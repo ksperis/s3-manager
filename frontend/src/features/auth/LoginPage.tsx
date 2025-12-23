@@ -1,0 +1,226 @@
+/*
+ * Copyright (c) 2025 Laurent Barbe
+ * Licensed under the Apache License, Version 2.0
+ */
+import { FormEvent, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { fetchOidcProviders, login, loginWithKeys, startOidcLogin, type OidcProviderInfo } from "../../api/auth";
+
+export default function LoginPage() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("admin@example.com");
+  const [password, setPassword] = useState("changeme");
+  const [accessKey, setAccessKey] = useState("");
+  const [secretKey, setSecretKey] = useState("");
+  const [mode, setMode] = useState<"password" | "keys">("password");
+  const [error, setError] = useState<string | null>(null);
+  const [oidcError, setOidcError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [oidcLoading, setOidcLoading] = useState<string | null>(null);
+  const [oidcProviders, setOidcProviders] = useState<OidcProviderInfo[]>([]);
+  const resolveDestination = (role?: string | null, accountLinks?: { account_role?: string | null; account_admin?: boolean | null }[] | null) => {
+    if (role === "ui_admin") return "/admin";
+    if (role === "ui_user") {
+      const links = accountLinks ?? [];
+      const hasPortalAccess = links.some((link) => link.account_role !== "portal_none");
+      const hasAccountAdmin = links.some((link) => link.account_admin);
+      if (hasPortalAccess) return "/portal";
+      if (hasAccountAdmin) return "/manager";
+    }
+    return "/unauthorized";
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchOidcProviders()
+      .then((providers) => {
+        if (isMounted) {
+          setOidcProviders(providers);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setOidcError("Unable to load identity providers");
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handlePasswordLogin = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await login(email, password);
+      localStorage.setItem("token", res.access_token);
+      localStorage.setItem("user", JSON.stringify({ ...res.user, authType: "password" }));
+      const destination = resolveDestination(res.user.role, res.user.account_links ?? null);
+      navigate(destination, { replace: true });
+    } catch (err) {
+      console.error(err);
+      setError("Invalid credentials or server unavailable");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyLogin = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await loginWithKeys(accessKey.trim(), secretKey.trim());
+      localStorage.setItem("token", res.access_token);
+      const userPayload = {
+        email: res.session.account_id ? `${res.session.account_id}@s3-session` : "s3-session",
+        role: "ui_user",
+        authType: "rgw_session",
+        actorType: res.session.actor_type,
+        accountId: res.session.account_id ?? null,
+        accountName: res.session.account_name ?? null,
+        capabilities: res.session.capabilities,
+      };
+      localStorage.setItem("user", JSON.stringify(userPayload));
+      navigate("/manager", { replace: true });
+    } catch (err) {
+      console.error(err);
+      setError("Unable to authenticate with these access keys");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleModeChange = (next: "password" | "keys") => {
+    setMode(next);
+    setError(null);
+  };
+
+  const startOidcFlow = async (providerId: string) => {
+    setOidcError(null);
+    setOidcLoading(providerId);
+    try {
+      const { authorization_url } = await startOidcLogin(providerId);
+      window.location.href = authorization_url;
+    } catch (err) {
+      console.error(err);
+      setOidcError("Unable to start external authentication");
+      setOidcLoading(null);
+    }
+  };
+
+  const tabClasses = (value: "password" | "keys") =>
+    `rounded-full px-4 py-2 text-sm font-semibold transition ${
+      mode === value
+        ? "bg-white text-slate-900 shadow-sm"
+        : "text-slate-500 hover:text-slate-800"
+    }`;
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-900">
+      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-xl">
+        <h1 className="mb-4 text-2xl font-semibold text-slate-800">Sign in</h1>
+        <p className="mb-6 text-sm text-slate-500">s3-manager admin portal</p>
+        <div className="mb-6 flex rounded-full bg-slate-100 p-1 text-sm font-semibold text-slate-600">
+          <button type="button" className={tabClasses("password")} onClick={() => handleModeChange("password")}>
+            Email & password
+          </button>
+          <button type="button" className={tabClasses("keys")} onClick={() => handleModeChange("keys")}>
+            S3 access keys
+          </button>
+        </div>
+
+        {mode === "password" ? (
+          <form onSubmit={handlePasswordLogin} className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                placeholder="admin@example.com"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+            {error && <p className="text-sm text-rose-600">{error}</p>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-md bg-primary px-4 py-2 text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-50"
+            >
+              {loading ? "Signing in..." : "Sign in"}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleKeyLogin} className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Access key</label>
+              <input
+                type="text"
+                value={accessKey}
+                onChange={(e) => setAccessKey(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                placeholder="ACCESS_KEY"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Secret key</label>
+              <input
+                type="password"
+                value={secretKey}
+                onChange={(e) => setSecretKey(e.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+            {error && <p className="text-sm text-rose-600">{error}</p>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-md bg-primary px-4 py-2 text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-50"
+            >
+              {loading ? "Connecting..." : "Connect with keys"}
+            </button>
+          </form>
+        )}
+
+        {oidcProviders.length > 0 && (
+          <div className="mt-6 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <div className="h-px flex-1 bg-slate-200" />
+              <span>Ou</span>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+            {oidcProviders.map((provider) => (
+              <button
+                key={provider.id}
+                type="button"
+                onClick={() => startOidcFlow(provider.id)}
+                disabled={Boolean(oidcLoading)}
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:opacity-50"
+              >
+                {oidcLoading === provider.id ? "Redirection..." : `Continuer avec ${provider.display_name}`}
+              </button>
+            ))}
+            {oidcError && <p className="text-sm text-rose-600">{oidcError}</p>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

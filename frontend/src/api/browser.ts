@@ -1,0 +1,396 @@
+/*
+ * Copyright (c) 2025 Laurent Barbe
+ * Licensed under the Apache License, Version 2.0
+ */
+import client from "./client";
+import { S3AccountSelector, withS3AccountParam } from "./accountParams";
+
+export type BrowserBucket = {
+  name: string;
+  creation_date?: string | null;
+};
+
+export type BrowserObject = {
+  key: string;
+  size: number;
+  last_modified?: string | null;
+  etag?: string | null;
+  storage_class?: string | null;
+};
+
+export type ListBrowserObjectsResponse = {
+  prefix: string;
+  objects: BrowserObject[];
+  prefixes: string[];
+  is_truncated: boolean;
+  next_continuation_token?: string | null;
+};
+
+export type BrowserObjectVersion = {
+  key: string;
+  version_id?: string | null;
+  is_latest: boolean;
+  is_delete_marker: boolean;
+  last_modified?: string | null;
+  size?: number | null;
+  etag?: string | null;
+  storage_class?: string | null;
+};
+
+export type ListObjectVersionsResponse = {
+  prefix?: string | null;
+  versions: BrowserObjectVersion[];
+  delete_markers: BrowserObjectVersion[];
+  is_truncated: boolean;
+  key_marker?: string | null;
+  version_id_marker?: string | null;
+  next_key_marker?: string | null;
+  next_version_id_marker?: string | null;
+};
+
+export type ObjectMetadata = {
+  key: string;
+  size: number;
+  etag?: string | null;
+  last_modified?: string | null;
+  content_type?: string | null;
+  storage_class?: string | null;
+  metadata: Record<string, string>;
+  version_id?: string | null;
+};
+
+export type ObjectTag = { key: string; value: string };
+
+export type ObjectTags = {
+  key: string;
+  tags: ObjectTag[];
+  version_id?: string | null;
+};
+
+export type PresignOperation = "get_object" | "put_object" | "delete_object" | "post_object";
+
+export type PresignRequest = {
+  key: string;
+  operation: PresignOperation;
+  expires_in?: number;
+  content_type?: string | null;
+  content_length?: number | null;
+  version_id?: string | null;
+};
+
+export type PresignedUrl = {
+  url: string;
+  method: string;
+  expires_in: number;
+  fields?: Record<string, string>;
+  headers?: Record<string, string>;
+};
+
+export type MultipartUploadInitRequest = {
+  key: string;
+  content_type?: string | null;
+  metadata?: Record<string, string>;
+  tags?: ObjectTag[];
+  acl?: string | null;
+};
+
+export type MultipartUploadInitResponse = {
+  key: string;
+  upload_id: string;
+};
+
+export type MultipartUploadItem = {
+  key: string;
+  upload_id: string;
+  initiated?: string | null;
+  storage_class?: string | null;
+  owner?: string | null;
+};
+
+export type ListMultipartUploadsResponse = {
+  uploads: MultipartUploadItem[];
+  is_truncated: boolean;
+  next_key?: string | null;
+  next_upload_id?: string | null;
+};
+
+export type MultipartPart = {
+  part_number: number;
+  etag: string;
+  size: number;
+  last_modified?: string | null;
+};
+
+export type ListPartsResponse = {
+  parts: MultipartPart[];
+  is_truncated: boolean;
+  next_part_number?: number | null;
+};
+
+export type PresignPartRequest = {
+  key: string;
+  part_number: number;
+  expires_in?: number;
+};
+
+export type PresignPartResponse = {
+  url: string;
+  method: string;
+  expires_in: number;
+  headers?: Record<string, string>;
+};
+
+export type CompletedPart = { part_number: number; etag: string };
+
+export type CompleteMultipartUploadRequest = {
+  parts: CompletedPart[];
+};
+
+export type CopyObjectPayload = {
+  source_key: string;
+  destination_key: string;
+  source_version_id?: string | null;
+  metadata?: Record<string, string>;
+  replace_metadata?: boolean;
+  tags?: ObjectTag[];
+  replace_tags?: boolean;
+  acl?: string | null;
+  move?: boolean;
+};
+
+export type DeleteObjectEntry = {
+  key: string;
+  version_id?: string | null;
+};
+
+export async function listBrowserBuckets(accountId: S3AccountSelector): Promise<BrowserBucket[]> {
+  const { data } = await client.get<BrowserBucket[]>("/manager/browser/buckets", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function listBrowserObjects(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  options?: { prefix?: string; continuationToken?: string | null; maxKeys?: number }
+): Promise<ListBrowserObjectsResponse> {
+  const params = withS3AccountParam(
+    {
+      prefix: options?.prefix ?? "",
+      continuation_token: options?.continuationToken ?? undefined,
+      max_keys: options?.maxKeys ?? undefined,
+    },
+    accountId
+  );
+  const { data } = await client.get<ListBrowserObjectsResponse>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/objects`,
+    { params }
+  );
+  return data;
+}
+
+export async function listObjectVersions(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  options?: { prefix?: string; keyMarker?: string | null; versionIdMarker?: string | null; maxKeys?: number }
+): Promise<ListObjectVersionsResponse> {
+  const params = withS3AccountParam(
+    {
+      prefix: options?.prefix ?? "",
+      key_marker: options?.keyMarker ?? undefined,
+      version_id_marker: options?.versionIdMarker ?? undefined,
+      max_keys: options?.maxKeys ?? undefined,
+    },
+    accountId
+  );
+  const { data } = await client.get<ListObjectVersionsResponse>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/versions`,
+    { params }
+  );
+  return data;
+}
+
+export async function fetchObjectMetadata(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  key: string,
+  versionId?: string | null
+): Promise<ObjectMetadata> {
+  const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
+  const { data } = await client.get<ObjectMetadata>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-meta`,
+    { params }
+  );
+  return data;
+}
+
+export async function getObjectTags(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  key: string,
+  versionId?: string | null
+): Promise<ObjectTags> {
+  const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
+  const { data } = await client.get<ObjectTags>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-tags`,
+    { params }
+  );
+  return data;
+}
+
+export async function updateObjectTags(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: ObjectTags
+): Promise<ObjectTags> {
+  const { data } = await client.put<ObjectTags>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-tags`,
+    payload,
+    {
+      params: withS3AccountParam(undefined, accountId),
+    }
+  );
+  return data;
+}
+
+export async function presignObject(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: PresignRequest
+): Promise<PresignedUrl> {
+  const { data } = await client.post<PresignedUrl>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/presign`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function copyObject(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: CopyObjectPayload
+): Promise<void> {
+  await client.post(`/manager/browser/buckets/${encodeURIComponent(bucketName)}/copy`, payload, {
+    params: withS3AccountParam(undefined, accountId),
+  });
+}
+
+export async function deleteObjects(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  objects: DeleteObjectEntry[]
+): Promise<number> {
+  const { data } = await client.post<{ deleted: number }>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/delete`,
+    { objects },
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data.deleted;
+}
+
+export async function createFolder(accountId: S3AccountSelector, bucketName: string, prefix: string): Promise<void> {
+  await client.post(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/folders`,
+    { prefix },
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+}
+
+export async function initiateMultipartUpload(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: MultipartUploadInitRequest
+): Promise<MultipartUploadInitResponse> {
+  const { data } = await client.post<MultipartUploadInitResponse>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart/initiate`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function listMultipartUploads(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  options?: { prefix?: string; keyMarker?: string | null; uploadIdMarker?: string | null; maxUploads?: number }
+): Promise<ListMultipartUploadsResponse> {
+  const params = withS3AccountParam(
+    {
+      prefix: options?.prefix ?? undefined,
+      key_marker: options?.keyMarker ?? undefined,
+      upload_id_marker: options?.uploadIdMarker ?? undefined,
+      max_uploads: options?.maxUploads ?? undefined,
+    },
+    accountId
+  );
+  const { data } = await client.get<ListMultipartUploadsResponse>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart`,
+    { params }
+  );
+  return data;
+}
+
+export async function listParts(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  uploadId: string,
+  key: string,
+  options?: { partNumberMarker?: number | null; maxParts?: number }
+): Promise<ListPartsResponse> {
+  const params = withS3AccountParam(
+    {
+      key,
+      part_number_marker: options?.partNumberMarker ?? undefined,
+      max_parts: options?.maxParts ?? undefined,
+    },
+    accountId
+  );
+  const { data } = await client.get<ListPartsResponse>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/parts`,
+    { params }
+  );
+  return data;
+}
+
+export async function presignPart(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  uploadId: string,
+  payload: PresignPartRequest
+): Promise<PresignPartResponse> {
+  const { data } = await client.post<PresignPartResponse>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/presign`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function completeMultipartUpload(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  uploadId: string,
+  key: string,
+  payload: CompleteMultipartUploadRequest
+): Promise<void> {
+  await client.post(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/complete`,
+    payload,
+    {
+      params: withS3AccountParam({ key }, accountId),
+    }
+  );
+}
+
+export async function abortMultipartUpload(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  uploadId: string,
+  key: string
+): Promise<void> {
+  await client.delete(`/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}`, {
+    params: withS3AccountParam({ key }, accountId),
+  });
+}

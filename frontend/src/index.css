@@ -1,0 +1,69 @@
+/*
+ * Copyright (c) 2025 Laurent Barbe
+ * Licensed under the Apache License, Version 2.0
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  color: #0f172a;
+  background-color: #f8fafc;
+}
+
+:root.dark {
+  color-scheme: dark;
+  color: #e2e8f0;
+  background-color: #0b1220;
+}
+
+body {
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-900 dark:text-slate-100;
+}
+
+a {
+  @apply text-primary-700 transition-colors dark:text-primary-200;
+}
+
+a:hover {
+  @apply text-primary-600 dark:text-primary-100;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(14, 165, 233, 0.6);
+}
+
+/* Keep manager data tables readable without horizontal scrolling */
+.manager-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.manager-table th,
+.manager-table td {
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.manager-table .manager-table-cell {
+  max-width: 18rem;
+}
+
+.manager-table .manager-table-cell-wide {
+  max-width: 22rem;
+}

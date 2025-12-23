@@ -1,0 +1,80 @@
+accounts:
+  - name: "Helios-Retail-Platform"
+    email: "storage@helios-retail.example.com"
+    quota_gb: 1
+    buckets:
+      - name: "helios-retail-logs"
+        object_count: 14
+      - name: "helios-retail-backups"
+        object_count: 10
+      - name: "helios-retail-exports"
+        object_count: 12
+    users:
+      - full_name: "Amelie Dupont"
+        email: "amelie.dupont@helios-retail.example.com"
+      - full_name: "Benoit Garnier"
+        email: "benoit.garnier@helios-retail.example.com"
+
+  - name: "Blue-Harbor-Analytics"
+    email: "analytics@blueharbor.example.com"
+    quota_gb: 1
+    buckets:
+      - name: "blueharbor-raw-data"
+        object_count: 16
+      - name: "blueharbor-curated"
+        object_count: 12
+      - name: "blueharbor-reports"
+        object_count: 9
+    users:
+      - full_name: "Camille Martin"
+        email: "camille.martin@blueharbor.example.com"
+      - full_name: "David Lambert"
+        email: "david.lambert@blueharbor.example.com"
+
+  - name: "Northwind-Logistics"
+    email: "ops@northwind.example.com"
+    quota_gb: 1
+    buckets:
+      - name: "northwind-logs"
+        object_count: 18
+      - name: "northwind-iot-events"
+        object_count: 12
+      - name: "northwind-backups"
+        object_count: 8
+    users:
+      - full_name: "Emma Robert"
+        email: "emma.robert@northwind.example.com"
+      - full_name: "Farid Lefevre"
+        email: "farid.lefevre@northwind.example.com"
+
+  - name: "Summit-Finance-Systems"
+    email: "storage@summit-finance.example.com"
+    quota_gb: 1
+    buckets:
+      - name: "summit-billing-archive"
+        object_count: 11
+      - name: "summit-reports"
+        object_count: 10
+      - name: "summit-metrics"
+        object_count: 9
+    users:
+      - full_name: "Gabriel Henry"
+        email: "gabriel.henry@summit-finance.example.com"
+      - full_name: "Helene Marchand"
+        email: "helene.marchand@summit-finance.example.com"
+
+  - name: "Vertex-Media-Ops"
+    email: "media@vertex-ops.example.com"
+    quota_gb: 1
+    buckets:
+      - name: "vertex-media-cdn"
+        object_count: 13
+      - name: "vertex-media-archive"
+        object_count: 10
+      - name: "vertex-media-exports"
+        object_count: 12
+    users:
+      - full_name: "Ines Fournier"
+        email: "ines.fournier@vertex-ops.example.com"
+      - full_name: "Julien Bernard"
+        email: "julien.bernard@vertex-ops.example.com"

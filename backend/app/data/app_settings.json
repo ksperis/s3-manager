@@ -1,0 +1,9 @@
+{
+  "portal": {
+    "allow_portal_key": true,
+    "allow_portal_user_bucket_create": true
+  },
+  "manager": {
+    "allow_manager_user_usage_stats": false
+  }
+}

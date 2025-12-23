@@ -1,0 +1,50 @@
+# Copyright (c) 2025 Laurent Barbe
+# Licensed under the Apache License, Version 2.0
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+from app.db_models import UserRole
+
+
+class S3KeyLogin(BaseModel):
+    access_key: str = Field(min_length=1)
+    secret_key: str = Field(min_length=1)
+
+
+class SessionCapabilities(BaseModel):
+    can_manage_iam: bool = False
+    can_manage_buckets: bool = True
+    can_view_traffic: bool = False
+
+
+class SessionDescriptor(BaseModel):
+    session_id: str
+    actor_type: str
+    account_id: Optional[str] = None
+    account_name: Optional[str] = None
+    user_uid: Optional[str] = None
+    capabilities: SessionCapabilities
+
+
+@dataclass
+class ManagerSessionPrincipal:
+    session_id: str
+    access_key: str
+    secret_key: str
+    actor_type: str
+    account_id: Optional[str]
+    account_name: Optional[str]
+    user_uid: Optional[str]
+    capabilities: SessionCapabilities
+    role: str = UserRole.UI_USER.value
+    email: str = "s3-session@local"
+    id: Optional[int] = None
+
+    def audit_fallbacks(self) -> tuple[str, str]:
+        fallback_email = self.email or f"rgw:{self.account_id or 'unknown'}"
+        fallback_role = self.role or "rgw_session"
+        return fallback_email, fallback_role
