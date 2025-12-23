@@ -1,0 +1,27 @@
+stages:
+  - build
+
+variables:
+  DOCKER_HOST: "tcp://docker:2375"
+  DOCKER_TLS_CERTDIR: ""
+  VITE_API_URL: "/api"
+
+build-backend:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build -t "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA" backend
+    - docker push "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA"
+
+build-frontend:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build --build-arg VITE_API_URL="$VITE_API_URL" -t "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA" frontend
+    - docker push "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA"
