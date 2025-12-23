@@ -32,3 +32,6 @@ pnpm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
+
+# Local k8s secrets
+k8s/lab/backend-secret.yaml
