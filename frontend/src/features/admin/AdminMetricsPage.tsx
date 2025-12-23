@@ -74,7 +74,7 @@ export default function AdminMetricsPage() {
         setEndpoints(cephEndpoints);
         if (cephEndpoints.length === 0) {
           setSelectedEndpointId(null);
-          setEndpointError("Aucun endpoint Ceph disponible pour les metriques.");
+          setEndpointError("No Ceph endpoint available for metrics.");
         } else {
           const preferred = cephEndpoints.find((ep) => ep.is_default) || cephEndpoints[0];
           setSelectedEndpointId((current) => current ?? preferred.id);
@@ -83,7 +83,7 @@ export default function AdminMetricsPage() {
         if (!cancelled) {
           setEndpoints([]);
           setSelectedEndpointId(null);
-          setEndpointError("Impossible de recuperer la liste des endpoints.");
+          setEndpointError("Unable to retrieve the endpoint list.");
         }
       } finally {
         if (!cancelled) {
@@ -222,9 +222,9 @@ export default function AdminMetricsPage() {
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Endpoint Ceph</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Ceph endpoint</p>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Choisissez le stockage a analyser (uniquement les endpoints Ceph).
+              Choose the storage to analyze (Ceph endpoints only).
             </p>
           </div>
           <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
@@ -234,12 +234,12 @@ export default function AdminMetricsPage() {
               onChange={(event) => setSelectedEndpointId(event.target.value ? Number(event.target.value) : null)}
               disabled={endpointLoading || endpoints.length === 0}
             >
-              {endpointLoading && <option value="">Chargement...</option>}
-              {!endpointLoading && endpoints.length === 0 && <option value="">Aucun endpoint Ceph</option>}
+              {endpointLoading && <option value="">Loading...</option>}
+              {!endpointLoading && endpoints.length === 0 && <option value="">No Ceph endpoint</option>}
               {!endpointLoading &&
                 endpoints.map((endpoint) => (
                   <option key={endpoint.id} value={endpoint.id} title={endpoint.endpoint_url}>
-                    {endpoint.is_default ? `${endpoint.name} (defaut)` : endpoint.name}
+                    {endpoint.is_default ? `${endpoint.name} (default)` : endpoint.name}
                   </option>
                 ))}
             </select>

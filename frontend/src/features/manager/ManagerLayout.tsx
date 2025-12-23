@@ -131,16 +131,16 @@ function ManagerShell() {
           aria-label={
             accessMode === "admin"
               ? showAccessToggle
-                ? "Mode admin actif, passer en portail"
-                : "Mode admin actif"
-              : "Mode portail actif, passer en admin"
+                ? "Admin mode active, switch to portal"
+                : "Admin mode active"
+              : "Portal mode active, switch to admin"
           }
           title={
             accessMode === "admin"
               ? showAccessToggle
-                ? "Mode admin actif"
-                : "Mode admin actif"
-              : "Mode portail actif"
+                ? "Admin mode active"
+                : "Admin mode active"
+              : "Portal mode active"
           }
         >
           <svg
@@ -205,7 +205,7 @@ function ManagerShell() {
       <>
         {accessError && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm dark:border-amber-900/40 dark:bg-amber-900/30 dark:text-amber-100">
-            Accès refusé pour /manager. Vérifiez vos droits sur le compte ou contactez un administrateur.
+            Access denied for /manager. Check your account permissions or contact an administrator.
           </div>
         )}
         <Outlet key={`${selectedS3AccountId ?? "session"}:${accessMode ?? "default"}`} />

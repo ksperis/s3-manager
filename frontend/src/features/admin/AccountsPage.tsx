@@ -331,7 +331,7 @@ export default function S3AccountsPage() {
       return;
     }
     if (!form.storage_endpoint_id) {
-      setActionError("Sélectionne un endpoint Ceph pour créer un compte.");
+      setActionError("Select a Ceph endpoint to create an account.");
       return;
     }
     setCreating(true);
@@ -578,7 +578,7 @@ export default function S3AccountsPage() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Endpoint de stockage (Ceph) *</label>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Storage endpoint (Ceph) *</label>
               <select
                 className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={form.storage_endpoint_id}
@@ -587,11 +587,11 @@ export default function S3AccountsPage() {
                 disabled={loadingEndpoints || cephEndpoints.length === 0}
               >
                 <option value="" disabled>
-                  {loadingEndpoints ? "Chargement..." : "Aucun endpoint Ceph"}
+                  {loadingEndpoints ? "Loading..." : "No Ceph endpoint"}
                 </option>
                 {cephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
-                    {ep.name} {ep.is_default ? "(défaut)" : ""}
+                    {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
                 ))}
               </select>
@@ -824,7 +824,7 @@ export default function S3AccountsPage() {
                 onChange={(e) => setImportText(e.target.value)}
               />
               <label className="mt-3 flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-                Endpoint Ceph
+                Ceph endpoint
                 <select
                   className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   value={importTenantEndpointId}
@@ -833,11 +833,11 @@ export default function S3AccountsPage() {
                   required
                 >
                   <option value="" disabled>
-                    {cephEndpoints.length === 0 ? "Aucun endpoint Ceph" : "Sélectionner"}
+                    {cephEndpoints.length === 0 ? "No Ceph endpoint" : "Select"}
                   </option>
                   {cephEndpoints.map((ep) => (
                     <option key={ep.id} value={ep.id}>
-                      {ep.name} {ep.is_default ? "(défaut)" : ""}
+                      {ep.name} {ep.is_default ? "(default)" : ""}
                     </option>
                   ))}
                 </select>
@@ -894,7 +894,7 @@ export default function S3AccountsPage() {
                 />
               </div>
               <div className="flex flex-col gap-1 md:col-span-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Endpoint de stockage</label>
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Storage endpoint</label>
                 <select
                   className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   value={importKeysEndpointId}
@@ -903,11 +903,11 @@ export default function S3AccountsPage() {
                   required
                 >
                   <option value="" disabled>
-                    {storageEndpoints.length === 0 ? "Aucun endpoint" : "Sélectionner"}
+                    {storageEndpoints.length === 0 ? "No endpoint" : "Select"}
                   </option>
                   {storageEndpoints.map((ep) => (
                     <option key={ep.id} value={ep.id}>
-                      {ep.name} {ep.is_default ? "(défaut)" : ""}
+                      {ep.name} {ep.is_default ? "(default)" : ""}
                     </option>
                   ))}
                 </select>
@@ -1018,7 +1018,7 @@ export default function S3AccountsPage() {
             </div>
           )}
           <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
-            Endpoint de stockage :{" "}
+            Storage endpoint:{" "}
             <span title={editingS3Account.storage_endpoint_url || undefined}>
               {editingS3Account.storage_endpoint_name ?? "—"}
             </span>
