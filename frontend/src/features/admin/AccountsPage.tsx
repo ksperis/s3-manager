@@ -164,7 +164,7 @@ export default function S3AccountsPage() {
   const assignedUsers = useMemo(() => {
     const selectedIds = new Set(editForm.user_links.map((link) => link.user_id));
     return userOptions.filter((u) => selectedIds.has(u.id)).map((u) => {
-      const role = editForm.user_links.find((link) => link.user_id === u.id)?.account_role ?? "portal_user";
+      const role = editForm.user_links.find((link) => link.user_id === u.id)?.account_role ?? "portal_none";
       return { ...u, role };
     });
   }, [editForm.user_links, userOptions]);
@@ -405,7 +405,7 @@ export default function S3AccountsPage() {
       user_links:
         detail.user_links?.map((link) => ({
           user_id: link.user_id,
-          account_role: link.account_role ?? "portal_user",
+          account_role: link.account_role ?? "portal_none",
           account_admin: Boolean(link.account_admin),
         })) ?? [],
     });
@@ -1157,7 +1157,7 @@ export default function S3AccountsPage() {
                         <div className="flex items-center gap-2">
                           <select
                             className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                            value={userRoleChoice[u.id] ?? "portal_user"}
+                            value={userRoleChoice[u.id] ?? "portal_none"}
                             onChange={(e) => {
                               const nextRole = e.target.value as AccountUserLink["account_role"];
                               setUserRoleChoice((prev) => ({
@@ -1197,10 +1197,10 @@ export default function S3AccountsPage() {
                                   ...prev.user_links,
                                   {
                                     user_id: u.id,
-                                    account_role: userRoleChoice[u.id] ?? "portal_user",
+                                    account_role: userRoleChoice[u.id] ?? "portal_none",
                                     account_admin:
                                       userAdminChoice[u.id] ??
-                                      (userRoleChoice[u.id] ?? "portal_user") === "portal_manager",
+                                      (userRoleChoice[u.id] ?? "portal_none") === "portal_manager",
                                   },
                                 ],
                               }))
@@ -1352,15 +1352,13 @@ export default function S3AccountsPage() {
                     {accountUserLinks.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {accountUserLinks.map((link) => {
-                          const role = link.account_role ?? "portal_user";
-                          const roleLabel =
-                            role === "portal_manager" ? "Portal manager" : role === "portal_none" ? "No portal" : "Portal user";
+                          const role = link.account_role ?? "portal_none";
+                          const showPortalBadge = role !== "portal_none";
+                          const roleLabel = role === "portal_manager" ? "Portal manager" : "Portal user";
                           const tone =
                             role === "portal_manager"
                               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100"
-                              : role === "portal_user"
-                              ? "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100"
-                              : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200";
+                              : "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100";
                           const isAccountAdmin = Boolean(link.account_admin);
                           return (
                             <span
@@ -1368,9 +1366,11 @@ export default function S3AccountsPage() {
                               className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                             >
                               <span>{userLabelById.get(link.user_id) ?? `User #${link.user_id}`}</span>
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
-                                {roleLabel}
-                              </span>
+                              {showPortalBadge && (
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
+                                  {roleLabel}
+                                </span>
+                              )}
                               {isAccountAdmin && (
                                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                                   Admin
