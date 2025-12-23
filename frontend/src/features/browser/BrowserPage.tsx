@@ -4,8 +4,6 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import PageHeader from "../../components/PageHeader";
-import SplitView from "../../components/SplitView";
-import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
 
 type TreeNode = {
@@ -32,6 +30,31 @@ type OperationItem = {
   path: string;
   progress: number;
   status: "uploading" | "deleting" | "copying";
+};
+
+type ObjectVersion = {
+  id: string;
+  size: string;
+  modified: string;
+  current?: boolean;
+};
+
+type ObjectDetail = {
+  contentType: string;
+  etag: string;
+  checksum: string;
+  encryption: string;
+  tags: string[];
+  retention: string;
+  versions?: ObjectVersion[];
+};
+
+type ActivityItem = {
+  id: string;
+  action: string;
+  path: string;
+  actor: string;
+  when: string;
 };
 
 const treeData: TreeNode[] = [
@@ -327,6 +350,81 @@ const operations: OperationItem[] = [
   },
 ];
 
+const objectDetails: Record<string, ObjectDetail> = {
+  "media-prod/logo.svg": {
+    contentType: "image/svg+xml",
+    etag: "b4d9f9c1a7f3c2",
+    checksum: "SHA256 2f8c9a7a",
+    encryption: "SSE-S3",
+    retention: "None",
+    tags: ["brand", "logo", "svg"],
+    versions: [
+      { id: "v3", size: "214 KB", modified: "2024-05-11 12:06", current: true },
+      { id: "v2", size: "210 KB", modified: "2024-03-02 10:22" },
+    ],
+  },
+  "media-prod/assets/hero.mp4": {
+    contentType: "video/mp4",
+    etag: "0aa1bd980f45",
+    checksum: "SHA256 8b1c3f4d",
+    encryption: "SSE-S3",
+    retention: "30d",
+    tags: ["hero", "launch", "2024"],
+    versions: [
+      { id: "v5", size: "84 MB", modified: "2024-05-13 10:34", current: true },
+      { id: "v4", size: "82 MB", modified: "2024-05-12 09:10" },
+    ],
+  },
+  "media-prod/backups/2024-05-14.tar.gz": {
+    contentType: "application/gzip",
+    etag: "a13d9c22",
+    checksum: "SHA256 91b2c301",
+    encryption: "SSE-S3",
+    retention: "90d",
+    tags: ["backup", "daily"],
+  },
+  "logs/router.log": {
+    contentType: "text/plain",
+    etag: "d19f73aa",
+    checksum: "SHA256 19f2a1c2",
+    encryption: "SSE-S3",
+    retention: "14d",
+    tags: ["router", "edge"],
+  },
+  "analytics/warehouse.parquet": {
+    contentType: "application/parquet",
+    etag: "ca91b01f",
+    checksum: "SHA256 8f9ad3c1",
+    encryption: "SSE-KMS",
+    retention: "365d",
+    tags: ["warehouse", "prod"],
+  },
+};
+
+const activityLog: ActivityItem[] = [
+  {
+    id: "activity-1",
+    action: "Uploaded",
+    path: "media-prod/assets/hero.mp4",
+    actor: "marketing",
+    when: "8m ago",
+  },
+  {
+    id: "activity-2",
+    action: "Deleted",
+    path: "media-prod/backups/2024-05-10.tar.gz",
+    actor: "ops",
+    when: "2h ago",
+  },
+  {
+    id: "activity-3",
+    action: "Tagged",
+    path: "analytics/warehouse.parquet",
+    actor: "data-team",
+    when: "Yesterday",
+  },
+];
+
 const iconButtonClasses =
   "inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200";
 const iconButtonDangerClasses =
@@ -335,6 +433,76 @@ const bulkActionClasses =
   "inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100";
 const bulkDangerClasses =
   "inline-flex items-center gap-2 rounded-full border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 disabled:opacity-50 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30";
+const toolbarButtonClasses =
+  "inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100";
+const toolbarPrimaryClasses =
+  "inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+const filterChipClasses =
+  "inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100";
+const filterChipActiveClasses =
+  "border-primary-200 bg-primary-100 text-primary-800 dark:border-primary-600 dark:bg-primary-900/30 dark:text-primary-100";
+const viewToggleBaseClasses =
+  "inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100";
+const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-100";
+
+const storageClassChipClasses: Record<string, string> = {
+  STANDARD: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-900/20 dark:text-emerald-200",
+  STANDARD_IA: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200",
+  GLACIER: "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-900/20 dark:text-indigo-200",
+};
+
+const sizeMultipliers: Record<string, number> = {
+  B: 1,
+  KB: 1024,
+  MB: 1024 ** 2,
+  GB: 1024 ** 3,
+  TB: 1024 ** 4,
+  PB: 1024 ** 5,
+};
+
+const parseSizeToBytes = (size: string): number | null => {
+  if (!size || size === "-") return null;
+  const match = size.trim().match(/^([\d.]+)\s*([A-Za-z]+)$/);
+  if (!match) return null;
+  const value = Number.parseFloat(match[1]);
+  if (Number.isNaN(value)) return null;
+  const unit = match[2].toUpperCase();
+  const multiplier = sizeMultipliers[unit];
+  if (!multiplier) return null;
+  return value * multiplier;
+};
+
+const formatBytes = (bytes?: number | null): string => {
+  if (bytes === undefined || bytes === null) return "-";
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let value = bytes;
+  let idx = 0;
+  while (value >= 1024 && idx < units.length - 1) {
+    value /= 1024;
+    idx += 1;
+  }
+  const decimals = value >= 10 || idx === 0 ? 0 : 1;
+  return `${value.toFixed(decimals)} ${units[idx]}`;
+};
+
+const getExtension = (name: string) => {
+  const idx = name.lastIndexOf(".");
+  if (idx === -1) return "";
+  return name.slice(idx + 1).toLowerCase();
+};
+
+const isImageFile = (name: string) => {
+  const ext = getExtension(name);
+  return ["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext);
+};
+
+const previewLabelForItem = (item: BrowserItem) => {
+  if (item.type === "folder") return "FOLDER";
+  const ext = getExtension(item.name);
+  if (!ext) return "FILE";
+  return ext.toUpperCase();
+};
 
 const FolderIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
@@ -368,17 +536,6 @@ const BucketIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
       strokeWidth="1.4"
       strokeLinejoin="round"
     />
-  </svg>
-);
-
-const ChevronIcon = ({ className = "h-3.5 w-3.5", expanded = false }: { className?: string; expanded?: boolean }) => (
-  <svg
-    viewBox="0 0 20 20"
-    className={`${className} ${expanded ? "rotate-90" : ""} transition-transform`}
-    fill="none"
-    aria-hidden="true"
-  >
-    <path d="M7.5 5.5 12.5 10l-5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
   </svg>
 );
 
@@ -438,40 +595,73 @@ const SearchIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
+const ListIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <path d="M4 6h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M4 10h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M4 14h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+const GridIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <rect x="3.5" y="3.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    <rect x="11" y="3.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    <rect x="3.5" y="11" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    <rect x="11" y="11" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+);
+
 export default function BrowserPage() {
   const [selectedPath, setSelectedPath] = useState(treeData[0]?.path ?? "");
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    [treeData[0]?.path ?? ""]: true,
-  });
   const [filter, setFilter] = useState("");
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
-  const expandToPath = (path: string) => {
-    const segments = path.split("/").filter(Boolean);
-    let current = "";
-    const nextExpanded: Record<string, boolean> = {};
-    segments.forEach((segment, index) => {
-      current = index === 0 ? segment : `${current}/${segment}`;
-      nextExpanded[current] = true;
-    });
-    setExpanded((prev) => ({ ...prev, ...nextExpanded }));
-  };
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [typeFilter, setTypeFilter] = useState<"all" | "file" | "folder">("all");
+  const [storageFilter, setStorageFilter] = useState<string>("all");
+  const [sortId, setSortId] = useState("name-asc");
 
   const handleSelectPath = (path: string) => {
     setSelectedPath(path);
-    expandToPath(path);
+    setActiveItem(null);
   };
 
   const items = contentIndex[selectedPath] ?? [];
+  const sortOptions = [
+    { id: "name-asc", label: "Name (A-Z)", key: "name", direction: "asc" as const },
+    { id: "name-desc", label: "Name (Z-A)", key: "name", direction: "desc" as const },
+    { id: "modified-desc", label: "Last modified (newest)", key: "modified", direction: "desc" as const },
+    { id: "modified-asc", label: "Last modified (oldest)", key: "modified", direction: "asc" as const },
+    { id: "size-desc", label: "Size (largest)", key: "size", direction: "desc" as const },
+    { id: "size-asc", label: "Size (smallest)", key: "size", direction: "asc" as const },
+  ];
+  const activeSort = sortOptions.find((option) => option.id === sortId) ?? sortOptions[0];
+
   const filteredItems = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    const next = q ? items.filter((item) => item.name.toLowerCase().includes(q)) : items;
+    let next = q ? items.filter((item) => item.name.toLowerCase().includes(q)) : items;
+    if (typeFilter !== "all") {
+      next = next.filter((item) => item.type === typeFilter);
+    }
+    if (storageFilter !== "all") {
+      next = next.filter((item) => item.type === "folder" || item.storageClass === storageFilter);
+    }
     return [...next].sort((a, b) => {
       if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
-      return a.name.localeCompare(b.name);
+      if (activeSort.key === "size") {
+        const aSize = parseSizeToBytes(a.size) ?? 0;
+        const bSize = parseSizeToBytes(b.size) ?? 0;
+        return activeSort.direction === "asc" ? aSize - bSize : bSize - aSize;
+      }
+      if (activeSort.key === "modified") {
+        const result = a.modified.localeCompare(b.modified);
+        return activeSort.direction === "asc" ? result : -result;
+      }
+      const result = a.name.localeCompare(b.name);
+      return activeSort.direction === "asc" ? result : -result;
     });
-  }, [filter, items]);
+  }, [activeSort.direction, activeSort.key, filter, items, storageFilter, typeFilter]);
 
   const pathParts = selectedPath.split("/").filter(Boolean);
   const bucketName = pathParts[0] ?? "";
@@ -480,53 +670,68 @@ export default function BrowserPage() {
     () => treeData.map((bucket) => ({ name: bucket.name, path: bucket.path })),
     []
   );
+
+  const breadcrumbs = useMemo(() => {
+    if (!bucketName) return [];
+    let current = bucketName;
+    return prefixParts.map((part) => {
+      current = `${current}/${part}`;
+      return { label: part, path: current };
+    });
+  }, [bucketName, prefixParts]);
+
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allSelected = filteredItems.length > 0 && filteredItems.every((item) => selectedSet.has(item.id));
   const selectedCount = selectedIds.length;
+  const selectedBytes = useMemo(() => {
+    return selectedIds.reduce((sum, id) => {
+      const item = items.find((entry) => entry.id === id);
+      if (!item) return sum;
+      const bytes = parseSizeToBytes(item.size) ?? 0;
+      return sum + bytes;
+    }, 0);
+  }, [items, selectedIds]);
 
-  const renderTreeNode = (node: TreeNode, level = 0) => {
-    const hasChildren = Boolean(node.children && node.children.length > 0);
-    const isExpanded = expanded[node.path] ?? false;
-    const isActive = selectedPath === node.path;
-    const icon = node.type === "bucket" ? BucketIcon : FolderIcon;
-    const Icon = icon;
+  const availableStorageClasses = useMemo(() => {
+    const classes = new Set<string>();
+    items.forEach((item) => {
+      if (item.storageClass) {
+        classes.add(item.storageClass);
+      }
+    });
+    return Array.from(classes);
+  }, [items]);
 
-    return (
-      <div key={node.id} className="space-y-1">
-        <div className="flex items-center gap-1" style={{ paddingLeft: level * 16 }}>
-          {hasChildren ? (
-            <button
-              type="button"
-              onClick={() => setExpanded((prev) => ({ ...prev, [node.path]: !isExpanded }))}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
-              aria-label={isExpanded ? "Collapse" : "Expand"}
-            >
-              <ChevronIcon expanded={isExpanded} />
-            </button>
-          ) : (
-            <span className="inline-flex h-6 w-6" aria-hidden="true" />
-          )}
-          <button
-            type="button"
-            onClick={() => handleSelectPath(node.path)}
-            className={`flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium transition ${
-              isActive
-                ? "bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-100"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-            }`}
-          >
-            <Icon className="h-4 w-4" />
-            <span className="truncate">{node.name}</span>
-          </button>
-        </div>
-        {hasChildren && isExpanded && (
-          <div className="space-y-1">
-            {node.children?.map((child) => renderTreeNode(child, level + 1))}
-          </div>
-        )}
-      </div>
-    );
-  };
+  const pathStats = useMemo(() => {
+    let totalBytes = 0;
+    let files = 0;
+    let folders = 0;
+    const storageCounts: Record<string, number> = {};
+    items.forEach((item) => {
+      if (item.type === "folder") {
+        folders += 1;
+        return;
+      }
+      files += 1;
+      totalBytes += parseSizeToBytes(item.size) ?? 0;
+      const storage = item.storageClass ?? "STANDARD";
+      storageCounts[storage] = (storageCounts[storage] ?? 0) + 1;
+    });
+    return { totalBytes, files, folders, storageCounts };
+  }, [items]);
+
+  const inspectedItem = useMemo(() => {
+    if (activeItem && items.some((entry) => entry.id === activeItem.id)) {
+      return activeItem;
+    }
+    if (selectedIds.length === 1) {
+      return items.find((entry) => entry.id === selectedIds[0]) ?? null;
+    }
+    return null;
+  }, [activeItem, items, selectedIds]);
+
+  const inspectedDetails = inspectedItem ? objectDetails[inspectedItem.id] : null;
+  const inspectedPath = inspectedItem ? `${selectedPath}/${inspectedItem.name}` : selectedPath;
 
   const handleOpenItem = (item: BrowserItem) => {
     if (item.type !== "folder") return;
@@ -538,11 +743,21 @@ export default function BrowserPage() {
 
   useEffect(() => {
     setSelectedIds([]);
+    setActiveItem(null);
   }, [selectedPath]);
 
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => items.some((item) => item.id === id)));
-  }, [items]);
+    if (activeItem && !items.some((item) => item.id === activeItem.id)) {
+      setActiveItem(null);
+    }
+  }, [activeItem, items]);
+
+  useEffect(() => {
+    if (storageFilter !== "all" && !availableStorageClasses.includes(storageFilter)) {
+      setStorageFilter("all");
+    }
+  }, [availableStorageClasses, storageFilter]);
 
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]));
@@ -579,49 +794,27 @@ export default function BrowserPage() {
     <div className="space-y-6">
       <PageHeader
         title="Browser"
-        description="Explore buckets, prefixes, and objects for the current account."
+        description="Browse buckets, prefixes, and objects for the current account."
         breadcrumbs={[{ label: "Manager" }, { label: "Browser" }]}
-        actions={[
-          { label: "New folder", onClick: () => {}, variant: "ghost" },
-          { label: "Upload", onClick: () => {} },
-        ]}
+        inlineContent={
+          bucketName ? (
+            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              <BucketIcon className="h-3.5 w-3.5" />
+              {bucketName}
+            </span>
+          ) : null
+        }
       />
 
-      <SplitView
-        leftWidth="320px"
-        left={
-          <div className="flex h-full flex-col gap-4 p-4">
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">S3 paths</p>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  <SearchIcon />
-                </span>
-                <input
-                  type="text"
-                  placeholder="Filter buckets or prefixes"
-                  className="w-full rounded-md border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Buckets</p>
-              <div className="space-y-1">{treeData.map((node) => renderTreeNode(node))}</div>
-            </div>
-            <div className="mt-auto rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
-              Tip: Use the icons in the list to preview, download, or delete objects quickly.
-            </div>
-          </div>
-        }
-        right={
-          <div className="flex h-full flex-col">
+      <div className="rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+        <div className="flex h-full flex-col">
             <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current path</p>
-                  <div className="flex flex-wrap items-center gap-3 text-sm">
-                    <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-900">
-                      <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
+              <div className="space-y-4">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Location</p>
+                    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                      <BucketIcon className="h-4 w-4 text-slate-500 dark:text-slate-300" />
                       <select
                         className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none dark:text-slate-200"
                         value={bucketName}
@@ -633,331 +826,650 @@ export default function BrowserPage() {
                           </option>
                         ))}
                       </select>
+                      <div className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        {breadcrumbs.length === 0 && <span className="text-slate-400">(root)</span>}
+                        {breadcrumbs.map((crumb, index) => (
+                          <span key={crumb.path} className="flex items-center gap-1">
+                            <span className="text-slate-300">/</span>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectPath(crumb.path)}
+                              className="rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+                            >
+                              {crumb.label}
+                            </button>
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    {prefixParts.map((part, index) => (
-                      <span key={`${part}-${index}`} className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                        / {part}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {filteredItems.length} item(s) in this prefix.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-                  >
-                    Refresh
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600"
-                  >
-                    Upload
-                  </button>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative w-full sm:max-w-xs">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                    <SearchIcon />
-                  </span>
-                  <input
-                    type="text"
-                    value={filter}
-                    onChange={(event) => setFilter(event.target.value)}
-                    placeholder="Filter objects"
-                    className="w-full rounded-md border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <span className="rounded-full border border-slate-200 px-2 py-1 font-semibold dark:border-slate-700">
-                    STANDARD
-                  </span>
-                  <span className="rounded-full border border-slate-200 px-2 py-1 font-semibold dark:border-slate-700">
-                    IA
-                  </span>
-                  <span className="rounded-full border border-slate-200 px-2 py-1 font-semibold dark:border-slate-700">
-                    GLACIER
-                  </span>
-                </div>
-              </div>
-              {selectedCount > 0 && (
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {selectedCount} selected
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedIds([])}
-                      className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                    >
-                      Clear
-                    </button>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {filteredItems.length} item(s) in this prefix. {pathStats.files} files, {pathStats.folders} folders.
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" className={bulkActionClasses} disabled={selectedCount === 0}>
-                      <DownloadIcon className="h-3.5 w-3.5" />
-                      Download
+                    <button type="button" className={toolbarButtonClasses}>
+                      Refresh
                     </button>
-                    <button type="button" className={bulkActionClasses} disabled={selectedCount === 0}>
-                      <CopyIcon className="h-3.5 w-3.5" />
-                      Copy
+                    <button type="button" className={toolbarButtonClasses}>
+                      New folder
                     </button>
-                    <button type="button" className={bulkDangerClasses} disabled={selectedCount === 0}>
-                      <TrashIcon className="h-3.5 w-3.5" />
-                      Delete
+                    <button type="button" className={toolbarPrimaryClasses}>
+                      Upload
                     </button>
                   </div>
                 </div>
-              )}
-            </div>
-            <div className="flex-1 overflow-x-auto">
-              <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                <thead className="bg-slate-50 dark:bg-slate-900/50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-1 flex-wrap items-center gap-2">
+                    <div className="relative w-full sm:max-w-xs">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                        <SearchIcon />
+                      </span>
                       <input
-                        type="checkbox"
-                        checked={allSelected}
-                        onChange={toggleAllSelection}
-                        aria-label="Select all"
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                        type="text"
+                        value={filter}
+                        onChange={(event) => setFilter(event.target.value)}
+                        placeholder="Filter objects"
+                        className="w-full rounded-md border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       />
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Size
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Modified
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Owner
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {filteredItems.length === 0 && (
-                    <TableEmptyState colSpan={6} message="No objects found for this path." />
-                  )}
-                  {filteredItems.map((item) => (
-                    <tr
-                      key={item.id}
-                      className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
-                        selectedSet.has(item.id) ? "bg-primary-50/50 dark:bg-primary-900/20" : ""
-                      }`}
-                    >
-                      <td className="px-6 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedSet.has(item.id)}
-                          onChange={() => toggleSelection(item.id)}
-                          aria-label={`Select ${item.name}`}
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                        />
-                      </td>
-                      <td className="manager-table-cell px-6 py-4 text-sm text-slate-700 dark:text-slate-200">
-                        <div className="flex items-center gap-3">
-                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
-                            {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
-                          </span>
-                          <div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {[
+                        { id: "all", label: "All" },
+                        { id: "file", label: "Files" },
+                        { id: "folder", label: "Folders" },
+                      ].map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setTypeFilter(option.id as "all" | "file" | "folder")}
+                          className={`${filterChipClasses} ${typeFilter === option.id ? filterChipActiveClasses : ""}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {availableStorageClasses.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStorageFilter("all")}
+                          className={`${filterChipClasses} ${storageFilter === "all" ? filterChipActiveClasses : ""}`}
+                        >
+                          Storage: All
+                        </button>
+                        {availableStorageClasses.map((storage) => (
+                          <button
+                            key={storage}
+                            type="button"
+                            onClick={() => setStorageFilter(storage)}
+                            className={`${filterChipClasses} ${storageFilter === storage ? filterChipActiveClasses : ""}`}
+                          >
+                            {storage}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                      <select
+                        className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none dark:text-slate-200"
+                        value={sortId}
+                        onChange={(event) => setSortId(event.target.value)}
+                      >
+                        {sortOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1 py-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode("list")}
+                        className={`${viewToggleBaseClasses} ${viewMode === "list" ? viewToggleActiveClasses : ""}`}
+                        aria-label="List view"
+                      >
+                        <ListIcon />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode("grid")}
+                        className={`${viewToggleBaseClasses} ${viewMode === "grid" ? viewToggleActiveClasses : ""}`}
+                        aria-label="Grid view"
+                      >
+                        <GridIcon />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedCount > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        {selectedCount} selected
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{formatBytes(selectedBytes)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedIds([])}
+                        className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="button" className={bulkActionClasses} disabled={selectedCount === 0}>
+                        <DownloadIcon className="h-3.5 w-3.5" />
+                        Download
+                      </button>
+                      <button type="button" className={bulkActionClasses} disabled={selectedCount === 0}>
+                        <CopyIcon className="h-3.5 w-3.5" />
+                        Copy
+                      </button>
+                      <button type="button" className={bulkDangerClasses} disabled={selectedCount === 0}>
+                        <TrashIcon className="h-3.5 w-3.5" />
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 p-4">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800">
+                  {viewMode === "list" ? (
+                    <div className="overflow-x-auto">
+                      <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                        <thead className="bg-slate-50 dark:bg-slate-900/50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                onChange={toggleAllSelection}
+                                aria-label="Select all"
+                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                              />
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Name
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Size
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Modified
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Owner
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                          {filteredItems.length === 0 && (
+                            <TableEmptyState colSpan={6} message="No objects found for this path." />
+                          )}
+                          {filteredItems.map((item) => (
+                            <tr
+                              key={item.id}
+                              className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
+                                selectedSet.has(item.id) ? "bg-primary-50/50 dark:bg-primary-900/20" : ""
+                              }`}
+                            >
+                              <td className="px-6 py-4">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedSet.has(item.id)}
+                                  onChange={() => toggleSelection(item.id)}
+                                  aria-label={`Select ${item.name}`}
+                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                                />
+                              </td>
+                              <td className="manager-table-cell px-6 py-4 text-sm text-slate-700 dark:text-slate-200">
+                                <div className="flex items-center gap-3">
+                                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                                    {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
+                                  </span>
+                                  <div>
+                                    <button
+                                      type="button"
+                                      onClick={() => (item.type === "folder" ? handleOpenItem(item) : setActiveItem(item))}
+                                      className="block text-left font-semibold text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
+                                    >
+                                      {item.name}
+                                    </button>
+                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                      <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
+                                        {item.type === "folder" ? "Prefix" : "Object"}
+                                      </span>
+                                      {item.storageClass && (
+                                        <span
+                                          className={`rounded-full border px-2 py-0.5 font-semibold ${
+                                            storageClassChipClasses[item.storageClass] ??
+                                            "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                          }`}
+                                        >
+                                          {item.storageClass}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.size}</td>
+                              <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.modified}</td>
+                              <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.owner}</td>
+                              <td className="px-6 py-4 text-right">
+                                <div className="flex flex-wrap justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    className={iconButtonClasses}
+                                    aria-label="Open"
+                                    title="Open"
+                                    onClick={() => handleOpenItem(item)}
+                                    disabled={item.type !== "folder"}
+                                  >
+                                    <OpenIcon />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={iconButtonClasses}
+                                    aria-label="Preview"
+                                    title="Preview"
+                                    disabled={item.type === "folder"}
+                                    onClick={() => setActiveItem(item)}
+                                  >
+                                    <EyeIcon />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={iconButtonClasses}
+                                    aria-label="Download"
+                                    title="Download"
+                                    disabled={item.type === "folder"}
+                                  >
+                                    <DownloadIcon />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={iconButtonDangerClasses}
+                                    aria-label="Delete"
+                                    title="Delete"
+                                  >
+                                    <TrashIcon />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={iconButtonClasses}
+                                    aria-label="More actions"
+                                    title="More"
+                                    onClick={() => setActiveItem(item)}
+                                  >
+                                    <MoreIcon />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {filteredItems.length === 0 && (
+                        <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          No objects found for this path.
+                        </div>
+                      )}
+                      {filteredItems.map((item) => {
+                        const selected = selectedSet.has(item.id);
+                        return (
+                          <div
+                            key={item.id}
+                            className={`flex flex-col gap-3 rounded-xl border px-3 py-3 transition ${
+                              selected
+                                ? "border-primary-200 bg-primary-50/50 dark:border-primary-700/60 dark:bg-primary-900/20"
+                                : "border-slate-200 bg-white hover:border-primary-200 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-primary-700/60"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => toggleSelection(item.id)}
+                                aria-label={`Select ${item.name}`}
+                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                              />
+                              <button
+                                type="button"
+                                className={iconButtonClasses}
+                                aria-label="Focus"
+                                onClick={() => setActiveItem(item)}
+                              >
+                                <MoreIcon />
+                              </button>
+                            </div>
                             <button
                               type="button"
                               onClick={() => (item.type === "folder" ? handleOpenItem(item) : setActiveItem(item))}
-                              className="block text-left font-semibold text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
+                              className="flex items-center gap-2 text-left"
                             >
-                              {item.name}
+                              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                                {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
+                              </span>
+                              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.name}</span>
                             </button>
-                            <div className="mt-1 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                               <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
                                 {item.type === "folder" ? "Prefix" : "Object"}
                               </span>
                               {item.storageClass && (
-                                <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 font-semibold ${
+                                    storageClassChipClasses[item.storageClass] ??
+                                    "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                  }`}
+                                >
                                   {item.storageClass}
                                 </span>
                               )}
                             </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              Size: {item.size} | Modified: {item.modified}
+                            </div>
+                            <div className="mt-auto flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                className={bulkActionClasses}
+                                disabled={item.type === "folder"}
+                                onClick={() => setActiveItem(item)}
+                              >
+                                Preview
+                              </button>
+                              <button
+                                type="button"
+                                className={bulkActionClasses}
+                                disabled={item.type === "folder"}
+                              >
+                                Download
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Inspector</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {inspectedItem ? "Object details and metadata" : "Select an object to inspect."}
+                        </p>
+                      </div>
+                      {inspectedItem && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveItem(null)}
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    {inspectedItem ? (
+                      <div className="mt-4 space-y-4">
+                        <div className="rounded-xl border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-sky-50 px-3 py-3 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900/60 dark:to-slate-900">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex h-12 w-12 items-center justify-center rounded-lg border text-[11px] font-bold ${
+                                isImageFile(inspectedItem.name)
+                                  ? "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/30 dark:text-sky-200"
+                                  : "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                              }`}
+                            >
+                              {previewLabelForItem(inspectedItem)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                {inspectedItem.name}
+                              </p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                {inspectedItem.type === "folder" ? "Prefix" : "Object"} | {inspectedItem.size}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button type="button" className={bulkActionClasses} disabled={inspectedItem.type === "folder"}>
+                              <DownloadIcon className="h-3.5 w-3.5" />
+                              Download
+                            </button>
+                            <button type="button" className={bulkActionClasses}>
+                              <CopyIcon className="h-3.5 w-3.5" />
+                              Copy URL
+                            </button>
+                            <button
+                              type="button"
+                              className={bulkActionClasses}
+                              onClick={() => (inspectedItem.type === "folder" ? handleOpenItem(inspectedItem) : undefined)}
+                              disabled={inspectedItem.type !== "folder"}
+                            >
+                              <OpenIcon className="h-3.5 w-3.5" />
+                              Open
+                            </button>
+                            <button type="button" className={bulkDangerClasses}>
+                              <TrashIcon className="h-3.5 w-3.5" />
+                              Delete
+                            </button>
                           </div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.size}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.modified}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.owner}</td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex flex-wrap justify-end gap-2">
-                          <button
-                            type="button"
-                            className={iconButtonClasses}
-                            aria-label="Open"
-                            title="Open"
-                            onClick={() => handleOpenItem(item)}
-                            disabled={item.type !== "folder"}
-                          >
-                            <OpenIcon />
-                          </button>
-                          <button
-                            type="button"
-                            className={iconButtonClasses}
-                            aria-label="Preview"
-                            title="Preview"
-                            disabled={item.type === "folder"}
-                          >
-                            <EyeIcon />
-                          </button>
-                          <button
-                            type="button"
-                            className={iconButtonClasses}
-                            aria-label="Download"
-                            title="Download"
-                            disabled={item.type === "folder"}
-                          >
-                            <DownloadIcon />
-                          </button>
-                          <button
-                            type="button"
-                            className={iconButtonDangerClasses}
-                            aria-label="Delete"
-                            title="Delete"
-                          >
-                            <TrashIcon />
-                          </button>
-                          <button
-                            type="button"
-                            className={iconButtonClasses}
-                            aria-label="More actions"
-                            title="More"
-                            onClick={() => setActiveItem(item)}
-                          >
-                            <MoreIcon />
-                          </button>
+
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Metadata</p>
+                          <div className="grid gap-2 text-xs text-slate-600 dark:text-slate-300">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-slate-500">Path</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedPath}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-slate-500">Owner</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedItem.owner}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-slate-500">Last modified</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedItem.modified}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-slate-500">Content type</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                {inspectedDetails?.contentType ?? "unknown"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-slate-500">ETag</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                {inspectedDetails?.etag ?? "-"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-slate-500">Encryption</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                {inspectedDetails?.encryption ?? "None"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-slate-500">Retention</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                {inspectedDetails?.retention ?? "-"}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        }
-      />
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Operations in progress</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Live tasks for this account.</p>
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tags</p>
+                          <div className="flex flex-wrap gap-2">
+                            {inspectedDetails?.tags?.length ? (
+                              inspectedDetails.tags.map((tag) => (
+                                <span key={tag} className={`${filterChipClasses} border-slate-200 dark:border-slate-700`}>
+                                  {tag}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-slate-500 dark:text-slate-400">No tags defined.</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {inspectedItem.type === "file" && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Versions</p>
+                            <div className="space-y-2">
+                              {inspectedDetails?.versions?.length ? (
+                                inspectedDetails.versions.map((version) => (
+                                  <div
+                                    key={version.id}
+                                    className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-semibold text-slate-700 dark:text-slate-100">{version.id}</span>
+                                      {version.current && (
+                                        <span className="rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-semibold text-primary-800 dark:bg-primary-900/40 dark:text-primary-100">
+                                          Current
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-slate-500 dark:text-slate-400">
+                                      {version.size} | {version.modified}
+                                    </span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                  No versions listed for this object.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-4 space-y-4">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Prefix summary</p>
+                          <div className="mt-3 grid gap-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">Files</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.files}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">Folders</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.folders}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">Total size</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                {formatBytes(pathStats.totalBytes)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Storage classes</p>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.keys(pathStats.storageCounts).length === 0 ? (
+                              <span className="text-xs text-slate-500 dark:text-slate-400">No file data yet.</span>
+                            ) : (
+                              Object.entries(pathStats.storageCounts).map(([storage, count]) => (
+                                <span
+                                  key={storage}
+                                  className={`rounded-full border px-2 py-1 text-xs font-semibold ${
+                                    storageClassChipClasses[storage] ??
+                                    "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                  }`}
+                                >
+                                  {storage} ({count})
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Recent activity</p>
+                          <div className="space-y-2">
+                            {activityLog.map((activity) => (
+                              <div
+                                key={activity.id}
+                                className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                    {activity.action}
+                                  </span>
+                                  <span className="text-slate-400">{activity.when}</span>
+                                </div>
+                                <p className="mt-1 text-slate-500 dark:text-slate-400">{activity.path}</p>
+                                <p className="mt-1 text-slate-400">by {activity.actor}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Transfers</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Live operations for this account.</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-slate-500 transition hover:text-primary dark:text-slate-400 dark:hover:text-primary-200"
+                      >
+                        View all
+                      </button>
+                    </div>
+                    <div className="mt-3 space-y-3">
+                      {operations.map((op) => (
+                        <div key={op.id} className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClasses(op.status)}`}>
+                              {statusLabel(op.status)}
+                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">{op.progress}%</span>
+                          </div>
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{op.path}</p>
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                            <div className="h-full bg-primary-500" style={{ width: `${op.progress}%` }} />
+                          </div>
+                          <p className="text-[11px] text-slate-400">{op.label} in progress.</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <button
-              type="button"
-              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-            >
-              View all
-            </button>
           </div>
         </div>
-        <div className="divide-y divide-slate-200 dark:divide-slate-800">
-          {operations.map((op) => (
-            <div key={op.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClasses(op.status)}`}>
-                    {statusLabel(op.status)}
-                  </span>
-                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">{op.path}</span>
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{op.label} in progress.</div>
-              </div>
-              <div className="w-full max-w-sm space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  <span>Progress</span>
-                  <span>{op.progress}%</span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                  <div className="h-full bg-primary-500" style={{ width: `${op.progress}%` }} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {activeItem && (
-        <Modal title={`Actions for ${activeItem.name}`} onClose={() => setActiveItem(null)}>
-          <div className="space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-              <p className="font-semibold text-slate-900 dark:text-slate-100">Object details</p>
-              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                Path: {selectedPath}/{activeItem.name}
-              </p>
-              <div className="mt-3 grid gap-2 text-xs text-slate-500 dark:text-slate-400 sm:grid-cols-2">
-                <span>Type: {activeItem.type}</span>
-                <span>Owner: {activeItem.owner}</span>
-                <span>Size: {activeItem.size}</span>
-                <span>Modified: {activeItem.modified}</span>
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-              >
-                Manage access (ACL)
-                <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-                  Share or restrict permissions.
-                </span>
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-              >
-                Metadata
-                <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-                  View or edit object headers.
-                </span>
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-              >
-                Generate signed URL
-                <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-                  Temporary sharing link.
-                </span>
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-              >
-                Change storage class
-                <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
-                  Move between STANDARD or GLACIER.
-                </span>
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-rose-200 px-4 py-3 text-left text-sm font-semibold text-rose-700 transition hover:bg-rose-50 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30"
-              >
-                Delete object
-                <span className="mt-1 block text-xs text-rose-500 dark:text-rose-300">
-                  Removes all versions.
-                </span>
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }
