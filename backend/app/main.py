@@ -17,6 +17,7 @@ from app.routers.admin import s3_users as admin_s3_users
 from app.routers.admin import storage_endpoints as admin_storage_endpoints
 from app.routers.admin import settings as admin_settings
 from app.routers.manager import s3_accounts as manager_accounts
+from app.routers.manager import browser as manager_browser
 from app.routers.manager import buckets as manager_buckets
 from app.routers.manager import context as manager_context
 from app.routers.manager import iam_groups, iam_roles, iam_users
@@ -71,6 +72,7 @@ app.include_router(admin_settings.router, prefix=settings.api_v1_prefix)
 app.include_router(manager_accounts.router, prefix=settings.api_v1_prefix)
 app.include_router(manager_context.router, prefix=settings.api_v1_prefix)
 app.include_router(manager_buckets.router, prefix=settings.api_v1_prefix)
+app.include_router(manager_browser.router, prefix=settings.api_v1_prefix)
 app.include_router(iam_users.router, prefix=settings.api_v1_prefix)
 app.include_router(iam_groups.router, prefix=settings.api_v1_prefix)
 app.include_router(iam_roles.router, prefix=settings.api_v1_prefix)

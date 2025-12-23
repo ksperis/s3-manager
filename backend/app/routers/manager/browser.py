@@ -2,7 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import os
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.db_models import S3Account, User
@@ -22,6 +25,8 @@ from app.models.browser import (
     PresignPartResponse,
     PresignRequest,
     PresignedUrl,
+    BucketCorsStatus,
+    StsStatus,
 )
 from app.models.browser import BrowserBucket
 from app.services.audit_service import AuditService
@@ -33,6 +38,11 @@ router = APIRouter(prefix="/manager/browser", tags=["manager-browser"])
 
 class CreateFolderPayload(BaseModel):
     prefix: str
+
+
+class ProxyUploadResponse(BaseModel):
+    message: str
+    key: str
 
 
 @router.get("/buckets", response_model=list[BrowserBucket])
@@ -61,6 +71,25 @@ def list_objects(
         return service.list_objects(bucket_name, account, prefix=prefix, continuation_token=continuation_token, max_keys=max_keys)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/{bucket_name}/cors", response_model=BucketCorsStatus)
+def get_bucket_cors(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    _: User = Depends(get_current_account_admin),
+) -> BucketCorsStatus:
+    return service.get_bucket_cors_status(bucket_name, account)
+
+
+@router.get("/sts", response_model=StsStatus)
+def get_sts_status(
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    _: User = Depends(get_current_account_admin),
+) -> StsStatus:
+    return service.check_sts(account)
 
 
 @router.get("/buckets/{bucket_name}/versions", response_model=ListObjectVersionsResponse)
@@ -160,6 +189,70 @@ def presign_object(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         return service.presign(bucket_name, account, payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/buckets/{bucket_name}/proxy-upload", response_model=ProxyUploadResponse)
+def proxy_upload(
+    bucket_name: str,
+    key: str = Form(...),
+    file: UploadFile = File(...),
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> ProxyUploadResponse:
+    if not key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    try:
+        service.proxy_upload(bucket_name, account, key, file.file, file.content_type)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="proxy_upload",
+            entity_type="object",
+            entity_id=key,
+            account=account,
+            metadata={"bucket": bucket_name, "content_type": file.content_type},
+        )
+        return ProxyUploadResponse(message="uploaded", key=key)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/{bucket_name}/proxy-download")
+def proxy_download(
+    bucket_name: str,
+    key: str,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+):
+    if not key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    try:
+        resp = service.proxy_download(bucket_name, account, key)
+        body = resp.get("Body")
+        if not body:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Empty response body")
+        content_type = resp.get("ContentType") or "application/octet-stream"
+        filename = os.path.basename(key) or "download"
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        content_length = resp.get("ContentLength")
+        if content_length is not None:
+            headers["Content-Length"] = str(content_length)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="proxy_download",
+            entity_type="object",
+            entity_id=key,
+            account=account,
+            metadata={"bucket": bucket_name},
+        )
+        return StreamingResponse(body.iter_chunks(chunk_size=1024 * 1024), media_type=content_type, headers=headers)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

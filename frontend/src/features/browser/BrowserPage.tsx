@@ -2,24 +2,40 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import axios from "axios";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
-
-type TreeNode = {
-  id: string;
-  name: string;
-  path: string;
-  type: "bucket" | "folder";
-  children?: TreeNode[];
-};
+import {
+  BrowserBucket,
+  BrowserObject,
+  BucketCorsStatus,
+  ObjectMetadata,
+  ObjectTag,
+  StsStatus,
+  createFolder,
+  deleteObjects,
+  fetchObjectMetadata,
+  getBucketCorsStatus,
+  getObjectTags,
+  getStsStatus,
+  listBrowserBuckets,
+  listBrowserObjects,
+  presignObject,
+  proxyDownload,
+  proxyUpload,
+} from "../../api/browser";
+import { useS3AccountContext } from "../manager/S3AccountContext";
 
 type BrowserItem = {
   id: string;
+  key: string;
   name: string;
   type: "folder" | "file";
   size: string;
+  sizeBytes?: number | null;
   modified: string;
+  modifiedAt?: number | null;
   owner: string;
   storageClass?: string;
 };
@@ -32,23 +48,6 @@ type OperationItem = {
   status: "uploading" | "deleting" | "copying";
 };
 
-type ObjectVersion = {
-  id: string;
-  size: string;
-  modified: string;
-  current?: boolean;
-};
-
-type ObjectDetail = {
-  contentType: string;
-  etag: string;
-  checksum: string;
-  encryption: string;
-  tags: string[];
-  retention: string;
-  versions?: ObjectVersion[];
-};
-
 type ActivityItem = {
   id: string;
   action: string;
@@ -56,374 +55,6 @@ type ActivityItem = {
   actor: string;
   when: string;
 };
-
-const treeData: TreeNode[] = [
-  {
-    id: "media-prod",
-    name: "media-prod",
-    path: "media-prod",
-    type: "bucket",
-    children: [
-      {
-        id: "media-prod/assets",
-        name: "assets",
-        path: "media-prod/assets",
-        type: "folder",
-        children: [
-          {
-            id: "media-prod/assets/2024",
-            name: "2024",
-            path: "media-prod/assets/2024",
-            type: "folder",
-          },
-        ],
-      },
-      {
-        id: "media-prod/backups",
-        name: "backups",
-        path: "media-prod/backups",
-        type: "folder",
-      },
-    ],
-  },
-  {
-    id: "logs",
-    name: "logs",
-    path: "logs",
-    type: "bucket",
-    children: [
-      {
-        id: "logs/ingest",
-        name: "ingest",
-        path: "logs/ingest",
-        type: "folder",
-      },
-      {
-        id: "logs/archive",
-        name: "archive",
-        path: "logs/archive",
-        type: "folder",
-      },
-    ],
-  },
-  {
-    id: "analytics",
-    name: "analytics",
-    path: "analytics",
-    type: "bucket",
-    children: [
-      {
-        id: "analytics/datasets",
-        name: "datasets",
-        path: "analytics/datasets",
-        type: "folder",
-      },
-    ],
-  },
-];
-
-const contentIndex: Record<string, BrowserItem[]> = {
-  "media-prod": [
-    {
-      id: "media-prod/assets",
-      name: "assets",
-      type: "folder",
-      size: "-",
-      modified: "2024-05-12 09:44",
-      owner: "media-team",
-    },
-    {
-      id: "media-prod/backups",
-      name: "backups",
-      type: "folder",
-      size: "-",
-      modified: "2024-05-10 07:15",
-      owner: "media-team",
-    },
-    {
-      id: "media-prod/logo.svg",
-      name: "logo.svg",
-      type: "file",
-      size: "214 KB",
-      modified: "2024-05-11 12:06",
-      owner: "design",
-      storageClass: "STANDARD",
-    },
-    {
-      id: "media-prod/banner.png",
-      name: "banner.png",
-      type: "file",
-      size: "1.3 MB",
-      modified: "2024-05-09 18:22",
-      owner: "design",
-      storageClass: "STANDARD",
-    },
-  ],
-  "media-prod/assets": [
-    {
-      id: "media-prod/assets/2024",
-      name: "2024",
-      type: "folder",
-      size: "-",
-      modified: "2024-05-01 08:00",
-      owner: "media-team",
-    },
-    {
-      id: "media-prod/assets/hero.mp4",
-      name: "hero.mp4",
-      type: "file",
-      size: "84 MB",
-      modified: "2024-05-13 10:34",
-      owner: "marketing",
-      storageClass: "STANDARD",
-    },
-    {
-      id: "media-prod/assets/thumbs.zip",
-      name: "thumbs.zip",
-      type: "file",
-      size: "12 MB",
-      modified: "2024-05-12 14:01",
-      owner: "media-team",
-      storageClass: "STANDARD_IA",
-    },
-  ],
-  "media-prod/assets/2024": [
-    {
-      id: "media-prod/assets/2024/launch.mov",
-      name: "launch.mov",
-      type: "file",
-      size: "1.2 GB",
-      modified: "2024-05-04 15:50",
-      owner: "studio",
-      storageClass: "STANDARD",
-    },
-    {
-      id: "media-prod/assets/2024/teaser.mp4",
-      name: "teaser.mp4",
-      type: "file",
-      size: "640 MB",
-      modified: "2024-05-03 11:20",
-      owner: "studio",
-      storageClass: "STANDARD",
-    },
-  ],
-  "media-prod/backups": [
-    {
-      id: "media-prod/backups/2024-05-14.tar.gz",
-      name: "2024-05-14.tar.gz",
-      type: "file",
-      size: "3.8 GB",
-      modified: "2024-05-14 01:12",
-      owner: "ops",
-      storageClass: "GLACIER",
-    },
-    {
-      id: "media-prod/backups/2024-05-13.tar.gz",
-      name: "2024-05-13.tar.gz",
-      type: "file",
-      size: "3.7 GB",
-      modified: "2024-05-13 01:08",
-      owner: "ops",
-      storageClass: "GLACIER",
-    },
-  ],
-  "logs": [
-    {
-      id: "logs/ingest",
-      name: "ingest",
-      type: "folder",
-      size: "-",
-      modified: "2024-05-14 09:21",
-      owner: "platform",
-    },
-    {
-      id: "logs/archive",
-      name: "archive",
-      type: "folder",
-      size: "-",
-      modified: "2024-05-10 19:40",
-      owner: "platform",
-    },
-    {
-      id: "logs/router.log",
-      name: "router.log",
-      type: "file",
-      size: "48 MB",
-      modified: "2024-05-14 09:58",
-      owner: "platform",
-      storageClass: "STANDARD",
-    },
-  ],
-  "logs/ingest": [
-    {
-      id: "logs/ingest/2024-05-14.log",
-      name: "2024-05-14.log",
-      type: "file",
-      size: "1.4 GB",
-      modified: "2024-05-14 09:58",
-      owner: "platform",
-      storageClass: "STANDARD_IA",
-    },
-    {
-      id: "logs/ingest/2024-05-13.log",
-      name: "2024-05-13.log",
-      type: "file",
-      size: "1.1 GB",
-      modified: "2024-05-13 23:12",
-      owner: "platform",
-      storageClass: "STANDARD_IA",
-    },
-  ],
-  "logs/archive": [
-    {
-      id: "logs/archive/2024-04-30.log.gz",
-      name: "2024-04-30.log.gz",
-      type: "file",
-      size: "512 MB",
-      modified: "2024-05-01 00:10",
-      owner: "platform",
-      storageClass: "GLACIER",
-    },
-  ],
-  "analytics": [
-    {
-      id: "analytics/datasets",
-      name: "datasets",
-      type: "folder",
-      size: "-",
-      modified: "2024-05-08 17:22",
-      owner: "data-team",
-    },
-    {
-      id: "analytics/warehouse.parquet",
-      name: "warehouse.parquet",
-      type: "file",
-      size: "8.4 GB",
-      modified: "2024-05-08 17:30",
-      owner: "data-team",
-      storageClass: "STANDARD",
-    },
-  ],
-  "analytics/datasets": [
-    {
-      id: "analytics/datasets/facts-2024.parquet",
-      name: "facts-2024.parquet",
-      type: "file",
-      size: "2.1 GB",
-      modified: "2024-05-08 17:31",
-      owner: "data-team",
-      storageClass: "STANDARD",
-    },
-    {
-      id: "analytics/datasets/segments.csv",
-      name: "segments.csv",
-      type: "file",
-      size: "740 MB",
-      modified: "2024-05-08 17:12",
-      owner: "data-team",
-      storageClass: "STANDARD_IA",
-    },
-  ],
-};
-
-const operations: OperationItem[] = [
-  {
-    id: "op-upload-1",
-    label: "Uploading",
-    path: "logs/ingest/2024-05-14.log",
-    progress: 72,
-    status: "uploading",
-  },
-  {
-    id: "op-copy-1",
-    label: "Copying",
-    path: "media-prod/assets/hero.mp4",
-    progress: 38,
-    status: "copying",
-  },
-  {
-    id: "op-delete-1",
-    label: "Deleting",
-    path: "media-prod/backups/2024-05-10.tar.gz",
-    progress: 54,
-    status: "deleting",
-  },
-];
-
-const objectDetails: Record<string, ObjectDetail> = {
-  "media-prod/logo.svg": {
-    contentType: "image/svg+xml",
-    etag: "b4d9f9c1a7f3c2",
-    checksum: "SHA256 2f8c9a7a",
-    encryption: "SSE-S3",
-    retention: "None",
-    tags: ["brand", "logo", "svg"],
-    versions: [
-      { id: "v3", size: "214 KB", modified: "2024-05-11 12:06", current: true },
-      { id: "v2", size: "210 KB", modified: "2024-03-02 10:22" },
-    ],
-  },
-  "media-prod/assets/hero.mp4": {
-    contentType: "video/mp4",
-    etag: "0aa1bd980f45",
-    checksum: "SHA256 8b1c3f4d",
-    encryption: "SSE-S3",
-    retention: "30d",
-    tags: ["hero", "launch", "2024"],
-    versions: [
-      { id: "v5", size: "84 MB", modified: "2024-05-13 10:34", current: true },
-      { id: "v4", size: "82 MB", modified: "2024-05-12 09:10" },
-    ],
-  },
-  "media-prod/backups/2024-05-14.tar.gz": {
-    contentType: "application/gzip",
-    etag: "a13d9c22",
-    checksum: "SHA256 91b2c301",
-    encryption: "SSE-S3",
-    retention: "90d",
-    tags: ["backup", "daily"],
-  },
-  "logs/router.log": {
-    contentType: "text/plain",
-    etag: "d19f73aa",
-    checksum: "SHA256 19f2a1c2",
-    encryption: "SSE-S3",
-    retention: "14d",
-    tags: ["router", "edge"],
-  },
-  "analytics/warehouse.parquet": {
-    contentType: "application/parquet",
-    etag: "ca91b01f",
-    checksum: "SHA256 8f9ad3c1",
-    encryption: "SSE-KMS",
-    retention: "365d",
-    tags: ["warehouse", "prod"],
-  },
-};
-
-const activityLog: ActivityItem[] = [
-  {
-    id: "activity-1",
-    action: "Uploaded",
-    path: "media-prod/assets/hero.mp4",
-    actor: "marketing",
-    when: "8m ago",
-  },
-  {
-    id: "activity-2",
-    action: "Deleted",
-    path: "media-prod/backups/2024-05-10.tar.gz",
-    actor: "ops",
-    when: "2h ago",
-  },
-  {
-    id: "activity-3",
-    action: "Tagged",
-    path: "analytics/warehouse.parquet",
-    actor: "data-team",
-    when: "Yesterday",
-  },
-];
 
 const iconButtonClasses =
   "inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200";
@@ -444,32 +75,13 @@ const filterChipActiveClasses =
 const viewToggleBaseClasses =
   "inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100";
 const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-100";
+const breadcrumbIconButtonClasses =
+  "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-200";
 
 const storageClassChipClasses: Record<string, string> = {
   STANDARD: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-900/20 dark:text-emerald-200",
   STANDARD_IA: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200",
   GLACIER: "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-900/20 dark:text-indigo-200",
-};
-
-const sizeMultipliers: Record<string, number> = {
-  B: 1,
-  KB: 1024,
-  MB: 1024 ** 2,
-  GB: 1024 ** 3,
-  TB: 1024 ** 4,
-  PB: 1024 ** 5,
-};
-
-const parseSizeToBytes = (size: string): number | null => {
-  if (!size || size === "-") return null;
-  const match = size.trim().match(/^([\d.]+)\s*([A-Za-z]+)$/);
-  if (!match) return null;
-  const value = Number.parseFloat(match[1]);
-  if (Number.isNaN(value)) return null;
-  const unit = match[2].toUpperCase();
-  const multiplier = sizeMultipliers[unit];
-  if (!multiplier) return null;
-  return value * multiplier;
 };
 
 const formatBytes = (bytes?: number | null): string => {
@@ -484,6 +96,35 @@ const formatBytes = (bytes?: number | null): string => {
   }
   const decimals = value >= 10 || idx === 0 ? 0 : 1;
   return `${value.toFixed(decimals)} ${units[idx]}`;
+};
+
+const formatDateTime = (value?: string | null): string => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (num: number) => `${num}`.padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}`;
+};
+
+const normalizePrefix = (value: string) => {
+  if (!value) return "";
+  return value.endsWith("/") ? value : `${value}/`;
+};
+
+const shortName = (key: string, basePrefix: string) => {
+  if (!basePrefix) return key;
+  if (key.startsWith(basePrefix)) return key.slice(basePrefix.length);
+  return key;
+};
+
+const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const isLikelyCorsError = (error: unknown) => {
+  if (!axios.isAxiosError(error)) return false;
+  if (!error.response) return true;
+  return error.code === "ERR_NETWORK" || error.message === "Network Error";
 };
 
 const getExtension = (name: string) => {
@@ -565,6 +206,13 @@ const DownloadIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
+const UpIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <path d="M9 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5 8h6a4 4 0 0 1 4 4v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
 const CopyIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
     <rect x="7" y="7" width="9" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
@@ -613,7 +261,21 @@ const GridIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
 );
 
 export default function BrowserPage() {
-  const [selectedPath, setSelectedPath] = useState(treeData[0]?.path ?? "");
+  const { accountIdForApi, hasS3AccountContext } = useS3AccountContext();
+  const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
+  const [bucketName, setBucketName] = useState("");
+  const [prefix, setPrefix] = useState("");
+  const [objects, setObjects] = useState<BrowserObject[]>([]);
+  const [prefixes, setPrefixes] = useState<string[]>([]);
+  const [loadingBuckets, setLoadingBuckets] = useState(false);
+  const [bucketError, setBucketError] = useState<string | null>(null);
+  const [objectsLoading, setObjectsLoading] = useState(false);
+  const [objectsError, setObjectsError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
+  const [corsStatus, setCorsStatus] = useState<BucketCorsStatus | null>(null);
+  const [stsStatus, setStsStatus] = useState<StsStatus | null>(null);
+  const [useProxyTransfers, setUseProxyTransfers] = useState(false);
   const [filter, setFilter] = useState("");
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -621,13 +283,181 @@ export default function BrowserPage() {
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "folder">("all");
   const [storageFilter, setStorageFilter] = useState<string>("all");
   const [sortId, setSortId] = useState("name-asc");
+  const [operations, setOperations] = useState<OperationItem[]>([]);
+  const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
+  const [inspectedMetadata, setInspectedMetadata] = useState<ObjectMetadata | null>(null);
+  const [inspectedTags, setInspectedTags] = useState<ObjectTag[]>([]);
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [isEditingPath, setIsEditingPath] = useState(false);
+  const [pathDraft, setPathDraft] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const pathInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleSelectPath = (path: string) => {
-    setSelectedPath(path);
-    setActiveItem(null);
+  const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
+  const warnings = useMemo(() => {
+    const items: string[] = [];
+    if (warningMessage) {
+      items.push(warningMessage);
+    }
+    if (corsStatus && !corsStatus.enabled) {
+      items.push(corsStatus.error ?? "Bucket CORS is not enabled.");
+    }
+    if (useProxyTransfers) {
+      items.push("Backend proxy is active for uploads/downloads.");
+    }
+    if (stsStatus && !stsStatus.available) {
+      items.push(stsStatus.error ?? "STS is not available for this account.");
+    }
+    return items;
+  }, [corsStatus, stsStatus, useProxyTransfers, warningMessage]);
+
+  useEffect(() => {
+    if (!hasS3AccountContext) {
+      setBuckets([]);
+      setBucketName("");
+      setPrefix("");
+      return;
+    }
+    let isMounted = true;
+    setLoadingBuckets(true);
+    setBucketError(null);
+    listBrowserBuckets(accountIdForApi)
+      .then((data) => {
+        if (!isMounted) return;
+        setBuckets(data);
+        setBucketName((prev) => {
+          if (prev && data.some((bucket) => bucket.name === prev)) {
+            return prev;
+          }
+          const next = data[0]?.name ?? "";
+          if (next !== prev) {
+            setPrefix("");
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setBucketError("Unable to list buckets for this account.");
+        setBuckets([]);
+        setBucketName("");
+        setPrefix("");
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoadingBuckets(false);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [accountIdForApi, hasS3AccountContext]);
+
+  const loadObjects = async (nextPrefix?: string) => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const targetPrefix = normalizePrefix(nextPrefix ?? prefix);
+    setObjectsLoading(true);
+    setObjectsError(null);
+    try {
+      const data = await listBrowserObjects(accountIdForApi, bucketName, { prefix: targetPrefix });
+      setObjects(data.objects);
+      setPrefixes(data.prefixes);
+    } catch (err) {
+      setObjectsError("Unable to list objects for this prefix.");
+      setObjects([]);
+      setPrefixes([]);
+    } finally {
+      setObjectsLoading(false);
+    }
   };
 
-  const items = contentIndex[selectedPath] ?? [];
+  useEffect(() => {
+    if (!bucketName || !hasS3AccountContext) {
+      setObjects([]);
+      setPrefixes([]);
+      return;
+    }
+    loadObjects(prefix);
+  }, [accountIdForApi, bucketName, hasS3AccountContext, prefix]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!bucketName || !hasS3AccountContext) {
+      setCorsStatus(null);
+      setUseProxyTransfers(false);
+      return;
+    }
+    let isMounted = true;
+    getBucketCorsStatus(accountIdForApi, bucketName)
+      .then((status) => {
+        if (!isMounted) return;
+        setCorsStatus(status);
+        setUseProxyTransfers(!status.enabled);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setCorsStatus({ enabled: false, rules: [], error: "Unable to check bucket CORS." });
+        setUseProxyTransfers(true);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [accountIdForApi, bucketName, hasS3AccountContext]);
+
+  useEffect(() => {
+    if (!hasS3AccountContext) {
+      setStsStatus(null);
+      return;
+    }
+    let isMounted = true;
+    getStsStatus(accountIdForApi)
+      .then((status) => {
+        if (!isMounted) return;
+        setStsStatus(status);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setStsStatus({ available: false, error: "Unable to reach STS endpoint." });
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [accountIdForApi, hasS3AccountContext]);
+
+  const items = useMemo(() => {
+    const folderItems = prefixes.map((prefixKey) => {
+      const rawName = shortName(prefixKey, normalizedPrefix);
+      const name = rawName.endsWith("/") ? rawName.slice(0, -1) : rawName;
+      return {
+        id: prefixKey,
+        key: prefixKey,
+        name: name || prefixKey,
+        type: "folder",
+        size: "-",
+        sizeBytes: null,
+        modified: "-",
+        modifiedAt: null,
+        owner: "-",
+      } satisfies BrowserItem;
+    });
+    const objectItems = objects.map((obj) => {
+      const modifiedAt = obj.last_modified ? new Date(obj.last_modified).getTime() : null;
+      return {
+        id: obj.key,
+        key: obj.key,
+        name: shortName(obj.key, normalizedPrefix),
+        type: "file",
+        size: formatBytes(obj.size),
+        sizeBytes: obj.size,
+        modified: formatDateTime(obj.last_modified),
+        modifiedAt,
+        owner: "-",
+        storageClass: obj.storage_class ?? undefined,
+      } satisfies BrowserItem;
+    });
+    return [...folderItems, ...objectItems];
+  }, [normalizedPrefix, objects, prefixes]);
+
   const sortOptions = [
     { id: "name-asc", label: "Name (A-Z)", key: "name", direction: "asc" as const },
     { id: "name-desc", label: "Name (Z-A)", key: "name", direction: "desc" as const },
@@ -650,12 +480,12 @@ export default function BrowserPage() {
     return [...next].sort((a, b) => {
       if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
       if (activeSort.key === "size") {
-        const aSize = parseSizeToBytes(a.size) ?? 0;
-        const bSize = parseSizeToBytes(b.size) ?? 0;
+        const aSize = a.sizeBytes ?? 0;
+        const bSize = b.sizeBytes ?? 0;
         return activeSort.direction === "asc" ? aSize - bSize : bSize - aSize;
       }
       if (activeSort.key === "modified") {
-        const result = a.modified.localeCompare(b.modified);
+        const result = (a.modifiedAt ?? 0) - (b.modifiedAt ?? 0);
         return activeSort.direction === "asc" ? result : -result;
       }
       const result = a.name.localeCompare(b.name);
@@ -663,34 +493,33 @@ export default function BrowserPage() {
     });
   }, [activeSort.direction, activeSort.key, filter, items, storageFilter, typeFilter]);
 
-  const pathParts = selectedPath.split("/").filter(Boolean);
-  const bucketName = pathParts[0] ?? "";
-  const prefixParts = pathParts.slice(1);
-  const bucketOptions = useMemo(
-    () => treeData.map((bucket) => ({ name: bucket.name, path: bucket.path })),
-    []
-  );
+  const prefixParts = useMemo(() => prefix.split("/").filter(Boolean), [prefix]);
+  const bucketOptions = useMemo(() => buckets.map((bucket) => bucket.name), [buckets]);
 
   const breadcrumbs = useMemo(() => {
-    if (!bucketName) return [];
-    let current = bucketName;
+    let current = "";
     return prefixParts.map((part) => {
-      current = `${current}/${part}`;
-      return { label: part, path: current };
+      current = `${current}${part}/`;
+      return { label: part, prefix: current };
     });
-  }, [bucketName, prefixParts]);
+  }, [prefixParts]);
+
+  const parentPrefix = useMemo(() => {
+    if (prefixParts.length <= 1) return "";
+    return `${prefixParts.slice(0, -1).join("/")}/`;
+  }, [prefixParts]);
+  const canGoUp = prefixParts.length > 0;
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allSelected = filteredItems.length > 0 && filteredItems.every((item) => selectedSet.has(item.id));
-  const selectedCount = selectedIds.length;
+  const selectedItems = useMemo(() => items.filter((item) => selectedSet.has(item.id)), [items, selectedSet]);
+  const selectedCount = selectedItems.length;
+  const selectedFiles = selectedItems.filter((item) => item.type === "file");
+  const hasFolderSelection = selectedItems.some((item) => item.type === "folder");
+  const canBulkActions = selectedFiles.length > 0 && !hasFolderSelection;
   const selectedBytes = useMemo(() => {
-    return selectedIds.reduce((sum, id) => {
-      const item = items.find((entry) => entry.id === id);
-      if (!item) return sum;
-      const bytes = parseSizeToBytes(item.size) ?? 0;
-      return sum + bytes;
-    }, 0);
-  }, [items, selectedIds]);
+    return selectedItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
+  }, [selectedItems]);
 
   const availableStorageClasses = useMemo(() => {
     const classes = new Set<string>();
@@ -713,7 +542,7 @@ export default function BrowserPage() {
         return;
       }
       files += 1;
-      totalBytes += parseSizeToBytes(item.size) ?? 0;
+      totalBytes += item.sizeBytes ?? 0;
       const storage = item.storageClass ?? "STANDARD";
       storageCounts[storage] = (storageCounts[storage] ?? 0) + 1;
     });
@@ -730,21 +559,71 @@ export default function BrowserPage() {
     return null;
   }, [activeItem, items, selectedIds]);
 
-  const inspectedDetails = inspectedItem ? objectDetails[inspectedItem.id] : null;
-  const inspectedPath = inspectedItem ? `${selectedPath}/${inspectedItem.name}` : selectedPath;
+  const currentPath = useMemo(() => {
+    if (!bucketName) return "";
+    if (!prefix) return bucketName;
+    const trimmed = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+    return `${bucketName}/${trimmed}`;
+  }, [bucketName, prefix]);
+  const inspectedPath = inspectedItem ? `${bucketName}/${inspectedItem.key}` : currentPath;
 
   const handleOpenItem = (item: BrowserItem) => {
     if (item.type !== "folder") return;
-    const nextPath = `${selectedPath}/${item.name}`;
-    if (contentIndex[nextPath]) {
-      handleSelectPath(nextPath);
+    handleSelectPrefix(item.key);
+  };
+
+  const handleSelectPrefix = (nextPrefix: string) => {
+    setPrefix(nextPrefix);
+    setActiveItem(null);
+  };
+
+  const startEditingPath = () => {
+    if (!bucketName) return;
+    setPathDraft(prefix);
+    setIsEditingPath(true);
+  };
+
+  const commitPathDraft = () => {
+    const trimmed = pathDraft.trim().replace(/^\/+/, "");
+    const nextPrefix = trimmed ? normalizePrefix(trimmed) : "";
+    setIsEditingPath(false);
+    if (nextPrefix !== prefix) {
+      handleSelectPrefix(nextPrefix);
+    }
+  };
+
+  const cancelPathEdit = () => {
+    setPathDraft(prefix);
+    setIsEditingPath(false);
+  };
+
+  const handlePathKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitPathDraft();
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelPathEdit();
     }
   };
 
   useEffect(() => {
     setSelectedIds([]);
     setActiveItem(null);
-  }, [selectedPath]);
+    setStatusMessage(null);
+    setWarningMessage(null);
+    setIsEditingPath(false);
+  }, [bucketName, prefix]);
+
+  useEffect(() => {
+    if (!isEditingPath) {
+      setPathDraft(prefix);
+      return;
+    }
+    pathInputRef.current?.focus();
+    pathInputRef.current?.select();
+  }, [isEditingPath, prefix]);
 
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => items.some((item) => item.id === id)));
@@ -759,6 +638,42 @@ export default function BrowserPage() {
     }
   }, [availableStorageClasses, storageFilter]);
 
+  useEffect(() => {
+    if (!bucketName || !inspectedItem || inspectedItem.type === "folder" || !hasS3AccountContext) {
+      setInspectedMetadata(null);
+      setInspectedTags([]);
+      setMetadataError(null);
+      setMetadataLoading(false);
+      return;
+    }
+    let isMounted = true;
+    setMetadataLoading(true);
+    setMetadataError(null);
+    Promise.all([
+      fetchObjectMetadata(accountIdForApi, bucketName, inspectedItem.key),
+      getObjectTags(accountIdForApi, bucketName, inspectedItem.key),
+    ])
+      .then(([meta, tags]) => {
+        if (!isMounted) return;
+        setInspectedMetadata(meta);
+        setInspectedTags(tags.tags ?? []);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setMetadataError("Unable to load object details.");
+        setInspectedMetadata(null);
+        setInspectedTags([]);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setMetadataLoading(false);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.key, inspectedItem?.type]);
+
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]));
   };
@@ -772,9 +687,168 @@ export default function BrowserPage() {
   };
 
   const handleBucketChange = (value: string) => {
-    const match = bucketOptions.find((bucket) => bucket.name === value);
-    if (match) {
-      handleSelectPath(match.path);
+    if (!value || value === bucketName) return;
+    setBucketName(value);
+    setPrefix("");
+    setActiveItem(null);
+  };
+
+  const handleRefresh = () => {
+    if (!bucketName) return;
+    loadObjects(prefix);
+  };
+
+  const handleGoUp = () => {
+    if (!canGoUp) return;
+    handleSelectPrefix(parentPrefix);
+  };
+
+  const addActivity = (action: string, path: string) => {
+    setActivityLog((prev) => [{ id: makeId(), action, path, actor: "You", when: new Date().toLocaleTimeString() }, ...prev].slice(0, 6));
+  };
+
+  const handleNewFolder = async () => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const name = window.prompt("Folder name:");
+    if (!name) return;
+    const clean = name.replace(/^\/+|\/+$/g, "");
+    if (!clean) return;
+    const folderPrefix = `${normalizedPrefix}${clean}/`;
+    try {
+      await createFolder(accountIdForApi, bucketName, folderPrefix);
+      addActivity("Created", `${bucketName}/${folderPrefix}`);
+      setStatusMessage(`Folder ${clean} created`);
+      await loadObjects(prefix);
+    } catch (err) {
+      setStatusMessage("Unable to create folder.");
+    }
+  };
+
+  const handleUploadFiles = async (files: File[]) => {
+    if (!bucketName || !hasS3AccountContext || files.length === 0) return;
+    setWarningMessage(null);
+    await Promise.all(files.map((file) => startUpload(file)));
+  };
+
+  const startUpload = async (file: File) => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const key = `${normalizedPrefix}${file.name}`;
+    const operationId = makeId();
+    setOperations((prev) => [
+      { id: operationId, label: "Uploading", path: `${bucketName}/${key}`, progress: 0, status: "uploading" },
+      ...prev,
+    ]);
+    try {
+      const onProgress = (event: ProgressEvent) => {
+        const total = event.total ?? file.size;
+        const progress = total ? Math.round((event.loaded / total) * 100) : 0;
+        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress } : op)));
+      };
+      if (useProxyTransfers) {
+        await proxyUpload(accountIdForApi, bucketName, key, file, onProgress);
+      } else {
+        const presign = await presignObject(accountIdForApi, bucketName, {
+          key,
+          operation: "put_object",
+          content_type: file.type || undefined,
+          expires_in: 1800,
+        });
+        await axios.put(presign.url, file, {
+          headers: { ...(presign.headers || {}), "Content-Type": file.type || "application/octet-stream" },
+          onUploadProgress: onProgress,
+        });
+      }
+      setOperations((prev) => prev.filter((op) => op.id !== operationId));
+      addActivity("Uploaded", `${bucketName}/${key}`);
+      setStatusMessage(`Uploaded ${file.name}`);
+      await loadObjects(prefix);
+    } catch (err) {
+      setOperations((prev) => prev.filter((op) => op.id !== operationId));
+      setStatusMessage(`Upload failed for ${file.name}`);
+      if (!useProxyTransfers && isLikelyCorsError(err)) {
+        setWarningMessage(
+          `Possible CORS or endpoint issue. Ensure bucket CORS allows origin ${window.location.origin} with PUT/GET/HEAD and headers like Content-Type or x-amz-*.`
+        );
+      }
+    }
+  };
+
+  const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    handleUploadFiles(files);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDownloadItems = async (targets: BrowserItem[]) => {
+    if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
+    setWarningMessage(null);
+    try {
+      for (const item of targets) {
+        if (item.type !== "file") continue;
+        if (useProxyTransfers) {
+          const blob = await proxyDownload(accountIdForApi, bucketName, item.key);
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = item.name || "download";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(url);
+        } else {
+          const presign = await presignObject(accountIdForApi, bucketName, {
+            key: item.key,
+            operation: "get_object",
+            expires_in: 900,
+          });
+          window.open(presign.url, "_blank");
+        }
+      }
+    } catch (err) {
+      setStatusMessage(useProxyTransfers ? "Unable to download object." : "Unable to generate download URL.");
+    }
+  };
+
+  const handleDeleteItems = async (targets: BrowserItem[]) => {
+    if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
+    const fileTargets = targets.filter((item) => item.type === "file");
+    if (fileTargets.length === 0) return;
+    setWarningMessage(null);
+    const confirmed = window.confirm(`Delete ${fileTargets.length} object(s)?`);
+    if (!confirmed) return;
+    try {
+      await deleteObjects(
+        accountIdForApi,
+        bucketName,
+        fileTargets.map((item) => ({ key: item.key }))
+      );
+      fileTargets.forEach((item) => addActivity("Deleted", `${bucketName}/${item.key}`));
+      setSelectedIds((prev) => prev.filter((id) => !fileTargets.some((item) => item.id === id)));
+      setStatusMessage(`Deleted ${fileTargets.length} object(s)`);
+      await loadObjects(prefix);
+    } catch (err) {
+      setStatusMessage("Unable to delete objects.");
+    }
+  };
+
+  const handleCopyUrl = async (item: BrowserItem | null) => {
+    if (!bucketName || !hasS3AccountContext || !item || item.type !== "file") return;
+    try {
+      const presign = await presignObject(accountIdForApi, bucketName, {
+        key: item.key,
+        operation: "get_object",
+        expires_in: 900,
+      });
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(presign.url);
+        setStatusMessage("URL copied to clipboard.");
+      } else {
+        window.prompt("Copy URL:", presign.url);
+      }
+    } catch (err) {
+      setStatusMessage("Unable to copy URL.");
     }
   };
 
@@ -817,29 +891,85 @@ export default function BrowserPage() {
                       <BucketIcon className="h-4 w-4 text-slate-500 dark:text-slate-300" />
                       <select
                         className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none dark:text-slate-200"
-                        value={bucketName}
+                        value={bucketName || ""}
                         onChange={(event) => handleBucketChange(event.target.value)}
+                        disabled={loadingBuckets || bucketOptions.length === 0}
                       >
+                        {loadingBuckets && <option value="">Loading buckets...</option>}
+                        {!loadingBuckets && bucketOptions.length === 0 && <option value="">No buckets available</option>}
+                        {!loadingBuckets && bucketOptions.length > 0 && !bucketName && (
+                          <option value="">Select a bucket</option>
+                        )}
                         {bucketOptions.map((bucket) => (
-                          <option key={bucket.path} value={bucket.name}>
-                            {bucket.name}
+                          <option key={bucket} value={bucket}>
+                            {bucket}
                           </option>
                         ))}
                       </select>
-                      <div className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                        {breadcrumbs.length === 0 && <span className="text-slate-400">(root)</span>}
-                        {breadcrumbs.map((crumb, index) => (
-                          <span key={crumb.path} className="flex items-center gap-1">
-                            <span className="text-slate-300">/</span>
+                      <div
+                        className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400"
+                        onClick={isEditingPath ? undefined : startEditingPath}
+                      >
+                        {isEditingPath ? (
+                          <input
+                            ref={pathInputRef}
+                            type="text"
+                            value={pathDraft}
+                            onChange={(event) => setPathDraft(event.target.value)}
+                            onBlur={commitPathDraft}
+                            onKeyDown={handlePathKeyDown}
+                            placeholder="root"
+                            aria-label="Path"
+                            className="min-w-[160px] flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            disabled={!bucketName}
+                            spellCheck={false}
+                          />
+                        ) : (
+                          <>
                             <button
                               type="button"
-                              onClick={() => handleSelectPath(crumb.path)}
-                              className="rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleGoUp();
+                              }}
+                              className={breadcrumbIconButtonClasses}
+                              disabled={!canGoUp}
+                              aria-label="Parent folder"
+                              title="Parent folder"
                             >
-                              {crumb.label}
+                              <UpIcon className="h-3.5 w-3.5" />
                             </button>
-                          </span>
-                        ))}
+                            {breadcrumbs.length === 0 ? (
+                              <span className="text-slate-400">(root)</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleSelectPrefix("");
+                                }}
+                                className="rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+                              >
+                                root
+                              </button>
+                            )}
+                            {breadcrumbs.map((crumb) => (
+                              <span key={crumb.prefix} className="flex items-center gap-1">
+                                <span className="text-slate-300">/</span>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleSelectPrefix(crumb.prefix);
+                                  }}
+                                  className="rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+                                >
+                                  {crumb.label}
+                                </button>
+                              </span>
+                            ))}
+                          </>
+                        )}
                       </div>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -847,17 +977,49 @@ export default function BrowserPage() {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" className={toolbarButtonClasses}>
+                    <button
+                      type="button"
+                      className={toolbarButtonClasses}
+                      onClick={handleRefresh}
+                      disabled={!bucketName || objectsLoading}
+                    >
                       Refresh
                     </button>
-                    <button type="button" className={toolbarButtonClasses}>
+                    <button type="button" className={toolbarButtonClasses} onClick={handleNewFolder} disabled={!bucketName}>
                       New folder
                     </button>
-                    <button type="button" className={toolbarPrimaryClasses}>
+                    <button
+                      type="button"
+                      className={toolbarPrimaryClasses}
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={!bucketName}
+                    >
                       Upload
                     </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileInputChange}
+                    />
                   </div>
                 </div>
+
+                {(bucketError || objectsError || statusMessage || warnings.length > 0) && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+                    {bucketError && <p className="font-semibold text-rose-600 dark:text-rose-200">{bucketError}</p>}
+                    {!bucketError && objectsError && (
+                      <p className="font-semibold text-rose-600 dark:text-rose-200">{objectsError}</p>
+                    )}
+                    {statusMessage && <p className="text-slate-500 dark:text-slate-400">{statusMessage}</p>}
+                    {warnings.map((warning, index) => (
+                      <p key={`${warning}-${index}`} className="font-semibold text-amber-600 dark:text-amber-200">
+                        {warning}
+                      </p>
+                    ))}
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex flex-1 flex-wrap items-center gap-2">
@@ -963,15 +1125,30 @@ export default function BrowserPage() {
                       </button>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <button type="button" className={bulkActionClasses} disabled={selectedCount === 0}>
+                      <button
+                        type="button"
+                        className={bulkActionClasses}
+                        disabled={!canBulkActions}
+                        onClick={() => handleDownloadItems(selectedFiles)}
+                      >
                         <DownloadIcon className="h-3.5 w-3.5" />
                         Download
                       </button>
-                      <button type="button" className={bulkActionClasses} disabled={selectedCount === 0}>
+                      <button
+                        type="button"
+                        className={bulkActionClasses}
+                        disabled={selectedFiles.length !== 1 || hasFolderSelection}
+                        onClick={() => handleCopyUrl(selectedFiles[0] ?? null)}
+                      >
                         <CopyIcon className="h-3.5 w-3.5" />
-                        Copy
+                        Copy URL
                       </button>
-                      <button type="button" className={bulkDangerClasses} disabled={selectedCount === 0}>
+                      <button
+                        type="button"
+                        className={bulkDangerClasses}
+                        disabled={!canBulkActions}
+                        onClick={() => handleDeleteItems(selectedFiles)}
+                      >
                         <TrashIcon className="h-3.5 w-3.5" />
                         Delete
                       </button>
@@ -1016,7 +1193,14 @@ export default function BrowserPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                          {filteredItems.length === 0 && (
+                          {objectsLoading && <TableEmptyState colSpan={6} message="Loading objects..." />}
+                          {!objectsLoading && !bucketName && (
+                            <TableEmptyState colSpan={6} message="Select a bucket to browse objects." />
+                          )}
+                          {!objectsLoading && bucketName && objectsError && (
+                            <TableEmptyState colSpan={6} message={objectsError} />
+                          )}
+                          {!objectsLoading && bucketName && !objectsError && filteredItems.length === 0 && (
                             <TableEmptyState colSpan={6} message="No objects found for this path." />
                           )}
                           {filteredItems.map((item) => (
@@ -1097,6 +1281,7 @@ export default function BrowserPage() {
                                     aria-label="Download"
                                     title="Download"
                                     disabled={item.type === "folder"}
+                                    onClick={() => handleDownloadItems([item])}
                                   >
                                     <DownloadIcon />
                                   </button>
@@ -1105,6 +1290,8 @@ export default function BrowserPage() {
                                     className={iconButtonDangerClasses}
                                     aria-label="Delete"
                                     title="Delete"
+                                    disabled={item.type === "folder"}
+                                    onClick={() => handleDeleteItems([item])}
                                   >
                                     <TrashIcon />
                                   </button>
@@ -1126,7 +1313,22 @@ export default function BrowserPage() {
                     </div>
                   ) : (
                     <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {filteredItems.length === 0 && (
+                      {objectsLoading && (
+                        <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          Loading objects...
+                        </div>
+                      )}
+                      {!objectsLoading && !bucketName && (
+                        <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          Select a bucket to browse objects.
+                        </div>
+                      )}
+                      {!objectsLoading && bucketName && objectsError && (
+                        <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          {objectsError}
+                        </div>
+                      )}
+                      {!objectsLoading && bucketName && !objectsError && filteredItems.length === 0 && (
                         <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                           No objects found for this path.
                         </div>
@@ -1200,6 +1402,7 @@ export default function BrowserPage() {
                                 type="button"
                                 className={bulkActionClasses}
                                 disabled={item.type === "folder"}
+                                onClick={() => handleDownloadItems([item])}
                               >
                                 Download
                               </button>
@@ -1254,11 +1457,21 @@ export default function BrowserPage() {
                             </div>
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
-                            <button type="button" className={bulkActionClasses} disabled={inspectedItem.type === "folder"}>
+                            <button
+                              type="button"
+                              className={bulkActionClasses}
+                              disabled={inspectedItem.type === "folder"}
+                              onClick={() => handleDownloadItems([inspectedItem])}
+                            >
                               <DownloadIcon className="h-3.5 w-3.5" />
                               Download
                             </button>
-                            <button type="button" className={bulkActionClasses}>
+                            <button
+                              type="button"
+                              className={bulkActionClasses}
+                              disabled={inspectedItem.type === "folder"}
+                              onClick={() => handleCopyUrl(inspectedItem)}
+                            >
                               <CopyIcon className="h-3.5 w-3.5" />
                               Copy URL
                             </button>
@@ -1271,7 +1484,12 @@ export default function BrowserPage() {
                               <OpenIcon className="h-3.5 w-3.5" />
                               Open
                             </button>
-                            <button type="button" className={bulkDangerClasses}>
+                            <button
+                              type="button"
+                              className={bulkDangerClasses}
+                              disabled={inspectedItem.type === "folder"}
+                              onClick={() => handleDeleteItems([inspectedItem])}
+                            >
                               <TrashIcon className="h-3.5 w-3.5" />
                               Delete
                             </button>
@@ -1280,6 +1498,12 @@ export default function BrowserPage() {
 
                         <div className="space-y-2">
                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Metadata</p>
+                          {metadataLoading && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Loading metadata...</p>
+                          )}
+                          {metadataError && (
+                            <p className="text-xs font-semibold text-rose-600 dark:text-rose-200">{metadataError}</p>
+                          )}
                           <div className="grid gap-2 text-xs text-slate-600 dark:text-slate-300">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-slate-500">Path</span>
@@ -1296,25 +1520,19 @@ export default function BrowserPage() {
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-slate-500">Content type</span>
                               <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                {inspectedDetails?.contentType ?? "unknown"}
+                                {inspectedMetadata?.content_type ?? "unknown"}
                               </span>
                             </div>
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-slate-500">ETag</span>
                               <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                {inspectedDetails?.etag ?? "-"}
+                                {inspectedMetadata?.etag ?? "-"}
                               </span>
                             </div>
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-slate-500">Encryption</span>
+                              <span className="text-slate-500">Storage class</span>
                               <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                {inspectedDetails?.encryption ?? "None"}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-slate-500">Retention</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                {inspectedDetails?.retention ?? "-"}
+                                {inspectedMetadata?.storage_class ?? inspectedItem.storageClass ?? "-"}
                               </span>
                             </div>
                           </div>
@@ -1323,10 +1541,14 @@ export default function BrowserPage() {
                         <div className="space-y-2">
                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tags</p>
                           <div className="flex flex-wrap gap-2">
-                            {inspectedDetails?.tags?.length ? (
-                              inspectedDetails.tags.map((tag) => (
-                                <span key={tag} className={`${filterChipClasses} border-slate-200 dark:border-slate-700`}>
-                                  {tag}
+                            {inspectedTags.length ? (
+                              inspectedTags.map((tag) => (
+                                <span
+                                  key={`${tag.key}:${tag.value}`}
+                                  className={`${filterChipClasses} border-slate-200 dark:border-slate-700`}
+                                >
+                                  {tag.key}
+                                  {tag.value ? `=${tag.value}` : ""}
                                 </span>
                               ))
                             ) : (
@@ -1334,38 +1556,6 @@ export default function BrowserPage() {
                             )}
                           </div>
                         </div>
-
-                        {inspectedItem.type === "file" && (
-                          <div className="space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Versions</p>
-                            <div className="space-y-2">
-                              {inspectedDetails?.versions?.length ? (
-                                inspectedDetails.versions.map((version) => (
-                                  <div
-                                    key={version.id}
-                                    className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-semibold text-slate-700 dark:text-slate-100">{version.id}</span>
-                                      {version.current && (
-                                        <span className="rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-semibold text-primary-800 dark:bg-primary-900/40 dark:text-primary-100">
-                                          Current
-                                        </span>
-                                      )}
-                                    </div>
-                                    <span className="text-slate-500 dark:text-slate-400">
-                                      {version.size} | {version.modified}
-                                    </span>
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="text-xs text-slate-500 dark:text-slate-400">
-                                  No versions listed for this object.
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <div className="mt-4 space-y-4">
@@ -1413,21 +1603,27 @@ export default function BrowserPage() {
                         <div className="space-y-2">
                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Recent activity</p>
                           <div className="space-y-2">
-                            {activityLog.map((activity) => (
-                              <div
-                                key={activity.id}
-                                className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                    {activity.action}
-                                  </span>
-                                  <span className="text-slate-400">{activity.when}</span>
-                                </div>
-                                <p className="mt-1 text-slate-500 dark:text-slate-400">{activity.path}</p>
-                                <p className="mt-1 text-slate-400">by {activity.actor}</p>
+                            {activityLog.length === 0 ? (
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                No activity recorded for this session yet.
                               </div>
-                            ))}
+                            ) : (
+                              activityLog.map((activity) => (
+                                <div
+                                  key={activity.id}
+                                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {activity.action}
+                                    </span>
+                                    <span className="text-slate-400">{activity.when}</span>
+                                  </div>
+                                  <p className="mt-1 text-slate-500 dark:text-slate-400">{activity.path}</p>
+                                  <p className="mt-1 text-slate-400">by {activity.actor}</p>
+                                </div>
+                              ))
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1443,26 +1639,34 @@ export default function BrowserPage() {
                       <button
                         type="button"
                         className="text-xs font-semibold text-slate-500 transition hover:text-primary dark:text-slate-400 dark:hover:text-primary-200"
+                        disabled
                       >
                         View all
                       </button>
                     </div>
                     <div className="mt-3 space-y-3">
-                      {operations.map((op) => (
-                        <div key={op.id} className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClasses(op.status)}`}>
-                              {statusLabel(op.status)}
-                            </span>
-                            <span className="text-xs text-slate-500 dark:text-slate-400">{op.progress}%</span>
+                      {operations.length === 0 ? (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">No active transfers.</div>
+                      ) : (
+                        operations.map((op) => (
+                          <div
+                            key={op.id}
+                            className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClasses(op.status)}`}>
+                                {statusLabel(op.status)}
+                              </span>
+                              <span className="text-xs text-slate-500 dark:text-slate-400">{op.progress}%</span>
+                            </div>
+                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{op.path}</p>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                              <div className="h-full bg-primary-500" style={{ width: `${op.progress}%` }} />
+                            </div>
+                            <p className="text-[11px] text-slate-400">{op.label} in progress.</p>
                           </div>
-                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{op.path}</p>
-                          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                            <div className="h-full bg-primary-500" style={{ width: `${op.progress}%` }} />
-                          </div>
-                          <p className="text-[11px] text-slate-400">{op.label} in progress.</p>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>

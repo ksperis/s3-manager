@@ -12,6 +12,8 @@ from app.models.browser import (
     BrowserBucket,
     BrowserObject,
     BrowserObjectVersion,
+    BucketCorsRule,
+    BucketCorsStatus,
     CompleteMultipartUploadRequest,
     CopyObjectPayload,
     DeleteObjectsPayload,
@@ -30,8 +32,10 @@ from app.models.browser import (
     PresignPartResponse,
     PresignRequest,
     PresignedUrl,
+    StsStatus,
 )
 from app.services.s3_client import _delete_objects, get_s3_client
+from app.services.sts_service import get_sts_client
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -63,6 +67,64 @@ class BrowserService:
         if not etag:
             return None
         return etag.strip('"')
+
+    def get_bucket_cors_status(self, bucket_name: str, account: S3Account) -> BucketCorsStatus:
+        client = self._client(account)
+        try:
+            resp = client.get_bucket_cors(Bucket=bucket_name)
+        except (ClientError, BotoCoreError) as exc:
+            code = None
+            if isinstance(exc, ClientError):
+                code = exc.response.get("Error", {}).get("Code")
+            if code in {"NoSuchCORSConfiguration", "NoSuchCORS"}:
+                return BucketCorsStatus(enabled=False, rules=[])
+            return BucketCorsStatus(enabled=False, rules=[], error=str(exc))
+        rules = []
+        for rule in resp.get("CORSRules", []) or []:
+            rules.append(
+                BucketCorsRule(
+                    allowed_origins=rule.get("AllowedOrigins") or [],
+                    allowed_methods=rule.get("AllowedMethods") or [],
+                    allowed_headers=rule.get("AllowedHeaders") or [],
+                    expose_headers=rule.get("ExposeHeaders") or [],
+                    max_age_seconds=rule.get("MaxAgeSeconds"),
+                )
+            )
+        return BucketCorsStatus(enabled=bool(rules), rules=rules)
+
+    def check_sts(self, account: S3Account) -> StsStatus:
+        access_key, secret_key = account.effective_rgw_credentials()
+        if not access_key or not secret_key:
+            return StsStatus(available=False, error="S3 credentials missing for this account")
+        session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        endpoint = settings.sts_endpoint or _resolve_endpoint(account)
+        client = get_sts_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
+        try:
+            client.get_caller_identity()
+            return StsStatus(available=True)
+        except (ClientError, BotoCoreError) as exc:
+            return StsStatus(available=False, error=str(exc))
+
+    def proxy_upload(self, bucket_name: str, account: S3Account, key: str, file_obj, content_type: Optional[str]) -> None:
+        client = self._client(account)
+        extra_args = {}
+        if content_type:
+            extra_args["ContentType"] = content_type
+        try:
+            file_obj.seek(0)
+            if extra_args:
+                client.upload_fileobj(file_obj, bucket_name, key, ExtraArgs=extra_args)
+            else:
+                client.upload_fileobj(file_obj, bucket_name, key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to upload '{key}': {exc}") from exc
+
+    def proxy_download(self, bucket_name: str, account: S3Account, key: str):
+        client = self._client(account)
+        try:
+            return client.get_object(Bucket=bucket_name, Key=key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to download '{key}': {exc}") from exc
 
     def list_buckets(self, account: S3Account) -> list[BrowserBucket]:
         client = self._client(account)
