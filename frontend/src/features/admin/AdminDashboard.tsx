@@ -31,7 +31,7 @@ export default function AdminDashboard() {
             {
               label: "UI users",
               value: (summary.total_users ?? 0) + (summary.total_admins ?? 0) + (summary.total_portal_users ?? 0),
-              hint: `Admins: ${summary.total_admins ?? 0} | Managers: ${summary.total_users ?? 0} | Portail: ${summary.total_portal_users ?? 0}`,
+              hint: `Admins: ${summary.total_admins ?? 0} | Managers: ${summary.total_users ?? 0} | Portal: ${summary.total_portal_users ?? 0}`,
               to: "/admin/users",
             },
             { label: "Accounts", value: summary.total_accounts, to: "/admin/s3-accounts" },

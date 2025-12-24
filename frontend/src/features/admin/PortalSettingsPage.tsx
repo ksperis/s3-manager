@@ -15,7 +15,7 @@ export default function PortalSettingsPage() {
   useEffect(() => {
     fetchAppSettings()
       .then((data) => setSettings(data))
-      .catch(() => setError("Impossible de charger les paramètres."));
+      .catch(() => setError("Unable to load settings."));
   }, []);
 
   const handleToggleAllowPortalKey = (value: boolean) => {
@@ -34,11 +34,11 @@ export default function PortalSettingsPage() {
     try {
       const saved = await updateAppSettings(settings);
       setSettings(saved);
-      setSavedMessage("Paramètres sauvegardés.");
+      setSavedMessage("Settings saved.");
       setTimeout(() => setSavedMessage(null), 3000);
     } catch (err) {
       console.error(err);
-      setError("Sauvegarde impossible.");
+      setError("Unable to save.");
     } finally {
       setSaving(false);
     }
@@ -48,7 +48,7 @@ export default function PortalSettingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Portal dashboard"
-        description="Configurer certains comportements côté portail utilisateur."
+        description="Configure user portal behavior."
         breadcrumbs={[
           { label: "Admin" },
           { label: "Portal" },
@@ -64,9 +64,9 @@ export default function PortalSettingsPage() {
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Afficher la clé portail</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Show portal key</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Autorise l’affichage et la récupération de la clé portail active dans le dashboard utilisateur.
+                Allows displaying and retrieving the active portal key in the user dashboard.
               </p>
             </div>
             <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -77,16 +77,16 @@ export default function PortalSettingsPage() {
                 className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                 disabled={!settings}
               />
-              <span>{settings?.portal.allow_portal_key ? "Activé" : "Désactivé"}</span>
+              <span>{settings?.portal.allow_portal_key ? "Enabled" : "Disabled"}</span>
             </label>
           </div>
         </div>
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Création de bucket par portal_user</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Bucket creation by portal_user</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Autorise un utilisateur portal_user à créer un bucket depuis le portail (utilise les clés admin du compte).
+                Allows a portal_user to create a bucket from the portal (uses the account admin keys).
               </p>
             </div>
             <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -99,16 +99,16 @@ export default function PortalSettingsPage() {
                 className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                 disabled={!settings}
               />
-              <span>{settings?.portal.allow_portal_user_bucket_create ? "Activé" : "Désactivé"}</span>
+              <span>{settings?.portal.allow_portal_user_bucket_create ? "Enabled" : "Disabled"}</span>
             </label>
           </div>
         </div>
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Statistiques manager pour portal_user</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Manager stats for portal_user</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Autorise un utilisateur non admin à consulter les stats de buckets et l’usage depuis /manager.
+                Allows a non-admin user to view bucket stats and usage from /manager.
               </p>
             </div>
             <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -119,7 +119,7 @@ export default function PortalSettingsPage() {
                 className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                 disabled={!settings}
               />
-              <span>{settings?.manager.allow_manager_user_usage_stats ? "Activé" : "Désactivé"}</span>
+              <span>{settings?.manager.allow_manager_user_usage_stats ? "Enabled" : "Disabled"}</span>
             </label>
           </div>
         </div>
@@ -129,7 +129,7 @@ export default function PortalSettingsPage() {
             disabled={!settings || saving}
             className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
           >
-            {saving ? "Sauvegarde..." : "Sauvegarder"}
+            {saving ? "Saving..." : "Save"}
           </button>
           {savedMessage && <span className="text-xs text-emerald-600 dark:text-emerald-300">{savedMessage}</span>}
         </div>

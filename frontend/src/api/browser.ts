@@ -163,6 +163,25 @@ export type DeleteObjectEntry = {
   version_id?: string | null;
 };
 
+export type BucketCorsRule = {
+  allowed_origins: string[];
+  allowed_methods: string[];
+  allowed_headers: string[];
+  expose_headers: string[];
+  max_age_seconds?: number | null;
+};
+
+export type BucketCorsStatus = {
+  enabled: boolean;
+  rules: BucketCorsRule[];
+  error?: string | null;
+};
+
+export type StsStatus = {
+  available: boolean;
+  error?: string | null;
+};
+
 export async function listBrowserBuckets(accountId: S3AccountSelector): Promise<BrowserBucket[]> {
   const { data } = await client.get<BrowserBucket[]>("/manager/browser/buckets", {
     params: withS3AccountParam(undefined, accountId),
@@ -187,6 +206,39 @@ export async function listBrowserObjects(
     `/manager/browser/buckets/${encodeURIComponent(bucketName)}/objects`,
     { params }
   );
+  return data;
+}
+
+export async function getBucketCorsStatus(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  origin?: string
+): Promise<BucketCorsStatus> {
+  const params = withS3AccountParam(origin ? { origin } : undefined, accountId);
+  const { data } = await client.get<BucketCorsStatus>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/cors`,
+    { params }
+  );
+  return data;
+}
+
+export async function ensureBucketCors(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  origin: string
+): Promise<BucketCorsStatus> {
+  const { data } = await client.post<BucketCorsStatus>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/cors/ensure`,
+    { origin },
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function getStsStatus(accountId: S3AccountSelector): Promise<StsStatus> {
+  const { data } = await client.get<StsStatus>("/manager/browser/sts", {
+    params: withS3AccountParam(undefined, accountId),
+  });
   return data;
 }
 
@@ -296,6 +348,34 @@ export async function createFolder(accountId: S3AccountSelector, bucketName: str
     { prefix },
     { params: withS3AccountParam(undefined, accountId) }
   );
+}
+
+export async function proxyUpload(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  key: string,
+  file: File,
+  onUploadProgress?: (event: ProgressEvent) => void
+): Promise<void> {
+  const form = new FormData();
+  form.append("key", key);
+  form.append("file", file);
+  await client.post(`/manager/browser/buckets/${encodeURIComponent(bucketName)}/proxy-upload`, form, {
+    params: withS3AccountParam(undefined, accountId),
+    onUploadProgress,
+  });
+}
+
+export async function proxyDownload(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  key: string
+): Promise<Blob> {
+  const { data } = await client.get(`/manager/browser/buckets/${encodeURIComponent(bucketName)}/proxy-download`, {
+    params: withS3AccountParam({ key }, accountId),
+    responseType: "blob",
+  });
+  return data as Blob;
 }
 
 export async function initiateMultipartUpload(

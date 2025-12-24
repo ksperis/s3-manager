@@ -12,6 +12,8 @@ from app.models.browser import (
     BrowserBucket,
     BrowserObject,
     BrowserObjectVersion,
+    BucketCorsRule,
+    BucketCorsStatus,
     CompleteMultipartUploadRequest,
     CopyObjectPayload,
     DeleteObjectsPayload,
@@ -30,8 +32,10 @@ from app.models.browser import (
     PresignPartResponse,
     PresignRequest,
     PresignedUrl,
+    StsStatus,
 )
 from app.services.s3_client import _delete_objects, get_s3_client
+from app.services.sts_service import get_sts_client
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -63,6 +67,185 @@ class BrowserService:
         if not etag:
             return None
         return etag.strip('"')
+
+    def get_bucket_cors_status(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        origin: Optional[str] = None,
+    ) -> BucketCorsStatus:
+        client = self._client(account)
+        try:
+            resp = client.get_bucket_cors(Bucket=bucket_name)
+        except (ClientError, BotoCoreError) as exc:
+            code = None
+            if isinstance(exc, ClientError):
+                code = exc.response.get("Error", {}).get("Code")
+            if code in {"NoSuchCORSConfiguration", "NoSuchCORS"}:
+                return BucketCorsStatus(enabled=False, rules=[])
+            return BucketCorsStatus(enabled=False, rules=[], error=str(exc))
+        rules = []
+        raw_rules = resp.get("CORSRules", []) or []
+        enabled = bool(raw_rules)
+        for rule in resp.get("CORSRules", []) or []:
+            rules.append(
+                BucketCorsRule(
+                    allowed_origins=rule.get("AllowedOrigins") or [],
+                    allowed_methods=rule.get("AllowedMethods") or [],
+                    allowed_headers=rule.get("AllowedHeaders") or [],
+                    expose_headers=rule.get("ExposeHeaders") or [],
+                    max_age_seconds=rule.get("MaxAgeSeconds"),
+                )
+            )
+        if origin and raw_rules:
+            required_methods = {"GET", "PUT", "HEAD"}
+
+            def matches_header(allowed_headers: list[str], header: str) -> bool:
+                header = header.lower()
+                for entry in allowed_headers:
+                    entry_lower = entry.lower()
+                    if entry_lower == "*" or entry_lower == header:
+                        return True
+                    if entry_lower.endswith("*") and header.startswith(entry_lower[:-1]):
+                        return True
+                return False
+
+            def rule_allows(rule: dict) -> bool:
+                allowed_origins = {o for o in (rule.get("AllowedOrigins") or [])}
+                if "*" not in allowed_origins and origin not in allowed_origins:
+                    return False
+                allowed_methods = {m.upper() for m in (rule.get("AllowedMethods") or [])}
+                if not required_methods.issubset(allowed_methods):
+                    return False
+                allowed_headers = rule.get("AllowedHeaders") or []
+                if allowed_headers:
+                    return matches_header(allowed_headers, "content-type")
+                return False
+
+            enabled = any(rule_allows(rule) for rule in raw_rules)
+        return BucketCorsStatus(enabled=enabled, rules=rules)
+
+    def ensure_bucket_cors(self, bucket_name: str, account: S3Account, origin: str) -> BucketCorsStatus:
+        if not origin:
+            raise RuntimeError("Missing origin")
+        client = self._client(account)
+        try:
+            resp = client.get_bucket_cors(Bucket=bucket_name)
+            rules = resp.get("CORSRules", []) or []
+        except (ClientError, BotoCoreError) as exc:
+            code = None
+            if isinstance(exc, ClientError):
+                code = exc.response.get("Error", {}).get("Code")
+            if code in {"NoSuchCORSConfiguration", "NoSuchCORS"}:
+                rules = []
+            else:
+                raise RuntimeError(f"Unable to fetch CORS for '{bucket_name}': {exc}") from exc
+
+        desired_methods = {"GET", "PUT", "HEAD"}
+        desired_headers = {"Content-Type", "x-amz-*"}
+        desired_expose = {"ETag"}
+
+        def normalize(values: list[str]) -> list[str]:
+            seen = set()
+            ordered = []
+            for value in values:
+                if value not in seen:
+                    seen.add(value)
+                    ordered.append(value)
+            return ordered
+
+        def update_rule(rule: dict) -> bool:
+            changed = False
+            allowed_origins = rule.get("AllowedOrigins") or []
+            if origin not in allowed_origins and "*" not in allowed_origins:
+                allowed_origins.append(origin)
+                rule["AllowedOrigins"] = normalize(allowed_origins)
+                changed = True
+            allowed_methods = {m.upper() for m in (rule.get("AllowedMethods") or [])}
+            if not desired_methods.issubset(allowed_methods):
+                merged_methods = normalize([*allowed_methods, *desired_methods])
+                rule["AllowedMethods"] = merged_methods
+                changed = True
+            allowed_headers = set(rule.get("AllowedHeaders") or [])
+            if not allowed_headers:
+                rule["AllowedHeaders"] = sorted(desired_headers)
+                changed = True
+            elif "*" not in allowed_headers and not desired_headers.issubset(allowed_headers):
+                merged_headers = normalize([*allowed_headers, *desired_headers])
+                rule["AllowedHeaders"] = merged_headers
+                changed = True
+            expose_headers = set(rule.get("ExposeHeaders") or [])
+            if not desired_expose.issubset(expose_headers):
+                merged_expose = normalize([*expose_headers, *desired_expose])
+                rule["ExposeHeaders"] = merged_expose
+                changed = True
+            if rule.get("MaxAgeSeconds") is None:
+                rule["MaxAgeSeconds"] = 3000
+                changed = True
+            return changed
+
+        updated = False
+        matched = False
+        for rule in rules:
+            allowed_origins = set(rule.get("AllowedOrigins") or [])
+            if "*" in allowed_origins or origin in allowed_origins:
+                matched = True
+                if update_rule(rule):
+                    updated = True
+                break
+
+        if not matched:
+            new_rule = {
+                "AllowedOrigins": [origin],
+                "AllowedMethods": sorted(desired_methods),
+                "AllowedHeaders": sorted(desired_headers),
+                "ExposeHeaders": sorted(desired_expose),
+                "MaxAgeSeconds": 3000,
+            }
+            rules.append(new_rule)
+            updated = True
+
+        if updated:
+            try:
+                client.put_bucket_cors(Bucket=bucket_name, CORSConfiguration={"CORSRules": rules})
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(f"Unable to update CORS for '{bucket_name}': {exc}") from exc
+
+        return self.get_bucket_cors_status(bucket_name, account, origin=origin)
+
+    def check_sts(self, account: S3Account) -> StsStatus:
+        access_key, secret_key = account.effective_rgw_credentials()
+        if not access_key or not secret_key:
+            return StsStatus(available=False, error="S3 credentials missing for this account")
+        session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        endpoint = settings.sts_endpoint or _resolve_endpoint(account)
+        client = get_sts_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
+        try:
+            client.get_caller_identity()
+            return StsStatus(available=True)
+        except (ClientError, BotoCoreError) as exc:
+            return StsStatus(available=False, error=str(exc))
+
+    def proxy_upload(self, bucket_name: str, account: S3Account, key: str, file_obj, content_type: Optional[str]) -> None:
+        client = self._client(account)
+        extra_args = {}
+        if content_type:
+            extra_args["ContentType"] = content_type
+        try:
+            file_obj.seek(0)
+            if extra_args:
+                client.upload_fileobj(file_obj, bucket_name, key, ExtraArgs=extra_args)
+            else:
+                client.upload_fileobj(file_obj, bucket_name, key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to upload '{key}': {exc}") from exc
+
+    def proxy_download(self, bucket_name: str, account: S3Account, key: str):
+        client = self._client(account)
+        try:
+            return client.get_object(Bucket=bucket_name, Key=key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to download '{key}': {exc}") from exc
 
     def list_buckets(self, account: S3Account) -> list[BrowserBucket]:
         client = self._client(account)

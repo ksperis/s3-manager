@@ -171,3 +171,22 @@ class DeleteObjectEntry(BaseModel):
 
 class DeleteObjectsPayload(BaseModel):
     objects: list[DeleteObjectEntry]
+
+
+class BucketCorsRule(BaseModel):
+    allowed_origins: list[str] = Field(default_factory=list)
+    allowed_methods: list[str] = Field(default_factory=list)
+    allowed_headers: list[str] = Field(default_factory=list)
+    expose_headers: list[str] = Field(default_factory=list)
+    max_age_seconds: Optional[int] = None
+
+
+class BucketCorsStatus(BaseModel):
+    enabled: bool
+    rules: list[BucketCorsRule] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class StsStatus(BaseModel):
+    available: bool
+    error: Optional[str] = None

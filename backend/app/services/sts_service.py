@@ -17,12 +17,14 @@ def get_sts_client(
     access_key: Optional[str],
     secret_key: Optional[str],
     endpoint: Optional[str] = None,
+    session_token: Optional[str] = None,
 ):
     client = boto3.client(
         "sts",
         endpoint_url=endpoint or settings.sts_endpoint or settings.s3_endpoint,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
+        aws_session_token=session_token,
         region_name=settings.s3_region,
     )
     return client

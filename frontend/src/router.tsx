@@ -81,8 +81,8 @@ const adminNav = [
     links: [{ to: "/admin/audit", label: "Audit trail" }],
   },
   {
-    label: "Portal",
-    links: [{ to: "/admin/portal-settings", label: "Portal settings" }],
+    label: "Settings",
+    links: [{ to: "/admin/portal-settings", label: "Portal" }],
   },
 ];
 

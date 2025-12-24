@@ -40,7 +40,7 @@ const EMPTY_FORM: FormState = {
 };
 
 function extractError(err: unknown): string {
-  if (!err) return "Action impossible.";
+  if (!err) return "Action failed.";
   if (typeof err === "string") return err;
   if (typeof err === "object" && err !== null) {
     const axiosErr = err as { response?: { data?: unknown; status?: number } };
@@ -52,7 +52,7 @@ function extractError(err: unknown): string {
       if (Array.isArray(detail) && detail.length > 0 && typeof detail[0] === "string") return detail[0];
     }
   }
-  return "Une erreur est survenue.";
+  return "An error occurred.";
 }
 
 function ProviderBadge({ provider }: { provider: StorageProvider }) {
@@ -65,7 +65,7 @@ function ProviderBadge({ provider }: { provider: StorageProvider }) {
           : "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100"
       }`}
     >
-      {isCeph ? "Ceph" : "Autre"}
+      {isCeph ? "Ceph" : "Other"}
     </span>
   );
 }
@@ -152,7 +152,7 @@ export default function StorageEndpointsPage() {
     try {
       await deleteStorageEndpoint(deleteTarget.id);
       setDeleteTarget(null);
-      setActionMessage("Endpoint supprimé.");
+      setActionMessage("Endpoint deleted.");
       loadEndpoints();
     } catch (err) {
       setDeleteError(extractError(err));
@@ -172,11 +172,11 @@ export default function StorageEndpointsPage() {
     const trimmedSupervisionSecret = form.supervision_secret_key.trim();
 
     if (!trimmedName) {
-      setFormError("Le nom du stockage est requis.");
+      setFormError("Storage name is required.");
       return null;
     }
     if (!trimmedEndpoint) {
-      setFormError("L'URL de l'endpoint est requise.");
+      setFormError("Endpoint URL is required.");
       return null;
     }
 
@@ -200,7 +200,7 @@ export default function StorageEndpointsPage() {
         payload.supervision_access_key = trimmedSupervisionAccess || null;
         payload.supervision_secret_key = trimmedSupervisionSecret || null;
         if (!payload.admin_access_key || !payload.admin_secret_key) {
-          setFormError("Les credentials admin sont requis pour un endpoint Ceph.");
+          setFormError("Admin credentials are required for a Ceph endpoint.");
           return null;
         }
       }
@@ -218,10 +218,10 @@ export default function StorageEndpointsPage() {
     try {
       if (editingId) {
         await updateStorageEndpoint(editingId, payload);
-        setActionMessage("Endpoint mis à jour.");
+        setActionMessage("Endpoint updated.");
       } else {
         await createStorageEndpoint(payload);
-        setActionMessage("Endpoint ajouté.");
+        setActionMessage("Endpoint added.");
       }
       setShowForm(false);
       resetForm();
@@ -247,8 +247,8 @@ export default function StorageEndpointsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{endpoint.name}</h3>
               <ProviderBadge provider={endpoint.provider} />
-              {endpoint.is_default && <LockBadge label="Défaut (env)" />}
-              {!endpoint.is_editable && !endpoint.is_default && <LockBadge label="Protégé" />}
+              {endpoint.is_default && <LockBadge label="Default (env)" />}
+              {!endpoint.is_editable && !endpoint.is_default && <LockBadge label="Protected" />}
             </div>
             <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <span className="font-semibold text-slate-700 dark:text-slate-100">Endpoint:</span>
@@ -273,7 +273,7 @@ export default function StorageEndpointsPage() {
                   onClick={() => startEdit(endpoint)}
                   type="button"
                 >
-                  Modifier
+                  Edit
                 </button>
                 <button
                   className="rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
@@ -283,12 +283,12 @@ export default function StorageEndpointsPage() {
                   }}
                   type="button"
                 >
-                  Supprimer
+                  Delete
                 </button>
               </>
             ) : (
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                Lecture seule
+                Read-only
               </span>
             )}
           </div>
@@ -296,17 +296,17 @@ export default function StorageEndpointsPage() {
         <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Region</p>
-            <p className="font-semibold">{endpoint.region || "Défaut"}</p>
+            <p className="font-semibold">{endpoint.region || "Default"}</p>
           </div>
           <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
             <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Admin key</p>
             {endpoint.provider === "ceph" ? (
               <p className="font-semibold">
-                {endpoint.admin_access_key ? endpoint.admin_access_key : "Non configurée"}
-                {endpoint.has_admin_secret && <span className="ml-2 text-xs text-emerald-500">(secret stocké)</span>}
+                {endpoint.admin_access_key ? endpoint.admin_access_key : "Not configured"}
+                {endpoint.has_admin_secret && <span className="ml-2 text-xs text-emerald-500">(secret stored)</span>}
               </p>
             ) : (
-              <p className="font-semibold text-slate-500">Non requis</p>
+              <p className="font-semibold text-slate-500">Not required</p>
             )}
           </div>
           <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
@@ -315,11 +315,11 @@ export default function StorageEndpointsPage() {
               <p className="font-semibold">
                 {endpoint.supervision_access_key || "—"}
                 {endpoint.has_supervision_secret && (
-                  <span className="ml-2 text-xs text-emerald-500">(secret stocké)</span>
+                  <span className="ml-2 text-xs text-emerald-500">(secret stored)</span>
                 )}
               </p>
             ) : (
-              <p className="font-semibold text-slate-500">Non définie</p>
+              <p className="font-semibold text-slate-500">Not set</p>
             )}
           </div>
         </div>
@@ -330,8 +330,8 @@ export default function StorageEndpointsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Endpoints de stockage"
-        description="Gérez les points d'accès S3/Ceph utilisés par la console."
+        title="Storage endpoints"
+        description="Manage the S3/Ceph endpoints used by the console."
         rightContent={[
           <button
             key="new-endpoint"
@@ -339,13 +339,13 @@ export default function StorageEndpointsPage() {
             onClick={startCreate}
             type="button"
           >
-            Nouvel endpoint
+            New endpoint
           </button>,
         ]}
         inlineContent={
           defaultEndpoint ? (
             <span className="text-sm font-semibold text-slate-500 dark:text-slate-300">
-              Endpoint par défaut: {defaultEndpoint.name}
+              Default endpoint: {defaultEndpoint.name}
             </span>
           ) : null
         }
@@ -363,18 +363,18 @@ export default function StorageEndpointsPage() {
       )}
       {loading ? (
         <div className="rounded-2xl border border-slate-200 bg-white/70 px-5 py-6 text-sm text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
-          Chargement des endpoints...
+          Loading endpoints...
         </div>
       ) : endpoints.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-6 py-8 text-center text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
-          Aucun endpoint configuré pour le moment.
+          No endpoints configured yet.
         </div>
       ) : (
         <div className="grid gap-4">{endpoints.map((ep) => renderEndpointCard(ep))}</div>
       )}
 
       {showForm && (
-        <Modal title={editingId ? "Modifier l'endpoint" : "Nouvel endpoint"} onClose={onCloseForm}>
+        <Modal title={editingId ? "Edit endpoint" : "New endpoint"} onClose={onCloseForm}>
           <form onSubmit={handleSubmit} className="space-y-4">
             {formError && (
               <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/30 dark:text-rose-100">
@@ -383,7 +383,7 @@ export default function StorageEndpointsPage() {
             )}
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
-                Nom du stockage
+                Storage name
                 <input
                   type="text"
                   value={form.name}
@@ -422,7 +422,7 @@ export default function StorageEndpointsPage() {
                         }))
                       }
                     />
-                    <span>Autre</span>
+                    <span>Other</span>
                   </label>
                 </div>
               </div>
@@ -441,7 +441,7 @@ export default function StorageEndpointsPage() {
                 />
               </label>
               <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
-                Endpoint admin (optionnel)
+                Admin endpoint (optional)
                 <input
                   type="text"
                   value={form.admin_endpoint}
@@ -454,7 +454,7 @@ export default function StorageEndpointsPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
-                Région (optionnelle)
+                Region (optional)
                 <input
                   type="text"
                   value={form.region}
@@ -481,7 +481,7 @@ export default function StorageEndpointsPage() {
             {cephMode && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
-                  Secret key admin {editingId ? <span className="text-xs font-normal text-slate-500">(laisser vide pour conserver)</span> : null}
+                  Admin secret key {editingId ? <span className="text-xs font-normal text-slate-500">(leave blank to keep)</span> : null}
                   <input
                     type="password"
                     value={form.admin_secret_key}
@@ -492,7 +492,7 @@ export default function StorageEndpointsPage() {
                   />
                 </label>
                 <div className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
-                  Supervision (optionnelle)
+                  Supervision (optional)
                   <div className="grid gap-3">
                     <input
                       type="text"
@@ -510,7 +510,7 @@ export default function StorageEndpointsPage() {
                     />
                   </div>
                   <p className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                    Utilisez ces clés pour les actions de supervision en lecture seule.
+                    Use these keys for read-only monitoring actions.
                   </p>
                 </div>
               </div>
@@ -522,14 +522,14 @@ export default function StorageEndpointsPage() {
                 onClick={onCloseForm}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
               >
-                Annuler
+                Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {saving ? "Enregistrement..." : editingId ? "Mettre à jour" : "Créer"}
+                {saving ? "Saving..." : editingId ? "Update" : "Create"}
               </button>
             </div>
           </form>
@@ -537,7 +537,7 @@ export default function StorageEndpointsPage() {
       )}
 
       {deleteTarget && (
-        <Modal title="Supprimer l'endpoint" onClose={() => setDeleteTarget(null)}>
+        <Modal title="Delete endpoint" onClose={() => setDeleteTarget(null)}>
           <div className="space-y-4">
             {deleteError && (
               <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/30 dark:text-rose-100">
@@ -545,7 +545,7 @@ export default function StorageEndpointsPage() {
               </div>
             )}
             <p className="text-sm text-slate-700 dark:text-slate-100">
-              Voulez-vous vraiment supprimer <strong>{deleteTarget.name}</strong> ? Cette action est irréversible.
+              Are you sure you want to delete <strong>{deleteTarget.name}</strong>? This action cannot be undone.
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
@@ -553,7 +553,7 @@ export default function StorageEndpointsPage() {
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
                 type="button"
               >
-                Annuler
+                Cancel
               </button>
               <button
                 onClick={handleDelete}
@@ -561,7 +561,7 @@ export default function StorageEndpointsPage() {
                 className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-70"
                 type="button"
               >
-                {deleteBusy ? "Suppression..." : "Supprimer"}
+                {deleteBusy ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>

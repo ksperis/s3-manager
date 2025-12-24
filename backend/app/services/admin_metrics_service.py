@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Dict, Iterable, Optional, Tuple
 
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 class AdminMetricsService:
+    _IDENTIFIER_SPLIT = re.compile(r"[$:/]")
+
     def __init__(
         self,
         db: Session,
@@ -84,14 +87,7 @@ class AdminMetricsService:
 
     def _storage_snapshot(self) -> dict:
         summary = self.build_summary_payload(self.db, endpoint_id=self.endpoint_id)
-        account_query = self.db.query(S3Account)
-        if self.endpoint_id is not None:
-            account_query = account_query.filter(S3Account.storage_endpoint_id == self.endpoint_id)
-        accounts = account_query.all()
-        s3_user_query = self.db.query(S3User)
-        if self.endpoint_id is not None:
-            s3_user_query = s3_user_query.filter(S3User.storage_endpoint_id == self.endpoint_id)
-        s3_users = s3_user_query.all()
+        accounts, s3_users, allowed_identifiers = self._load_scope_targets()
 
         try:
             all_buckets = self._fetch_all_buckets()
@@ -100,7 +96,8 @@ class AdminMetricsService:
             all_buckets = None
 
         if all_buckets is not None:
-            return self._storage_snapshot_from_bucket_list(summary, accounts, s3_users, all_buckets)
+            filtered_buckets = self._filter_buckets(all_buckets, allowed_identifiers)
+            return self._storage_snapshot_from_bucket_list(summary, accounts, s3_users, filtered_buckets)
 
         # Fallback to per-account collection using admin credentials only
         total_buckets = 0
@@ -310,6 +307,11 @@ class AdminMetricsService:
         start = reference - WINDOW_DELTAS[window]
         payload = self._fetch_usage(start=start, end=reference)
         entries = flatten_usage_entries(payload)
+        _, _, allowed_identifiers = self._load_scope_targets()
+        if allowed_identifiers:
+            entries = self._filter_usage_entries(entries, allowed_identifiers)
+        else:
+            entries = []
         aggregation = aggregate_usage(entries, start=start, end=reference)
         aggregation.update(
             {
@@ -349,6 +351,81 @@ class AdminMetricsService:
         if last_error is not None:
             raise last_error
         return {}
+
+    def _normalize_identifier(self, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            value = str(value)
+        normalized = value.strip().lower()
+        return normalized or None
+
+    def _expand_identifier(self, value: Optional[str]) -> set[str]:
+        normalized = self._normalize_identifier(value)
+        if not normalized:
+            return set()
+        tokens = {normalized}
+        for part in self._IDENTIFIER_SPLIT.split(normalized):
+            if part:
+                tokens.add(part)
+        return tokens
+
+    def _identifier_in_scope(self, value: Optional[str], allowed: set[str]) -> bool:
+        if not allowed:
+            return False
+        return any(token in allowed for token in self._expand_identifier(value))
+
+    def _load_scope_targets(self) -> tuple[list[S3Account], list[S3User], set[str]]:
+        account_query = self.db.query(S3Account)
+        if self.endpoint_id is not None:
+            account_query = account_query.filter(S3Account.storage_endpoint_id == self.endpoint_id)
+        accounts = account_query.all()
+        s3_user_query = self.db.query(S3User)
+        if self.endpoint_id is not None:
+            s3_user_query = s3_user_query.filter(S3User.storage_endpoint_id == self.endpoint_id)
+        s3_users = s3_user_query.all()
+
+        allowed: set[str] = set()
+        for acc in accounts:
+            if acc.rgw_account_id:
+                allowed.add(acc.rgw_account_id.strip().lower())
+            resolved_uid = resolve_admin_uid(acc.rgw_account_id, acc.rgw_user_uid)
+            if resolved_uid:
+                allowed.add(resolved_uid.strip().lower())
+            if acc.rgw_user_uid:
+                allowed.add(acc.rgw_user_uid.strip().lower())
+        for user in s3_users:
+            if user.rgw_user_uid:
+                allowed.add(user.rgw_user_uid.strip().lower())
+        return accounts, s3_users, allowed
+
+    def _filter_buckets(self, buckets: Iterable[Dict], allowed: set[str]) -> list[dict]:
+        if not allowed:
+            return []
+        filtered: list[dict] = []
+        for bucket in buckets:
+            if not isinstance(bucket, dict):
+                continue
+            if self._identifier_in_scope(bucket.get("owner"), allowed) or self._identifier_in_scope(
+                bucket.get("tenant"), allowed
+            ):
+                filtered.append(bucket)
+        return filtered
+
+    def _filter_usage_entries(self, entries: Iterable[dict], allowed: set[str]) -> list[dict]:
+        if not allowed:
+            return []
+        filtered: list[dict] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            if (
+                self._identifier_in_scope(entry.get("user"), allowed)
+                or self._identifier_in_scope(entry.get("owner"), allowed)
+                or self._identifier_in_scope(entry.get("tenant"), allowed)
+            ):
+                filtered.append(entry)
+        return filtered
 
     def _collect_bucket_usage(
         self,

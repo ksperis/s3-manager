@@ -171,31 +171,27 @@ export default function UsersPage() {
       <div className="flex flex-wrap gap-2">
         {user.accounts.map((id) => {
           const label = accountOptionsById.get(Number(id))?.name ?? `Account #${id}`;
-          const role = roleByAccountId.get(Number(id)) ?? "portal_user";
+          const role = roleByAccountId.get(Number(id)) ?? "portal_none";
           const isAccountAdmin = adminByAccountId.get(Number(id)) === true;
+          const showPortalBadge = role !== "portal_none";
           const tone =
             role === "portal_manager"
               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100"
               : role === "portal_user"
               ? "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100"
               : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200";
-          const displayRole =
-            role === "portal_manager"
-              ? "Portal manager"
-              : role === "portal_user"
-              ? "Portal user"
-              : role === "portal_none"
-              ? "Portal none"
-              : role;
+          const displayRole = role === "portal_manager" ? "Portal manager" : role === "portal_user" ? "Portal user" : role;
           return (
             <span
               key={`${id}-${role}`}
               className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
             >
               <span>{label}</span>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
-                {displayRole}
-              </span>
+              {showPortalBadge && (
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
+                  {displayRole}
+                </span>
+              )}
               {isAccountAdmin && (
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                   Admin
@@ -422,7 +418,7 @@ export default function UsersPage() {
     const selectedAccounts =
       user.accounts?.map((id) => ({
         id: Number(id),
-        role: accountRoles.get(Number(id)) ?? "portal_user",
+        role: accountRoles.get(Number(id)) ?? "portal_none",
         account_admin: accountAdmins.get(Number(id)) ?? false,
       })) ?? [];
     setEditSelectedS3Accounts(selectedAccounts);
@@ -487,7 +483,7 @@ export default function UsersPage() {
       const toAdd = editSelectedS3Accounts.filter((entry) => !existing.includes(Number(entry.id)));
       const toRemove = existing.filter((id) => !selectedIds.includes(id));
       const toUpdateRole = editSelectedS3Accounts.filter((entry) => {
-        const currentRole = existingRoleById.get(Number(entry.id)) ?? "portal_user";
+        const currentRole = existingRoleById.get(Number(entry.id)) ?? "portal_none";
         const currentAdmin = existingAdminById.get(Number(entry.id)) ?? false;
         return existing.includes(Number(entry.id)) && (currentRole !== entry.role || currentAdmin !== Boolean(entry.account_admin));
       });
@@ -776,7 +772,7 @@ export default function UsersPage() {
                     <div className="flex items-center gap-2">
                       <select
                         className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                        value={createAccountRoleChoice[Number(opt.id)] ?? "portal_user"}
+                        value={createAccountRoleChoice[Number(opt.id)] ?? "portal_none"}
                         onChange={(e) =>
                           setCreateAccountRoleChoice((prev) => ({
                             ...prev,
@@ -805,7 +801,7 @@ export default function UsersPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          const role = createAccountRoleChoice[Number(opt.id)] ?? "portal_user";
+                          const role = createAccountRoleChoice[Number(opt.id)] ?? "portal_none";
                           const account_admin = Boolean(createAccountAdminChoice[Number(opt.id)]);
                           setCreateSelectedS3Accounts((prev) => [...prev, { id: Number(opt.id), role, account_admin }]);
                         }}
@@ -1186,17 +1182,18 @@ export default function UsersPage() {
                   {editSelectedS3Accounts.map((entry) => {
                     const label =
                       accountOptions.find((a) => Number(a.id) === Number(entry.id))?.label ?? `S3Account #${entry.id}`;
+                    const showPortalBadge = entry.role !== "portal_none";
                     const tone =
                       entry.role === "portal_manager"
                         ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100"
-                        : "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100";
+                        : entry.role === "portal_user"
+                        ? "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100"
+                        : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200";
                     const roleLabel =
                       entry.role === "portal_manager"
                         ? "Portal manager"
                         : entry.role === "portal_user"
                         ? "Portal user"
-                        : entry.role === "portal_none"
-                        ? "Portal none"
                         : entry.role;
                     return (
                       <span
@@ -1204,9 +1201,11 @@ export default function UsersPage() {
                         className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                       >
                         <span className="text-sm">{label}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
-                          {roleLabel}
-                        </span>
+                        {showPortalBadge && (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
+                            {roleLabel}
+                          </span>
+                        )}
                         <select
                           className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                           value={entry.role}
@@ -1276,7 +1275,7 @@ export default function UsersPage() {
                       <div className="flex items-center gap-2">
                         <select
                           className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                          value={editAccountRoleChoice[Number(opt.id)] ?? "portal_user"}
+                          value={editAccountRoleChoice[Number(opt.id)] ?? "portal_none"}
                           onChange={(e) =>
                             setEditAccountRoleChoice((prev) => ({
                               ...prev,
@@ -1305,7 +1304,7 @@ export default function UsersPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            const role = editAccountRoleChoice[Number(opt.id)] ?? "portal_user";
+                            const role = editAccountRoleChoice[Number(opt.id)] ?? "portal_none";
                             const account_admin = Boolean(editAccountAdminChoice[Number(opt.id)]);
                             setEditSelectedS3Accounts((prev) => [...prev, { id: Number(opt.id), role, account_admin }]);
                           }}

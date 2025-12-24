@@ -6,13 +6,18 @@ The `/browser` page talks only to standard S3 APIs; no RGW admin APIs are used. 
 
 - `GET /api/manager/browser/buckets` — `ListBuckets`
 - `GET /api/manager/browser/buckets/{bucket}/objects` — `ListObjectsV2` with delimiter/prefix/pagination
+- `GET /api/manager/browser/buckets/{bucket}/cors` — `GetBucketCors` status for UI checks
+- `POST /api/manager/browser/buckets/{bucket}/cors/ensure` — merge required CORS rules for the UI origin
 - `GET /api/manager/browser/buckets/{bucket}/versions` — `ListObjectVersions`
 - `GET /api/manager/browser/buckets/{bucket}/object-meta` — `HeadObject`
 - `GET/PUT /api/manager/browser/buckets/{bucket}/object-tags` — `GetObjectTagging` / `PutObjectTagging` / `DeleteObjectTagging`
 - `POST /api/manager/browser/buckets/{bucket}/presign` — presigned GET/PUT/DELETE/POST policies for direct browser calls
+- `GET /api/manager/browser/sts` — STS availability check (GetCallerIdentity)
 - `POST /api/manager/browser/buckets/{bucket}/copy` — `CopyObject` (used for move/metadata updates)
 - `POST /api/manager/browser/buckets/{bucket}/delete` — `DeleteObjects` (version aware)
 - `POST /api/manager/browser/buckets/{bucket}/folders` — `PutObject` (empty marker)
+- `POST /api/manager/browser/buckets/{bucket}/proxy-upload` — backend proxy upload (form-data)
+- `GET /api/manager/browser/buckets/{bucket}/proxy-download` — backend proxy download (stream)
 - Multipart helpers: `CreateMultipartUpload`, `UploadPart` (presigned), `CompleteMultipartUpload`, `AbortMultipartUpload`, `ListMultipartUploads`, `ListParts`
 
 ## Minimum IAM permissions

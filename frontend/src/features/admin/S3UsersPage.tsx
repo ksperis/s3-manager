@@ -185,7 +185,7 @@ export default function S3UsersPage() {
     e.preventDefault();
     if (!editingUser) return;
     if (!editForm.storage_endpoint_id) {
-      setEditError("Sélectionne un endpoint Ceph.");
+      setEditError("Select a Ceph endpoint.");
       return;
     }
     setEditBusy(true);
@@ -248,7 +248,7 @@ export default function S3UsersPage() {
       return;
     }
     if (!importEndpointId) {
-      setImportError("Sélectionne un endpoint Ceph.");
+      setImportError("Select a Ceph endpoint.");
       setImportMessage(null);
       return;
     }
@@ -484,7 +484,7 @@ export default function S3UsersPage() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Endpoint Ceph *</label>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
               <select
                 className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={createForm.storage_endpoint_id}
@@ -493,11 +493,11 @@ export default function S3UsersPage() {
                 required
               >
                 <option value="" disabled>
-                  {loadingEndpoints ? "Chargement..." : cephEndpoints.length === 0 ? "Aucun endpoint Ceph" : "Sélectionner"}
+                  {loadingEndpoints ? "Loading..." : cephEndpoints.length === 0 ? "No Ceph endpoint" : "Select"}
                 </option>
                 {cephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
-                    {ep.name} {ep.is_default ? "(défaut)" : ""}
+                    {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
                 ))}
               </select>
@@ -553,7 +553,7 @@ export default function S3UsersPage() {
             onChange={(e) => setImportText(e.target.value)}
           />
           <div className="mt-3 flex flex-col gap-1">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Endpoint Ceph *</label>
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
             <select
               className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               value={importEndpointId}
@@ -562,11 +562,11 @@ export default function S3UsersPage() {
               required
             >
               <option value="" disabled>
-                {loadingEndpoints ? "Chargement..." : cephEndpoints.length === 0 ? "Aucun endpoint Ceph" : "Sélectionner"}
+                {loadingEndpoints ? "Loading..." : cephEndpoints.length === 0 ? "No Ceph endpoint" : "Select"}
               </option>
               {cephEndpoints.map((ep) => (
                 <option key={ep.id} value={ep.id}>
-                  {ep.name} {ep.is_default ? "(défaut)" : ""}
+                  {ep.name} {ep.is_default ? "(default)" : ""}
                 </option>
               ))}
             </select>
@@ -617,7 +617,7 @@ export default function S3UsersPage() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Endpoint Ceph *</label>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
               <select
                 className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={editForm.storage_endpoint_id}
@@ -626,11 +626,11 @@ export default function S3UsersPage() {
                 required
               >
                 <option value="" disabled>
-                  {loadingEndpoints ? "Chargement..." : cephEndpoints.length === 0 ? "Aucun endpoint Ceph" : "Sélectionner"}
+                  {loadingEndpoints ? "Loading..." : cephEndpoints.length === 0 ? "No Ceph endpoint" : "Select"}
                 </option>
                 {cephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
-                    {ep.name} {ep.is_default ? "(défaut)" : ""}
+                    {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
                 ))}
               </select>

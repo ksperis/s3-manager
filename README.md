@@ -28,6 +28,11 @@ npm run dev
 
 Access the UI at `http://localhost:5173`. The frontend defaults to `http://localhost:8000/api` for API calls; configure via `frontend/.env` with `VITE_API_URL`.
 
+## Infra / Deployment
+Infra and deployment live in the `infra-platform` repo. See:
+- `infra-platform/docs/s3-manager/lab-deploy.md`
+- `infra-platform/kubernetes/s3-manager/lab`
+
 ## Roles & routing
 
 - **Admin (super_admin)** — global RGW admin ops:
@@ -40,4 +45,3 @@ Access the UI at `http://localhost:5173`. The frontend defaults to `http://local
 JWT and user profile are stored in `localStorage` (`token`, `user`).
 
 ## TODO / Roadmap
-
