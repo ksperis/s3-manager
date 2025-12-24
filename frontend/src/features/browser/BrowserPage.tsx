@@ -17,6 +17,7 @@ import {
   deleteObjects,
   fetchObjectMetadata,
   getBucketCorsStatus,
+  ensureBucketCors,
   getObjectTags,
   getStsStatus,
   listBrowserBuckets,
@@ -38,6 +39,16 @@ type BrowserItem = {
   modifiedAt?: number | null;
   owner: string;
   storageClass?: string;
+};
+
+type TreeNode = {
+  id: string;
+  name: string;
+  prefix: string;
+  children: TreeNode[];
+  isExpanded: boolean;
+  isLoaded: boolean;
+  isLoading: boolean;
 };
 
 type OperationItem = {
@@ -78,6 +89,15 @@ const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary
 const breadcrumbIconButtonClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-200";
 
+const treeToggleButtonClasses =
+  "inline-flex h-5 w-5 items-center justify-center rounded border border-slate-200 text-[10px] font-semibold text-slate-500 transition hover:border-primary hover:text-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary-500 dark:hover:text-primary-200";
+const treeItemBaseClasses =
+  "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-semibold transition";
+const treeItemActiveClasses =
+  "bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-100";
+const treeItemInactiveClasses =
+  "text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100";
+
 const storageClassChipClasses: Record<string, string> = {
   STANDARD: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-900/20 dark:text-emerald-200",
   STANDARD_IA: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200",
@@ -117,6 +137,41 @@ const shortName = (key: string, basePrefix: string) => {
   if (!basePrefix) return key;
   if (key.startsWith(basePrefix)) return key.slice(basePrefix.length);
   return key;
+};
+
+const buildTreeNodes = (prefixes: string[], parentPrefix: string): TreeNode[] => {
+  const base = normalizePrefix(parentPrefix);
+  return prefixes
+    .map((prefixValue) => {
+      const rawName = shortName(prefixValue, base);
+      const name = rawName.endsWith("/") ? rawName.slice(0, -1) : rawName;
+      return {
+        id: prefixValue,
+        name: name || prefixValue,
+        prefix: prefixValue,
+        children: [],
+        isExpanded: false,
+        isLoaded: false,
+        isLoading: false,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+};
+
+const updateTreeNodes = (
+  nodes: TreeNode[],
+  targetPrefix: string,
+  updater: (node: TreeNode) => TreeNode
+): TreeNode[] => {
+  return nodes.map((node) => {
+    if (node.prefix === targetPrefix) {
+      return updater(node);
+    }
+    if (node.children.length === 0) {
+      return node;
+    }
+    return { ...node, children: updateTreeNodes(node.children, targetPrefix, updater) };
+  });
 };
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -276,6 +331,9 @@ export default function BrowserPage() {
   const [corsStatus, setCorsStatus] = useState<BucketCorsStatus | null>(null);
   const [stsStatus, setStsStatus] = useState<StsStatus | null>(null);
   const [useProxyTransfers, setUseProxyTransfers] = useState(false);
+  const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
+  const [corsFixing, setCorsFixing] = useState(false);
+  const [corsFixError, setCorsFixError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -295,10 +353,17 @@ export default function BrowserPage() {
   const pathInputRef = useRef<HTMLInputElement | null>(null);
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
+  const uiOrigin = useMemo(
+    () => (typeof window === "undefined" ? undefined : window.location.origin),
+    []
+  );
   const warnings = useMemo(() => {
     const items: string[] = [];
     if (warningMessage) {
       items.push(warningMessage);
+    }
+    if (corsFixError) {
+      items.push(corsFixError);
     }
     if (corsStatus && !corsStatus.enabled) {
       items.push(corsStatus.error ?? "Bucket CORS is not enabled.");
@@ -310,7 +375,7 @@ export default function BrowserPage() {
       items.push(stsStatus.error ?? "STS is not available for this account.");
     }
     return items;
-  }, [corsStatus, stsStatus, useProxyTransfers, warningMessage]);
+  }, [corsFixError, corsStatus, stsStatus, useProxyTransfers, warningMessage]);
 
   useEffect(() => {
     if (!hasS3AccountContext) {
@@ -383,16 +448,58 @@ export default function BrowserPage() {
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {
+      setTreeNodes([]);
+      return;
+    }
+    let isMounted = true;
+    const rootNode: TreeNode = {
+      id: "root",
+      name: bucketName,
+      prefix: "",
+      children: [],
+      isExpanded: true,
+      isLoaded: false,
+      isLoading: true,
+    };
+    setTreeNodes([rootNode]);
+    const loadRoot = async () => {
+      try {
+        const data = await listBrowserObjects(accountIdForApi, bucketName, { prefix: "" });
+        if (!isMounted) return;
+        const children = buildTreeNodes(data.prefixes, "");
+        setTreeNodes([
+          {
+            ...rootNode,
+            children,
+            isExpanded: true,
+            isLoaded: true,
+            isLoading: false,
+          },
+        ]);
+      } catch {
+        if (!isMounted) return;
+        setTreeNodes([{ ...rootNode, isLoaded: true, isLoading: false }]);
+      }
+    };
+    loadRoot();
+    return () => {
+      isMounted = false;
+    };
+  }, [accountIdForApi, bucketName, hasS3AccountContext]);
+
+  useEffect(() => {
+    if (!bucketName || !hasS3AccountContext) {
       setCorsStatus(null);
       setUseProxyTransfers(false);
       return;
     }
     let isMounted = true;
-    getBucketCorsStatus(accountIdForApi, bucketName)
+    getBucketCorsStatus(accountIdForApi, bucketName, uiOrigin)
       .then((status) => {
         if (!isMounted) return;
         setCorsStatus(status);
         setUseProxyTransfers(!status.enabled);
+        setCorsFixError(null);
       })
       .catch(() => {
         if (!isMounted) return;
@@ -402,7 +509,7 @@ export default function BrowserPage() {
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, bucketName, hasS3AccountContext]);
+  }, [accountIdForApi, bucketName, hasS3AccountContext, uiOrigin]);
 
   useEffect(() => {
     if (!hasS3AccountContext) {
@@ -698,6 +805,117 @@ export default function BrowserPage() {
     loadObjects(prefix);
   };
 
+  const loadTreeChildren = async (targetPrefix: string) => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const normalized = targetPrefix ? normalizePrefix(targetPrefix) : "";
+    setTreeNodes((prev) =>
+      updateTreeNodes(prev, targetPrefix, (node) => ({ ...node, isLoading: true }))
+    );
+    try {
+      const data = await listBrowserObjects(accountIdForApi, bucketName, { prefix: normalized });
+      const children = buildTreeNodes(data.prefixes, normalized);
+      setTreeNodes((prev) =>
+        updateTreeNodes(prev, targetPrefix, (node) => ({
+          ...node,
+          children,
+          isExpanded: true,
+          isLoaded: true,
+          isLoading: false,
+        }))
+      );
+    } catch {
+      setTreeNodes((prev) =>
+        updateTreeNodes(prev, targetPrefix, (node) => ({
+          ...node,
+          isLoaded: true,
+          isLoading: false,
+        }))
+      );
+    }
+  };
+
+  const handleToggleTreeNode = (node: TreeNode) => {
+    if (node.isExpanded) {
+      setTreeNodes((prev) =>
+        updateTreeNodes(prev, node.prefix, (entry) => ({ ...entry, isExpanded: false }))
+      );
+      return;
+    }
+    if (!node.isLoaded) {
+      loadTreeChildren(node.prefix);
+      return;
+    }
+    setTreeNodes((prev) =>
+      updateTreeNodes(prev, node.prefix, (entry) => ({ ...entry, isExpanded: true }))
+    );
+  };
+
+  const renderTreeNodes = (nodes: TreeNode[], depth = 0) => (
+    <ul className="space-y-1">
+      {nodes.map((node) => {
+        const isActive = prefix === node.prefix;
+        const canToggle = node.isLoaded ? node.children.length > 0 : true;
+        const labelClasses = `${treeItemBaseClasses} ${isActive ? treeItemActiveClasses : treeItemInactiveClasses}`;
+        return (
+          <li key={node.id}>
+            <div className="flex items-center gap-1" style={{ paddingLeft: depth * 12 }}>
+              <button
+                type="button"
+                className={treeToggleButtonClasses}
+                onClick={() => handleToggleTreeNode(node)}
+                disabled={!canToggle}
+                aria-label={node.isExpanded ? "Collapse" : "Expand"}
+              >
+                {canToggle ? (node.isExpanded ? "-" : "+") : ""}
+              </button>
+              <button
+                type="button"
+                className={labelClasses}
+                onClick={() => handleSelectPrefix(node.prefix)}
+                title={node.name}
+              >
+                {node.prefix === "" ? <BucketIcon className="h-3.5 w-3.5" /> : <FolderIcon className="h-3.5 w-3.5" />}
+                <span className="truncate">{node.name}</span>
+              </button>
+            </div>
+            {node.isExpanded && (
+              <div className="mt-1">
+                {node.isLoading ? (
+                  <div className="pl-6 text-xs text-slate-400 dark:text-slate-500">Loading...</div>
+                ) : node.children.length === 0 ? (
+                  <div className="pl-6 text-xs text-slate-400 dark:text-slate-500">No folders</div>
+                ) : (
+                  renderTreeNodes(node.children, depth + 1)
+                )}
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  const handleEnsureCors = async () => {
+    if (!bucketName || !hasS3AccountContext || !uiOrigin) return;
+    setCorsFixing(true);
+    setCorsFixError(null);
+    setStatusMessage(null);
+    try {
+      const status = await ensureBucketCors(accountIdForApi, bucketName, uiOrigin);
+      setCorsStatus(status);
+      setUseProxyTransfers(!status.enabled);
+      if (status.enabled) {
+        setStatusMessage("CORS rules updated for this bucket.");
+      } else {
+        setCorsFixError(status.error ?? "CORS is still not enabled for this origin.");
+      }
+    } catch (err) {
+      setCorsFixError("Unable to update bucket CORS configuration.");
+    } finally {
+      setCorsFixing(false);
+    }
+  };
+
   const handleGoUp = () => {
     if (!canGoUp) return;
     handleSelectPrefix(parentPrefix);
@@ -719,6 +937,7 @@ export default function BrowserPage() {
       addActivity("Created", `${bucketName}/${folderPrefix}`);
       setStatusMessage(`Folder ${clean} created`);
       await loadObjects(prefix);
+      loadTreeChildren(prefix);
     } catch (err) {
       setStatusMessage("Unable to create folder.");
     }
@@ -1018,6 +1237,18 @@ export default function BrowserPage() {
                         {warning}
                       </p>
                     ))}
+                    {corsStatus && !corsStatus.enabled && uiOrigin && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          className={bulkActionClasses}
+                          onClick={handleEnsureCors}
+                          disabled={corsFixing}
+                        >
+                          {corsFixing ? "Activation CORS..." : `Ajouter CORS pour ${uiOrigin}`}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1159,7 +1390,17 @@ export default function BrowserPage() {
             </div>
 
             <div className="flex-1 p-4">
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_320px]">
+              <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Folders</p>
+                <div className="mt-3 max-h-[520px] overflow-auto pr-1">
+                  {!bucketName ? (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
+                  ) : (
+                    renderTreeNodes(treeNodes)
+                  )}
+                </div>
+              </div>
                 <div className="rounded-xl border border-slate-200 dark:border-slate-800">
                   {viewMode === "list" ? (
                     <div className="overflow-x-auto">

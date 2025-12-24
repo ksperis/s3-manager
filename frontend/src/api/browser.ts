@@ -211,10 +211,25 @@ export async function listBrowserObjects(
 
 export async function getBucketCorsStatus(
   accountId: S3AccountSelector,
-  bucketName: string
+  bucketName: string,
+  origin?: string
 ): Promise<BucketCorsStatus> {
+  const params = withS3AccountParam(origin ? { origin } : undefined, accountId);
   const { data } = await client.get<BucketCorsStatus>(
     `/manager/browser/buckets/${encodeURIComponent(bucketName)}/cors`,
+    { params }
+  );
+  return data;
+}
+
+export async function ensureBucketCors(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  origin: string
+): Promise<BucketCorsStatus> {
+  const { data } = await client.post<BucketCorsStatus>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/cors/ensure`,
+    { origin },
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;

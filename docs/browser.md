@@ -7,6 +7,7 @@ The `/browser` page talks only to standard S3 APIs; no RGW admin APIs are used. 
 - `GET /api/manager/browser/buckets` — `ListBuckets`
 - `GET /api/manager/browser/buckets/{bucket}/objects` — `ListObjectsV2` with delimiter/prefix/pagination
 - `GET /api/manager/browser/buckets/{bucket}/cors` — `GetBucketCors` status for UI checks
+- `POST /api/manager/browser/buckets/{bucket}/cors/ensure` — merge required CORS rules for the UI origin
 - `GET /api/manager/browser/buckets/{bucket}/versions` — `ListObjectVersions`
 - `GET /api/manager/browser/buckets/{bucket}/object-meta` — `HeadObject`
 - `GET/PUT /api/manager/browser/buckets/{bucket}/object-tags` — `GetObjectTagging` / `PutObjectTagging` / `DeleteObjectTagging`

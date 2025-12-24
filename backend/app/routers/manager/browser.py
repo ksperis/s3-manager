@@ -45,6 +45,10 @@ class ProxyUploadResponse(BaseModel):
     key: str
 
 
+class EnsureCorsPayload(BaseModel):
+    origin: str
+
+
 @router.get("/buckets", response_model=list[BrowserBucket])
 def list_buckets(
     account: S3Account = Depends(get_account_context),
@@ -76,11 +80,39 @@ def list_objects(
 @router.get("/buckets/{bucket_name}/cors", response_model=BucketCorsStatus)
 def get_bucket_cors(
     bucket_name: str,
+    origin: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: User = Depends(get_current_account_admin),
 ) -> BucketCorsStatus:
-    return service.get_bucket_cors_status(bucket_name, account)
+    return service.get_bucket_cors_status(bucket_name, account, origin=origin)
+
+
+@router.post("/buckets/{bucket_name}/cors/ensure", response_model=BucketCorsStatus)
+def ensure_bucket_cors(
+    bucket_name: str,
+    payload: EnsureCorsPayload,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketCorsStatus:
+    if not payload.origin:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing origin")
+    try:
+        status_result = service.ensure_bucket_cors(bucket_name, account, payload.origin)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="ensure_bucket_cors",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"origin": payload.origin},
+        )
+        return status_result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.get("/sts", response_model=StsStatus)
