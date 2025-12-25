@@ -27,7 +27,7 @@ export default function PoliciesPage() {
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PageHeader
           title="IAM Policies"
           description="Manage IAM policies for account administrators."
@@ -115,7 +115,7 @@ export default function PoliciesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="IAM Policies"
         description="List and create Ceph IAM policies for the selected account."
@@ -155,8 +155,8 @@ export default function PoliciesPage() {
             {!loading &&
               policies.map((p) => (
                 <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="manager-table-cell px-6 py-4">
-                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{p.name}</span>
+                  <td className="manager-table-cell px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <span>{p.name}</span>
                   </td>
                   <td className="manager-table-cell px-6 py-4 text-xs text-slate-600 dark:text-slate-300">{p.arn}</td>
                   <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{p.default_version_id ?? "-"}</td>

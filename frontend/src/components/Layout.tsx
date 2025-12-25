@@ -69,11 +69,11 @@ export default function Layout({
         onLogout={logout}
         contextAction={topbarAction}
       />
-      <div className="flex pt-20">
+      <div className="flex pt-14">
         {!hideSidebar && (
           <Sidebar title={sidebarTitle} sections={navSections} links={navLinks} headerAction={sidebarAction} />
         )}
-        <main className="flex-1 overflow-y-auto bg-surface px-4 pb-12 pt-4 sm:px-8 dark:bg-slate-950">
+        <main className="flex-1 overflow-y-auto bg-surface px-3 pb-8 pt-3 sm:px-6 dark:bg-slate-950">
           {!hideHeader && (
             <Header
               title={headerTitle}
@@ -82,7 +82,7 @@ export default function Layout({
               inlineAction={heroInlineAction}
             />
           )}
-          <div className="space-y-6">
+          <div className="space-y-4">
             <Outlet />
           </div>
         </main>

@@ -26,7 +26,7 @@ export default function PageBanner({ tone = "info", children, className }: PageB
   if (!children) {
     return null;
   }
-  const base = "rounded-md px-4 py-3 text-sm";
+  const base = "rounded-md px-3 py-2 text-xs";
   const toneClass = toneClasses[tone];
   const extra = className ? ` ${className}` : "";
   return <div className={`${base} ${toneClass}${extra}`}>{children}</div>;

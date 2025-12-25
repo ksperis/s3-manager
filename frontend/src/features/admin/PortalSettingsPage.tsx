@@ -256,7 +256,7 @@ export default function PortalSettingsPage() {
   const hasPolicyError = Boolean(managerPolicyError || userPolicyError || bucketPolicyError);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Portal dashboard"
         description="Configure user portal behavior."

@@ -293,7 +293,7 @@ export default function BucketsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Buckets"
         description="Inventory of buckets for the selected account. Actions via root keys."

@@ -148,15 +148,15 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
   const requestPieData = useMemo(() => prepareRequestPie(traffic?.request_breakdown ?? []), [traffic]);
 
   return (
-    <section className="space-y-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <section className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">RGW traffic</p>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Traffic visualization</h3>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">RGW traffic</p>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Traffic visualization</h3>
           {bucketName && (
-            <p className="text-xs font-semibold text-primary-700 dark:text-primary-200">Bucket: {bucketName}</p>
+            <p className="text-[11px] font-semibold text-primary-700 dark:text-primary-200">Bucket: {bucketName}</p>
           )}
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Ingress/egress volume, request types, and busiest buckets.
           </p>
         </div>
@@ -165,7 +165,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
             <button
               key={option.value}
               type="button"
-              className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
                 option.value === window
                   ? "bg-primary text-white shadow-sm"
                   : "text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -179,7 +179,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
       </header>
 
       {error && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
           {error}
         </div>
       )}
@@ -285,10 +285,10 @@ type TotalCardProps = {
 
 function TrafficTotalCard({ label, value, hint, loading }: TotalCardProps) {
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{loading ? "…" : value}</p>
-      {hint && <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
+    <div className="rounded-lg border border-slate-200/80 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1.5 text-xl font-semibold text-slate-900 dark:text-white">{loading ? "…" : value}</p>
+      {hint && <p className="text-[11px] text-slate-500 dark:text-slate-400">{hint}</p>}
     </div>
   );
 }
@@ -304,24 +304,24 @@ type ChartCardProps = {
 function ChartCard({ title, subtitle, loading, children, hasData }: ChartCardProps) {
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
-        <div className="mt-4 h-48 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
+      <div className="rounded-lg border border-slate-200/80 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+        <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+        <div className="mt-3 h-40 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
       </div>
     );
   }
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
-      {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>}
-      {hasData ? <div className="mt-4">{children}</div> : <EmptyState />}
+    <div className="rounded-lg border border-slate-200/80 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+      {subtitle && <p className="text-[11px] text-slate-500 dark:text-slate-400">{subtitle}</p>}
+      {hasData ? <div className="mt-3">{children}</div> : <EmptyState />}
     </div>
   );
 }
 
 function EmptyState() {
   return (
-    <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+    <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
       No usable measurements yet for this time window.
     </div>
   );

@@ -72,48 +72,48 @@ export default function UsageOverview({
       />
 
       <section
-        className={`relative space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 ${iamDisabled ? "opacity-60" : ""}`}
+        className={`relative space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 ${iamDisabled ? "opacity-60" : ""}`}
         aria-disabled={iamDisabled}
       >
         <header className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">IAM resources</p>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Inventory overview</h3>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">IAM resources</p>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Inventory overview</h3>
         </header>
 
         {!iamDisabled && iamError && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
             {iamError}
           </div>
         )}
 
         {iamDisabled && (
-          <div className="absolute inset-0 flex cursor-not-allowed items-center justify-center rounded-2xl bg-white/80 text-center text-sm font-semibold text-slate-600 dark:bg-slate-900/70 dark:text-slate-200">
+          <div className="absolute inset-0 flex cursor-not-allowed items-center justify-center rounded-xl bg-white/80 text-center text-xs font-semibold text-slate-600 dark:bg-slate-900/70 dark:text-slate-200">
             IAM features are hidden for IAM-only credentials.
           </div>
         )}
 
         {!iamLoading && totalComposition === 0 && !iamDisabled && !iamError ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
             No IAM resources yet.
           </div>
         ) : null}
 
         {!iamDisabled && totalComposition > 0 && (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             {iamTiles.map((item) => (
               <Link
                 key={item.label}
                 to={item.to}
-                className="flex items-center gap-4 rounded-xl border border-slate-200/80 bg-white p-4 text-left shadow-sm transition hover:-translate-y-[1px] hover:border-primary hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-800 dark:bg-slate-900"
+                className="flex items-center gap-3 rounded-lg border border-slate-200/80 bg-white p-3 text-left shadow-sm transition hover:-translate-y-[1px] hover:border-primary hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-800 dark:bg-slate-900"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
                   {item.label.slice(0, 1)}
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">{Number(item.value ?? 0).toLocaleString()}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">{Number(item.value ?? 0).toLocaleString()}</p>
                 </div>
-                <div className="text-xs font-medium text-primary flex items-center gap-1 dark:text-primary-200">
+                <div className="text-[11px] font-medium text-primary flex items-center gap-1 dark:text-primary-200">
                   <span>View</span>
                   <span aria-hidden>→</span>
                 </div>

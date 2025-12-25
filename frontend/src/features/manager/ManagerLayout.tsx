@@ -68,8 +68,8 @@ function ManagerShell() {
   const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
   const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
   const baseControlClasses =
-    "w-56 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
-  const selectClasses = `appearance-none pr-10 ${baseControlClasses}`;
+    "w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
+  const selectClasses = `appearance-none pr-8 ${baseControlClasses}`;
   const pillClasses = `${baseControlClasses} ${selected ? "" : "text-slate-500 dark:text-slate-400"}`;
   const handleS3AccountChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value || null;
@@ -82,9 +82,9 @@ function ManagerShell() {
     setAccessMode(accessMode === "admin" ? "portal" : "admin");
   };
   const inlineAction = (
-    <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-6">
+    <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-4">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">S3Account</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">S3Account</span>
         {requiresS3AccountSelection ? (
           showSelector ? (
             <div className="relative">
@@ -104,7 +104,7 @@ function ManagerShell() {
                   </option>
                 ))}
               </select>
-              <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-xs text-slate-500 dark:text-slate-300">
+              <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[10px] text-slate-500 dark:text-slate-300">
                 ▼
               </div>
             </div>
@@ -120,7 +120,7 @@ function ManagerShell() {
       {isAccessModeToggleVisible && (
         <div className="flex items-center gap-2">
           <span
-            className={`text-xs font-semibold ${
+            className={`text-[10px] font-semibold ${
               canToggleAccess ? "text-slate-500 dark:text-slate-400" : "text-slate-400 dark:text-slate-500"
             }`}
           >
@@ -132,7 +132,7 @@ function ManagerShell() {
             aria-checked={accessMode === "admin"}
             onClick={handleAccessModeToggle}
             disabled={!canToggleAccess}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
               accessMode === "admin"
                 ? "bg-amber-400/80 dark:bg-amber-500/70"
                 : "bg-slate-200 dark:bg-slate-700"
@@ -157,8 +157,8 @@ function ManagerShell() {
             }
           >
             <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition ${
-                accessMode === "admin" ? "translate-x-5" : "translate-x-1"
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition ${
+                accessMode === "admin" ? "translate-x-4" : "translate-x-1"
               }`}
             />
           </button>

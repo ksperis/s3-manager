@@ -82,7 +82,7 @@ export default function EnvironmentSwitcher() {
   return (
     <div className="relative">
       <select
-        className="appearance-none rounded-full border border-slate-200 bg-white px-3 py-1.5 pr-7 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900"
+        className="appearance-none rounded-full border border-slate-200 bg-white px-2.5 py-1 pr-6 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900"
         value={current.id}
         onChange={handleChange}
         aria-label="Changer d'environnement"
@@ -94,7 +94,7 @@ export default function EnvironmentSwitcher() {
           </option>
         ))}
       </select>
-      <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-slate-500 dark:text-slate-300">
+      <div className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[10px] text-slate-500 dark:text-slate-300">
         ▼
       </div>
     </div>

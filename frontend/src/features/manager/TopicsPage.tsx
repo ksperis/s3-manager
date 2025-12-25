@@ -71,7 +71,7 @@ export default function TopicsPage() {
 
   if (isS3User) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PageHeader
           title="SNS Topics"
           description="Manage RGW SNS topics for bucket notifications."

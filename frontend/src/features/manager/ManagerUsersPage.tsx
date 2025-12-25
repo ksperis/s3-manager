@@ -33,7 +33,7 @@ export default function ManagerUsersPage() {
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PageHeader
           title="Users"
           description="Manage RGW IAM identities for your account."
@@ -303,7 +303,7 @@ export default function ManagerUsersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Users"
         description="Create/delete via the account root credentials. Optionally generate an access key on creation."
@@ -419,9 +419,9 @@ export default function ManagerUsersPage() {
 
                 return (
                   <tr key={u.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="manager-table-cell px-6 py-4">
+                    <td className="manager-table-cell px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{u.name}</span>
+                        <span>{u.name}</span>
                         {showWarning && (
                           <span
                             className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-100"

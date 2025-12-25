@@ -510,7 +510,7 @@ export default function S3AccountsPage() {
 
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Accounts"
         description="Provision Ceph RGW accounts (tenants), quotas, and root users."
@@ -1272,7 +1272,7 @@ export default function S3AccountsPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+        <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
               {columns.map((col) => (
@@ -1324,18 +1324,18 @@ export default function S3AccountsPage() {
                   const accountUserLinks = resolveAccountUserLinks(account);
                   return (
                     <tr key={account.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
                     <div className="flex flex-wrap items-center gap-2">
                       {isSuperAdmin ? (
                         <button
                           type="button"
                           onClick={() => startEditS3Account(account)}
-                          className="text-left text-sm font-semibold text-slate-900 transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100 dark:hover:text-primary-100"
+                          className="text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
                         >
                           {account.name}
                         </button>
                       ) : (
-                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{account.name}</span>
+                        <span>{account.name}</span>
                       )}
                       {renderS3AccountTypeBadge(account)}
                     </div>

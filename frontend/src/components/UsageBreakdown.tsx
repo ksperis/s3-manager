@@ -95,17 +95,17 @@ export default function UsageBreakdown({
   const circumference = 2 * Math.PI * radius;
 
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <header className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-primary">Breakdown</p>
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-        {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Breakdown</p>
+        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+        {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>}
       </header>
 
       {loading && <SkeletonPie />}
 
       {!loading && !hasData && (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
           {emptyMessage}
         </div>
       )}

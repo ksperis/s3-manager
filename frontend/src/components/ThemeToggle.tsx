@@ -12,20 +12,10 @@ export default function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-primary-500"
+      className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-primary-500"
       aria-label="Toggle theme"
     >
-      {isDark ? (
-        <>
-          <SunIcon className="h-4 w-4" />
-          Light
-        </>
-      ) : (
-        <>
-          <MoonIcon className="h-4 w-4" />
-          Dark
-        </>
-      )}
+      {isDark ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
     </button>
   );
 }

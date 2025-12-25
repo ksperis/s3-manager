@@ -67,3 +67,13 @@ a:hover {
 .manager-table .manager-table-cell-wide {
   max-width: 22rem;
 }
+
+/* Compact tables across admin/manager/browser */
+.manager-table th,
+.manager-table td,
+.compact-table th,
+.compact-table td {
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+  padding: 0.5rem 0.75rem;
+}

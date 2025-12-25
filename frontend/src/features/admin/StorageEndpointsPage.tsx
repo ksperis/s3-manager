@@ -328,7 +328,7 @@ export default function StorageEndpointsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Storage endpoints"
         description="Manage the S3/Ceph endpoints used by the console."
