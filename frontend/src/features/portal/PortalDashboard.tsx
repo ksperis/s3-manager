@@ -122,7 +122,7 @@ export default function PortalDashboard() {
     allow_portal_key: false,
     allow_portal_user_bucket_create: false,
   });
-  const [trafficSparkline, setTrafficSparkline] = useState<{ timestamp: number; total: number }[]>([]);
+  const [trafficSparkline, setTrafficSparkline] = useState<{ timestamp: number; total: number; ops: number }[]>([]);
   const [trafficOps24h, setTrafficOps24h] = useState(0);
   const [trafficLoading, setTrafficLoading] = useState(false);
   const accountUsedBytes = accountUsage?.used_bytes ?? state?.used_bytes ?? null;
@@ -457,11 +457,12 @@ export default function PortalDashboard() {
           .map((point) => ({
             timestamp: new Date(point.timestamp).getTime(),
             total: point.bytes_in + point.bytes_out,
+            ops: point.ops ?? 0,
           }))
-          .filter((point) => Number.isFinite(point.timestamp) && Number.isFinite(point.total))
+          .filter((point) => Number.isFinite(point.timestamp) && Number.isFinite(point.total) && Number.isFinite(point.ops))
           .sort((a, b) => a.timestamp - b.timestamp);
         setTrafficSparkline(points);
-        setTrafficOps24h(stats?.totals?.ops ?? points.reduce((sum, point) => sum + (point as any).ops ?? 0, 0));
+        setTrafficOps24h(stats?.totals?.ops ?? points.reduce((sum, point) => sum + point.ops, 0));
       } catch (err) {
         console.error(err);
         if (!cancelled) {
