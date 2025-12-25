@@ -147,15 +147,23 @@ def create_portal_bucket(
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    settings = load_app_settings()
-    allow_portal_user_create = settings.portal.allow_portal_user_bucket_create
+    portal_settings = load_app_settings().portal
+    allow_portal_user_create = portal_settings.allow_portal_user_bucket_create
     is_manager = access.capabilities.can_manage_buckets
     is_portal_user = access.role == AccountRole.PORTAL_USER.value
     if not (is_manager or (allow_portal_user_create and is_portal_user)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket creation not allowed for this role.")
     use_root = bool(allow_portal_user_create and is_portal_user and not is_manager)
     try:
-        bucket = service.create_bucket(actor, access, payload.name, payload.versioning, use_root=use_root)
+        versioning = payload.versioning if payload.versioning is not None else portal_settings.bucket_defaults.versioning
+        bucket = service.create_bucket(
+            actor,
+            access,
+            payload.name,
+            versioning=versioning,
+            use_root=use_root,
+            portal_settings=portal_settings,
+        )
         audit_service.record_action(
             user=actor,
             scope="portal",
@@ -163,7 +171,11 @@ def create_portal_bucket(
             entity_type="bucket",
             entity_id=payload.name,
             account=access.account,
-            metadata={"versioning": payload.versioning if hasattr(payload, "versioning") else False},
+            metadata={
+                "versioning": versioning,
+                "lifecycle": portal_settings.bucket_defaults.enable_lifecycle,
+                "cors": portal_settings.bucket_defaults.enable_cors,
+            },
         )
         return bucket
     except RuntimeError as exc:

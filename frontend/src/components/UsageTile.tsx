@@ -32,11 +32,11 @@ export default function UsageTile({
   const ratioLabel = ratio !== null ? formatPercentage(ratio) : "—";
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center gap-4">
+    <div className="flex flex-col gap-3 rounded-lg border border-slate-200/80 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center gap-3">
         <div className="shrink-0">
           {ratio === null ? (
-            <div className="flex h-20 w-20 items-center justify-center rounded-full border border-dashed border-slate-200 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-slate-200 text-[11px] font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
               N/A
             </div>
           ) : (
@@ -44,21 +44,21 @@ export default function UsageTile({
           )}
         </div>
         <div className="flex-1 space-y-1">
-          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{label}</p>
-          <p className="text-2xl font-semibold text-slate-900 dark:text-white">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</p>
+          <p className="text-xl font-semibold text-slate-900 dark:text-white">
             {usedDisplay}
-            {unitHint && hasUsage && <span className="ml-1 text-sm font-normal text-slate-500 dark:text-slate-400">{unitHint}</span>}
+            {unitHint && hasUsage && <span className="ml-1 text-[11px] font-normal text-slate-500 dark:text-slate-400">{unitHint}</span>}
           </p>
           {quotaDisplay ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               {usedDisplay} / {quotaDisplay} · {ratioLabel}
             </p>
           ) : (
-            <p className="text-xs text-slate-500 dark:text-slate-400">{emptyHint ?? "No quota defined."}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">{emptyHint ?? "No quota defined."}</p>
           )}
         </div>
       </div>
-      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
+      <div className="h-1 rounded-full bg-slate-100 dark:bg-slate-800">
         <div
           className={`h-full rounded-full ${getBarColor(ratio ?? 0)}`}
           style={{ width: `${ratio ?? 0}%` }}
@@ -77,14 +77,14 @@ function UsageGauge({ ratio }: { ratio: number }) {
 
   return (
     <div
-      className="relative h-20 w-20 rounded-full"
+      className="relative h-16 w-16 rounded-full"
       role="img"
       aria-label={`Usage at ${formatPercentage(clamped)}`}
       style={{
         background: `conic-gradient(${color} ${angle}deg, ${track} ${angle}deg 360deg)`,
       }}
     >
-      <div className="absolute inset-2 flex items-center justify-center rounded-full bg-white text-sm font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+      <div className="absolute inset-1.5 flex items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
         {formatPercentage(clamped)}
       </div>
     </div>

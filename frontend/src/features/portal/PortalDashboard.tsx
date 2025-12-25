@@ -937,7 +937,7 @@ export default function PortalDashboard() {
                     <p className="text-[11px] text-rose-600 dark:text-rose-300">{accountUsageError}</p>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3 xl:flex-nowrap">
                   {renderUsageGauge({
                     label: "Data",
                     used: accountUsedBytes,
@@ -1041,7 +1041,7 @@ export default function PortalDashboard() {
           <div className="h-64 animate-pulse rounded-2xl bg-slate-200/70 dark:bg-slate-800/60" />
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {showKeysModal && (
             <Modal title="Clés IAM portail" onClose={() => setShowKeysModal(false)}>
               <div className="space-y-4">

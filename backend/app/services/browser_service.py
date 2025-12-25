@@ -312,14 +312,17 @@ class BrowserService:
         bucket_name: str,
         account: S3Account,
         prefix: str = "",
+        key: Optional[str] = None,
         key_marker: Optional[str] = None,
         version_id_marker: Optional[str] = None,
         max_keys: int = 1000,
     ) -> ListObjectVersionsResponse:
         client = self._client(account)
+        filter_key = (key or "").strip() or None
+        query_prefix = filter_key or (prefix or "")
         kwargs = {
             "Bucket": bucket_name,
-            "Prefix": prefix or "",
+            "Prefix": query_prefix,
             "MaxKeys": max_keys,
         }
         if key_marker:
@@ -336,6 +339,8 @@ class BrowserService:
             key = ver.get("Key")
             if not key:
                 continue
+            if filter_key and key != filter_key:
+                continue
             versions.append(
                 BrowserObjectVersion(
                     key=key,
@@ -351,6 +356,8 @@ class BrowserService:
             key = marker.get("Key")
             if not key:
                 continue
+            if filter_key and key != filter_key:
+                continue
             delete_markers.append(
                 BrowserObjectVersion(
                     key=key,
@@ -360,8 +367,9 @@ class BrowserService:
                     last_modified=marker.get("LastModified"),
                 )
             )
+        response_prefix = filter_key or (prefix or None)
         return ListObjectVersionsResponse(
-            prefix=prefix or None,
+            prefix=response_prefix,
             versions=versions,
             delete_markers=delete_markers,
             is_truncated=bool(resp.get("IsTruncated")),

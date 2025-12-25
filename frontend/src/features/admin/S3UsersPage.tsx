@@ -333,7 +333,7 @@ export default function S3UsersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Users"
         description="Persist RGW standalone users for direct manager access (no IAM)."
@@ -369,7 +369,7 @@ export default function S3UsersPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
                 {["Name", "UID", "Storage", "Email", "UI Users", "Actions"].map((label) => (

@@ -212,7 +212,7 @@ export default function AdminMetricsPage() {
   const missingTraffic = selectedEndpointId != null && !traffic && !trafficLoading && !trafficError;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Metrics"
         description={pageError || "Centralized view of platform storage and traffic."}

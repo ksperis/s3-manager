@@ -24,18 +24,17 @@ type PageHeaderProps = {
 
 export default function PageHeader({
   title,
-  description,
   breadcrumbs = [],
   actions = [],
   inlineContent,
   rightContent,
 }: PageHeaderProps) {
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/70 bg-white/90 px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="space-y-2">
+    <div className="flex flex-col gap-3 rounded-xl border border-slate-200/70 bg-white/90 px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="space-y-1">
           {breadcrumbs.length > 0 && (
-            <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+            <nav className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
               {breadcrumbs.map((bc, idx) => (
                 <span key={bc.label} className="flex items-center gap-2">
                   {bc.to ? (
@@ -50,11 +49,10 @@ export default function PageHeader({
               ))}
             </nav>
           )}
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">{title}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold text-slate-900 dark:text-white">{title}</h1>
             {inlineContent}
           </div>
-          {description && <p className="text-sm text-slate-600 dark:text-slate-300">{description}</p>}
         </div>
         {rightContent ? (
           <div className="flex flex-wrap items-center gap-2">{rightContent}</div>
@@ -68,7 +66,7 @@ export default function PageHeader({
                     ? "border border-slate-200 text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
                     : "bg-primary text-white hover:bg-primary-600";
               const base =
-                "inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition";
+                "inline-flex items-center justify-center rounded-md px-3 py-1.5 text-xs font-semibold shadow-sm transition";
               if (action.to) {
                 return (
                   <Link key={action.label} to={action.to} className={`${base} ${classes}`}>

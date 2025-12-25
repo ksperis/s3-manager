@@ -557,7 +557,7 @@ export default function UsersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="UI Users"
         description="Create, edit, delete, and link UI users to RGW accounts."
@@ -937,7 +937,7 @@ export default function UsersPage() {
           )}
         </div>
         <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+        <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
                     {[
@@ -990,18 +990,18 @@ export default function UsersPage() {
                 !error &&
                 users.map((user) => (
                   <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
                       <div className="flex flex-col gap-1">
                         <button
                           type="button"
                           onClick={() => startEdit(user)}
-                          className="w-full text-left text-sm font-semibold text-slate-900 transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:text-slate-100 dark:hover:text-primary-100"
+                          className="w-full text-left transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:text-primary-100"
                         >
                           {user.email}
                         </button>
                         {user.role === "ui_admin" && user.has_rgw_credentials && (
                           <span
-                            className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-sm text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
                             title="Custom RGW key"
                             aria-label="Custom RGW key"
                           >

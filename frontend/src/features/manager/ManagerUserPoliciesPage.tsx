@@ -29,7 +29,7 @@ export default function ManagerUserPoliciesPage() {
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PageHeader
           title="User policies"
           description="Attach/detach IAM policies for a specific user."
@@ -168,7 +168,7 @@ export default function ManagerUserPoliciesPage() {
   const options = available.map((p) => ({ value: p.arn, label: p.name }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="User policies"
         description={
@@ -253,12 +253,12 @@ export default function ManagerUserPoliciesPage() {
                 {!loading &&
                   attached.map((p) => (
                     <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="manager-table-cell px-6 py-4 text-sm font-medium text-slate-800 dark:text-slate-100">{p.name}</td>
+                      <td className="manager-table-cell px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">{p.name}</td>
                       <td className="manager-table-cell px-6 py-4 text-xs text-slate-600 dark:text-slate-300">{p.arn}</td>
                       <td className="px-6 py-4 text-right">
                         <button
                           onClick={() => handleDetach(p.arn)}
-                          className="text-sm font-medium text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
+                          className="text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
                           disabled={busy === p.arn}
                         >
                           {busy === p.arn ? "Detaching..." : "Detach"}

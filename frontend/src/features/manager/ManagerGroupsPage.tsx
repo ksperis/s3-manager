@@ -23,7 +23,7 @@ export default function ManagerGroupsPage() {
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PageHeader
           title="IAM Groups"
           description="Manage IAM groups for account administrators."
@@ -213,7 +213,7 @@ export default function ManagerGroupsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="IAM Groups"
         description="Manage groups using the account root keys."
@@ -252,8 +252,8 @@ export default function ManagerGroupsPage() {
             {!loading &&
               groups.map((g) => (
                 <tr key={g.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="manager-table-cell px-6 py-4">
-                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{g.name}</span>
+                  <td className="manager-table-cell px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <span>{g.name}</span>
                   </td>
                   <td className="manager-table-cell px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{g.arn ?? "-"}</td>
                   <td className="manager-table-cell-wide px-6 py-4 text-sm text-slate-600 dark:text-slate-300">

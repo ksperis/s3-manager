@@ -39,7 +39,7 @@ export default function ManagerUserKeysPage() {
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PageHeader
           title="User access keys"
           description="Rotate IAM access keys for a specific user."
@@ -227,13 +227,13 @@ export default function ManagerUserKeysPage() {
             {!loading &&
               keys.map((k) => (
                 <tr key={k.access_key_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="manager-table-cell px-6 py-4 font-mono text-sm text-slate-800 dark:text-slate-100">{k.access_key_id}</td>
+                  <td className="manager-table-cell px-6 py-4 font-mono text-slate-800 dark:text-slate-100">{k.access_key_id}</td>
                   <td className="manager-table-cell px-6 py-4 text-sm text-slate-700 dark:text-slate-200">{k.status ?? "-"}</td>
                   <td className="manager-table-cell px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{formatDate(k.created_at)}</td>
                   <td className="px-6 py-4 text-right">
                     <button
                       onClick={() => handleDeleteKey(k.access_key_id)}
-                      className="text-sm font-medium text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
+                      className="text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
                       disabled={busy === k.access_key_id}
                     >
                       {busy === k.access_key_id ? "Deleting..." : "Delete"}

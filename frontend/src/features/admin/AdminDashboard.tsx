@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AdminSummary, fetchAdminSummary } from "../../api/stats";
 import PageHeader from "../../components/PageHeader";
+import PageBanner from "../../components/PageBanner";
 import StatCards from "../../components/StatCards";
 
 export default function AdminDashboard() {
@@ -42,12 +43,13 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Admin overview"
-        description={error || "Global Ceph RGW view (Endpoints, UI Users, Storage Accounts)."}
         breadcrumbs={[{ label: "Admin" }, { label: "Dashboard" }]}
       />
+
+      {error && <PageBanner tone="error">{error}</PageBanner>}
 
       <StatCards stats={cards} columns={3} />
     </div>

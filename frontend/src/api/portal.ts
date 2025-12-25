@@ -103,7 +103,10 @@ export async function createPortalBucket(
   name: string,
   options?: { versioning?: boolean }
 ): Promise<Bucket> {
-  const payload = { name, versioning: options?.versioning ?? false };
+  const payload: Record<string, unknown> = { name };
+  if (options?.versioning !== undefined) {
+    payload.versioning = options.versioning;
+  }
   const { data } = await client.post<Bucket>("/portal/buckets", payload, { params: withS3AccountParam(undefined, accountId) });
   return data;
 }

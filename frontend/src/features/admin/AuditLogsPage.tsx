@@ -177,7 +177,7 @@ export default function AuditLogsPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Audit trail"
         description="Last administrative actions performed through the UI."
@@ -205,7 +205,7 @@ export default function AuditLogsPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-700 dark:divide-slate-800 dark:text-slate-200">
+            <table className="compact-table min-w-full divide-y divide-slate-200 text-left text-sm text-slate-700 dark:divide-slate-800 dark:text-slate-200">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Time</th>

@@ -1288,7 +1288,7 @@ export default function BucketDetailPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={bucketName ?? "Bucket"}
         description={bucketError || "Bucket overview, objects, properties, permissions, metrics."}
@@ -2108,7 +2108,7 @@ export default function BucketDetailPage() {
             id: "permissions",
             label: "Permissions",
             content: (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className={`space-y-3 ${bucketCardClass}`}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
