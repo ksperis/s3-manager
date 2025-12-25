@@ -937,7 +937,7 @@ export default function PortalDashboard() {
                     <p className="text-[11px] text-rose-600 dark:text-rose-300">{accountUsageError}</p>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3 xl:flex-nowrap">
                   {renderUsageGauge({
                     label: "Data",
                     used: accountUsedBytes,

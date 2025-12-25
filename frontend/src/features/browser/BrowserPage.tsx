@@ -365,14 +365,36 @@ export default function BrowserPage() {
     if (corsFixError) {
       items.push(corsFixError);
     }
-    if (corsStatus && !corsStatus.enabled) {
-      items.push(corsStatus.error ?? "Bucket CORS is not enabled.");
-    }
+    const corsDisabled = Boolean(corsStatus && !corsStatus.enabled);
+    const stsDisabled = Boolean(stsStatus && !stsStatus.available);
+    const stripTrailingPeriod = (value: string) => (value.endsWith(".") ? value.slice(0, -1) : value);
+    const normalizeStsError = (value?: string | null) => {
+      if (!value) return null;
+      if (value.includes("GetCallerIdentity")) return "STS is unavailable.";
+      return value;
+    };
+    const stsError = normalizeStsError(stsStatus?.error) ?? "STS is not available for this account.";
     if (useProxyTransfers) {
-      items.push("Backend proxy is active for uploads/downloads.");
+      const reasons: string[] = [];
+      if (corsDisabled) {
+        reasons.push(corsStatus?.error ?? "Bucket CORS is not enabled.");
+      }
+      if (stsDisabled) {
+        reasons.push(stsError);
+      }
+      if (reasons.length > 0) {
+        const reasonText = reasons.map(stripTrailingPeriod).join("; ");
+        items.push(`Backend proxy is active for uploads/downloads (${reasonText}).`);
+      } else {
+        items.push("Backend proxy is active for uploads/downloads.");
+      }
+      return items;
     }
-    if (stsStatus && !stsStatus.available) {
-      items.push(stsStatus.error ?? "STS is not available for this account.");
+    if (corsDisabled) {
+      items.push(corsStatus?.error ?? "Bucket CORS is not enabled.");
+    }
+    if (stsDisabled) {
+      items.push(stsError);
     }
     return items;
   }, [corsFixError, corsStatus, stsStatus, useProxyTransfers, warningMessage]);
