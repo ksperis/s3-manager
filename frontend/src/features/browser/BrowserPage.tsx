@@ -4,7 +4,6 @@
  */
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import axios from "axios";
-import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import {
   BrowserBucket,
@@ -338,6 +337,9 @@ export default function BrowserPage() {
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
+  const [showFolders, setShowFolders] = useState(false);
+  const [showInspector, setShowInspector] = useState(false);
+  const [compactMode, setCompactMode] = useState(true);
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
   const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
   const [prefixVersionsLoading, setPrefixVersionsLoading] = useState(false);
@@ -798,6 +800,18 @@ export default function BrowserPage() {
     }
     return null;
   }, [activeItem, items, selectedIds]);
+
+  const layoutClass = showFolders && showInspector
+    ? "xl:grid-cols-[200px_minmax(0,1fr)_320px]"
+    : showFolders
+      ? "xl:grid-cols-[200px_minmax(0,1fr)]"
+      : showInspector
+        ? "xl:grid-cols-[minmax(0,1fr)_320px]"
+        : "xl:grid-cols-[minmax(0,1fr)]";
+  const rowPadding = compactMode ? "py-2" : "py-4";
+  const headerPadding = compactMode ? "py-2" : "py-3";
+  const iconBoxClasses = compactMode ? "h-7 w-7" : "h-9 w-9";
+  const nameGapClasses = compactMode ? "gap-2" : "gap-3";
 
   const prefixVersionRows = useMemo(
     () => buildVersionRows(prefixVersions, prefixDeleteMarkers),
@@ -1292,338 +1306,311 @@ export default function BrowserPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Browser"
-        description="Browse buckets, prefixes, and objects for the current account."
-        breadcrumbs={[{ label: "Manager" }, { label: "Browser" }]}
-        inlineContent={
-          bucketName ? (
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-              <BucketIcon className="h-3.5 w-3.5" />
-              {bucketName}
-            </span>
-          ) : null
-        }
-      />
-
-      <div className="rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-        <div className="flex h-full flex-col">
-            <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-              <div className="space-y-4">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Location</p>
-                    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-                      <BucketIcon className="h-4 w-4 text-slate-500 dark:text-slate-300" />
-                      <select
-                        className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none dark:text-slate-200"
-                        value={bucketName || ""}
-                        onChange={(event) => handleBucketChange(event.target.value)}
-                        disabled={loadingBuckets || bucketOptions.length === 0}
-                      >
-                        {loadingBuckets && <option value="">Loading buckets...</option>}
-                        {!loadingBuckets && bucketOptions.length === 0 && <option value="">No buckets available</option>}
-                        {!loadingBuckets && bucketOptions.length > 0 && !bucketName && (
-                          <option value="">Select a bucket</option>
-                        )}
-                        {bucketOptions.map((bucket) => (
-                          <option key={bucket} value={bucket}>
-                            {bucket}
-                          </option>
-                        ))}
-                      </select>
-                      <div
-                        className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400"
-                        onClick={isEditingPath ? undefined : startEditingPath}
-                      >
-                        {isEditingPath ? (
-                          <input
-                            ref={pathInputRef}
-                            type="text"
-                            value={pathDraft}
-                            onChange={(event) => setPathDraft(event.target.value)}
-                            onBlur={commitPathDraft}
-                            onKeyDown={handlePathKeyDown}
-                            placeholder="root"
-                            aria-label="Path"
-                            className="min-w-[160px] flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                            disabled={!bucketName}
-                            spellCheck={false}
-                          />
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleGoUp();
-                              }}
-                              className={breadcrumbIconButtonClasses}
-                              disabled={!canGoUp}
-                              aria-label="Parent folder"
-                              title="Parent folder"
-                            >
-                              <UpIcon className="h-3.5 w-3.5" />
-                            </button>
-                            {breadcrumbs.length === 0 ? (
-                              <span className="text-slate-400">(root)</span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleSelectPrefix("");
-                                }}
-                                className="rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
-                              >
-                                root
-                              </button>
-                            )}
-                            {breadcrumbs.map((crumb) => (
-                              <span key={crumb.prefix} className="flex items-center gap-1">
-                                <span className="text-slate-300">/</span>
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleSelectPrefix(crumb.prefix);
-                                  }}
-                                  className="rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
-                                >
-                                  {crumb.label}
-                                </button>
-                              </span>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {filteredItems.length} item(s) in this prefix. {pathStats.files} files, {pathStats.folders} folders.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-3">
+      <div className="rounded-xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Browser</span>
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
+            <select
+              className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none dark:text-slate-200"
+              value={bucketName || ""}
+              onChange={(event) => handleBucketChange(event.target.value)}
+              disabled={loadingBuckets || bucketOptions.length === 0}
+            >
+              {loadingBuckets && <option value="">Loading buckets...</option>}
+              {!loadingBuckets && bucketOptions.length === 0 && <option value="">No buckets</option>}
+              {!loadingBuckets && bucketOptions.length > 0 && !bucketName && <option value="">Select bucket</option>}
+              {bucketOptions.map((bucket) => (
+                <option key={bucket} value={bucket}>
+                  {bucket}
+                </option>
+              ))}
+            </select>
+            <div
+              className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400"
+              onClick={isEditingPath ? undefined : startEditingPath}
+            >
+              {isEditingPath ? (
+                <input
+                  ref={pathInputRef}
+                  type="text"
+                  value={pathDraft}
+                  onChange={(event) => setPathDraft(event.target.value)}
+                  onBlur={commitPathDraft}
+                  onKeyDown={handlePathKeyDown}
+                  placeholder="root"
+                  aria-label="Path"
+                  className="min-w-[140px] flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  disabled={!bucketName}
+                  spellCheck={false}
+                />
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleGoUp();
+                    }}
+                    className={breadcrumbIconButtonClasses}
+                    disabled={!canGoUp}
+                    aria-label="Parent folder"
+                    title="Parent folder"
+                  >
+                    <UpIcon className="h-3.5 w-3.5" />
+                  </button>
+                  {breadcrumbs.length === 0 ? (
+                    <span className="text-slate-400">(root)</span>
+                  ) : (
                     <button
                       type="button"
-                      className={toolbarButtonClasses}
-                      onClick={handleRefresh}
-                      disabled={!bucketName || objectsLoading}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleSelectPrefix("");
+                      }}
+                      className="rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
                     >
-                      Refresh
+                      root
                     </button>
-                    <button type="button" className={toolbarButtonClasses} onClick={handleNewFolder} disabled={!bucketName}>
-                      New folder
-                    </button>
-                    <button
-                      type="button"
-                      className={toolbarPrimaryClasses}
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={!bucketName}
-                    >
-                      Upload
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      className="hidden"
-                      onChange={handleFileInputChange}
-                    />
-                  </div>
-                </div>
-
-                {(bucketError || objectsError || statusMessage || warnings.length > 0) && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-                    {bucketError && <p className="font-semibold text-rose-600 dark:text-rose-200">{bucketError}</p>}
-                    {!bucketError && objectsError && (
-                      <p className="font-semibold text-rose-600 dark:text-rose-200">{objectsError}</p>
-                    )}
-                    {statusMessage && <p className="text-slate-500 dark:text-slate-400">{statusMessage}</p>}
-                    {warnings.map((warning, index) => (
-                      <p key={`${warning}-${index}`} className="font-semibold text-amber-600 dark:text-amber-200">
-                        {warning}
-                      </p>
-                    ))}
-                    {corsStatus && !corsStatus.enabled && uiOrigin && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          className={bulkActionClasses}
-                          onClick={handleEnsureCors}
-                          disabled={corsFixing}
-                        >
-                          {corsFixing ? "Activation CORS..." : `Ajouter CORS pour ${uiOrigin}`}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex flex-1 flex-wrap items-center gap-2">
-                    <div className="relative w-full sm:max-w-xs">
-                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                        <SearchIcon />
-                      </span>
-                      <input
-                        type="text"
-                        value={filter}
-                        onChange={(event) => setFilter(event.target.value)}
-                        placeholder="Filter objects"
-                        className="w-full rounded-md border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {[
-                        { id: "all", label: "All" },
-                        { id: "file", label: "Files" },
-                        { id: "folder", label: "Folders" },
-                      ].map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => setTypeFilter(option.id as "all" | "file" | "folder")}
-                          className={`${filterChipClasses} ${typeFilter === option.id ? filterChipActiveClasses : ""}`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {availableStorageClasses.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setStorageFilter("all")}
-                          className={`${filterChipClasses} ${storageFilter === "all" ? filterChipActiveClasses : ""}`}
-                        >
-                          Storage: All
-                        </button>
-                        {availableStorageClasses.map((storage) => (
-                          <button
-                            key={storage}
-                            type="button"
-                            onClick={() => setStorageFilter(storage)}
-                            className={`${filterChipClasses} ${storageFilter === storage ? filterChipActiveClasses : ""}`}
-                          >
-                            {storage}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                      <select
-                        className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none dark:text-slate-200"
-                        value={sortId}
-                        onChange={(event) => setSortId(event.target.value)}
-                      >
-                        {sortOptions.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1 py-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                  )}
+                  {breadcrumbs.map((crumb) => (
+                    <span key={crumb.prefix} className="flex items-center gap-1">
+                      <span className="text-slate-300">/</span>
                       <button
                         type="button"
-                        onClick={() => setViewMode("list")}
-                        className={`${viewToggleBaseClasses} ${viewMode === "list" ? viewToggleActiveClasses : ""}`}
-                        aria-label="List view"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleSelectPrefix(crumb.prefix);
+                        }}
+                        className="rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
                       >
-                        <ListIcon />
+                        {crumb.label}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setViewMode("grid")}
-                        className={`${viewToggleBaseClasses} ${viewMode === "grid" ? viewToggleActiveClasses : ""}`}
-                        aria-label="Grid view"
-                      >
-                        <GridIcon />
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowPrefixVersions((prev) => !prev)}
-                      className={`${filterChipClasses} ${showPrefixVersions ? filterChipActiveClasses : ""}`}
-                    >
-                      Versions (prefix)
-                    </button>
-                  </div>
-                </div>
-
-                {selectedCount > 0 && (
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        {selectedCount} selected
-                      </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">{formatBytes(selectedBytes)}</span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedIds([])}
-                        className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className={bulkActionClasses}
-                        disabled={!canBulkActions}
-                        onClick={() => handleDownloadItems(selectedFiles)}
-                      >
-                        <DownloadIcon className="h-3.5 w-3.5" />
-                        Download
-                      </button>
-                      <button
-                        type="button"
-                        className={bulkActionClasses}
-                        disabled={selectedFiles.length !== 1 || hasFolderSelection}
-                        onClick={() => handleCopyUrl(selectedFiles[0] ?? null)}
-                      >
-                        <CopyIcon className="h-3.5 w-3.5" />
-                        Copy URL
-                      </button>
-                      <button
-                        type="button"
-                        className={bulkDangerClasses}
-                        disabled={!canBulkActions}
-                        onClick={() => handleDeleteItems(selectedFiles)}
-                      >
-                        <TrashIcon className="h-3.5 w-3.5" />
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+                    </span>
+                  ))}
+                </>
+              )}
             </div>
+          </div>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            {filteredItems.length} items · {pathStats.files} files · {pathStats.folders} folders
+          </span>
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            <div className="relative w-full sm:w-44">
+              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">
+                <SearchIcon className="h-3.5 w-3.5" />
+              </span>
+              <input
+                type="text"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                placeholder="Filter"
+                className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-7 pr-2 text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            </div>
+            <select
+              className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value as "all" | "file" | "folder")}
+            >
+              <option value="all">All</option>
+              <option value="file">Files</option>
+              <option value="folder">Folders</option>
+            </select>
+            {availableStorageClasses.length > 0 && (
+              <select
+                className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                value={storageFilter}
+                onChange={(event) => setStorageFilter(event.target.value)}
+              >
+                <option value="all">Storage: All</option>
+                {availableStorageClasses.map((storage) => (
+                  <option key={storage} value={storage}>
+                    {storage}
+                  </option>
+                ))}
+              </select>
+            )}
+            <select
+              className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              value={sortId}
+              onChange={(event) => setSortId(event.target.value)}
+            >
+              {sortOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1 py-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`${viewToggleBaseClasses} ${viewMode === "list" ? viewToggleActiveClasses : ""}`}
+                aria-label="List view"
+              >
+                <ListIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("grid")}
+                className={`${viewToggleBaseClasses} ${viewMode === "grid" ? viewToggleActiveClasses : ""}`}
+                aria-label="Grid view"
+              >
+                <GridIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowFolders((prev) => !prev)}
+              className={`${filterChipClasses} ${showFolders ? filterChipActiveClasses : ""}`}
+            >
+              Folders
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowInspector((prev) => !prev)}
+              className={`${filterChipClasses} ${showInspector ? filterChipActiveClasses : ""}`}
+            >
+              Inspector
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPrefixVersions((prev) => !prev)}
+              className={`${filterChipClasses} ${showPrefixVersions ? filterChipActiveClasses : ""}`}
+            >
+              Versions
+            </button>
+            <button
+              type="button"
+              onClick={() => setCompactMode((prev) => !prev)}
+              className={`${filterChipClasses} ${compactMode ? filterChipActiveClasses : ""}`}
+            >
+              Compact
+            </button>
+            <button
+              type="button"
+              className={toolbarButtonClasses}
+              onClick={handleRefresh}
+              disabled={!bucketName || objectsLoading}
+            >
+              Refresh
+            </button>
+            <button type="button" className={toolbarButtonClasses} onClick={handleNewFolder} disabled={!bucketName}>
+              New folder
+            </button>
+            <button
+              type="button"
+              className={toolbarPrimaryClasses}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!bucketName}
+            >
+              Upload
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFileInputChange}
+            />
+          </div>
+        </div>
 
-            <div className="flex-1 p-4">
-              <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_320px]">
-                <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Folders</p>
-                  <div className="mt-3 max-h-[520px] overflow-auto pr-1">
-                    {!bucketName ? (
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
-                    ) : (
-                      renderTreeNodes(treeNodes)
-                    )}
+        {(bucketError || objectsError || statusMessage || warnings.length > 0) && (
+          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
+            {bucketError && <p className="font-semibold text-rose-600 dark:text-rose-200">{bucketError}</p>}
+            {!bucketError && objectsError && <p className="font-semibold text-rose-600 dark:text-rose-200">{objectsError}</p>}
+            {statusMessage && <p className="text-slate-500 dark:text-slate-400">{statusMessage}</p>}
+            {warnings.map((warning, index) => (
+              <p key={`${warning}-${index}`} className="font-semibold text-amber-600 dark:text-amber-200">
+                {warning}
+              </p>
+            ))}
+            {corsStatus && !corsStatus.enabled && uiOrigin && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={bulkActionClasses}
+                  onClick={handleEnsureCors}
+                  disabled={corsFixing}
+                >
+                  {corsFixing ? "Activation CORS..." : `Ajouter CORS pour ${uiOrigin}`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="p-2">
+          <div className={`grid gap-3 ${layoutClass}`}>
+            {showFolders && (
+              <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Folders</p>
+                <div className="mt-3 max-h-[520px] overflow-auto pr-1">
+                  {!bucketName ? (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
+                  ) : (
+                    renderTreeNodes(treeNodes)
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="space-y-3">
+              {selectedCount > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      {selectedCount} selected
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{formatBytes(selectedBytes)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedIds([])}
+                      className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className={bulkActionClasses}
+                      disabled={!canBulkActions}
+                      onClick={() => handleDownloadItems(selectedFiles)}
+                    >
+                      <DownloadIcon className="h-3.5 w-3.5" />
+                      Download
+                    </button>
+                    <button
+                      type="button"
+                      className={bulkActionClasses}
+                      disabled={selectedFiles.length !== 1 || hasFolderSelection}
+                      onClick={() => handleCopyUrl(selectedFiles[0] ?? null)}
+                    >
+                      <CopyIcon className="h-3.5 w-3.5" />
+                      Copy URL
+                    </button>
+                    <button
+                      type="button"
+                      className={bulkDangerClasses}
+                      disabled={!canBulkActions}
+                      onClick={() => handleDeleteItems(selectedFiles)}
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
                   </div>
                 </div>
-                <div className="space-y-4">
+              )}
                   <div className="rounded-xl border border-slate-200 dark:border-slate-800">
                     {viewMode === "list" ? (
                       <div className="overflow-x-auto">
                         <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                           <thead className="bg-slate-50 dark:bg-slate-900/50">
                             <tr>
-                              <th className="w-9 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              <th className={`w-9 px-2 ${headerPadding} text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 <input
                                   type="checkbox"
                                   checked={allSelected}
@@ -1632,16 +1619,16 @@ export default function BrowserPage() {
                                   className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                                 />
                               </th>
-                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              <th className={`px-4 ${headerPadding} text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 Name
                               </th>
-                              <th className="w-20 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              <th className={`w-20 px-3 ${headerPadding} text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 Size
                               </th>
-                              <th className="w-36 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              <th className={`w-36 px-3 ${headerPadding} text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 Modified
                               </th>
-                              <th className="w-24 px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              <th className={`w-24 px-3 ${headerPadding} text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 Actions
                               </th>
                             </tr>
@@ -1664,7 +1651,7 @@ export default function BrowserPage() {
                                   selectedSet.has(item.id) ? "bg-primary-50/50 dark:bg-primary-900/20" : ""
                                 }`}
                               >
-                                <td className="w-9 px-2 py-4">
+                                <td className={`w-9 px-2 ${rowPadding}`}>
                                   <input
                                     type="checkbox"
                                     checked={selectedSet.has(item.id)}
@@ -1673,9 +1660,9 @@ export default function BrowserPage() {
                                     className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                                   />
                                 </td>
-                                <td className="manager-table-cell px-4 py-4 text-sm text-slate-700 dark:text-slate-200">
-                                  <div className="flex items-center gap-3">
-                                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                                <td className={`manager-table-cell px-4 ${rowPadding} text-sm text-slate-700 dark:text-slate-200`}>
+                                  <div className={`flex items-center ${nameGapClasses}`}>
+                                    <span className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200`}>
                                       {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
                                     </span>
                                     <div>
@@ -1686,27 +1673,29 @@ export default function BrowserPage() {
                                       >
                                         {item.name}
                                       </button>
-                                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                        <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
-                                          {item.type === "folder" ? "Prefix" : "Object"}
-                                        </span>
-                                        {item.storageClass && (
-                                          <span
-                                            className={`rounded-full border px-2 py-0.5 font-semibold ${
-                                              storageClassChipClasses[item.storageClass] ??
-                                              "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                            }`}
-                                          >
-                                            {item.storageClass}
+                                      {!compactMode && (
+                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                          <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
+                                            {item.type === "folder" ? "Prefix" : "Object"}
                                           </span>
-                                        )}
-                                      </div>
+                                          {item.storageClass && (
+                                            <span
+                                              className={`rounded-full border px-2 py-0.5 font-semibold ${
+                                                storageClassChipClasses[item.storageClass] ??
+                                                "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                              }`}
+                                            >
+                                              {item.storageClass}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-3 py-4 text-sm text-slate-600 dark:text-slate-300">{item.size}</td>
-                                <td className="px-3 py-4 text-sm text-slate-600 dark:text-slate-300">{item.modified}</td>
-                                <td className="px-3 py-4 text-right">
+                                <td className={`px-3 ${rowPadding} text-sm text-slate-600 dark:text-slate-300`}>{item.size}</td>
+                                <td className={`px-3 ${rowPadding} text-sm text-slate-600 dark:text-slate-300`}>{item.modified}</td>
+                                <td className={`px-3 ${rowPadding} text-right`}>
                                   <div className="flex flex-wrap justify-end gap-2">
                                     <button
                                       type="button"
@@ -1951,6 +1940,7 @@ export default function BrowserPage() {
                   )}
                 </div>
 
+                {showInspector && (
                 <div className="space-y-4">
                   <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
                     <div className="flex items-center justify-between gap-2">
@@ -2282,10 +2272,10 @@ export default function BrowserPage() {
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+                )}
           </div>
         </div>
+      </div>
     </div>
   );
 }
