@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import axios from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
 import {
@@ -21,12 +21,16 @@ import {
   ensureBucketCors,
   getObjectTags,
   getStsStatus,
+  initiateMultipartUpload,
   listBrowserBuckets,
   listBrowserObjects,
   listObjectVersions,
+  presignPart,
   presignObject,
   proxyDownload,
   proxyUpload,
+  completeMultipartUpload,
+  abortMultipartUpload,
 } from "../../api/browser";
 import { useS3AccountContext } from "../manager/S3AccountContext";
 
@@ -59,6 +63,11 @@ type OperationItem = {
   path: string;
   progress: number;
   status: "uploading" | "deleting" | "copying";
+};
+
+type UploadCandidate = {
+  file: File;
+  relativePath?: string;
 };
 
 type ActivityItem = {
@@ -105,6 +114,11 @@ const storageClassChipClasses: Record<string, string> = {
   STANDARD_IA: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200",
   GLACIER: "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-900/20 dark:text-indigo-200",
 };
+
+const MULTIPART_THRESHOLD = 25 * 1024 * 1024;
+const PART_SIZE = 8 * 1024 * 1024;
+const MULTIPART_CONCURRENCY = 4;
+const MULTI_FILE_CONCURRENCY = 3;
 
 const formatBytes = (bytes?: number | null): string => {
   if (bytes === undefined || bytes === null) return "-";
@@ -182,6 +196,72 @@ const isLikelyCorsError = (error: unknown) => {
   if (!axios.isAxiosError(error)) return false;
   if (!error.response) return true;
   return error.code === "ERR_NETWORK" || error.message === "Network Error";
+};
+
+const normalizeEtag = (raw?: string | string[] | null): string | undefined => {
+  if (!raw) return undefined;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value?.replace(/"/g, "");
+};
+
+type WebkitEntry = {
+  isFile: boolean;
+  isDirectory: boolean;
+  name: string;
+  file?: (success: (file: File) => void, error?: (error: unknown) => void) => void;
+  createReader?: () => { readEntries: (success: (entries: WebkitEntry[]) => void, error?: (error: unknown) => void) => void };
+};
+
+const normalizeUploadPath = (value: string) => value.replace(/\\/g, "/").replace(/^\/+/, "");
+
+const extractRelativePath = (file: File) => {
+  const relative = (file as { webkitRelativePath?: string }).webkitRelativePath;
+  return relative && relative.length > 0 ? relative : file.name;
+};
+
+const buildUploadCandidates = (files: File[]): UploadCandidate[] =>
+  files.map((file) => ({ file, relativePath: extractRelativePath(file) }));
+
+const getWebkitEntry = (item: DataTransferItem): WebkitEntry | null => {
+  const cast = item as DataTransferItem & { webkitGetAsEntry?: () => WebkitEntry | null };
+  return cast.webkitGetAsEntry ? cast.webkitGetAsEntry() : null;
+};
+
+const readDirectoryEntries = (reader: { readEntries: (success: (entries: WebkitEntry[]) => void, error?: (error: unknown) => void) => void }) =>
+  new Promise<WebkitEntry[]>((resolve, reject) => {
+    reader.readEntries(resolve, reject);
+  });
+
+const walkEntry = async (entry: WebkitEntry, parentPath: string): Promise<UploadCandidate[]> => {
+  if (entry.isFile && entry.file) {
+    const file = await new Promise<File>((resolve, reject) => entry.file?.(resolve, reject));
+    return [{ file, relativePath: `${parentPath}${file.name}` }];
+  }
+  if (entry.isDirectory && entry.createReader) {
+    const reader = entry.createReader();
+    const entries: WebkitEntry[] = [];
+    while (true) {
+      const batch = await readDirectoryEntries(reader);
+      if (batch.length === 0) break;
+      entries.push(...batch);
+    }
+    const nextPath = `${parentPath}${entry.name}/`;
+    const nested = await Promise.all(entries.map((child) => walkEntry(child, nextPath)));
+    return nested.flat();
+  }
+  return [];
+};
+
+const collectDroppedFiles = async (dataTransfer: DataTransfer): Promise<UploadCandidate[]> => {
+  const items = Array.from(dataTransfer.items || []);
+  const entries = items
+    .map((item) => getWebkitEntry(item))
+    .filter((entry): entry is WebkitEntry => Boolean(entry));
+  if (entries.length > 0) {
+    const groups = await Promise.all(entries.map((entry) => walkEntry(entry, "")));
+    return groups.flat();
+  }
+  return buildUploadCandidates(Array.from(dataTransfer.files || []));
 };
 
 const getExtension = (name: string) => {
@@ -329,6 +409,12 @@ const GridIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
+const ChevronDownIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <path d="m5 7 5 5 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 export default function BrowserPage() {
   const { accountIdForApi, hasS3AccountContext } = useS3AccountContext();
   const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
@@ -337,8 +423,8 @@ export default function BrowserPage() {
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
-  const [showFolders, setShowFolders] = useState(false);
-  const [showInspector, setShowInspector] = useState(false);
+  const [showFolders, setShowFolders] = useState(true);
+  const [showInspector, setShowInspector] = useState(true);
   const [compactMode, setCompactMode] = useState(true);
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
   const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
@@ -379,7 +465,12 @@ export default function BrowserPage() {
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
+  const [showUploadMenu, setShowUploadMenu] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
@@ -425,6 +516,32 @@ export default function BrowserPage() {
     }
     return items;
   }, [corsFixError, corsStatus, stsStatus, useProxyTransfers, warningMessage]);
+
+  useEffect(() => {
+    if (!folderInputRef.current) return;
+    folderInputRef.current.setAttribute("webkitdirectory", "");
+    folderInputRef.current.setAttribute("directory", "");
+  }, []);
+
+  useEffect(() => {
+    if (!showUploadMenu) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      if (uploadMenuRef.current && !uploadMenuRef.current.contains(event.target as Node)) {
+        setShowUploadMenu(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowUploadMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showUploadMenu]);
 
   useEffect(() => {
     if (!hasS3AccountContext) {
@@ -857,7 +974,7 @@ export default function BrowserPage() {
     setIsEditingPath(false);
   };
 
-  const handlePathKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const handlePathKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
       commitPathDraft();
@@ -1116,47 +1233,159 @@ export default function BrowserPage() {
     }
   };
 
-  const handleUploadFiles = async (files: File[]) => {
-    if (!bucketName || !hasS3AccountContext || files.length === 0) return;
+  const handleUploadFiles = async (items: UploadCandidate[]) => {
+    if (!bucketName || !hasS3AccountContext || items.length === 0) return;
     setWarningMessage(null);
-    await Promise.all(files.map((file) => startUpload(file)));
+    const queue = [...items];
+    const workerCount = Math.min(MULTI_FILE_CONCURRENCY, queue.length);
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (queue.length > 0) {
+        const next = queue.shift();
+        if (!next) return;
+        await startUpload(next);
+      }
+    });
+    await Promise.all(workers);
   };
 
-  const startUpload = async (file: File) => {
+  const uploadSimple = async (file: File, key: string, onProgress: (event: ProgressEvent) => void) => {
     if (!bucketName || !hasS3AccountContext) return;
-    const key = `${normalizedPrefix}${file.name}`;
+    if (useProxyTransfers) {
+      await proxyUpload(accountIdForApi, bucketName, key, file, onProgress);
+      return;
+    }
+    const presign = await presignObject(accountIdForApi, bucketName, {
+      key,
+      operation: "put_object",
+      content_type: file.type || undefined,
+      expires_in: 1800,
+    });
+    await axios.put(presign.url, file, {
+      headers: { ...(presign.headers || {}), "Content-Type": file.type || "application/octet-stream" },
+      onUploadProgress: onProgress,
+    });
+  };
+
+  const uploadMultipart = async (file: File, key: string, operationId: string) => {
+    if (!bucketName || !hasS3AccountContext) return;
+    let uploadId: string | null = null;
+    const totalParts = Math.ceil(file.size / PART_SIZE);
+    const partProgress = new Map<number, number>();
+    const controller = new AbortController();
+
+    const updateProgress = () => {
+      const loaded = Array.from(partProgress.values()).reduce((sum, value) => sum + value, 0);
+      const percent = file.size ? Math.min(99, Math.round((loaded / file.size) * 100)) : 0;
+      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+    };
+
+    const recordProgress = (partNumber: number, loadedBytes: number, partSize: number) => {
+      partProgress.set(partNumber, Math.min(loadedBytes, partSize));
+      updateProgress();
+    };
+
+    const partsQueue = Array.from({ length: totalParts }, (_, index) => {
+      const partNumber = index + 1;
+      const start = index * PART_SIZE;
+      const end = Math.min(start + PART_SIZE, file.size);
+      return { partNumber, start, end, size: end - start };
+    });
+
+    const uploadedParts: { part_number: number; etag: string }[] = [];
+
+    const uploadPart = async (part: { partNumber: number; start: number; end: number; size: number }) => {
+      if (!uploadId) {
+        throw new Error("Missing multipart upload ID.");
+      }
+      const blob = file.slice(part.start, part.end);
+      const presignedPart = await presignPart(accountIdForApi, bucketName, uploadId, {
+        key,
+        part_number: part.partNumber,
+        expires_in: 1800,
+      });
+      const response = await axios.put(presignedPart.url, blob, {
+        headers: presignedPart.headers || {},
+        signal: controller.signal,
+        onUploadProgress: (event) => {
+          const loaded = event.loaded ?? 0;
+          recordProgress(part.partNumber, loaded, part.size);
+        },
+      });
+      const etag = normalizeEtag(response.headers?.etag || response.headers?.ETag || response.headers?.ETAG);
+      if (!etag) {
+        throw new Error("Missing ETag from multipart upload.");
+      }
+      uploadedParts.push({ part_number: part.partNumber, etag });
+      recordProgress(part.partNumber, part.size, part.size);
+    };
+
+    try {
+      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, label: "Multipart upload" } : op)));
+      const init = await initiateMultipartUpload(accountIdForApi, bucketName, {
+        key,
+        content_type: file.type || undefined,
+      });
+      uploadId = init.upload_id;
+      let hasError = false;
+      const workerCount = Math.min(MULTIPART_CONCURRENCY, partsQueue.length);
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (partsQueue.length > 0 && !hasError) {
+          const part = partsQueue.shift();
+          if (!part) return;
+          try {
+            await uploadPart(part);
+          } catch (err) {
+            hasError = true;
+            controller.abort();
+            throw err;
+          }
+        }
+      });
+      await Promise.all(workers);
+      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 95 } : op)));
+      uploadedParts.sort((a, b) => a.part_number - b.part_number);
+      await completeMultipartUpload(accountIdForApi, bucketName, uploadId, key, { parts: uploadedParts });
+      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
+    } catch (err) {
+      if (uploadId) {
+        try {
+          await abortMultipartUpload(accountIdForApi, bucketName, uploadId, key);
+        } catch {
+          // ignore abort failures
+        }
+      }
+      throw err;
+    }
+  };
+
+  const startUpload = async (item: UploadCandidate) => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const file = item.file;
+    const relativePath = normalizeUploadPath(item.relativePath || file.name);
+    const key = `${normalizedPrefix}${relativePath}`;
     const operationId = makeId();
     setOperations((prev) => [
       { id: operationId, label: "Uploading", path: `${bucketName}/${key}`, progress: 0, status: "uploading" },
       ...prev,
     ]);
     try {
-      const onProgress = (event: ProgressEvent) => {
-        const total = event.total ?? file.size;
-        const progress = total ? Math.round((event.loaded / total) * 100) : 0;
-        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress } : op)));
-      };
-      if (useProxyTransfers) {
-        await proxyUpload(accountIdForApi, bucketName, key, file, onProgress);
+      if (!useProxyTransfers && file.size >= MULTIPART_THRESHOLD) {
+        await uploadMultipart(file, key, operationId);
       } else {
-        const presign = await presignObject(accountIdForApi, bucketName, {
-          key,
-          operation: "put_object",
-          content_type: file.type || undefined,
-          expires_in: 1800,
-        });
-        await axios.put(presign.url, file, {
-          headers: { ...(presign.headers || {}), "Content-Type": file.type || "application/octet-stream" },
-          onUploadProgress: onProgress,
-        });
+        const onProgress = (event: ProgressEvent) => {
+          const total = event.total ?? file.size;
+          const progress = total ? Math.round((event.loaded / total) * 100) : 0;
+          setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress } : op)));
+        };
+        await uploadSimple(file, key, onProgress);
       }
       setOperations((prev) => prev.filter((op) => op.id !== operationId));
       addActivity("Uploaded", `${bucketName}/${key}`);
-      setStatusMessage(`Uploaded ${file.name}`);
+      setStatusMessage(`Uploaded ${relativePath}`);
       await loadObjects(prefix);
     } catch (err) {
       setOperations((prev) => prev.filter((op) => op.id !== operationId));
-      setStatusMessage(`Upload failed for ${file.name}`);
+      setStatusMessage(`Upload failed for ${relativePath}`);
       if (!useProxyTransfers && isLikelyCorsError(err)) {
         setWarningMessage(
           `Possible CORS or endpoint issue. Ensure bucket CORS allows origin ${window.location.origin} with PUT/GET/HEAD and headers like Content-Type or x-amz-*.`
@@ -1167,10 +1396,61 @@ export default function BrowserPage() {
 
   const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? Array.from(event.target.files) : [];
-    handleUploadFiles(files);
+    handleUploadFiles(buildUploadCandidates(files));
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const handleFolderInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    handleUploadFiles(buildUploadCandidates(files));
+    if (folderInputRef.current) {
+      folderInputRef.current.value = "";
+    }
+  };
+
+  const isFileDrag = (event: DragEvent<HTMLDivElement>) => {
+    const types = Array.from(event.dataTransfer?.types || []);
+    if (types.includes("Files")) return true;
+    return Array.from(event.dataTransfer?.items || []).some((item) => item.kind === "file");
+  };
+
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    dragCounter.current += 1;
+    setDragging(true);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDragging(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (!dragging) return;
+    event.preventDefault();
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) {
+      setDragging(false);
+    }
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    dragCounter.current = 0;
+    setDragging(false);
+    const files = await collectDroppedFiles(event.dataTransfer);
+    if (files.length === 0) return;
+    if (!bucketName || !hasS3AccountContext) {
+      setStatusMessage("Select a bucket before uploading.");
+      return;
+    }
+    handleUploadFiles(files);
   };
 
   const handleDownloadItems = async (targets: BrowserItem[]) => {
@@ -1497,20 +1777,67 @@ export default function BrowserPage() {
             <button type="button" className={toolbarButtonClasses} onClick={handleNewFolder} disabled={!bucketName}>
               New folder
             </button>
-            <button
-              type="button"
-              className={toolbarPrimaryClasses}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!bucketName}
-            >
-              Upload
-            </button>
+            <div ref={uploadMenuRef} className="relative">
+              <div className="inline-flex items-center">
+                <button
+                  type="button"
+                  className={`${toolbarPrimaryClasses} rounded-r-none`}
+                  onClick={() => {
+                    setShowUploadMenu(false);
+                    fileInputRef.current?.click();
+                  }}
+                  disabled={!bucketName}
+                >
+                  Upload
+                </button>
+                <button
+                  type="button"
+                  className={`${toolbarPrimaryClasses} rounded-l-none px-2`}
+                  onClick={() => setShowUploadMenu((prev) => !prev)}
+                  disabled={!bucketName}
+                  aria-label="Upload options"
+                >
+                  <ChevronDownIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {showUploadMenu && (
+                <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                    onClick={() => {
+                      setShowUploadMenu(false);
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    Upload files
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                    onClick={() => {
+                      setShowUploadMenu(false);
+                      folderInputRef.current?.click();
+                    }}
+                  >
+                    Upload folder
+                  </button>
+                </div>
+              )}
+            </div>
             <input
               ref={fileInputRef}
               type="file"
               multiple
               className="hidden"
               onChange={handleFileInputChange}
+            />
+            <input
+              ref={folderInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFolderInputChange}
             />
           </div>
         </div>
@@ -1601,7 +1928,27 @@ export default function BrowserPage() {
                   </div>
                 </div>
               )}
-                  <div className="rounded-xl border border-slate-200 dark:border-slate-800">
+                  <div
+                    className={`relative rounded-xl border transition ${
+                      dragging
+                        ? "border-primary/60 bg-primary/5 dark:border-primary-500/60 dark:bg-primary-500/10"
+                        : "border-slate-200 dark:border-slate-800"
+                    }`}
+                    onDragEnter={handleDragEnter}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
+                    {dragging && (
+                      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-50/80 text-center text-sm font-semibold text-slate-600 backdrop-blur-sm dark:bg-slate-900/70 dark:text-slate-200">
+                        <div>
+                          <div>Drop files or folders to upload</div>
+                          <div className="mt-1 text-xs font-normal text-slate-500 dark:text-slate-400">
+                            {bucketName ? `${bucketName}/${normalizedPrefix}` : "Select a bucket first"}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {viewMode === "list" ? (
                       <div className="overflow-x-auto">
                         <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
@@ -1854,9 +2201,9 @@ export default function BrowserPage() {
                   </div>
                   {showPrefixVersions && (
                     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40">
-                      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-100">
+                      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-100">
                         <div>Versions {normalizedPrefix ? `· ${normalizedPrefix}` : ""}</div>
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
                           {prefixVersionsLoading && <span>Loading...</span>}
                           <button
                             type="button"
@@ -1868,31 +2215,31 @@ export default function BrowserPage() {
                           </button>
                         </div>
                       </div>
-                      {prefixVersionsError && <div className="px-4 py-2 text-sm text-rose-500">{prefixVersionsError}</div>}
+                      {prefixVersionsError && <div className="px-3 py-2 text-xs text-rose-500">{prefixVersionsError}</div>}
                       <div className="divide-y divide-slate-100 dark:divide-slate-800">
                         {prefixVersionRows.length === 0 && !prefixVersionsLoading && (
-                          <div className="px-4 py-4 text-sm text-slate-500 dark:text-slate-300">No versions found.</div>
+                          <div className="px-3 py-3 text-xs text-slate-500 dark:text-slate-300">No versions found.</div>
                         )}
                         {prefixVersionRows.map((ver) => (
                           <div
                             key={`${ver.key}-${ver.version_id ?? "none"}-${ver.is_delete_marker ? "marker" : "version"}`}
-                            className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 text-sm"
+                            className="flex flex-wrap items-start justify-between gap-3 px-3 py-2 text-xs"
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="truncate font-semibold text-slate-800 dark:text-slate-100">{ver.key}</span>
                                 {ver.is_delete_marker && (
-                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
                                     delete marker
                                   </span>
                                 )}
                                 {ver.is_latest && (
-                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
+                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
                                     latest
                                   </span>
                                 )}
                               </div>
-                              <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-300">
+                              <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 dark:text-slate-300">
                                 {ver.version_id && <span>v: {ver.version_id}</span>}
                                 {ver.last_modified && <span>{formatDateTime(ver.last_modified)}</span>}
                                 {ver.size != null && <span>{formatBytes(ver.size)}</span>}
