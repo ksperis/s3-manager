@@ -9,10 +9,12 @@ import TableEmptyState from "../../components/TableEmptyState";
 import {
   BrowserBucket,
   BrowserObject,
+  BrowserObjectVersion,
   BucketCorsStatus,
   ObjectMetadata,
   ObjectTag,
   StsStatus,
+  copyObject,
   createFolder,
   deleteObjects,
   fetchObjectMetadata,
@@ -22,6 +24,7 @@ import {
   getStsStatus,
   listBrowserBuckets,
   listBrowserObjects,
+  listObjectVersions,
   presignObject,
   proxyDownload,
   proxyUpload,
@@ -200,6 +203,18 @@ const previewLabelForItem = (item: BrowserItem) => {
   return ext.toUpperCase();
 };
 
+const buildVersionRows = (versions: BrowserObjectVersion[], deleteMarkers: BrowserObjectVersion[]) => {
+  const entries = [...versions, ...deleteMarkers].map((entry) => ({
+    ...entry,
+    is_delete_marker: entry.is_delete_marker || false,
+  }));
+  return entries.sort((a, b) => {
+    const dateA = a.last_modified ? new Date(a.last_modified).getTime() : 0;
+    const dateB = b.last_modified ? new Date(b.last_modified).getTime() : 0;
+    return dateB - dateA;
+  });
+};
+
 const FolderIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
     <path
@@ -322,6 +337,19 @@ export default function BrowserPage() {
   const [prefix, setPrefix] = useState("");
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
+  const [showPrefixVersions, setShowPrefixVersions] = useState(false);
+  const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
+  const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
+  const [prefixVersionsLoading, setPrefixVersionsLoading] = useState(false);
+  const [prefixVersionsError, setPrefixVersionsError] = useState<string | null>(null);
+  const [prefixVersionKeyMarker, setPrefixVersionKeyMarker] = useState<string | null>(null);
+  const [prefixVersionIdMarker, setPrefixVersionIdMarker] = useState<string | null>(null);
+  const [objectVersions, setObjectVersions] = useState<BrowserObjectVersion[]>([]);
+  const [objectDeleteMarkers, setObjectDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
+  const [objectVersionsLoading, setObjectVersionsLoading] = useState(false);
+  const [objectVersionsError, setObjectVersionsError] = useState<string | null>(null);
+  const [objectVersionKeyMarker, setObjectVersionKeyMarker] = useState<string | null>(null);
+  const [objectVersionIdMarker, setObjectVersionIdMarker] = useState<string | null>(null);
   const [loadingBuckets, setLoadingBuckets] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
@@ -459,6 +487,75 @@ export default function BrowserPage() {
     }
   };
 
+  const loadPrefixVersions = async (opts?: { append?: boolean; keyMarker?: string | null; versionIdMarker?: string | null }) => {
+    if (!bucketName || !hasS3AccountContext) return;
+    if (!opts?.append) {
+      setPrefixVersionsLoading(true);
+      setPrefixVersionsError(null);
+    } else {
+      setPrefixVersionsLoading(true);
+    }
+    const resolvedKeyMarker = opts?.keyMarker !== undefined ? opts.keyMarker : prefixVersionKeyMarker;
+    const resolvedVersionIdMarker = opts?.versionIdMarker !== undefined ? opts.versionIdMarker : prefixVersionIdMarker;
+    try {
+      const data = await listObjectVersions(accountIdForApi, bucketName, {
+        prefix: normalizedPrefix,
+        keyMarker: resolvedKeyMarker ?? undefined,
+        versionIdMarker: resolvedVersionIdMarker ?? undefined,
+      });
+      setPrefixVersionKeyMarker(data.next_key_marker ?? null);
+      setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
+      setPrefixVersions((prev) => (opts?.append ? [...prev, ...data.versions] : data.versions));
+      setPrefixDeleteMarkers((prev) => (opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers));
+    } catch (err) {
+      setPrefixVersionsError("Unable to list versions for this prefix.");
+      if (!opts?.append) {
+        setPrefixVersions([]);
+        setPrefixDeleteMarkers([]);
+      }
+    } finally {
+      setPrefixVersionsLoading(false);
+    }
+  };
+
+  const loadObjectVersions = async (opts?: {
+    append?: boolean;
+    keyMarker?: string | null;
+    versionIdMarker?: string | null;
+    targetKey?: string | null;
+  }) => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const targetKey = opts?.targetKey ?? inspectedItem?.key ?? null;
+    if (!targetKey) return;
+    if (!opts?.append) {
+      setObjectVersionsLoading(true);
+      setObjectVersionsError(null);
+    } else {
+      setObjectVersionsLoading(true);
+    }
+    const resolvedKeyMarker = opts?.keyMarker !== undefined ? opts.keyMarker : objectVersionKeyMarker;
+    const resolvedVersionIdMarker = opts?.versionIdMarker !== undefined ? opts.versionIdMarker : objectVersionIdMarker;
+    try {
+      const data = await listObjectVersions(accountIdForApi, bucketName, {
+        key: targetKey,
+        keyMarker: resolvedKeyMarker ?? undefined,
+        versionIdMarker: resolvedVersionIdMarker ?? undefined,
+      });
+      setObjectVersionKeyMarker(data.next_key_marker ?? null);
+      setObjectVersionIdMarker(data.next_version_id_marker ?? null);
+      setObjectVersions((prev) => (opts?.append ? [...prev, ...data.versions] : data.versions));
+      setObjectDeleteMarkers((prev) => (opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers));
+    } catch (err) {
+      setObjectVersionsError("Unable to list versions for this object.");
+      if (!opts?.append) {
+        setObjectVersions([]);
+        setObjectDeleteMarkers([]);
+      }
+    } finally {
+      setObjectVersionsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {
       setObjects([]);
@@ -467,6 +564,20 @@ export default function BrowserPage() {
     }
     loadObjects(prefix);
   }, [accountIdForApi, bucketName, hasS3AccountContext, prefix]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!showPrefixVersions || !bucketName || !hasS3AccountContext) {
+      setPrefixVersions([]);
+      setPrefixDeleteMarkers([]);
+      setPrefixVersionsError(null);
+      setPrefixVersionKeyMarker(null);
+      setPrefixVersionIdMarker(null);
+      return;
+    }
+    setPrefixVersionKeyMarker(null);
+    setPrefixVersionIdMarker(null);
+    loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
+  }, [accountIdForApi, bucketName, hasS3AccountContext, normalizedPrefix, showPrefixVersions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {
@@ -688,6 +799,15 @@ export default function BrowserPage() {
     return null;
   }, [activeItem, items, selectedIds]);
 
+  const prefixVersionRows = useMemo(
+    () => buildVersionRows(prefixVersions, prefixDeleteMarkers),
+    [prefixDeleteMarkers, prefixVersions]
+  );
+  const objectVersionRows = useMemo(
+    () => buildVersionRows(objectVersions, objectDeleteMarkers),
+    [objectDeleteMarkers, objectVersions]
+  );
+
   const currentPath = useMemo(() => {
     if (!bucketName) return "";
     if (!prefix) return bucketName;
@@ -803,6 +923,20 @@ export default function BrowserPage() {
     };
   }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.key, inspectedItem?.type]);
 
+  useEffect(() => {
+    if (!bucketName || !hasS3AccountContext || !inspectedItem || inspectedItem.type === "folder") {
+      setObjectVersions([]);
+      setObjectDeleteMarkers([]);
+      setObjectVersionsError(null);
+      setObjectVersionKeyMarker(null);
+      setObjectVersionIdMarker(null);
+      return;
+    }
+    setObjectVersionKeyMarker(null);
+    setObjectVersionIdMarker(null);
+    loadObjectVersions({ append: false, keyMarker: null, versionIdMarker: null, targetKey: inspectedItem.key });
+  }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.key, inspectedItem?.type]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]));
   };
@@ -825,6 +959,12 @@ export default function BrowserPage() {
   const handleRefresh = () => {
     if (!bucketName) return;
     loadObjects(prefix);
+    if (showPrefixVersions) {
+      loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
+    }
+    if (inspectedItem?.type === "file") {
+      loadObjectVersions({ append: false, keyMarker: null, versionIdMarker: null, targetKey: inspectedItem.key });
+    }
   };
 
   const loadTreeChildren = async (targetPrefix: string) => {
@@ -1071,6 +1211,52 @@ export default function BrowserPage() {
       await loadObjects(prefix);
     } catch (err) {
       setStatusMessage("Unable to delete objects.");
+    }
+  };
+
+  const refreshVersionsForKey = async (targetKey: string) => {
+    if (showPrefixVersions) {
+      await loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
+    }
+    if (inspectedItem?.type === "file" && inspectedItem.key === targetKey) {
+      await loadObjectVersions({ append: false, keyMarker: null, versionIdMarker: null, targetKey });
+    }
+  };
+
+  const handleRestoreVersion = async (item: BrowserObjectVersion) => {
+    if (!bucketName || !hasS3AccountContext || !item.version_id || item.is_delete_marker) return;
+    setWarningMessage(null);
+    try {
+      await copyObject(accountIdForApi, bucketName, {
+        source_key: item.key,
+        source_version_id: item.version_id,
+        destination_key: item.key,
+        replace_metadata: false,
+        move: false,
+      });
+      addActivity("Restored", `${bucketName}/${item.key}`);
+      setStatusMessage(`Restored version ${item.version_id}`);
+      await loadObjects(prefix);
+      await refreshVersionsForKey(item.key);
+    } catch (err) {
+      setStatusMessage("Unable to restore version.");
+    }
+  };
+
+  const handleDeleteVersion = async (item: BrowserObjectVersion) => {
+    if (!bucketName || !hasS3AccountContext || !item.version_id) return;
+    setWarningMessage(null);
+    const label = item.is_delete_marker ? "delete marker" : "version";
+    const confirmed = window.confirm(`Delete ${label} for ${item.key}?`);
+    if (!confirmed) return;
+    try {
+      await deleteObjects(accountIdForApi, bucketName, [{ key: item.key, version_id: item.version_id }]);
+      addActivity(item.is_delete_marker ? "Removed delete marker" : "Deleted version", `${bucketName}/${item.key}`);
+      setStatusMessage(item.is_delete_marker ? "Delete marker removed." : "Version deleted.");
+      await loadObjects(prefix);
+      await refreshVersionsForKey(item.key);
+    } catch (err) {
+      setStatusMessage(item.is_delete_marker ? "Unable to delete marker." : "Unable to delete version.");
     }
   };
 
@@ -1359,6 +1545,13 @@ export default function BrowserPage() {
                         <GridIcon />
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPrefixVersions((prev) => !prev)}
+                      className={`${filterChipClasses} ${showPrefixVersions ? filterChipActiveClasses : ""}`}
+                    >
+                      Versions (prefix)
+                    </button>
                   </div>
                 </div>
 
@@ -1413,266 +1606,347 @@ export default function BrowserPage() {
 
             <div className="flex-1 p-4">
               <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_320px]">
-              <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Folders</p>
-                <div className="mt-3 max-h-[520px] overflow-auto pr-1">
-                  {!bucketName ? (
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
-                  ) : (
-                    renderTreeNodes(treeNodes)
-                  )}
+                <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Folders</p>
+                  <div className="mt-3 max-h-[520px] overflow-auto pr-1">
+                    {!bucketName ? (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
+                    ) : (
+                      renderTreeNodes(treeNodes)
+                    )}
+                  </div>
                 </div>
-              </div>
-                <div className="rounded-xl border border-slate-200 dark:border-slate-800">
-                  {viewMode === "list" ? (
-                    <div className="overflow-x-auto">
-                      <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                        <thead className="bg-slate-50 dark:bg-slate-900/50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <input
-                                type="checkbox"
-                                checked={allSelected}
-                                onChange={toggleAllSelection}
-                                aria-label="Select all"
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                              />
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Name
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Size
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Modified
-                            </th>
-                            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Owner
-                            </th>
-                            <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                          {objectsLoading && <TableEmptyState colSpan={6} message="Loading objects..." />}
-                          {!objectsLoading && !bucketName && (
-                            <TableEmptyState colSpan={6} message="Select a bucket to browse objects." />
-                          )}
-                          {!objectsLoading && bucketName && objectsError && (
-                            <TableEmptyState colSpan={6} message={objectsError} />
-                          )}
-                          {!objectsLoading && bucketName && !objectsError && filteredItems.length === 0 && (
-                            <TableEmptyState colSpan={6} message="No objects found for this path." />
-                          )}
-                          {filteredItems.map((item) => (
-                            <tr
-                              key={item.id}
-                              className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
-                                selectedSet.has(item.id) ? "bg-primary-50/50 dark:bg-primary-900/20" : ""
-                              }`}
-                            >
-                              <td className="px-6 py-4">
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-800">
+                    {viewMode === "list" ? (
+                      <div className="overflow-x-auto">
+                        <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                          <thead className="bg-slate-50 dark:bg-slate-900/50">
+                            <tr>
+                              <th className="w-9 px-2 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 <input
                                   type="checkbox"
-                                  checked={selectedSet.has(item.id)}
+                                  checked={allSelected}
+                                  onChange={toggleAllSelection}
+                                  aria-label="Select all"
+                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                                />
+                              </th>
+                              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Name
+                              </th>
+                              <th className="w-20 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Size
+                              </th>
+                              <th className="w-36 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Modified
+                              </th>
+                              <th className="w-24 px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                            {objectsLoading && <TableEmptyState colSpan={5} message="Loading objects..." />}
+                            {!objectsLoading && !bucketName && (
+                              <TableEmptyState colSpan={5} message="Select a bucket to browse objects." />
+                            )}
+                            {!objectsLoading && bucketName && objectsError && (
+                              <TableEmptyState colSpan={5} message={objectsError} />
+                            )}
+                            {!objectsLoading && bucketName && !objectsError && filteredItems.length === 0 && (
+                              <TableEmptyState colSpan={5} message="No objects found for this path." />
+                            )}
+                            {filteredItems.map((item) => (
+                              <tr
+                                key={item.id}
+                                className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
+                                  selectedSet.has(item.id) ? "bg-primary-50/50 dark:bg-primary-900/20" : ""
+                                }`}
+                              >
+                                <td className="w-9 px-2 py-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedSet.has(item.id)}
+                                    onChange={() => toggleSelection(item.id)}
+                                    aria-label={`Select ${item.name}`}
+                                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                                  />
+                                </td>
+                                <td className="manager-table-cell px-4 py-4 text-sm text-slate-700 dark:text-slate-200">
+                                  <div className="flex items-center gap-3">
+                                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                                      {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
+                                    </span>
+                                    <div>
+                                      <button
+                                        type="button"
+                                        onClick={() => (item.type === "folder" ? handleOpenItem(item) : setActiveItem(item))}
+                                        className="block text-left font-semibold text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
+                                      >
+                                        {item.name}
+                                      </button>
+                                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                        <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
+                                          {item.type === "folder" ? "Prefix" : "Object"}
+                                        </span>
+                                        {item.storageClass && (
+                                          <span
+                                            className={`rounded-full border px-2 py-0.5 font-semibold ${
+                                              storageClassChipClasses[item.storageClass] ??
+                                              "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                            }`}
+                                          >
+                                            {item.storageClass}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-4 text-sm text-slate-600 dark:text-slate-300">{item.size}</td>
+                                <td className="px-3 py-4 text-sm text-slate-600 dark:text-slate-300">{item.modified}</td>
+                                <td className="px-3 py-4 text-right">
+                                  <div className="flex flex-wrap justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      className={iconButtonClasses}
+                                      aria-label="Open"
+                                      title="Open"
+                                      onClick={() => handleOpenItem(item)}
+                                      disabled={item.type !== "folder"}
+                                    >
+                                      <OpenIcon />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={iconButtonClasses}
+                                      aria-label="Preview"
+                                      title="Preview"
+                                      disabled={item.type === "folder"}
+                                      onClick={() => setActiveItem(item)}
+                                    >
+                                      <EyeIcon />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={iconButtonClasses}
+                                      aria-label="Download"
+                                      title="Download"
+                                      disabled={item.type === "folder"}
+                                      onClick={() => handleDownloadItems([item])}
+                                    >
+                                      <DownloadIcon />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={iconButtonDangerClasses}
+                                      aria-label="Delete"
+                                      title="Delete"
+                                      disabled={item.type === "folder"}
+                                      onClick={() => handleDeleteItems([item])}
+                                    >
+                                      <TrashIcon />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={iconButtonClasses}
+                                      aria-label="More actions"
+                                      title="More"
+                                      onClick={() => setActiveItem(item)}
+                                    >
+                                      <MoreIcon />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {objectsLoading && (
+                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                            Loading objects...
+                          </div>
+                        )}
+                        {!objectsLoading && !bucketName && (
+                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                            Select a bucket to browse objects.
+                          </div>
+                        )}
+                        {!objectsLoading && bucketName && objectsError && (
+                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                            {objectsError}
+                          </div>
+                        )}
+                        {!objectsLoading && bucketName && !objectsError && filteredItems.length === 0 && (
+                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                            No objects found for this path.
+                          </div>
+                        )}
+                        {filteredItems.map((item) => {
+                          const selected = selectedSet.has(item.id);
+                          return (
+                            <div
+                              key={item.id}
+                              className={`flex flex-col gap-3 rounded-xl border px-3 py-3 transition ${
+                                selected
+                                  ? "border-primary-200 bg-primary-50/50 dark:border-primary-700/60 dark:bg-primary-900/20"
+                                  : "border-slate-200 bg-white hover:border-primary-200 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-primary-700/60"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
                                   onChange={() => toggleSelection(item.id)}
                                   aria-label={`Select ${item.name}`}
                                   className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                                 />
-                              </td>
-                              <td className="manager-table-cell px-6 py-4 text-sm text-slate-700 dark:text-slate-200">
-                                <div className="flex items-center gap-3">
-                                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
-                                    {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
-                                  </span>
-                                  <div>
-                                    <button
-                                      type="button"
-                                      onClick={() => (item.type === "folder" ? handleOpenItem(item) : setActiveItem(item))}
-                                      className="block text-left font-semibold text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
-                                    >
-                                      {item.name}
-                                    </button>
-                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                      <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
-                                        {item.type === "folder" ? "Prefix" : "Object"}
-                                      </span>
-                                      {item.storageClass && (
-                                        <span
-                                          className={`rounded-full border px-2 py-0.5 font-semibold ${
-                                            storageClassChipClasses[item.storageClass] ??
-                                            "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                          }`}
-                                        >
-                                          {item.storageClass}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.size}</td>
-                              <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.modified}</td>
-                              <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{item.owner}</td>
-                              <td className="px-6 py-4 text-right">
-                                <div className="flex flex-wrap justify-end gap-2">
-                                  <button
-                                    type="button"
-                                    className={iconButtonClasses}
-                                    aria-label="Open"
-                                    title="Open"
-                                    onClick={() => handleOpenItem(item)}
-                                    disabled={item.type !== "folder"}
-                                  >
-                                    <OpenIcon />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={iconButtonClasses}
-                                    aria-label="Preview"
-                                    title="Preview"
-                                    disabled={item.type === "folder"}
-                                    onClick={() => setActiveItem(item)}
-                                  >
-                                    <EyeIcon />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={iconButtonClasses}
-                                    aria-label="Download"
-                                    title="Download"
-                                    disabled={item.type === "folder"}
-                                    onClick={() => handleDownloadItems([item])}
-                                  >
-                                    <DownloadIcon />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={iconButtonDangerClasses}
-                                    aria-label="Delete"
-                                    title="Delete"
-                                    disabled={item.type === "folder"}
-                                    onClick={() => handleDeleteItems([item])}
-                                  >
-                                    <TrashIcon />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={iconButtonClasses}
-                                    aria-label="More actions"
-                                    title="More"
-                                    onClick={() => setActiveItem(item)}
-                                  >
-                                    <MoreIcon />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {objectsLoading && (
-                        <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                          Loading objects...
-                        </div>
-                      )}
-                      {!objectsLoading && !bucketName && (
-                        <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                          Select a bucket to browse objects.
-                        </div>
-                      )}
-                      {!objectsLoading && bucketName && objectsError && (
-                        <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                          {objectsError}
-                        </div>
-                      )}
-                      {!objectsLoading && bucketName && !objectsError && filteredItems.length === 0 && (
-                        <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                          No objects found for this path.
-                        </div>
-                      )}
-                      {filteredItems.map((item) => {
-                        const selected = selectedSet.has(item.id);
-                        return (
-                          <div
-                            key={item.id}
-                            className={`flex flex-col gap-3 rounded-xl border px-3 py-3 transition ${
-                              selected
-                                ? "border-primary-200 bg-primary-50/50 dark:border-primary-700/60 dark:bg-primary-900/20"
-                                : "border-slate-200 bg-white hover:border-primary-200 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-primary-700/60"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between">
-                              <input
-                                type="checkbox"
-                                checked={selected}
-                                onChange={() => toggleSelection(item.id)}
-                                aria-label={`Select ${item.name}`}
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                              />
-                              <button
-                                type="button"
-                                className={iconButtonClasses}
-                                aria-label="Focus"
-                                onClick={() => setActiveItem(item)}
-                              >
-                                <MoreIcon />
-                              </button>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => (item.type === "folder" ? handleOpenItem(item) : setActiveItem(item))}
-                              className="flex items-center gap-2 text-left"
-                            >
-                              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
-                                {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
-                              </span>
-                              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.name}</span>
-                            </button>
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                              <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
-                                {item.type === "folder" ? "Prefix" : "Object"}
-                              </span>
-                              {item.storageClass && (
-                                <span
-                                  className={`rounded-full border px-2 py-0.5 font-semibold ${
-                                    storageClassChipClasses[item.storageClass] ??
-                                    "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                  }`}
+                                <button
+                                  type="button"
+                                  className={iconButtonClasses}
+                                  aria-label="Focus"
+                                  onClick={() => setActiveItem(item)}
                                 >
-                                  {item.storageClass}
+                                  <MoreIcon />
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => (item.type === "folder" ? handleOpenItem(item) : setActiveItem(item))}
+                                className="flex items-center gap-2 text-left"
+                              >
+                                <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                                  {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
                                 </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              Size: {item.size} | Modified: {item.modified}
-                            </div>
-                            <div className="mt-auto flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                className={bulkActionClasses}
-                                disabled={item.type === "folder"}
-                                onClick={() => setActiveItem(item)}
-                              >
-                                Preview
+                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.name}</span>
                               </button>
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
+                                  {item.type === "folder" ? "Prefix" : "Object"}
+                                </span>
+                                {item.storageClass && (
+                                  <span
+                                    className={`rounded-full border px-2 py-0.5 font-semibold ${
+                                      storageClassChipClasses[item.storageClass] ??
+                                      "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                    }`}
+                                  >
+                                    {item.storageClass}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                Size: {item.size} | Modified: {item.modified}
+                              </div>
+                              <div className="mt-auto flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  disabled={item.type === "folder"}
+                                  onClick={() => setActiveItem(item)}
+                                >
+                                  Preview
+                                </button>
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  disabled={item.type === "folder"}
+                                  onClick={() => handleDownloadItems([item])}
+                                >
+                                  Download
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {showPrefixVersions && (
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40">
+                      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-100">
+                        <div>Versions {normalizedPrefix ? `· ${normalizedPrefix}` : ""}</div>
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          {prefixVersionsLoading && <span>Loading...</span>}
+                          <button
+                            type="button"
+                            className={toolbarButtonClasses}
+                            onClick={() => loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null })}
+                            disabled={!bucketName || prefixVersionsLoading}
+                          >
+                            Refresh
+                          </button>
+                        </div>
+                      </div>
+                      {prefixVersionsError && <div className="px-4 py-2 text-sm text-rose-500">{prefixVersionsError}</div>}
+                      <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {prefixVersionRows.length === 0 && !prefixVersionsLoading && (
+                          <div className="px-4 py-4 text-sm text-slate-500 dark:text-slate-300">No versions found.</div>
+                        )}
+                        {prefixVersionRows.map((ver) => (
+                          <div
+                            key={`${ver.key}-${ver.version_id ?? "none"}-${ver.is_delete_marker ? "marker" : "version"}`}
+                            className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 text-sm"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="truncate font-semibold text-slate-800 dark:text-slate-100">{ver.key}</span>
+                                {ver.is_delete_marker && (
+                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+                                    delete marker
+                                  </span>
+                                )}
+                                {ver.is_latest && (
+                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
+                                    latest
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-300">
+                                {ver.version_id && <span>v: {ver.version_id}</span>}
+                                {ver.last_modified && <span>{formatDateTime(ver.last_modified)}</span>}
+                                {ver.size != null && <span>{formatBytes(ver.size)}</span>}
+                                {ver.etag && <span>ETag {ver.etag}</span>}
+                                {ver.storage_class && <span>{ver.storage_class}</span>}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {!ver.is_delete_marker && (
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={() => handleRestoreVersion(ver)}
+                                >
+                                  Restore
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                className={bulkActionClasses}
-                                disabled={item.type === "folder"}
-                                onClick={() => handleDownloadItems([item])}
+                                className={bulkDangerClasses}
+                                onClick={() => handleDeleteVersion(ver)}
                               >
-                                Download
+                                {ver.is_delete_marker ? "Delete marker" : "Delete version"}
                               </button>
                             </div>
                           </div>
-                        );
-                      })}
+                        ))}
+                      </div>
+                      {(prefixVersionKeyMarker || prefixVersionIdMarker) && (
+                        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900/60">
+                          <button
+                            type="button"
+                            className={toolbarButtonClasses}
+                            onClick={() => loadPrefixVersions({ append: true })}
+                            disabled={prefixVersionsLoading}
+                          >
+                            Load more versions
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1819,6 +2093,81 @@ export default function BrowserPage() {
                             )}
                           </div>
                         </div>
+                        {inspectedItem.type === "file" && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Versions</p>
+                              {objectVersionsLoading && (
+                                <span className="text-xs text-slate-500 dark:text-slate-400">Loading...</span>
+                              )}
+                            </div>
+                            {objectVersionsError && (
+                              <p className="text-xs font-semibold text-rose-600 dark:text-rose-200">
+                                {objectVersionsError}
+                              </p>
+                            )}
+                            <div className="space-y-2">
+                              {objectVersionRows.length === 0 && !objectVersionsLoading && (
+                                <span className="text-xs text-slate-500 dark:text-slate-400">No versions found.</span>
+                              )}
+                              {objectVersionRows.map((ver) => (
+                                <div
+                                  key={`${ver.key}-${ver.version_id ?? "none"}-${ver.is_delete_marker ? "marker" : "version"}`}
+                                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {ver.is_delete_marker && (
+                                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+                                          delete marker
+                                        </span>
+                                      )}
+                                      {ver.is_latest && (
+                                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
+                                          latest
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {!ver.is_delete_marker && (
+                                        <button
+                                          type="button"
+                                          className={bulkActionClasses}
+                                          onClick={() => handleRestoreVersion(ver)}
+                                        >
+                                          Restore
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        className={bulkDangerClasses}
+                                        onClick={() => handleDeleteVersion(ver)}
+                                      >
+                                        {ver.is_delete_marker ? "Delete marker" : "Delete version"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                    {ver.version_id && <div>v: {ver.version_id}</div>}
+                                    {ver.last_modified && <div>Modified: {formatDateTime(ver.last_modified)}</div>}
+                                    {ver.size != null && <div>Size: {formatBytes(ver.size)}</div>}
+                                    {ver.etag && <div>ETag: {ver.etag}</div>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            {(objectVersionKeyMarker || objectVersionIdMarker) && (
+                              <button
+                                type="button"
+                                className={toolbarButtonClasses}
+                                onClick={() => loadObjectVersions({ append: true })}
+                                disabled={objectVersionsLoading}
+                              >
+                                Load more versions
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="mt-4 space-y-4">

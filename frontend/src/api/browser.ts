@@ -245,11 +245,18 @@ export async function getStsStatus(accountId: S3AccountSelector): Promise<StsSta
 export async function listObjectVersions(
   accountId: S3AccountSelector,
   bucketName: string,
-  options?: { prefix?: string; keyMarker?: string | null; versionIdMarker?: string | null; maxKeys?: number }
+  options?: {
+    prefix?: string;
+    key?: string | null;
+    keyMarker?: string | null;
+    versionIdMarker?: string | null;
+    maxKeys?: number;
+  }
 ): Promise<ListObjectVersionsResponse> {
   const params = withS3AccountParam(
     {
       prefix: options?.prefix ?? "",
+      key: options?.key ?? undefined,
       key_marker: options?.keyMarker ?? undefined,
       version_id_marker: options?.versionIdMarker ?? undefined,
       max_keys: options?.maxKeys ?? undefined,

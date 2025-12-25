@@ -128,6 +128,7 @@ def get_sts_status(
 def list_versions(
     bucket_name: str,
     prefix: str = "",
+    key: Optional[str] = None,
     key_marker: Optional[str] = None,
     version_id_marker: Optional[str] = None,
     max_keys: int = Query(default=1000, ge=1, le=1000),
@@ -140,6 +141,7 @@ def list_versions(
             bucket_name,
             account,
             prefix=prefix,
+            key=key,
             key_marker=key_marker,
             version_id_marker=version_id_marker,
             max_keys=max_keys,
