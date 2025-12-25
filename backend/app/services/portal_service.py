@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import copy
 import logging
 import uuid
 from datetime import datetime
@@ -9,9 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db_models import AccountIAMUser, AccountRole, S3Account, StorageEndpoint, User
+from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
 from app.models.portal import PortalAccessKey, PortalIAMUser, PortalState, PortalUsage
+from app.services.app_settings_service import load_app_settings
 from app.services import s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_iam import RGWIAMService, get_iam_service
@@ -29,20 +32,105 @@ class PortalService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self._inline_policy_name = "portal-self-service"
+        self._manager_group_policy_name = "portal-manager"
         self._manager_group_name = "portal-manager"
         self._user_group_name = "portal-user"
         self._bucket_access_policy_name = "portal-user-buckets"
         self._bucket_access_sid = "PortalUserBuckets"
-        self._bucket_access_actions = [
-            "s3:GetBucketLocation",
-            "s3:ListBucket",
-            "s3:ListBucketVersions",
-            "s3:ListBucketMultipartUploads",
-            "s3:GetObject",
-            "s3:PutObject",
-            "s3:DeleteObject",
-            "s3:AbortMultipartUpload",
-            "s3:ListMultipartUploadParts",
+        self._bucket_access_default_actions = PortalSettings().bucket_access_policy.actions
+
+    def _portal_settings(self) -> PortalSettings:
+        return load_app_settings().portal
+
+    def _normalize_actions(self, actions: Optional[list[str]]) -> list[str]:
+        if not actions:
+            return []
+        seen: set[str] = set()
+        normalized = []
+        for entry in actions:
+            if not isinstance(entry, str):
+                continue
+            cleaned = entry.strip()
+            if not cleaned or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            normalized.append(cleaned)
+        return normalized
+
+    def _normalize_origins(self, origins: Optional[list[str]]) -> list[str]:
+        if not origins:
+            return []
+        seen: set[str] = set()
+        normalized = []
+        for entry in origins:
+            if not isinstance(entry, str):
+                continue
+            cleaned = entry.strip()
+            if not cleaned or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            normalized.append(cleaned)
+        return normalized
+
+    def _resolve_group_policy(
+        self,
+        portal_settings: PortalSettings,
+        group_key: str,
+    ) -> Optional[dict]:
+        if group_key == "manager":
+            group_policy = portal_settings.iam_group_manager_policy
+        else:
+            group_policy = portal_settings.iam_group_user_policy
+        if group_policy.advanced_policy:
+            policy = copy.deepcopy(group_policy.advanced_policy)
+        else:
+            actions = self._normalize_actions(group_policy.actions)
+            if not actions:
+                return None
+            policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": actions,
+                        "Resource": ["*"],
+                    }
+                ],
+            }
+        if isinstance(policy, dict) and "Version" not in policy:
+            policy["Version"] = "2012-10-17"
+        return policy
+
+    def _bucket_access_actions(self, portal_settings: Optional[PortalSettings] = None) -> list[str]:
+        settings = portal_settings or self._portal_settings()
+        actions = self._normalize_actions(settings.bucket_access_policy.actions)
+        return actions or list(self._bucket_access_default_actions)
+
+    def _portal_bucket_cors_rules(self, origins: list[str]) -> list[dict]:
+        return [
+            {
+                "AllowedOrigins": origins,
+                "AllowedMethods": ["GET", "PUT", "HEAD"],
+                "AllowedHeaders": ["Content-Type", "x-amz-*"],
+                "ExposeHeaders": ["ETag"],
+                "MaxAgeSeconds": 3000,
+            }
+        ]
+
+    def _portal_bucket_lifecycle_rules(self) -> list[dict]:
+        return [
+            {
+                "ID": "ExpireDeleteMarkers",
+                "Status": "Enabled",
+                "Prefix": "",
+                "Expiration": {"ExpiredObjectDeleteMarker": True},
+            },
+            {
+                "ID": "ExpireOldVersions",
+                "Status": "Enabled",
+                "Prefix": "",
+                "NoncurrentVersionExpiration": {"NoncurrentDays": 90},
+            },
         ]
 
     def _is_active_status(self, status: Optional[str], default: bool = True) -> bool:
@@ -213,37 +301,36 @@ class PortalService:
         }
         iam_service.put_user_inline_policy(username, self._inline_policy_name, policy_doc)
 
-    def _ensure_portal_groups(self, iam_service: RGWIAMService) -> None:
+    def _ensure_portal_groups(
+        self,
+        iam_service: RGWIAMService,
+        portal_settings: Optional[PortalSettings] = None,
+    ) -> None:
         """Ensure portal groups exist and carry the expected policies."""
+        settings = portal_settings or self._portal_settings()
         groups = {g.name for g in iam_service.list_groups()}
         if self._manager_group_name not in groups:
             iam_service.create_group(self._manager_group_name)
         if self._user_group_name not in groups:
             iam_service.create_group(self._user_group_name)
 
-        attached = {p.arn for p in iam_service.list_group_policies(self._manager_group_name)}
-        manager_policies = {
-            "arn:aws:iam::aws:policy/IAMFullAccess",
-            "arn:aws:iam::aws:policy/AmazonS3FullAccess",
-        }
-        for policy_arn in manager_policies - attached:
-            iam_service.attach_group_policy(self._manager_group_name, policy_arn)
+        for group_name in (self._manager_group_name, self._user_group_name):
+            attached = iam_service.list_group_policies(group_name)
+            for policy in attached:
+                if policy.arn:
+                    iam_service.detach_group_policy(group_name, policy.arn)
 
-        policy_doc = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Action": [
-                        "s3:ListAllMyBuckets",
-                    ],
-                    "Resource": [
-                        "arn:aws:s3:::*"
-                    ],
-                }
-            ],
-        }
-        iam_service.put_group_inline_policy(self._user_group_name, self._inline_policy_name, policy_doc)
+        manager_policy = self._resolve_group_policy(settings, "manager")
+        if manager_policy:
+            iam_service.put_group_inline_policy(self._manager_group_name, self._manager_group_policy_name, manager_policy)
+        else:
+            iam_service.delete_group_inline_policy(self._manager_group_name, self._manager_group_policy_name)
+
+        user_policy = self._resolve_group_policy(settings, "user")
+        if user_policy:
+            iam_service.put_group_inline_policy(self._user_group_name, self._inline_policy_name, user_policy)
+        else:
+            iam_service.delete_group_inline_policy(self._user_group_name, self._inline_policy_name)
 
     def _sync_user_group_membership(
         self,
@@ -256,7 +343,8 @@ class PortalService:
         if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
             return
 
-        self._ensure_portal_groups(iam_service)
+        portal_settings = self._portal_settings()
+        self._ensure_portal_groups(iam_service, portal_settings)
         target_group = self._manager_group_name if account_role == AccountRole.PORTAL_MANAGER.value else self._user_group_name
         other_group = self._user_group_name if target_group == self._manager_group_name else self._manager_group_name
 
@@ -417,11 +505,18 @@ class PortalService:
         iam_service: RGWIAMService,
         iam_username: Optional[str],
         bucket_name: str,
+        portal_settings: Optional[PortalSettings] = None,
     ) -> None:
         if not iam_username:
             raise RuntimeError("IAM username missing for this portal user")
-        existing = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name) or {}
-        statements = existing.get("Statement") or []
+        settings = portal_settings or self._portal_settings()
+        policy_settings = settings.bucket_access_policy
+        use_advanced = policy_settings.advanced_policy is not None
+        if use_advanced:
+            policy = copy.deepcopy(policy_settings.advanced_policy)
+        else:
+            policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name) or {}
+        statements = policy.get("Statement") or []
         if not isinstance(statements, list):
             statements = [statements]
         bucket_statement = None
@@ -435,12 +530,14 @@ class PortalService:
             bucket_statement = {
                 "Sid": self._bucket_access_sid,
                 "Effect": "Allow",
-                "Action": self._bucket_access_actions,
                 "Resource": [],
             }
             statements.append(bucket_statement)
-        else:
-            bucket_statement["Action"] = self._bucket_access_actions
+        actions = self._bucket_access_actions(settings)
+        if "Effect" not in bucket_statement:
+            bucket_statement["Effect"] = "Allow"
+        if not use_advanced or "Action" not in bucket_statement:
+            bucket_statement["Action"] = actions
 
         resources = bucket_statement.get("Resource") or []
         if not isinstance(resources, list):
@@ -452,7 +549,7 @@ class PortalService:
 
         bucket_statement["Resource"] = resources
         policy = {
-            "Version": existing.get("Version") or "2012-10-17",
+            "Version": policy.get("Version") or "2012-10-17",
             "Statement": statements,
         }
         iam_service.put_user_inline_policy(iam_username, self._bucket_access_policy_name, policy)
@@ -504,6 +601,8 @@ class PortalService:
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
         self._sync_user_group_membership(iam_service, link.iam_username, account_role)
+        portal_settings = self._portal_settings()
+        bucket_actions = self._bucket_access_actions(portal_settings)
         policy = iam_service.get_user_inline_policy(link.iam_username, self._bucket_access_policy_name) or {}
         statements = policy.get("Statement") or []
         if not isinstance(statements, list):
@@ -522,7 +621,7 @@ class PortalService:
         remaining_resources = [arn for arn in resources if arn not in remove_arns]
         if remaining_resources:
             bucket_statement["Resource"] = remaining_resources
-            bucket_statement["Action"] = self._bucket_access_actions
+            bucket_statement["Action"] = bucket_actions
             policy = {
                 "Version": policy.get("Version") or "2012-10-17",
                 "Statement": statements,
@@ -734,8 +833,18 @@ class PortalService:
     def list_buckets(self, account: S3Account) -> list[Bucket]:
         raise RuntimeError("Listing buckets requires user context")
 
-    def create_bucket(self, user: User, access: "AccountAccess", bucket_name: str, versioning: bool = False, use_root: bool = False) -> Bucket:
+    def create_bucket(
+        self,
+        user: User,
+        access: "AccountAccess",
+        bucket_name: str,
+        versioning: Optional[bool] = None,
+        use_root: bool = False,
+        portal_settings: Optional[PortalSettings] = None,
+    ) -> Bucket:
         account = access.account
+        portal_defaults = portal_settings or self._portal_settings()
+        versioning_flag = portal_defaults.bucket_defaults.versioning if versioning is None else versioning
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(user, account, iam_service)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role)
@@ -744,14 +853,30 @@ class PortalService:
         else:
             active_key_id, active_secret = self._active_credentials(link, iam_service)
         s3_client.create_bucket(bucket_name, access_key=active_key_id, secret_key=active_secret)
-        if versioning:
+        if versioning_flag:
             s3_client.set_bucket_versioning(
                 bucket_name,
                 enabled=True,
                 access_key=active_key_id,
                 secret_key=active_secret,
             )
-        self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name)
+        if portal_defaults.bucket_defaults.enable_lifecycle:
+            s3_client.put_bucket_lifecycle(
+                bucket_name,
+                rules=self._portal_bucket_lifecycle_rules(),
+                access_key=active_key_id,
+                secret_key=active_secret,
+            )
+        if portal_defaults.bucket_defaults.enable_cors:
+            origins = self._normalize_origins(portal_defaults.bucket_defaults.cors_allowed_origins)
+            if origins:
+                s3_client.put_bucket_cors(
+                    bucket_name,
+                    rules=self._portal_bucket_cors_rules(origins),
+                    access_key=active_key_id,
+                    secret_key=active_secret,
+                )
+        self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name, portal_settings=portal_defaults)
         return Bucket(
             name=bucket_name,
             creation_date=None,

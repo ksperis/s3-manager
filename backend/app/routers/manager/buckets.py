@@ -476,10 +476,11 @@ def create_bucket(
     audit_service: AuditService = Depends(get_audit_logger),
 ):
     try:
+        versioning = payload.versioning if payload.versioning is not None else False
         service.create_bucket(
             payload.name,
             account,
-            versioning=payload.versioning,
+            versioning=versioning,
         )
         audit_service.record_action(
             user=current_user,
@@ -489,13 +490,13 @@ def create_bucket(
             entity_id=payload.name,
             account=account,
             metadata={
-                "versioning": payload.versioning,
+                "versioning": versioning,
             },
         )
         return {
             "message": f"Bucket '{payload.name}' created",
             "name": payload.name,
-            "versioning": payload.versioning,
+            "versioning": versioning,
         }
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc

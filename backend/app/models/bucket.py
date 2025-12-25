@@ -24,7 +24,7 @@ class BucketPublicAccessBlock(BaseModel):
 
 class BucketCreate(BaseModel):
     name: str
-    versioning: bool = False
+    versioning: Optional[bool] = None
 
 
 class BucketVersioningUpdate(BaseModel):
