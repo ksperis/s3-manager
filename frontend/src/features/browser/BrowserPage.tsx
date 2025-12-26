@@ -93,10 +93,10 @@ const toolbarPrimaryClasses =
 const filterChipClasses =
   "inline-flex items-center gap-2 rounded-full border border-slate-200 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100";
 const filterChipActiveClasses =
-  "border-primary-200 bg-primary-100 text-primary-800 dark:border-primary-600 dark:bg-primary-900/30 dark:text-primary-100";
+  "border-primary-200 bg-primary-100 text-primary-800 dark:border-primary-600 dark:bg-primary-500/20 dark:text-primary-100";
 const viewToggleBaseClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100";
-const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-100";
+const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-100";
 const breadcrumbIconButtonClasses =
   "inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-200";
 
@@ -105,7 +105,7 @@ const treeToggleButtonClasses =
 const treeItemBaseClasses =
   "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-[11px] font-semibold transition";
 const treeItemActiveClasses =
-  "bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-100";
+  "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100";
 const treeItemInactiveClasses =
   "text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100";
 
@@ -1992,7 +1992,7 @@ export default function BrowserPage() {
                               <tr
                                 key={item.id}
                                 className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
-                                  selectedSet.has(item.id) ? "bg-primary-50/50 dark:bg-primary-900/20" : ""
+                                  selectedSet.has(item.id) ? "bg-primary-50/50 dark:bg-primary-500/20" : ""
                                 }`}
                               >
                                 <td className={`w-9 px-2 ${rowPadding}`}>
@@ -2126,7 +2126,7 @@ export default function BrowserPage() {
                               key={item.id}
                               className={`flex flex-col gap-3 rounded-xl border px-3 py-3 transition ${
                                 selected
-                                  ? "border-primary-200 bg-primary-50/50 dark:border-primary-700/60 dark:bg-primary-900/20"
+                                  ? "border-primary-200 bg-primary-50/50 dark:border-primary-700/60 dark:bg-primary-500/20"
                                   : "border-slate-200 bg-white hover:border-primary-200 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-primary-700/60"
                               }`}
                             >

@@ -31,7 +31,7 @@ export default function PageTabs({ tabs, activeTab, onChange }: PageTabsProps) {
               className={[
                 "rounded-md px-2.5 py-1.5 text-xs font-semibold transition",
                 isActive
-                  ? "bg-primary-100/70 text-primary-800 dark:bg-primary-900/25 dark:text-primary-100"
+                  ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
                   : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
                 tab.disabled ? "opacity-50" : "",
               ].join(" ")}
