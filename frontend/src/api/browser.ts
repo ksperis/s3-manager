@@ -26,6 +26,12 @@ export type ListBrowserObjectsResponse = {
   next_continuation_token?: string | null;
 };
 
+export type BrowserObjectsQuery = {
+  query?: string;
+  type?: "all" | "file" | "folder";
+  storageClass?: string;
+};
+
 export type BrowserObjectVersion = {
   key: string;
   version_id?: string | null;
@@ -192,13 +198,16 @@ export async function listBrowserBuckets(accountId: S3AccountSelector): Promise<
 export async function listBrowserObjects(
   accountId: S3AccountSelector,
   bucketName: string,
-  options?: { prefix?: string; continuationToken?: string | null; maxKeys?: number }
+  options?: { prefix?: string; continuationToken?: string | null; maxKeys?: number } & BrowserObjectsQuery
 ): Promise<ListBrowserObjectsResponse> {
   const params = withS3AccountParam(
     {
       prefix: options?.prefix ?? "",
       continuation_token: options?.continuationToken ?? undefined,
       max_keys: options?.maxKeys ?? undefined,
+      query: options?.query?.trim() || undefined,
+      item_type: options?.type && options.type !== "all" ? options.type : undefined,
+      storage_class: options?.storageClass && options.storageClass !== "all" ? options.storageClass : undefined,
     },
     accountId
   );

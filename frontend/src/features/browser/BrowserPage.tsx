@@ -119,6 +119,8 @@ const MULTIPART_THRESHOLD = 25 * 1024 * 1024;
 const PART_SIZE = 8 * 1024 * 1024;
 const MULTIPART_CONCURRENCY = 4;
 const MULTI_FILE_CONCURRENCY = 3;
+const OBJECTS_PAGE_SIZE = 200;
+const VERSIONS_PAGE_SIZE = 200;
 
 const formatBytes = (bytes?: number | null): string => {
   if (bytes === undefined || bytes === null) return "-";
@@ -422,9 +424,11 @@ export default function BrowserPage() {
   const [prefix, setPrefix] = useState("");
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
+  const [objectsNextToken, setObjectsNextToken] = useState<string | null>(null);
+  const [objectsIsTruncated, setObjectsIsTruncated] = useState(false);
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
   const [showFolders, setShowFolders] = useState(true);
-  const [showInspector, setShowInspector] = useState(true);
+  const [showInspector, setShowInspector] = useState(false);
   const [compactMode, setCompactMode] = useState(true);
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
   const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
@@ -441,6 +445,7 @@ export default function BrowserPage() {
   const [loadingBuckets, setLoadingBuckets] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
+  const [objectsLoadingMore, setObjectsLoadingMore] = useState(false);
   const [objectsError, setObjectsError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
@@ -585,21 +590,52 @@ export default function BrowserPage() {
     };
   }, [accountIdForApi, hasS3AccountContext]);
 
-  const loadObjects = async (nextPrefix?: string) => {
+  const loadObjects = async (opts?: { append?: boolean; continuationToken?: string | null; prefixOverride?: string }) => {
     if (!bucketName || !hasS3AccountContext) return;
-    const targetPrefix = normalizePrefix(nextPrefix ?? prefix);
-    setObjectsLoading(true);
-    setObjectsError(null);
+    const targetPrefix = normalizePrefix(opts?.prefixOverride ?? prefix);
+    if (!opts?.append) {
+      setObjectsLoading(true);
+      setObjectsLoadingMore(false);
+      setObjectsError(null);
+      setObjectsNextToken(null);
+      setObjectsIsTruncated(false);
+    } else {
+      setObjectsLoadingMore(true);
+    }
+    const query = filter.trim();
     try {
-      const data = await listBrowserObjects(accountIdForApi, bucketName, { prefix: targetPrefix });
-      setObjects(data.objects);
-      setPrefixes(data.prefixes);
+      const data = await listBrowserObjects(accountIdForApi, bucketName, {
+        prefix: targetPrefix,
+        continuationToken: opts?.continuationToken ?? undefined,
+        maxKeys: OBJECTS_PAGE_SIZE,
+        query: query || undefined,
+        type: typeFilter,
+        storageClass: storageFilter,
+      });
+      setObjects((prev) => (opts?.append ? [...prev, ...data.objects] : data.objects));
+      setPrefixes((prev) => {
+        if (!opts?.append) {
+          return data.prefixes;
+        }
+        const merged = [...prev, ...data.prefixes];
+        return Array.from(new Set(merged));
+      });
+      setObjectsNextToken(data.next_continuation_token ?? null);
+      setObjectsIsTruncated(data.is_truncated);
     } catch (err) {
       setObjectsError("Unable to list objects for this prefix.");
-      setObjects([]);
-      setPrefixes([]);
+      if (!opts?.append) {
+        setObjects([]);
+        setPrefixes([]);
+        setObjectsNextToken(null);
+        setObjectsIsTruncated(false);
+      }
     } finally {
-      setObjectsLoading(false);
+      if (!opts?.append) {
+        setObjectsLoading(false);
+      } else {
+        setObjectsLoadingMore(false);
+      }
     }
   };
 
@@ -618,6 +654,7 @@ export default function BrowserPage() {
         prefix: normalizedPrefix,
         keyMarker: resolvedKeyMarker ?? undefined,
         versionIdMarker: resolvedVersionIdMarker ?? undefined,
+        maxKeys: VERSIONS_PAGE_SIZE,
       });
       setPrefixVersionKeyMarker(data.next_key_marker ?? null);
       setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
@@ -656,6 +693,7 @@ export default function BrowserPage() {
         key: targetKey,
         keyMarker: resolvedKeyMarker ?? undefined,
         versionIdMarker: resolvedVersionIdMarker ?? undefined,
+        maxKeys: VERSIONS_PAGE_SIZE,
       });
       setObjectVersionKeyMarker(data.next_key_marker ?? null);
       setObjectVersionIdMarker(data.next_version_id_marker ?? null);
@@ -676,10 +714,13 @@ export default function BrowserPage() {
     if (!bucketName || !hasS3AccountContext) {
       setObjects([]);
       setPrefixes([]);
+      setObjectsNextToken(null);
+      setObjectsIsTruncated(false);
+      setObjectsLoadingMore(false);
       return;
     }
-    loadObjects(prefix);
-  }, [accountIdForApi, bucketName, hasS3AccountContext, prefix]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadObjects({ prefixOverride: prefix });
+  }, [accountIdForApi, bucketName, filter, hasS3AccountContext, prefix, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!showPrefixVersions || !bucketName || !hasS3AccountContext) {
@@ -825,15 +866,7 @@ export default function BrowserPage() {
   const activeSort = sortOptions.find((option) => option.id === sortId) ?? sortOptions[0];
 
   const filteredItems = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    let next = q ? items.filter((item) => item.name.toLowerCase().includes(q)) : items;
-    if (typeFilter !== "all") {
-      next = next.filter((item) => item.type === typeFilter);
-    }
-    if (storageFilter !== "all") {
-      next = next.filter((item) => item.type === "folder" || item.storageClass === storageFilter);
-    }
-    return [...next].sort((a, b) => {
+    return [...items].sort((a, b) => {
       if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
       if (activeSort.key === "size") {
         const aSize = a.sizeBytes ?? 0;
@@ -847,7 +880,7 @@ export default function BrowserPage() {
       const result = a.name.localeCompare(b.name);
       return activeSort.direction === "asc" ? result : -result;
     });
-  }, [activeSort.direction, activeSort.key, filter, items, storageFilter, typeFilter]);
+  }, [activeSort.direction, activeSort.key, items]);
 
   const prefixParts = useMemo(() => prefix.split("/").filter(Boolean), [prefix]);
   const bucketOptions = useMemo(() => buckets.map((bucket) => bucket.name), [buckets]);
@@ -947,6 +980,11 @@ export default function BrowserPage() {
   const handleOpenItem = (item: BrowserItem) => {
     if (item.type !== "folder") return;
     handleSelectPrefix(item.key);
+  };
+
+  const handlePreviewItem = (item: BrowserItem) => {
+    setActiveItem(item);
+    setShowInspector(true);
   };
 
   const handleSelectPrefix = (nextPrefix: string) => {
@@ -1086,7 +1124,7 @@ export default function BrowserPage() {
 
   const handleRefresh = () => {
     if (!bucketName) return;
-    loadObjects(prefix);
+    loadObjects({ prefixOverride: prefix });
     if (showPrefixVersions) {
       loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
     }
@@ -1226,7 +1264,7 @@ export default function BrowserPage() {
       await createFolder(accountIdForApi, bucketName, folderPrefix);
       addActivity("Created", `${bucketName}/${folderPrefix}`);
       setStatusMessage(`Folder ${clean} created`);
-      await loadObjects(prefix);
+      await loadObjects({ prefixOverride: prefix });
       loadTreeChildren(prefix);
     } catch (err) {
       setStatusMessage("Unable to create folder.");
@@ -1382,7 +1420,7 @@ export default function BrowserPage() {
       setOperations((prev) => prev.filter((op) => op.id !== operationId));
       addActivity("Uploaded", `${bucketName}/${key}`);
       setStatusMessage(`Uploaded ${relativePath}`);
-      await loadObjects(prefix);
+      await loadObjects({ prefixOverride: prefix });
     } catch (err) {
       setOperations((prev) => prev.filter((op) => op.id !== operationId));
       setStatusMessage(`Upload failed for ${relativePath}`);
@@ -1499,7 +1537,7 @@ export default function BrowserPage() {
       fileTargets.forEach((item) => addActivity("Deleted", `${bucketName}/${item.key}`));
       setSelectedIds((prev) => prev.filter((id) => !fileTargets.some((item) => item.id === id)));
       setStatusMessage(`Deleted ${fileTargets.length} object(s)`);
-      await loadObjects(prefix);
+      await loadObjects({ prefixOverride: prefix });
     } catch (err) {
       setStatusMessage("Unable to delete objects.");
     }
@@ -1527,7 +1565,7 @@ export default function BrowserPage() {
       });
       addActivity("Restored", `${bucketName}/${item.key}`);
       setStatusMessage(`Restored version ${item.version_id}`);
-      await loadObjects(prefix);
+      await loadObjects({ prefixOverride: prefix });
       await refreshVersionsForKey(item.key);
     } catch (err) {
       setStatusMessage("Unable to restore version.");
@@ -1544,7 +1582,7 @@ export default function BrowserPage() {
       await deleteObjects(accountIdForApi, bucketName, [{ key: item.key, version_id: item.version_id }]);
       addActivity(item.is_delete_marker ? "Removed delete marker" : "Deleted version", `${bucketName}/${item.key}`);
       setStatusMessage(item.is_delete_marker ? "Delete marker removed." : "Version deleted.");
-      await loadObjects(prefix);
+      await loadObjects({ prefixOverride: prefix });
       await refreshVersionsForKey(item.key);
     } catch (err) {
       setStatusMessage(item.is_delete_marker ? "Unable to delete marker." : "Unable to delete version.");
@@ -2051,16 +2089,16 @@ export default function BrowserPage() {
                                     >
                                       <OpenIcon />
                                     </button>
-                                    <button
-                                      type="button"
-                                      className={iconButtonClasses}
-                                      aria-label="Preview"
-                                      title="Preview"
-                                      disabled={item.type === "folder"}
-                                      onClick={() => setActiveItem(item)}
-                                    >
-                                      <EyeIcon />
-                                    </button>
+                                      <button
+                                        type="button"
+                                        className={iconButtonClasses}
+                                        aria-label="Preview"
+                                        title="Preview"
+                                        disabled={item.type === "folder"}
+                                      onClick={() => handlePreviewItem(item)}
+                                      >
+                                        <EyeIcon />
+                                      </button>
                                     <button
                                       type="button"
                                       className={iconButtonClasses}
@@ -2180,7 +2218,7 @@ export default function BrowserPage() {
                                   type="button"
                                   className={bulkActionClasses}
                                   disabled={item.type === "folder"}
-                                  onClick={() => setActiveItem(item)}
+                                  onClick={() => handlePreviewItem(item)}
                                 >
                                   Preview
                                 </button>
@@ -2196,6 +2234,18 @@ export default function BrowserPage() {
                             </div>
                           );
                         })}
+                      </div>
+                    )}
+                    {objectsIsTruncated && objectsNextToken && (
+                      <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900/60">
+                        <button
+                          type="button"
+                          className={toolbarButtonClasses}
+                          onClick={() => loadObjects({ append: true, continuationToken: objectsNextToken })}
+                          disabled={objectsLoadingMore}
+                        >
+                          {objectsLoadingMore ? "Loading..." : "Load more"}
+                        </button>
                       </div>
                     )}
                   </div>

@@ -67,12 +67,24 @@ def list_objects(
     prefix: str = "",
     continuation_token: Optional[str] = None,
     max_keys: int = Query(default=1000, ge=1, le=1000),
+    query: Optional[str] = None,
+    item_type: Optional[str] = None,
+    storage_class: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: User = Depends(get_current_account_admin),
 ) -> ListBrowserObjectsResponse:
     try:
-        return service.list_objects(bucket_name, account, prefix=prefix, continuation_token=continuation_token, max_keys=max_keys)
+        return service.list_objects(
+            bucket_name,
+            account,
+            prefix=prefix,
+            continuation_token=continuation_token,
+            max_keys=max_keys,
+            query=query,
+            item_type=item_type,
+            storage_class=storage_class,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

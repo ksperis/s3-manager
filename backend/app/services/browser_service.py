@@ -268,11 +268,31 @@ class BrowserService:
         prefix: str = "",
         continuation_token: Optional[str] = None,
         max_keys: int = 1000,
+        query: Optional[str] = None,
+        item_type: Optional[str] = None,
+        storage_class: Optional[str] = None,
     ) -> ListBrowserObjectsResponse:
         client = self._client(account)
+        normalized_prefix = prefix or ""
+        query_value = (query or "").strip().lower()
+        type_filter = (item_type or "all").lower()
+        if type_filter not in {"all", "file", "folder"}:
+            type_filter = "all"
+        storage_filter = (storage_class or "").strip() or None
+
+        def matches_query(value: str) -> bool:
+            if not query_value:
+                return True
+            relative = value
+            if normalized_prefix and relative.startswith(normalized_prefix):
+                relative = relative[len(normalized_prefix):]
+            if relative.endswith("/"):
+                relative = relative[:-1]
+            return query_value in relative.lower()
+
         kwargs = {
             "Bucket": bucket_name,
-            "Prefix": prefix or "",
+            "Prefix": normalized_prefix,
             "Delimiter": "/",
             "MaxKeys": max_keys,
         }
@@ -284,21 +304,38 @@ class BrowserService:
             raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
         objects: list[BrowserObject] = []
         for obj in resp.get("Contents", []):
+            if type_filter == "folder":
+                continue
             key = obj.get("Key")
             if not key:
                 continue
             if prefix and key.rstrip("/") == prefix.rstrip("/") and obj.get("Size", 0) == 0:
+                continue
+            if not matches_query(key):
+                continue
+            storage = obj.get("StorageClass")
+            if storage_filter and storage != storage_filter:
                 continue
             objects.append(
                 BrowserObject(
                     key=key,
                     size=int(obj.get("Size") or 0),
                     last_modified=obj.get("LastModified"),
-                    storage_class=obj.get("StorageClass"),
+                    storage_class=storage,
                     etag=self._clean_etag(obj.get("ETag")),
                 )
             )
-        prefixes = [p.get("Prefix") for p in resp.get("CommonPrefixes", []) if p.get("Prefix")]
+        if type_filter == "file":
+            prefixes = []
+        else:
+            prefixes = []
+            for entry in resp.get("CommonPrefixes", []) or []:
+                prefix_value = entry.get("Prefix")
+                if not prefix_value:
+                    continue
+                if not matches_query(prefix_value):
+                    continue
+                prefixes.append(prefix_value)
         return ListBrowserObjectsResponse(
             prefix=prefix,
             objects=objects,
