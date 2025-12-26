@@ -55,6 +55,11 @@ class ObjectMetadata(BaseModel):
     etag: Optional[str] = None
     last_modified: Optional[datetime] = None
     content_type: Optional[str] = None
+    cache_control: Optional[str] = None
+    content_disposition: Optional[str] = None
+    content_encoding: Optional[str] = None
+    content_language: Optional[str] = None
+    expires: Optional[datetime] = None
     storage_class: Optional[str] = None
     metadata: dict[str, str] = Field(default_factory=dict)
     version_id: Optional[str] = None
@@ -68,6 +73,46 @@ class ObjectTag(BaseModel):
 class ObjectTags(BaseModel):
     key: str
     tags: list[ObjectTag] = Field(default_factory=list)
+    version_id: Optional[str] = None
+
+
+class ObjectMetadataUpdate(BaseModel):
+    key: str
+    version_id: Optional[str] = None
+    content_type: Optional[str] = None
+    cache_control: Optional[str] = None
+    content_disposition: Optional[str] = None
+    content_encoding: Optional[str] = None
+    content_language: Optional[str] = None
+    expires: Optional[str] = None
+    metadata: Optional[dict[str, str]] = None
+    storage_class: Optional[str] = None
+
+
+class ObjectAcl(BaseModel):
+    key: str
+    acl: str
+    version_id: Optional[str] = None
+
+
+class ObjectLegalHold(BaseModel):
+    key: str
+    status: Optional[Literal["ON", "OFF"]] = None
+    version_id: Optional[str] = None
+
+
+class ObjectRetention(BaseModel):
+    key: str
+    mode: Optional[Literal["GOVERNANCE", "COMPLIANCE"]] = None
+    retain_until: Optional[datetime] = None
+    bypass_governance: Optional[bool] = None
+    version_id: Optional[str] = None
+
+
+class ObjectRestoreRequest(BaseModel):
+    key: str
+    days: int = Field(default=1, ge=1, le=3650)
+    tier: Optional[Literal["Standard", "Bulk", "Expedited"]] = None
     version_id: Optional[str] = None
 
 

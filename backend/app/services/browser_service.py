@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import logging
+from datetime import datetime
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -26,7 +27,12 @@ from app.models.browser import (
     MultipartUploadInitResponse,
     MultipartUploadItem,
     ObjectMetadata,
+    ObjectMetadataUpdate,
     ObjectTag,
+    ObjectAcl,
+    ObjectLegalHold,
+    ObjectRetention,
+    ObjectRestoreRequest,
     ObjectTags,
     PresignPartRequest,
     PresignPartResponse,
@@ -438,6 +444,11 @@ class BrowserService:
             etag=self._clean_etag(resp.get("ETag")),
             last_modified=resp.get("LastModified"),
             content_type=resp.get("ContentType"),
+            cache_control=resp.get("CacheControl"),
+            content_disposition=resp.get("ContentDisposition"),
+            content_encoding=resp.get("ContentEncoding"),
+            content_language=resp.get("ContentLanguage"),
+            expires=resp.get("Expires"),
             storage_class=resp.get("StorageClass"),
             metadata=metadata,
             version_id=resp.get("VersionId") or version_id,
@@ -491,6 +502,227 @@ class BrowserService:
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to update tags for '{key}': {exc}") from exc
         return ObjectTags(key=key, tags=tags, version_id=version_id)
+
+    def update_object_metadata(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        payload: ObjectMetadataUpdate,
+    ) -> ObjectMetadata:
+        client = self._client(account)
+        head_kwargs = {"Bucket": bucket_name, "Key": payload.key}
+        if payload.version_id:
+            head_kwargs["VersionId"] = payload.version_id
+        try:
+            current = client.head_object(**head_kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to fetch metadata for '{payload.key}': {exc}") from exc
+
+        current_metadata = current.get("Metadata") or {}
+        metadata_source = current_metadata if payload.metadata is None else payload.metadata
+        metadata = {
+            key: value
+            for key, value in (metadata_source or {}).items()
+            if key is not None and str(key).strip() and value is not None
+        }
+
+        def resolve(value: Optional[str], current_value: Optional[str]) -> Optional[str]:
+            if value is None:
+                return current_value
+            if str(value).strip() == "":
+                return None
+            return value
+
+        content_type = resolve(payload.content_type, current.get("ContentType"))
+        cache_control = resolve(payload.cache_control, current.get("CacheControl"))
+        content_disposition = resolve(payload.content_disposition, current.get("ContentDisposition"))
+        content_encoding = resolve(payload.content_encoding, current.get("ContentEncoding"))
+        content_language = resolve(payload.content_language, current.get("ContentLanguage"))
+        storage_class = resolve(payload.storage_class, current.get("StorageClass"))
+
+        expires_value: Optional[datetime] = None
+        current_expires = current.get("Expires")
+        if isinstance(current_expires, datetime):
+            expires_value = current_expires
+        elif isinstance(current_expires, str) and current_expires.strip():
+            try:
+                cleaned = current_expires.strip()
+                if cleaned.endswith("Z"):
+                    cleaned = f"{cleaned[:-1]}+00:00"
+                expires_value = datetime.fromisoformat(cleaned)
+            except ValueError:
+                expires_value = None
+        if payload.expires is not None:
+            if str(payload.expires).strip() == "":
+                expires_value = None
+            else:
+                try:
+                    cleaned = str(payload.expires).strip()
+                    if cleaned.endswith("Z"):
+                        cleaned = f"{cleaned[:-1]}+00:00"
+                    expires_value = datetime.fromisoformat(cleaned)
+                except ValueError as exc:
+                    raise RuntimeError(f"Invalid expires value: {payload.expires}") from exc
+
+        copy_source: dict[str, str] = {"Bucket": bucket_name, "Key": payload.key}
+        if payload.version_id:
+            copy_source["VersionId"] = payload.version_id
+        kwargs: dict[str, object] = {
+            "Bucket": bucket_name,
+            "Key": payload.key,
+            "CopySource": copy_source,
+            "MetadataDirective": "REPLACE",
+            "TaggingDirective": "COPY",
+            "Metadata": metadata,
+        }
+        if content_type is not None:
+            kwargs["ContentType"] = content_type
+        if cache_control is not None:
+            kwargs["CacheControl"] = cache_control
+        if content_disposition is not None:
+            kwargs["ContentDisposition"] = content_disposition
+        if content_encoding is not None:
+            kwargs["ContentEncoding"] = content_encoding
+        if content_language is not None:
+            kwargs["ContentLanguage"] = content_language
+        if expires_value is not None:
+            kwargs["Expires"] = expires_value
+        if storage_class is not None:
+            kwargs["StorageClass"] = storage_class
+
+        try:
+            client.copy_object(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to update metadata for '{payload.key}': {exc}") from exc
+
+        return self.head_object(bucket_name, account, payload.key, version_id=None)
+
+    def put_object_acl(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        payload: ObjectAcl,
+    ) -> ObjectAcl:
+        client = self._client(account)
+        kwargs: dict[str, object] = {"Bucket": bucket_name, "Key": payload.key, "ACL": payload.acl}
+        if payload.version_id:
+            kwargs["VersionId"] = payload.version_id
+        try:
+            client.put_object_acl(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to update ACL for '{payload.key}': {exc}") from exc
+        return payload
+
+    def get_object_legal_hold(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        key: str,
+        version_id: Optional[str] = None,
+    ) -> ObjectLegalHold:
+        client = self._client(account)
+        kwargs: dict[str, object] = {"Bucket": bucket_name, "Key": key}
+        if version_id:
+            kwargs["VersionId"] = version_id
+        try:
+            resp = client.get_object_legal_hold(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to fetch legal hold for '{key}': {exc}") from exc
+        status = (resp.get("LegalHold") or {}).get("Status")
+        return ObjectLegalHold(key=key, status=status, version_id=version_id)
+
+    def put_object_legal_hold(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        payload: ObjectLegalHold,
+    ) -> ObjectLegalHold:
+        client = self._client(account)
+        if payload.status not in {"ON", "OFF"}:
+            raise RuntimeError("Legal hold status must be ON or OFF.")
+        status = payload.status.upper()
+        kwargs: dict[str, object] = {
+            "Bucket": bucket_name,
+            "Key": payload.key,
+            "LegalHold": {"Status": status},
+        }
+        if payload.version_id:
+            kwargs["VersionId"] = payload.version_id
+        try:
+            client.put_object_legal_hold(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to update legal hold for '{payload.key}': {exc}") from exc
+        return payload
+
+    def get_object_retention(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        key: str,
+        version_id: Optional[str] = None,
+    ) -> ObjectRetention:
+        client = self._client(account)
+        kwargs: dict[str, object] = {"Bucket": bucket_name, "Key": key}
+        if version_id:
+            kwargs["VersionId"] = version_id
+        try:
+            resp = client.get_object_retention(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to fetch retention for '{key}': {exc}") from exc
+        retention = resp.get("Retention") or {}
+        return ObjectRetention(
+            key=key,
+            mode=retention.get("Mode"),
+            retain_until=retention.get("RetainUntilDate"),
+            version_id=version_id,
+        )
+
+    def put_object_retention(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        payload: ObjectRetention,
+    ) -> ObjectRetention:
+        client = self._client(account)
+        if not payload.mode or not payload.retain_until:
+            raise RuntimeError("Retention mode and retain-until date are required.")
+        mode = payload.mode.upper()
+        kwargs: dict[str, object] = {
+            "Bucket": bucket_name,
+            "Key": payload.key,
+            "Retention": {"Mode": mode, "RetainUntilDate": payload.retain_until},
+        }
+        if payload.version_id:
+            kwargs["VersionId"] = payload.version_id
+        if payload.bypass_governance is not None:
+            kwargs["BypassGovernanceRetention"] = payload.bypass_governance
+        try:
+            client.put_object_retention(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to update retention for '{payload.key}': {exc}") from exc
+        return payload
+
+    def restore_object(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        payload: ObjectRestoreRequest,
+    ) -> None:
+        client = self._client(account)
+        restore_request: dict[str, object] = {"Days": payload.days}
+        if payload.tier:
+            restore_request["GlacierJobParameters"] = {"Tier": payload.tier}
+        kwargs: dict[str, object] = {
+            "Bucket": bucket_name,
+            "Key": payload.key,
+            "RestoreRequest": restore_request,
+        }
+        if payload.version_id:
+            kwargs["VersionId"] = payload.version_id
+        try:
+            client.restore_object(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to restore '{payload.key}': {exc}") from exc
 
     def presign(
         self,

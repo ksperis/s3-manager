@@ -60,6 +60,11 @@ export type ObjectMetadata = {
   etag?: string | null;
   last_modified?: string | null;
   content_type?: string | null;
+  cache_control?: string | null;
+  content_disposition?: string | null;
+  content_encoding?: string | null;
+  content_language?: string | null;
+  expires?: string | null;
   storage_class?: string | null;
   metadata: Record<string, string>;
   version_id?: string | null;
@@ -70,6 +75,46 @@ export type ObjectTag = { key: string; value: string };
 export type ObjectTags = {
   key: string;
   tags: ObjectTag[];
+  version_id?: string | null;
+};
+
+export type ObjectMetadataUpdate = {
+  key: string;
+  version_id?: string | null;
+  content_type?: string | null;
+  cache_control?: string | null;
+  content_disposition?: string | null;
+  content_encoding?: string | null;
+  content_language?: string | null;
+  expires?: string | null;
+  metadata?: Record<string, string> | null;
+  storage_class?: string | null;
+};
+
+export type ObjectAcl = {
+  key: string;
+  acl: string;
+  version_id?: string | null;
+};
+
+export type ObjectLegalHold = {
+  key: string;
+  status?: "ON" | "OFF" | null;
+  version_id?: string | null;
+};
+
+export type ObjectRetention = {
+  key: string;
+  mode?: "GOVERNANCE" | "COMPLIANCE" | null;
+  retain_until?: string | null;
+  bypass_governance?: boolean | null;
+  version_id?: string | null;
+};
+
+export type ObjectRestoreRequest = {
+  key: string;
+  days: number;
+  tier?: "Standard" | "Bulk" | "Expedited" | null;
   version_id?: string | null;
 };
 
@@ -320,6 +365,98 @@ export async function updateObjectTags(
     }
   );
   return data;
+}
+
+export async function updateObjectMetadata(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: ObjectMetadataUpdate
+): Promise<ObjectMetadata> {
+  const { data } = await client.put<ObjectMetadata>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-meta`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function updateObjectAcl(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: ObjectAcl
+): Promise<ObjectAcl> {
+  const { data } = await client.put<ObjectAcl>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-acl`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function getObjectLegalHold(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  key: string,
+  versionId?: string | null
+): Promise<ObjectLegalHold> {
+  const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
+  const { data } = await client.get<ObjectLegalHold>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-legal-hold`,
+    { params }
+  );
+  return data;
+}
+
+export async function updateObjectLegalHold(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: ObjectLegalHold
+): Promise<ObjectLegalHold> {
+  const { data } = await client.put<ObjectLegalHold>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-legal-hold`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function getObjectRetention(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  key: string,
+  versionId?: string | null
+): Promise<ObjectRetention> {
+  const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
+  const { data } = await client.get<ObjectRetention>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-retention`,
+    { params }
+  );
+  return data;
+}
+
+export async function updateObjectRetention(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: ObjectRetention
+): Promise<ObjectRetention> {
+  const { data } = await client.put<ObjectRetention>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-retention`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function restoreObject(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: ObjectRestoreRequest
+): Promise<void> {
+  await client.post(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-restore`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
 }
 
 export async function presignObject(

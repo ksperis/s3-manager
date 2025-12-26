@@ -33,6 +33,7 @@ import {
   abortMultipartUpload,
 } from "../../api/browser";
 import { useS3AccountContext } from "../manager/S3AccountContext";
+import ObjectAdvancedModal from "./ObjectAdvancedModal";
 
 type BrowserItem = {
   id: string;
@@ -466,8 +467,10 @@ export default function BrowserPage() {
   const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
   const [inspectedMetadata, setInspectedMetadata] = useState<ObjectMetadata | null>(null);
   const [inspectedTags, setInspectedTags] = useState<ObjectTag[]>([]);
+  const [inspectedTagsVersionId, setInspectedTagsVersionId] = useState<string | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
   const [showUploadMenu, setShowUploadMenu] = useState(false);
@@ -1057,6 +1060,7 @@ export default function BrowserPage() {
     if (!bucketName || !inspectedItem || inspectedItem.type === "folder" || !hasS3AccountContext) {
       setInspectedMetadata(null);
       setInspectedTags([]);
+      setInspectedTagsVersionId(null);
       setMetadataError(null);
       setMetadataLoading(false);
       return;
@@ -1072,12 +1076,14 @@ export default function BrowserPage() {
         if (!isMounted) return;
         setInspectedMetadata(meta);
         setInspectedTags(tags.tags ?? []);
+        setInspectedTagsVersionId(tags.version_id ?? null);
       })
       .catch(() => {
         if (!isMounted) return;
         setMetadataError("Unable to load object details.");
         setInspectedMetadata(null);
         setInspectedTags([]);
+        setInspectedTagsVersionId(null);
       })
       .finally(() => {
         if (isMounted) {
@@ -1088,6 +1094,13 @@ export default function BrowserPage() {
       isMounted = false;
     };
   }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.key, inspectedItem?.type]);
+
+  useEffect(() => {
+    if (!showAdvancedModal) return;
+    if (!inspectedItem || inspectedItem.type !== "file") {
+      setShowAdvancedModal(false);
+    }
+  }, [inspectedItem?.key, inspectedItem?.type, showAdvancedModal]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext || !inspectedItem || inspectedItem.type === "folder") {
@@ -1543,6 +1556,28 @@ export default function BrowserPage() {
     }
   };
 
+  const refreshInspectedObject = async (targetKey?: string) => {
+    if (!bucketName || !hasS3AccountContext || !targetKey) return;
+    setMetadataLoading(true);
+    setMetadataError(null);
+    try {
+      const [meta, tags] = await Promise.all([
+        fetchObjectMetadata(accountIdForApi, bucketName, targetKey),
+        getObjectTags(accountIdForApi, bucketName, targetKey),
+      ]);
+      setInspectedMetadata(meta);
+      setInspectedTags(tags.tags ?? []);
+      setInspectedTagsVersionId(tags.version_id ?? null);
+    } catch (err) {
+      setMetadataError("Unable to load object details.");
+      setInspectedMetadata(null);
+      setInspectedTags([]);
+      setInspectedTagsVersionId(null);
+    } finally {
+      setMetadataLoading(false);
+    }
+  };
+
   const refreshVersionsForKey = async (targetKey: string) => {
     if (showPrefixVersions) {
       await loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
@@ -1550,6 +1585,12 @@ export default function BrowserPage() {
     if (inspectedItem?.type === "file" && inspectedItem.key === targetKey) {
       await loadObjectVersions({ append: false, keyMarker: null, versionIdMarker: null, targetKey });
     }
+  };
+
+  const handleAdvancedRefresh = async (targetKey: string) => {
+    await refreshInspectedObject(targetKey);
+    await loadObjects({ prefixOverride: prefix });
+    await refreshVersionsForKey(targetKey);
   };
 
   const handleRestoreVersion = async (item: BrowserObjectVersion) => {
@@ -1605,6 +1646,20 @@ export default function BrowserPage() {
       }
     } catch (err) {
       setStatusMessage("Unable to copy URL.");
+    }
+  };
+
+  const handleCopyPath = async (path: string) => {
+    if (!path) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(path);
+        setStatusMessage("Path copied to clipboard.");
+      } else {
+        window.prompt("Copy path:", path);
+      }
+    } catch (err) {
+      setStatusMessage("Unable to copy path.");
     }
   };
 
@@ -2407,6 +2462,15 @@ export default function BrowserPage() {
                             </button>
                             <button
                               type="button"
+                              className={bulkActionClasses}
+                              disabled={inspectedItem.type === "folder" || !hasS3AccountContext}
+                              onClick={() => setShowAdvancedModal(true)}
+                            >
+                              <MoreIcon className="h-3.5 w-3.5" />
+                              Advanced
+                            </button>
+                            <button
+                              type="button"
                               className={bulkDangerClasses}
                               disabled={inspectedItem.type === "folder"}
                               onClick={() => handleDeleteItems([inspectedItem])}
@@ -2426,9 +2490,22 @@ export default function BrowserPage() {
                             <p className="text-xs font-semibold text-rose-600 dark:text-rose-200">{metadataError}</p>
                           )}
                           <div className="grid gap-2 text-xs text-slate-600 dark:text-slate-300">
-                            <div className="flex items-center justify-between gap-2">
+                            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
                               <span className="text-slate-500">Path</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedPath}</span>
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="truncate font-semibold text-slate-700 dark:text-slate-100">
+                                  {inspectedPath}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300 dark:hover:text-primary-200"
+                                  aria-label="Copy path"
+                                  title="Copy path"
+                                  onClick={() => handleCopyPath(inspectedPath)}
+                                >
+                                  <CopyIcon className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-slate-500">Owner</span>
@@ -2670,6 +2747,18 @@ export default function BrowserPage() {
           </div>
         </div>
       </div>
+      {showAdvancedModal && inspectedItem && inspectedItem.type === "file" && (
+        <ObjectAdvancedModal
+          accountId={accountIdForApi}
+          bucketName={bucketName}
+          item={inspectedItem}
+          metadata={inspectedMetadata}
+          tags={inspectedTags}
+          tagsVersionId={inspectedTagsVersionId}
+          onClose={() => setShowAdvancedModal(false)}
+          onRefresh={handleAdvancedRefresh}
+        />
+      )}
     </div>
   );
 }
