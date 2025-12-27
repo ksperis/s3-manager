@@ -24,7 +24,10 @@ export default function Topbar({
   contextAction,
 }: TopbarProps) {
   return (
-    <div className="fixed inset-x-0 top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur supports-[backdrop-filter]:backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
+    <div
+      data-topbar
+      className="fixed inset-x-0 top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur supports-[backdrop-filter]:backdrop-blur dark:border-slate-800 dark:bg-slate-900/80"
+    >
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2 sm:px-6">
         <div className="flex items-center">
           <div className="leading-tight">

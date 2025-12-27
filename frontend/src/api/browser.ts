@@ -26,10 +26,19 @@ export type ListBrowserObjectsResponse = {
   next_continuation_token?: string | null;
 };
 
+export type BrowserSettings = {
+  direct_upload_parallelism: number;
+  proxy_upload_parallelism: number;
+  direct_download_parallelism: number;
+  proxy_download_parallelism: number;
+  other_operations_parallelism: number;
+};
+
 export type BrowserObjectsQuery = {
   query?: string;
   type?: "all" | "file" | "folder";
   storageClass?: string;
+  recursive?: boolean;
 };
 
 export type BrowserObjectVersion = {
@@ -198,6 +207,7 @@ export type CompleteMultipartUploadRequest = {
 };
 
 export type CopyObjectPayload = {
+  source_bucket?: string;
   source_key: string;
   destination_key: string;
   source_version_id?: string | null;
@@ -240,6 +250,13 @@ export async function listBrowserBuckets(accountId: S3AccountSelector): Promise<
   return data;
 }
 
+export async function fetchBrowserSettings(accountId: S3AccountSelector): Promise<BrowserSettings> {
+  const { data } = await client.get<BrowserSettings>("/manager/browser/settings", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
 export async function listBrowserObjects(
   accountId: S3AccountSelector,
   bucketName: string,
@@ -253,6 +270,7 @@ export async function listBrowserObjects(
       query: options?.query?.trim() || undefined,
       item_type: options?.type && options.type !== "all" ? options.type : undefined,
       storage_class: options?.storageClass && options.storageClass !== "all" ? options.storageClass : undefined,
+      recursive: options?.recursive ? true : undefined,
     },
     accountId
   );
@@ -508,7 +526,8 @@ export async function proxyUpload(
   bucketName: string,
   key: string,
   file: File,
-  onUploadProgress?: (event: ProgressEvent) => void
+  onUploadProgress?: (event: ProgressEvent) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const form = new FormData();
   form.append("key", key);
@@ -516,17 +535,20 @@ export async function proxyUpload(
   await client.post(`/manager/browser/buckets/${encodeURIComponent(bucketName)}/proxy-upload`, form, {
     params: withS3AccountParam(undefined, accountId),
     onUploadProgress,
+    signal,
   });
 }
 
 export async function proxyDownload(
   accountId: S3AccountSelector,
   bucketName: string,
-  key: string
+  key: string,
+  signal?: AbortSignal
 ): Promise<Blob> {
   const { data } = await client.get(`/manager/browser/buckets/${encodeURIComponent(bucketName)}/proxy-download`, {
     params: withS3AccountParam({ key }, accountId),
     responseType: "blob",
+    signal,
   });
   return data as Blob;
 }

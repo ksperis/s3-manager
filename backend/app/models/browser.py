@@ -198,6 +198,7 @@ class CompleteMultipartUploadRequest(BaseModel):
 
 
 class CopyObjectPayload(BaseModel):
+    source_bucket: Optional[str] = None
     source_key: str
     destination_key: str
     source_version_id: Optional[str] = None

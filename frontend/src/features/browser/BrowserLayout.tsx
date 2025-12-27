@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ChangeEvent } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { S3AccountProvider, useS3AccountContext } from "../manager/S3AccountContext";
@@ -28,6 +28,23 @@ function BrowserShell() {
     "w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
   const selectClasses = `appearance-none pr-8 ${baseControlClasses}`;
   const pillClasses = `${baseControlClasses} ${selected ? "" : "text-slate-500 dark:text-slate-400"}`;
+  const [showTopbar, setShowTopbar] = useState(false);
+
+  useEffect(() => {
+    if (!showTopbar) return;
+    const handleBlur = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest("[data-topbar]") || target.closest("[data-topbar-toggle]")) return;
+      setShowTopbar(false);
+    };
+    document.addEventListener("pointerdown", handleBlur, true);
+    document.addEventListener("focusin", handleBlur, true);
+    return () => {
+      document.removeEventListener("pointerdown", handleBlur, true);
+      document.removeEventListener("focusin", handleBlur, true);
+    };
+  }, [showTopbar]);
 
   const handleS3AccountChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value || null;
@@ -131,20 +148,40 @@ function BrowserShell() {
   );
 
   return (
-    <Layout
-      hideHeader
-      hideSidebar
-      topbarContent={inlineAction}
-    >
-      <>
-        {accessError && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm dark:border-amber-900/40 dark:bg-amber-900/30 dark:text-amber-100">
-            Accès refusé pour /browser. Vérifiez vos droits sur le compte ou contactez un administrateur.
-          </div>
-        )}
-        <Outlet key={`${selectedS3AccountId ?? "session"}:${accessMode ?? "default"}`} />
-      </>
-    </Layout>
+    <>
+      <button
+        type="button"
+        onClick={() => setShowTopbar((prev) => !prev)}
+        aria-label={showTopbar ? "Hide top bar" : "Show top bar"}
+        aria-pressed={showTopbar}
+        title={showTopbar ? "Hide top bar" : "Show top bar"}
+        data-topbar-toggle
+        className={`fixed left-1/2 top-2 z-30 -translate-x-1/2 rounded-full border px-2 py-1 text-[10px] font-semibold shadow-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+          showTopbar
+            ? "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            : "border-slate-200 bg-white/90 text-slate-600 hover:text-primary dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200"
+        }`}
+      >
+        <span aria-hidden="true">{showTopbar ? "▲" : "▼"}</span>
+      </button>
+      <Layout
+        hideHeader
+        hideSidebar
+        hideTopbar={!showTopbar}
+        topbarContent={inlineAction}
+        mainClassName="pb-0"
+        disableMainScroll
+      >
+        <>
+          {accessError && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm dark:border-amber-900/40 dark:bg-amber-900/30 dark:text-amber-100">
+              Accès refusé pour /browser. Vérifiez vos droits sur le compte ou contactez un administrateur.
+            </div>
+          )}
+          <Outlet key={`${selectedS3AccountId ?? "session"}:${accessMode ?? "default"}`} />
+        </>
+      </Layout>
+    </>
   );
 }
 

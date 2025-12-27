@@ -5,5 +5,12 @@
   },
   "manager": {
     "allow_manager_user_usage_stats": false
+  },
+  "browser": {
+    "direct_upload_parallelism": 5,
+    "proxy_upload_parallelism": 2,
+    "direct_download_parallelism": 5,
+    "proxy_download_parallelism": 2,
+    "other_operations_parallelism": 3
   }
 }

@@ -277,6 +277,7 @@ class BrowserService:
         query: Optional[str] = None,
         item_type: Optional[str] = None,
         storage_class: Optional[str] = None,
+        recursive: bool = False,
     ) -> ListBrowserObjectsResponse:
         client = self._client(account)
         normalized_prefix = prefix or ""
@@ -299,9 +300,10 @@ class BrowserService:
         kwargs = {
             "Bucket": bucket_name,
             "Prefix": normalized_prefix,
-            "Delimiter": "/",
             "MaxKeys": max_keys,
         }
+        if not recursive:
+            kwargs["Delimiter"] = "/"
         if continuation_token:
             kwargs["ContinuationToken"] = continuation_token
         try:
@@ -331,10 +333,8 @@ class BrowserService:
                     etag=self._clean_etag(obj.get("ETag")),
                 )
             )
-        if type_filter == "file":
-            prefixes = []
-        else:
-            prefixes = []
+        prefixes = []
+        if not recursive and type_filter != "file":
             for entry in resp.get("CommonPrefixes", []) or []:
                 prefix_value = entry.get("Prefix")
                 if not prefix_value:
@@ -794,8 +794,9 @@ class BrowserService:
         payload: CopyObjectPayload,
     ) -> None:
         client = self._client(account)
+        source_bucket = payload.source_bucket or bucket_name
         copy_source: dict[str, str] = {
-            "Bucket": bucket_name,
+            "Bucket": source_bucket,
             "Key": payload.source_key,
         }
         if payload.source_version_id:
@@ -818,7 +819,7 @@ class BrowserService:
         try:
             client.copy_object(**kwargs)
             if payload.move:
-                delete_kwargs = {"Bucket": bucket_name, "Key": payload.source_key}
+                delete_kwargs = {"Bucket": source_bucket, "Key": payload.source_key}
                 if payload.source_version_id:
                     delete_kwargs["VersionId"] = payload.source_version_id
                 client.delete_object(**delete_kwargs)

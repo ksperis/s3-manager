@@ -36,6 +36,8 @@ from app.models.browser import (
 from app.models.browser import BrowserBucket
 from app.services.audit_service import AuditService
 from app.services.browser_service import BrowserService, get_browser_service
+from app.services.app_settings_service import load_app_settings
+from app.models.app_settings import BrowserSettings
 from app.routers.dependencies import get_account_context, get_audit_logger, get_current_account_admin
 
 router = APIRouter(prefix="/manager/browser", tags=["manager-browser"])
@@ -52,6 +54,13 @@ class ProxyUploadResponse(BaseModel):
 
 class EnsureCorsPayload(BaseModel):
     origin: str
+
+
+@router.get("/settings", response_model=BrowserSettings)
+def get_browser_settings(
+    _: User = Depends(get_current_account_admin),
+) -> BrowserSettings:
+    return load_app_settings().browser
 
 
 @router.get("/buckets", response_model=list[BrowserBucket])
@@ -75,6 +84,7 @@ def list_objects(
     query: Optional[str] = None,
     item_type: Optional[str] = None,
     storage_class: Optional[str] = None,
+    recursive: bool = Query(default=False),
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: User = Depends(get_current_account_admin),
@@ -89,6 +99,7 @@ def list_objects(
             query=query,
             item_type=item_type,
             storage_class=storage_class,
+            recursive=recursive,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -499,6 +510,8 @@ def copy_object(
             account=account,
             metadata={
                 "source": payload.source_key,
+                "source_bucket": payload.source_bucket or bucket_name,
+                "destination_bucket": bucket_name,
                 "destination": payload.destination_key,
                 "move": payload.move,
                 "version_id": payload.source_version_id,

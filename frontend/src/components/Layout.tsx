@@ -19,9 +19,12 @@ type LayoutProps = {
   topbarContent?: ReactNode;
   projectName?: string;
   hideHeader?: boolean;
+  hideTopbar?: boolean;
   topbarAction?: ReactNode;
   sidebarAction?: ReactNode;
   hideSidebar?: boolean;
+  mainClassName?: string;
+  disableMainScroll?: boolean;
 };
 
 function getUserEmail(): string | null {
@@ -47,9 +50,12 @@ export default function Layout({
   topbarContent,
   projectName,
   hideHeader = false,
+  hideTopbar = false,
   topbarAction,
   sidebarAction,
   hideSidebar = false,
+  mainClassName,
+  disableMainScroll = false,
 }: LayoutProps) {
   const userEmail = getUserEmail();
   const logout = () => {
@@ -58,22 +64,28 @@ export default function Layout({
     window.location.href = "/login";
   };
   const heroInlineAction = topbarContent ? undefined : headerInlineAction;
+  const mainOverflowClass = disableMainScroll ? "overflow-hidden" : "overflow-y-auto";
+  const mainClasses = `flex min-h-0 flex-1 flex-col ${mainOverflowClass} bg-surface px-3 pb-8 pt-3 sm:px-6 dark:bg-slate-950${
+    mainClassName ? ` ${mainClassName}` : ""
+  }`;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      <Topbar
-        projectName={projectName}
-        section={headerTitle}
-        inlineContent={topbarContent ?? headerInlineAction}
-        userEmail={userEmail}
-        onLogout={logout}
-        contextAction={topbarAction}
-      />
-      <div className="flex pt-14">
+    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {!hideTopbar && (
+        <Topbar
+          projectName={projectName}
+          section={headerTitle}
+          inlineContent={topbarContent ?? headerInlineAction}
+          userEmail={userEmail}
+          onLogout={logout}
+          contextAction={topbarAction}
+        />
+      )}
+      <div className={`flex min-h-0 flex-1 ${hideTopbar ? "pt-0" : "pt-14"}`}>
         {!hideSidebar && (
           <Sidebar title={sidebarTitle} sections={navSections} links={navLinks} headerAction={sidebarAction} />
         )}
-        <main className="flex-1 overflow-y-auto bg-surface px-3 pb-8 pt-3 sm:px-6 dark:bg-slate-950">
+        <main className={mainClasses}>
           {!hideHeader && (
             <Header
               title={headerTitle}
@@ -82,7 +94,7 @@ export default function Layout({
               inlineAction={heroInlineAction}
             />
           )}
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col space-y-4">
             <Outlet />
           </div>
         </main>
