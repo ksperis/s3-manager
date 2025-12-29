@@ -25,6 +25,7 @@ type LayoutProps = {
   hideSidebar?: boolean;
   mainClassName?: string;
   disableMainScroll?: boolean;
+  fullHeight?: boolean;
 };
 
 function getUserEmail(): string | null {
@@ -56,6 +57,7 @@ export default function Layout({
   hideSidebar = false,
   mainClassName,
   disableMainScroll = false,
+  fullHeight = false,
 }: LayoutProps) {
   const userEmail = getUserEmail();
   const logout = () => {
@@ -68,9 +70,10 @@ export default function Layout({
   const mainClasses = `flex min-h-0 flex-1 flex-col ${mainOverflowClass} bg-surface px-3 pb-8 pt-3 sm:px-6 dark:bg-slate-950${
     mainClassName ? ` ${mainClassName}` : ""
   }`;
+  const rootHeightClass = fullHeight ? "h-screen" : "min-h-screen";
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+    <div className={`flex ${rootHeightClass} flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50`}>
       {!hideTopbar && (
         <Topbar
           projectName={projectName}

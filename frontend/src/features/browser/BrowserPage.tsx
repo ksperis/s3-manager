@@ -611,6 +611,13 @@ const UploadIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
+const RefreshIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <path d="M16 10a6 6 0 1 1-2.1-4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M12.5 3.5h3.5v3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const UpIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
     <path d="M9 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -660,6 +667,15 @@ const ListIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
     <path d="M4 6h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     <path d="M4 10h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     <path d="M4 14h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+const CompactIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <path d="M4 5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M4 8.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M4 12h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M4 15.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </svg>
 );
 
@@ -1434,6 +1450,8 @@ export default function BrowserPage() {
   const headerPadding = compactMode ? "py-2" : "py-3";
   const iconBoxClasses = compactMode ? "h-7 w-7" : "h-9 w-9";
   const nameGapClasses = compactMode ? "gap-2" : "gap-3";
+  const gridCardHeightClasses = "h-52";
+  const gridCardGapClasses = "gap-3";
 
   const prefixVersionRows = useMemo(
     () => buildVersionRows(prefixVersions, prefixDeleteMarkers),
@@ -1717,6 +1735,16 @@ export default function BrowserPage() {
       setInspectorTab("selection");
       setShowInspector(true);
     }
+  };
+
+  const toggleInspectorForItem = (item: BrowserItem) => {
+    if (showInspector) {
+      setShowInspector(false);
+      return;
+    }
+    setActiveItem(item);
+    setInspectorTab("details");
+    setShowInspector(true);
   };
 
   const handleBucketChange = (value: string) => {
@@ -3967,9 +3995,25 @@ export default function BrowserPage() {
             <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1 py-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <button
                 type="button"
-                onClick={() => setViewMode("list")}
-                className={`${viewToggleBaseClasses} ${viewMode === "list" ? viewToggleActiveClasses : ""}`}
+                onClick={() => {
+                  setViewMode("list");
+                  setCompactMode(true);
+                }}
+                className={`${viewToggleBaseClasses} ${viewMode === "list" && compactMode ? viewToggleActiveClasses : ""}`}
+                aria-label="Compact list view"
+                aria-pressed={viewMode === "list" && compactMode}
+              >
+                <CompactIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode("list");
+                  setCompactMode(false);
+                }}
+                className={`${viewToggleBaseClasses} ${viewMode === "list" && !compactMode ? viewToggleActiveClasses : ""}`}
                 aria-label="List view"
+                aria-pressed={viewMode === "list" && !compactMode}
               >
                 <ListIcon className="h-3.5 w-3.5" />
               </button>
@@ -3978,6 +4022,7 @@ export default function BrowserPage() {
                 onClick={() => setViewMode("grid")}
                 className={`${viewToggleBaseClasses} ${viewMode === "grid" ? viewToggleActiveClasses : ""}`}
                 aria-label="Grid view"
+                aria-pressed={viewMode === "grid"}
               >
                 <GridIcon className="h-3.5 w-3.5" />
               </button>
@@ -3996,38 +4041,36 @@ export default function BrowserPage() {
             </button>
             <button
               type="button"
-              onClick={() => setCompactMode((prev) => !prev)}
-              className={`${filterChipClasses} ${compactMode ? filterChipActiveClasses : ""}`}
-            >
-              Compact
-            </button>
-            <button
-              type="button"
-              className={toolbarButtonClasses}
+              className={iconButtonClasses}
               onClick={handleRefresh}
               disabled={!bucketName || objectsLoading}
+              aria-label="Refresh"
+              title="Refresh"
             >
-              Refresh
+              <RefreshIcon className="h-3.5 w-3.5" />
             </button>
             <div ref={uploadMenuRef} className="relative">
-              <div className="inline-flex items-center">
+              <div className="inline-flex items-center gap-1">
                 <button
                   type="button"
-                  className={`${toolbarPrimaryClasses} rounded-r-none`}
+                  className={iconButtonClasses}
                   onClick={() => {
                     setShowUploadMenu(false);
                     fileInputRef.current?.click();
                   }}
                   disabled={!bucketName}
+                  aria-label="Upload files"
+                  title="Upload files"
                 >
-                  Upload
+                  <UploadIcon className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
-                  className={`${toolbarPrimaryClasses} rounded-l-none px-2`}
+                  className={iconButtonClasses}
                   onClick={() => setShowUploadMenu((prev) => !prev)}
                   disabled={!bucketName}
                   aria-label="Upload options"
+                  title="Upload options"
                 >
                   <ChevronDownIcon className="h-3.5 w-3.5" />
                 </button>
@@ -4306,10 +4349,7 @@ export default function BrowserPage() {
                                       className={iconButtonClasses}
                                       aria-label="More actions"
                                       title="More"
-                                      onClick={() => {
-                                        setActiveItem(item);
-                                        setShowInspector(true);
-                                      }}
+                                      onClick={() => toggleInspectorForItem(item)}
                                     >
                                       <MoreIcon />
                                     </button>
@@ -4321,7 +4361,7 @@ export default function BrowserPage() {
                         </table>
                       </div>
                     ) : (
-                      <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2 xl:grid-cols-3">
                         {objectsLoading && (
                           <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             Loading objects...
@@ -4347,7 +4387,7 @@ export default function BrowserPage() {
                           return (
                             <div
                               key={item.id}
-                              className={`flex flex-col gap-3 rounded-xl border px-3 py-3 transition ${
+                              className={`flex ${gridCardGapClasses} ${gridCardHeightClasses} flex-col overflow-hidden rounded-xl border px-3 py-3 transition ${
                                 selected
                                   ? "border-primary-200 bg-primary-50/50 dark:border-primary-700/60 dark:bg-primary-500/20"
                                   : "border-slate-200 bg-white hover:border-primary-200 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-primary-700/60"
@@ -4365,10 +4405,7 @@ export default function BrowserPage() {
                                   type="button"
                                   className={iconButtonClasses}
                                   aria-label="Focus"
-                                  onClick={() => {
-                                    setActiveItem(item);
-                                    setShowInspector(true);
-                                  }}
+                                  onClick={() => toggleInspectorForItem(item)}
                                 >
                                   <MoreIcon />
                                 </button>
@@ -4384,10 +4421,10 @@ export default function BrowserPage() {
                                   setShowInspector(true);
                                   setInspectorTab("details");
                                 }}
-                                className="flex items-center gap-2 text-left"
+                                className="flex min-w-0 items-start gap-2 text-left"
                               >
                                 <span
-                                  className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border ${
+                                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${
                                     item.type === "folder"
                                       ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
                                       : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200"
@@ -4395,7 +4432,9 @@ export default function BrowserPage() {
                                 >
                                   {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
                                 </span>
-                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.name}</span>
+                                <span className="min-w-0 break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                  {item.name}
+                                </span>
                               </button>
                               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                 <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
@@ -4412,8 +4451,9 @@ export default function BrowserPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="text-xs text-slate-500 dark:text-slate-400">
-                                Size: {item.size} | Modified: {item.modified}
+                              <div className="space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                <div>Size: {item.size}</div>
+                                <div>Modified: {item.modified}</div>
                               </div>
                               <div className="mt-auto flex flex-wrap gap-2">
                                 <button

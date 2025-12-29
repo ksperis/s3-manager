@@ -63,7 +63,7 @@ function PortalShell() {
       hideHeader
       topbarContent={
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Compte</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Account</span>
           <AccountSelector />
         </div>
       }
