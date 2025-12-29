@@ -5,6 +5,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import get_settings
+from app.models.storage_endpoint import StorageEndpointPublic
 
 _settings = get_settings()
 
@@ -29,6 +30,7 @@ def _default_portal_bucket_access_actions() -> list[str]:
         "s3:ListBucketMultipartUploads",
         "s3:GetObject",
         "s3:GetObjectVersion",
+        "s3:GetObjectTagging",
         "s3:PutObject",
         "s3:DeleteObject",
         "s3:AbortMultipartUpload",
@@ -62,6 +64,20 @@ class PortalBucketDefaults(BaseModel):
     cors_allowed_origins: list[str] = Field(default_factory=_default_portal_cors_origins)
 
 
+class GeneralSettings(BaseModel):
+    manager_enabled: bool = True
+    browser_enabled: bool = True
+    portal_enabled: bool = True
+    allow_login_endpoint_list: bool = False
+    allow_login_custom_endpoint: bool = False
+
+
+class LoginSettings(BaseModel):
+    allow_login_endpoint_list: bool = False
+    allow_login_custom_endpoint: bool = False
+    endpoints: list[StorageEndpointPublic] = Field(default_factory=list)
+
+
 class PortalSettings(BaseModel):
     allow_portal_key: bool = False
     allow_portal_user_bucket_create: bool = False
@@ -90,6 +106,7 @@ class BrowserSettings(BaseModel):
 
 
 class AppSettings(BaseModel):
+    general: GeneralSettings = GeneralSettings()
     portal: PortalSettings = PortalSettings()
     manager: ManagerSettings = ManagerSettings()
     browser: BrowserSettings = BrowserSettings()

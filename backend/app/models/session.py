@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.db_models import UserRole
 
@@ -13,6 +13,15 @@ from app.db_models import UserRole
 class S3KeyLogin(BaseModel):
     access_key: str = Field(min_length=1)
     secret_key: str = Field(min_length=1)
+    endpoint_url: Optional[str] = None
+
+    @field_validator("endpoint_url", mode="before")
+    @classmethod
+    def normalize_endpoint(cls, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        normalized = value.strip().rstrip("/")
+        return normalized or None
 
 
 class SessionCapabilities(BaseModel):

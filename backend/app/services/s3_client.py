@@ -87,8 +87,9 @@ def create_bucket(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     session_token: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, session_token=session_token)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
     try:
         if settings.s3_region and settings.s3_region != "us-east-1":
             client.create_bucket(
@@ -108,8 +109,9 @@ def set_bucket_versioning(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     session_token: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, session_token=session_token)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
     status = "Enabled" if enabled else "Suspended"
     try:
         client.put_bucket_versioning(Bucket=bucket_name, VersioningConfiguration={"Status": status})
@@ -124,8 +126,9 @@ def set_bucket_public_access_block(
     configuration: Optional[dict] = None,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     block_state = bool(configuration) if configuration is not None else block
     try:
         if configuration is None:
@@ -161,8 +164,9 @@ def get_bucket_public_access_block(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> Optional[dict]:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         resp = client.get_public_access_block(Bucket=bucket_name)
         config = resp.get("PublicAccessBlockConfiguration") or {}
@@ -188,8 +192,9 @@ def get_bucket_versioning(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> Optional[str]:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         resp = client.get_bucket_versioning(Bucket=bucket_name)
     except (BotoCoreError, ClientError) as exc:
@@ -201,8 +206,9 @@ def get_bucket_object_lock(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> Optional[dict]:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         resp = client.get_object_lock_configuration(Bucket=bucket_name)
         config = resp.get("ObjectLockConfiguration") or {}
@@ -231,8 +237,9 @@ def get_bucket_acl(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> dict:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         return client.get_bucket_acl(Bucket=bucket_name)
     except (BotoCoreError, ClientError) as exc:
@@ -244,8 +251,9 @@ def put_bucket_tags(
     tags: list[dict],
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     tag_set = [
         {"Key": str(tag.get("key") or ""), "Value": str(tag.get("value") or "")}
         for tag in tags
@@ -266,8 +274,9 @@ def delete_bucket_tags(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         client.delete_bucket_tagging(Bucket=bucket_name)
     except (ClientError, BotoCoreError) as exc:
@@ -278,8 +287,9 @@ def get_bucket_notifications(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> dict:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         resp = client.get_bucket_notification_configuration(Bucket=bucket_name)
         resp.pop("ResponseMetadata", None)
@@ -293,8 +303,9 @@ def put_bucket_notifications(
     config: dict,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         client.put_bucket_notification_configuration(
             Bucket=bucket_name,
@@ -313,8 +324,9 @@ def put_bucket_object_lock(
     years: Optional[int] = None,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     config: dict = {}
     if enabled is not None:
         config["ObjectLockEnabled"] = "Enabled" if enabled else "Disabled"
@@ -340,8 +352,9 @@ def get_bucket_lifecycle(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> list[dict]:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         resp = client.get_bucket_lifecycle_configuration(Bucket=bucket_name)
     except ClientError as exc:
@@ -359,8 +372,9 @@ def put_bucket_lifecycle(
     rules: list[dict],
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         client.put_bucket_lifecycle_configuration(Bucket=bucket_name, LifecycleConfiguration={"Rules": rules})
     except (BotoCoreError, ClientError) as exc:
@@ -372,8 +386,9 @@ def delete_bucket_lifecycle(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         client.delete_bucket_lifecycle(Bucket=bucket_name)
     except ClientError as exc:
@@ -390,8 +405,9 @@ def get_bucket_cors(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> list[dict]:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         resp = client.get_bucket_cors(Bucket=bucket_name)
         return resp.get("CORSRules", []) or []
@@ -409,8 +425,9 @@ def put_bucket_cors(
     rules: list[dict],
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         client.put_bucket_cors(Bucket=bucket_name, CORSConfiguration={"CORSRules": rules})
     except (BotoCoreError, ClientError) as exc:
@@ -422,8 +439,9 @@ def delete_bucket_cors(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         client.delete_bucket_cors(Bucket=bucket_name)
     except ClientError as exc:
@@ -440,8 +458,9 @@ def get_bucket_policy(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> Optional[dict]:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         resp = client.get_bucket_policy(Bucket=bucket_name)
     except ClientError as exc:
@@ -465,8 +484,9 @@ def put_bucket_policy(
     policy: dict,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         client.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(policy))
     except (BotoCoreError, ClientError) as exc:
@@ -478,8 +498,9 @@ def delete_bucket_policy(
     bucket_name: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         client.delete_bucket_policy(Bucket=bucket_name)
     except ClientError as exc:
@@ -497,10 +518,31 @@ def _delete_objects(client, bucket_name: str, items: Iterable[dict]) -> None:
     for item in items:
         chunk.append(item)
         if len(chunk) == 1000:
-            client.delete_objects(Bucket=bucket_name, Delete={"Objects": chunk})
+            _delete_objects_chunk(client, bucket_name, chunk)
             chunk = []
     if chunk:
-        client.delete_objects(Bucket=bucket_name, Delete={"Objects": chunk})
+        _delete_objects_chunk(client, bucket_name, chunk)
+
+
+def _delete_objects_chunk(client, bucket_name: str, chunk: list[dict]) -> None:
+    resp = client.delete_objects(Bucket=bucket_name, Delete={"Objects": chunk})
+    errors = resp.get("Errors", []) if isinstance(resp, dict) else []
+    if errors:
+        sample = []
+        for err in errors[:3]:
+            key = err.get("Key", "unknown")
+            version_id = err.get("VersionId")
+            code = err.get("Code", "Error")
+            message = err.get("Message", "")
+            suffix = f" ({message})" if message else ""
+            if version_id:
+                sample.append(f"{code} for {key} (version {version_id}){suffix}")
+            else:
+                sample.append(f"{code} for {key}{suffix}")
+        extra = f" (+{len(errors) - 3} more)" if len(errors) > 3 else ""
+        raise RuntimeError(
+            f"Unable to delete {len(errors)} object(s) in bucket '{bucket_name}': {', '.join(sample)}{extra}"
+        )
 
 
 def _delete_versions(client, bucket_name: str) -> None:
@@ -531,8 +573,9 @@ def delete_bucket(
     force: bool = False,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_s3_client(access_key, secret_key)
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
     try:
         resp = client.list_objects_v2(Bucket=bucket_name, MaxKeys=1)
     except (BotoCoreError, ClientError) as exc:

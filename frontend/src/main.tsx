@@ -7,13 +7,16 @@ import ReactDOM from "react-dom/client";
 import AppRouter from "./router";
 import "./index.css";
 import { ThemeProvider } from "./components/theme";
+import { GeneralSettingsProvider } from "./components/GeneralSettingsContext";
 
 const root = document.getElementById("root");
 
 ReactDOM.createRoot(root as HTMLElement).render(
   <React.StrictMode>
     <ThemeProvider>
-      <AppRouter />
+      <GeneralSettingsProvider>
+        <AppRouter />
+      </GeneralSettingsProvider>
     </ThemeProvider>
   </React.StrictMode>
 );

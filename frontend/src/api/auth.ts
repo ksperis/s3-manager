@@ -52,10 +52,15 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return data;
 }
 
-export async function loginWithKeys(accessKey: string, secretKey: string): Promise<KeyLoginResponse> {
+export async function loginWithKeys(
+  accessKey: string,
+  secretKey: string,
+  endpointUrl?: string,
+): Promise<KeyLoginResponse> {
   const { data } = await client.post<KeyLoginResponse>("/auth/login-s3", {
     access_key: accessKey,
     secret_key: secretKey,
+    endpoint_url: endpointUrl,
   });
   return data;
 }

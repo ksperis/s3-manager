@@ -14,6 +14,7 @@ function handleAuthRedirect() {
   if (typeof window === "undefined") return;
   localStorage.removeItem("token");
   localStorage.removeItem("user");
+  localStorage.removeItem("s3SessionEndpoint");
   if (window.location.pathname !== "/login") {
     window.location.replace("/login");
   }
@@ -34,6 +35,21 @@ client.interceptors.request.use((config) => {
         config.headers = config.headers ?? {};
         config.headers["X-Manager-Access-Mode"] = mode;
       }
+    }
+  }
+  const userRaw = localStorage.getItem("user");
+  if (userRaw) {
+    try {
+      const parsed = JSON.parse(userRaw) as { authType?: string };
+      if (parsed?.authType === "rgw_session") {
+        const endpoint = localStorage.getItem("s3SessionEndpoint");
+        if (endpoint) {
+          config.headers = config.headers ?? {};
+          config.headers["X-S3-Endpoint"] = endpoint;
+        }
+      }
+    } catch (err) {
+      console.warn("Unable to parse stored user payload", err);
     }
   }
   return config;

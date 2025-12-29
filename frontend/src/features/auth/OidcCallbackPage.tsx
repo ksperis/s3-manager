@@ -5,11 +5,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { completeOidcLogin } from "../../api/auth";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
 export default function OidcCallbackPage() {
   const { provider } = useParams<{ provider: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { refresh: refreshGeneralSettings } = useGeneralSettings();
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(true);
   const resolveDestination = (role?: string | null, accountLinks?: { account_role?: string | null; account_admin?: boolean | null }[] | null) => {
@@ -46,6 +48,7 @@ export default function OidcCallbackPage() {
         if (cancelled) return;
         localStorage.setItem("token", res.access_token);
         localStorage.setItem("user", JSON.stringify({ ...res.user, authType: "oidc", authProvider: provider }));
+        refreshGeneralSettings();
         const baseDestination = resolveDestination(res.user.role, res.user.account_links ?? null);
         const destination = baseDestination === "/unauthorized" ? baseDestination : res.redirect_path || baseDestination;
         navigate(destination, { replace: true });

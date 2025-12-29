@@ -18,6 +18,8 @@ from app.services.app_settings_service import load_app_settings
 from app.services.portal_service import get_portal_service
 from app.services.audit_service import AuditService, get_audit_service as build_audit_service
 from app.services.session_service import SessionService
+from app.services.storage_endpoints_service import get_storage_endpoints_service
+from app.utils.s3_endpoint import normalize_s3_endpoint
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -152,6 +154,17 @@ def get_account_context(
 ) -> S3Account:
     account_id, s3_user_id = _parse_account_selector(account_ref)
     requested_mode = _normalize_access_mode(request.headers.get("X-Manager-Access-Mode")) if request else None
+    requested_endpoint = normalize_s3_endpoint(request.headers.get("X-S3-Endpoint")) if request else None
+    if requested_endpoint:
+        general = load_app_settings().general
+        if general.allow_login_custom_endpoint:
+            pass
+        elif general.allow_login_endpoint_list:
+            service = get_storage_endpoints_service(db)
+            if not any(endpoint.endpoint_url == requested_endpoint for endpoint in service.list_endpoints()):
+                requested_endpoint = None
+        else:
+            requested_endpoint = None
     if isinstance(actor, User):
         if s3_user_id is not None:
             s3_user = (
@@ -259,6 +272,8 @@ def get_account_context(
                 rgw_account_id=actor.account_id,
             )
     account.set_session_credentials(actor.access_key, actor.secret_key)
+    if requested_endpoint:
+        account._session_endpoint = requested_endpoint  # type: ignore[attr-defined]
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
         can_manage_buckets=actor.capabilities.can_manage_buckets,
         can_manage_portal_users=False,
@@ -478,6 +493,30 @@ def require_usage_capable_manager(
         if not settings.manager.allow_manager_user_usage_stats:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
     return actor
+
+
+def require_manager_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.manager_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager feature is disabled")
+
+
+def require_browser_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.browser_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser feature is disabled")
+
+
+def require_portal_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.portal_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal feature is disabled")
+
+
+def require_manager_context_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.manager_enabled and not settings.general.browser_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access is disabled")
 
 
 def _resolve_admin_rgw_credentials(user: User) -> tuple[str, str]:

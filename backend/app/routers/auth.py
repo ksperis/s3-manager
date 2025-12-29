@@ -31,6 +31,8 @@ from app.services.oidc_service import (
 )
 from app.services.session_service import SessionIntrospectionError, SessionService
 from app.services.users_service import UsersService, get_users_service
+from app.services.app_settings_service import load_app_settings
+from app.services.storage_endpoints_service import get_storage_endpoints_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -110,10 +112,22 @@ def login_with_s3_keys(
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> SessionLoginResponse:
     session_service = SessionService(db)
+    endpoint_url = payload.endpoint_url
+    if endpoint_url:
+        general = load_app_settings().general
+        if general.allow_login_custom_endpoint:
+            pass
+        elif general.allow_login_endpoint_list:
+            service = get_storage_endpoints_service(db)
+            if not any(endpoint.endpoint_url == endpoint_url for endpoint in service.list_endpoints()):
+                endpoint_url = None
+        else:
+            endpoint_url = None
     try:
         actor_type, account_id, account_name, user_uid, capabilities = session_service.introspect_credentials(
             payload.access_key,
             payload.secret_key,
+            endpoint_url,
         )
     except SessionIntrospectionError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc

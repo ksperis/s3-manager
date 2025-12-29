@@ -14,8 +14,11 @@ import AdminDashboard from "./features/admin/AdminDashboard";
 import AdminMetricsPage from "./features/admin/AdminMetricsPage";
 import S3UsersPage from "./features/admin/S3UsersPage";
 import S3UserKeysPage from "./features/admin/S3UserKeysPage";
+import GeneralSettingsPage from "./features/admin/GeneralSettingsPage";
+import ManagerSettingsPage from "./features/admin/ManagerSettingsPage";
 import PortalSettingsPage from "./features/admin/PortalSettingsPage";
 import BrowserSettingsPage from "./features/admin/BrowserSettingsPage";
+import FeatureDisabledPage from "./features/shared/FeatureDisabledPage";
 import BucketsPage from "./features/manager/BucketsPage";
 import ManagerDashboard from "./features/manager/ManagerDashboard";
 import PoliciesPage from "./features/manager/PoliciesPage";
@@ -36,6 +39,7 @@ import TopicsPage from "./features/manager/TopicsPage";
 import PortalLayout from "./features/portal/PortalLayout";
 import PortalDashboard from "./features/portal/PortalDashboard";
 import BrowserLayout from "./features/browser/BrowserLayout";
+import { useGeneralSettings } from "./components/GeneralSettingsContext";
 
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
@@ -84,8 +88,10 @@ const adminNav = [
   {
     label: "Settings",
     links: [
-      { to: "/admin/portal-settings", label: "Portal" },
+      { to: "/admin/general-settings", label: "General" },
+      { to: "/admin/manager-settings", label: "Manager" },
       { to: "/admin/browser-settings", label: "Browser" },
+      { to: "/admin/portal-settings", label: "Portal" },
     ],
   },
 ];
@@ -116,23 +122,41 @@ function RequireRole({ roles }: { roles: string[] }) {
 
 function RoleRedirect() {
   const user = getStoredUser();
+  const { generalSettings } = useGeneralSettings();
   if (!user || !user.role) return <Navigate to="/login" replace />;
   if (user.role === ADMIN_ROLE) return <Navigate to="/admin" replace />;
   if (user.role === USER_ROLE) {
     const links = user.account_links ?? [];
     const hasPortalAccess = links.some((link) => link.account_role !== "portal_none");
     const hasAccountAdmin = links.some((link) => link.account_admin);
-    if (hasPortalAccess) return <Navigate to="/portal" replace />;
-    if (hasAccountAdmin) return <Navigate to="/manager" replace />;
+    const canManageBuckets = user.capabilities?.can_manage_buckets !== false;
+    if (hasPortalAccess && generalSettings.portal_enabled) return <Navigate to="/portal" replace />;
+    if (hasAccountAdmin && generalSettings.manager_enabled) return <Navigate to="/manager" replace />;
+    if (hasAccountAdmin && canManageBuckets && generalSettings.browser_enabled) return <Navigate to="/browser" replace />;
     return <Navigate to="/unauthorized" replace />;
   }
   if (user.role === UNASSIGNED_ROLE) return <Navigate to="/unauthorized" replace />;
   return <Navigate to="/unauthorized" replace />;
 }
 
+function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal" }) {
+  const { generalSettings } = useGeneralSettings();
+  const enabled =
+    feature === "manager"
+      ? generalSettings.manager_enabled
+      : feature === "browser"
+        ? generalSettings.browser_enabled
+        : generalSettings.portal_enabled;
+  if (!enabled) {
+    const label = feature === "manager" ? "Manager" : feature === "browser" ? "Browser" : "Portal";
+    return <FeatureDisabledPage feature={label} />;
+  }
+  return <Outlet />;
+}
+
 export default function AppRouter() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route element={<RequireAuth />}>
           <Route index element={<RoleRedirect />} />
@@ -160,46 +184,54 @@ export default function AppRouter() {
               <Route path="users" element={<UsersPage />} />
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="metrics" element={<AdminMetricsPage />} />
+              <Route path="general-settings" element={<GeneralSettingsPage />} />
+              <Route path="manager-settings" element={<ManagerSettingsPage />} />
               <Route path="portal-settings" element={<PortalSettingsPage />} />
               <Route path="browser-settings" element={<BrowserSettingsPage />} />
             </Route>
           </Route>
 
           <Route element={<RequireRole roles={[ADMIN_ROLE, USER_ROLE]} />}>
-            <Route
-              path="/manager"
-              element={<ManagerLayout />}
-            >
-              <Route index element={<ManagerDashboard />} />
-              <Route path="buckets" element={<BucketsPage />} />
-              <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
-              <Route path="users" element={<ManagerUsersPage />} />
-              <Route path="users/:userName/keys" element={<ManagerUserKeysPage />} />
-              <Route path="users/:userName/policies" element={<ManagerUserPoliciesPage />} />
-              <Route path="metrics" element={<ManagerMetricsPage />} />
-              <Route path="groups" element={<ManagerGroupsPage />} />
-              <Route path="groups/:groupName/policies" element={<ManagerGroupPoliciesPage />} />
-              <Route path="groups/:groupName/users" element={<ManagerGroupUsersPage />} />
-              <Route path="roles" element={<ManagerRolesPage />} />
-              <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
-              <Route path="iam/policies" element={<PoliciesPage />} />
-              <Route path="topics" element={<TopicsPage />} />
+            <Route element={<RequireFeature feature="manager" />}>
+              <Route
+                path="/manager"
+                element={<ManagerLayout />}
+              >
+                <Route index element={<ManagerDashboard />} />
+                <Route path="buckets" element={<BucketsPage />} />
+                <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
+                <Route path="users" element={<ManagerUsersPage />} />
+                <Route path="users/:userName/keys" element={<ManagerUserKeysPage />} />
+                <Route path="users/:userName/policies" element={<ManagerUserPoliciesPage />} />
+                <Route path="metrics" element={<ManagerMetricsPage />} />
+                <Route path="groups" element={<ManagerGroupsPage />} />
+                <Route path="groups/:groupName/policies" element={<ManagerGroupPoliciesPage />} />
+                <Route path="groups/:groupName/users" element={<ManagerGroupUsersPage />} />
+                <Route path="roles" element={<ManagerRolesPage />} />
+                <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
+                <Route path="iam/policies" element={<PoliciesPage />} />
+                <Route path="topics" element={<TopicsPage />} />
+              </Route>
             </Route>
 
-            <Route
-              path="/browser"
-              element={<BrowserLayout />}
-            >
-              <Route index element={<BrowserPage />} />
+            <Route element={<RequireFeature feature="browser" />}>
+              <Route
+                path="/browser"
+                element={<BrowserLayout />}
+              >
+                <Route index element={<BrowserPage />} />
+              </Route>
             </Route>
           </Route>
 
           <Route element={<RequireRole roles={[ADMIN_ROLE, USER_ROLE]} />}>
-            <Route
-              path="/portal"
-              element={<PortalLayout />}
-            >
-              <Route index element={<PortalDashboard />} />
+            <Route element={<RequireFeature feature="portal" />}>
+              <Route
+                path="/portal"
+                element={<PortalLayout />}
+              >
+                <Route index element={<PortalDashboard />} />
+              </Route>
             </Route>
           </Route>
         </Route>

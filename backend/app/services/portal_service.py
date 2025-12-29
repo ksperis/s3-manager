@@ -19,6 +19,7 @@ from app.services import s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.rgw import extract_bucket_list, resolve_admin_uid
+from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
 if TYPE_CHECKING:
@@ -200,7 +201,7 @@ class PortalService:
 
     def _get_iam_service(self, account: S3Account) -> RGWIAMService:
         access_key, secret_key = self._account_credentials(account)
-        return get_iam_service(access_key, secret_key)
+        return get_iam_service(access_key, secret_key, endpoint=resolve_s3_endpoint(account))
 
     def _generate_username(self, account: S3Account, user: User) -> str:
         suffix = uuid.uuid4().hex[:8]
@@ -588,7 +589,8 @@ class PortalService:
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
         self._sync_user_group_membership(iam_service, link.iam_username, account_role)
         access_key, secret_key = self._account_credentials(account)
-        buckets = s3_client.list_buckets(access_key=access_key, secret_key=secret_key)
+        endpoint = resolve_s3_endpoint(account)
+        buckets = s3_client.list_buckets(access_key=access_key, secret_key=secret_key, endpoint=endpoint)
         if bucket_name not in [b.get("name") for b in buckets]:
             raise RuntimeError("Bucket introuvable pour ce compte.")
         self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name)
@@ -657,7 +659,8 @@ class PortalService:
             accessible_names = set(allowed)
 
         buckets = []
-        for b in s3_client.list_buckets(access_key=access_key, secret_key=secret_key):
+        endpoint = resolve_s3_endpoint(account)
+        for b in s3_client.list_buckets(access_key=access_key, secret_key=secret_key, endpoint=endpoint):
             name = b.get("name")
             if accessible_names is not None and name not in accessible_names:
                 continue
@@ -694,7 +697,7 @@ class PortalService:
             access_keys=[portal_key, *keys],
             buckets=buckets,
             total_buckets=total_buckets,
-            s3_endpoint=settings.s3_endpoint,
+            s3_endpoint=resolve_s3_endpoint(account),
             used_bytes=used_bytes,
             used_objects=used_objects,
             quota_max_size_bytes=int(account.quota_max_size_gb * (1024**3)) if account.quota_max_size_gb else None,
@@ -852,13 +855,15 @@ class PortalService:
             active_key_id, active_secret = self._account_credentials(account)
         else:
             active_key_id, active_secret = self._active_credentials(link, iam_service)
-        s3_client.create_bucket(bucket_name, access_key=active_key_id, secret_key=active_secret)
+        endpoint = resolve_s3_endpoint(account)
+        s3_client.create_bucket(bucket_name, access_key=active_key_id, secret_key=active_secret, endpoint=endpoint)
         if versioning_flag:
             s3_client.set_bucket_versioning(
                 bucket_name,
                 enabled=True,
                 access_key=active_key_id,
                 secret_key=active_secret,
+                endpoint=endpoint,
             )
         if portal_defaults.bucket_defaults.enable_lifecycle:
             s3_client.put_bucket_lifecycle(
@@ -866,6 +871,7 @@ class PortalService:
                 rules=self._portal_bucket_lifecycle_rules(),
                 access_key=active_key_id,
                 secret_key=active_secret,
+                endpoint=endpoint,
             )
         if portal_defaults.bucket_defaults.enable_cors:
             origins = self._normalize_origins(portal_defaults.bucket_defaults.cors_allowed_origins)
@@ -875,6 +881,7 @@ class PortalService:
                     rules=self._portal_bucket_cors_rules(origins),
                     access_key=active_key_id,
                     secret_key=active_secret,
+                    endpoint=endpoint,
                 )
         self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name, portal_settings=portal_defaults)
         return Bucket(

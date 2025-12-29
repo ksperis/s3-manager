@@ -42,18 +42,14 @@ from app.models.browser import (
 )
 from app.services.s3_client import _delete_objects, get_s3_client
 from app.services.sts_service import get_sts_client
+from app.utils.s3_endpoint import resolve_s3_endpoint
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
 def _resolve_endpoint(account: S3Account) -> str:
-    if getattr(account, "storage_endpoint", None):
-        endpoint = getattr(account.storage_endpoint, "endpoint_url", None)
-        if endpoint:
-            return endpoint
-    endpoint_url = getattr(account, "storage_endpoint_url", None)
-    return endpoint_url or settings.s3_endpoint
+    return resolve_s3_endpoint(account) or settings.s3_endpoint
 
 
 class BrowserService:

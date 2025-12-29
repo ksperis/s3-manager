@@ -88,10 +88,6 @@ export default function PortalSettingsPage() {
     setSettings((prev) => (prev ? { ...prev, portal: { ...prev.portal, allow_portal_user_bucket_create: value } } : prev));
   };
 
-  const handleToggleAllowManagerUserStats = (value: boolean) => {
-    setSettings((prev) => (prev ? { ...prev, manager: { ...prev.manager, allow_manager_user_usage_stats: value } } : prev));
-  };
-
   const handleBucketDefaultVersioning = (value: boolean) => {
     setSettings((prev) =>
       prev ? { ...prev, portal: { ...prev.portal, bucket_defaults: { ...prev.portal.bucket_defaults, versioning: value } } } : prev
@@ -518,26 +514,6 @@ export default function PortalSettingsPage() {
                 disabled={!settings}
               />
             )}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Manager stats for portal_user</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Allows a non-admin user to view bucket stats and usage from /manager.
-              </p>
-            </div>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={Boolean(settings?.manager.allow_manager_user_usage_stats)}
-                onChange={(e) => handleToggleAllowManagerUserStats(e.target.checked)}
-                className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                disabled={!settings}
-              />
-              <span>{settings?.manager.allow_manager_user_usage_stats ? "Enabled" : "Disabled"}</span>
-            </label>
           </div>
         </div>
         <div className="flex items-center gap-3">
