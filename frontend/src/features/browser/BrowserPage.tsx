@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import JSZip from "jszip";
 import axios from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
@@ -140,6 +140,11 @@ type CopyDetailItem = {
   sizeBytes?: number;
 };
 
+type SelectionStats = {
+  objectCount: number;
+  totalBytes: number;
+};
+
 type BulkMetadataDraft = {
   contentType: string;
   cacheControl: string;
@@ -150,6 +155,16 @@ type BulkMetadataDraft = {
 };
 
 type PreviewKind = "image" | "video" | "audio" | "pdf" | "text" | "generic";
+
+type ContextMenuKind = "item" | "selection" | "path";
+
+type ContextMenuState = {
+  kind: ContextMenuKind;
+  x: number;
+  y: number;
+  item?: BrowserItem | null;
+  items?: BrowserItem[];
+};
 
 const iconButtonClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200";
@@ -190,6 +205,14 @@ const formInputClasses =
   "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
 const breadcrumbIconButtonClasses =
   "inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-200";
+const contextMenuBaseClasses =
+  "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-semibold transition";
+const contextMenuItemClasses =
+  `${contextMenuBaseClasses} text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800`;
+const contextMenuItemDangerClasses =
+  `${contextMenuBaseClasses} text-rose-600 hover:bg-rose-50 dark:text-rose-200 dark:hover:bg-rose-900/30`;
+const contextMenuItemDisabledClasses = "cursor-not-allowed opacity-50";
+const contextMenuSeparatorClasses = "my-1 border-t border-slate-200 dark:border-slate-700";
 
 const bucketButtonClasses =
   "inline-flex max-w-[220px] items-center gap-1 rounded-md px-1 py-0.5 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-800";
@@ -241,6 +264,7 @@ const DEFAULT_QUEUED_VISIBLE_COUNT = 10;
 const COMPLETED_OPERATIONS_LIMIT = 20;
 const OBJECTS_PAGE_SIZE = 200;
 const VERSIONS_PAGE_SIZE = 200;
+const NAME_COLUMN_CONTROLS_MIN_WIDTH = 360;
 
 const clampParallelism = (value: number, fallback: number) => {
   if (!Number.isFinite(value)) return fallback;
@@ -542,6 +566,29 @@ const buildVersionRows = (versions: BrowserObjectVersion[], deleteMarkers: Brows
   });
 };
 
+const getSelectionInfo = (items: BrowserItem[]) => {
+  const files = items.filter((item) => item.type === "file");
+  const folders = items.filter((item) => item.type === "folder");
+  const isSingle = items.length === 1;
+  const primary = isSingle ? items[0] : null;
+  const hasFolder = folders.length > 0;
+  const hasFile = files.length > 0;
+  return {
+    items,
+    files,
+    folders,
+    isSingle,
+    primary,
+    hasFolder,
+    hasFile,
+    canDownloadFiles: hasFile && !hasFolder,
+    canDownloadFolder: isSingle && primary?.type === "folder",
+    canOpen: primary?.type === "folder",
+    canCopyUrl: primary?.type === "file",
+    canAdvanced: primary?.type === "file",
+  };
+};
+
 const FolderIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
     <path
@@ -760,6 +807,7 @@ export default function BrowserPage() {
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [showFolderItems, setShowFolderItems] = useState(true);
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "folder">("all");
   const [storageFilter, setStorageFilter] = useState<string>("all");
   const [sortId, setSortId] = useState("name-asc");
@@ -792,7 +840,11 @@ export default function BrowserPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
-  const [showInspectorActionsMenu, setShowInspectorActionsMenu] = useState(false);
+  const [showNameColumnControls, setShowNameColumnControls] = useState(true);
+  const [selectionStats, setSelectionStats] = useState<SelectionStats | null>(null);
+  const [selectionStatsLoading, setSelectionStatsLoading] = useState(false);
+  const [selectionStatsError, setSelectionStatsError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showBulkAttributesModal, setShowBulkAttributesModal] = useState(false);
   const [showBulkRestoreModal, setShowBulkRestoreModal] = useState(false);
   const [bulkActionItems, setBulkActionItems] = useState<BrowserItem[]>([]);
@@ -836,14 +888,17 @@ export default function BrowserPage() {
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const bucketMenuRef = useRef<HTMLDivElement | null>(null);
   const bucketFilterRef = useRef<HTMLInputElement | null>(null);
-  const inspectorActionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const nameHeaderRef = useRef<HTMLTableCellElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
   const previewObjectUrlRef = useRef<string | null>(null);
   const contextCountIdRef = useRef(0);
+  const selectionStatsRequestIdRef = useRef(0);
   const browserPathRef = useRef("");
   const browserHistoryStateRef = useRef<{ bucketName: string; prefix: string } | null>(null);
   const skipHistoryPushRef = useRef(false);
+  const operationIdsRef = useRef(new Set<string>());
   const bucketNameRef = useRef(bucketName);
   const prefixRef = useRef(prefix);
 
@@ -1030,31 +1085,64 @@ export default function BrowserPage() {
   }, [showBucketMenu]);
 
   useEffect(() => {
-    if (!showInspectorActionsMenu) return;
+    if (viewMode !== "list") return;
+    const header = nameHeaderRef.current;
+    if (!header || typeof ResizeObserver === "undefined") return;
+    const updateControls = () => {
+      const width = header.getBoundingClientRect().width;
+      setShowNameColumnControls(width >= NAME_COLUMN_CONTROLS_MIN_WIDTH);
+    };
+    updateControls();
+    const observer = new ResizeObserver(() => updateControls());
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [viewMode]);
+
+
+
+  useEffect(() => {
+    if (!contextMenu) return;
     const handleMouseDown = (event: MouseEvent) => {
-      if (inspectorActionsMenuRef.current && !inspectorActionsMenuRef.current.contains(event.target as Node)) {
-        setShowInspectorActionsMenu(false);
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
+        setContextMenu(null);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setShowInspectorActionsMenu(false);
+        setContextMenu(null);
       }
+    };
+    const handleScroll = () => {
+      setContextMenu(null);
     };
     document.addEventListener("mousedown", handleMouseDown);
     document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", handleScroll, true);
     return () => {
       document.removeEventListener("mousedown", handleMouseDown);
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", handleScroll, true);
     };
-  }, [showInspectorActionsMenu]);
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (operations.length === 0) return;
+    const knownIds = operationIdsRef.current;
+    const newOps = operations.filter((op) => !knownIds.has(op.id));
+    if (newOps.length === 0) return;
+    newOps.forEach((op) => knownIds.add(op.id));
+    const primaryOps = newOps.filter((op) => op.kind !== "upload");
+    if (primaryOps.length === 0) return;
+    const latest = primaryOps[0];
+    setStatusMessage(`Queued: ${latest.label}.`);
+  }, [operations]);
 
   useEffect(() => {
     contextCountIdRef.current += 1;
     setContextCounts(null);
     setContextCountsError(null);
     setContextCountsLoading(false);
-  }, [bucketName, prefix, filter, storageFilter, typeFilter]);
+  }, [bucketName, prefix]);
 
   useEffect(() => {
     if (!hasS3AccountContext) {
@@ -1467,6 +1555,11 @@ export default function BrowserPage() {
     });
   }, [activeSort.direction, activeSort.key, items]);
 
+  const listItems = useMemo(
+    () => (showFolderItems ? filteredItems : filteredItems.filter((item) => item.type !== "folder")),
+    [filteredItems, showFolderItems]
+  );
+
   const prefixParts = useMemo(() => prefix.split("/").filter(Boolean), [prefix]);
   const bucketOptions = useMemo(() => buckets.map((bucket) => bucket.name), [buckets]);
   const normalizedBucketFilter = bucketFilter.trim().toLowerCase();
@@ -1503,7 +1596,7 @@ export default function BrowserPage() {
   const canGoUp = prefixParts.length > 0;
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const allSelected = filteredItems.length > 0 && filteredItems.every((item) => selectedSet.has(item.id));
+  const allSelected = listItems.length > 0 && listItems.every((item) => selectedSet.has(item.id));
   const selectedItems = useMemo(() => items.filter((item) => selectedSet.has(item.id)), [items, selectedSet]);
   const selectedCount = selectedItems.length;
   const bulkActionFileCount = useMemo(
@@ -1555,6 +1648,14 @@ export default function BrowserPage() {
     }
     return null;
   }, [activeItem, items, selectedIds]);
+
+  useEffect(() => {
+    selectionStatsRequestIdRef.current += 1;
+    setSelectionStats(null);
+    setSelectionStatsError(null);
+    setSelectionStatsLoading(false);
+  }, [bucketName, inspectedItem?.id, prefix, selectedIds]);
+
   const selectionItems = selectedCount > 0 ? selectedItems : inspectedItem ? [inspectedItem] : [];
   const selectionFiles = selectionItems.filter((item) => item.type === "file");
   const selectionFolders = selectionItems.filter((item) => item.type === "folder");
@@ -1606,6 +1707,35 @@ export default function BrowserPage() {
     return `${bucketName}/${trimmed}`;
   }, [bucketName, prefix]);
   const inspectedPath = inspectedItem ? `${bucketName}/${inspectedItem.key}` : currentPath;
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  const getContextMenuPosition = (event: ReactMouseEvent<HTMLElement>) => {
+    const { clientX, clientY } = event;
+    if (typeof window === "undefined") {
+      return { x: clientX, y: clientY };
+    }
+    const menuWidth = 240;
+    const menuHeight = 320;
+    const padding = 8;
+    const maxX = Math.max(padding, window.innerWidth - menuWidth - padding);
+    const maxY = Math.max(padding, window.innerHeight - menuHeight - padding);
+    const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+    return {
+      x: clamp(clientX, padding, maxX),
+      y: clamp(clientY, padding, maxY),
+    };
+  };
+
+  const openItemDetails = (item: BrowserItem) => {
+    setActiveItem(item);
+    setInspectorTab("details");
+    setShowInspector(true);
+  };
+
+  const openAdvancedForItem = (item: BrowserItem) => {
+    setActiveItem(item);
+    setShowAdvancedModal(true);
+  };
 
   const handleOpenItem = (item: BrowserItem) => {
     if (item.type !== "folder") return;
@@ -1867,8 +1997,8 @@ export default function BrowserPage() {
       setSelectedIds([]);
       return;
     }
-    setSelectedIds(filteredItems.map((item) => item.id));
-    if (filteredItems.length > 0) {
+    setSelectedIds(listItems.map((item) => item.id));
+    if (listItems.length > 0) {
       setInspectorTab("selection");
       setShowInspector(true);
     }
@@ -1884,6 +2014,35 @@ export default function BrowserPage() {
     setShowInspector(true);
   };
 
+  const handleItemContextMenu = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const isSelected = selectedSet.has(item.id);
+    const itemsForMenu = isSelected ? selectedItems : [item];
+    if (!isSelected) {
+      setSelectedIds([item.id]);
+    }
+    const { x, y } = getContextMenuPosition(event);
+    setContextMenu({
+      kind: isSelected && selectedItems.length > 1 ? "selection" : "item",
+      x,
+      y,
+      item,
+      items: itemsForMenu,
+    });
+  };
+
+  const handlePathContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button, a, input, textarea, select, label")) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const { x, y } = getContextMenuPosition(event);
+    setContextMenu({ kind: "path", x, y });
+  };
+
   const handleBucketChange = (value: string) => {
     setShowBucketMenu(false);
     setBucketFilter("");
@@ -1892,45 +2051,123 @@ export default function BrowserPage() {
     setPrefix("");
     setActiveItem(null);
   };
+
+  const listVersionStats = async (opts: { prefix?: string; key?: string | null }) => {
+    let versionsCount = 0;
+    let deleteMarkersCount = 0;
+    const latestByKey = new Map<string, { isDelete: boolean; size: number }>();
+    let keyMarker: string | null = null;
+    let versionIdMarker: string | null = null;
+    let isTruncated = true;
+    let pageGuard = 0;
+
+    while (isTruncated) {
+      const data = await listObjectVersions(accountIdForApi, bucketName, {
+        prefix: opts.prefix ?? "",
+        key: opts.key ?? undefined,
+        keyMarker: keyMarker ?? undefined,
+        versionIdMarker: versionIdMarker ?? undefined,
+        maxKeys: VERSIONS_PAGE_SIZE,
+      });
+      versionsCount += data.versions.length;
+      deleteMarkersCount += data.delete_markers.length;
+      data.versions.forEach((version) => {
+        if (!version.is_latest) return;
+        latestByKey.set(version.key, { isDelete: false, size: version.size ?? 0 });
+      });
+      data.delete_markers.forEach((marker) => {
+        if (!marker.is_latest) return;
+        latestByKey.set(marker.key, { isDelete: true, size: 0 });
+      });
+      isTruncated = data.is_truncated;
+      keyMarker = data.next_key_marker ?? null;
+      versionIdMarker = data.next_version_id_marker ?? null;
+      pageGuard += 1;
+      if (!isTruncated || pageGuard > 1000 || (!keyMarker && !versionIdMarker)) {
+        break;
+      }
+    }
+
+    let objectCount = 0;
+    let totalBytes = 0;
+    latestByKey.forEach((entry) => {
+      if (entry.isDelete) return;
+      objectCount += 1;
+      totalBytes += entry.size;
+    });
+
+    return { objectCount, totalBytes, versionsCount, deleteMarkersCount };
+  };
+
   const handleContextCount = async () => {
     if (!bucketName || !hasS3AccountContext) return;
     const requestId = contextCountIdRef.current + 1;
     contextCountIdRef.current = requestId;
     setContextCountsLoading(true);
     setContextCountsError(null);
-    const objectsCount = filteredItems.length;
-    let versionsCount = 0;
-    let deleteMarkersCount = 0;
-    let keyMarker: string | null = null;
-    let versionIdMarker: string | null = null;
     try {
-      let isTruncated = true;
-      let pageGuard = 0;
-      while (isTruncated) {
-        const data = await listObjectVersions(accountIdForApi, bucketName, {
-          prefix: normalizedPrefix,
-          keyMarker: keyMarker ?? undefined,
-          versionIdMarker: versionIdMarker ?? undefined,
-          maxKeys: VERSIONS_PAGE_SIZE,
-        });
-        versionsCount += data.versions.length;
-        deleteMarkersCount += data.delete_markers.length;
-        isTruncated = data.is_truncated;
-        keyMarker = data.next_key_marker ?? null;
-        versionIdMarker = data.next_version_id_marker ?? null;
-        pageGuard += 1;
-        if (!isTruncated || pageGuard > 500 || (!keyMarker && !versionIdMarker)) {
-          break;
-        }
-      }
+      const stats = await listVersionStats({ prefix: normalizedPrefix });
       if (contextCountIdRef.current !== requestId) return;
-      setContextCounts({ objects: objectsCount, versions: versionsCount, deleteMarkers: deleteMarkersCount });
+      setContextCounts({
+        objects: stats.objectCount,
+        versions: stats.versionsCount,
+        deleteMarkers: stats.deleteMarkersCount,
+      });
     } catch (err) {
       if (contextCountIdRef.current !== requestId) return;
       setContextCountsError("Unable to count versions for this prefix.");
     } finally {
       if (contextCountIdRef.current === requestId) {
         setContextCountsLoading(false);
+      }
+    }
+  };
+
+  const calculateSelectionStats = async () => {
+    if (!bucketName || !hasS3AccountContext) return;
+    if (selectionItems.length === 0) return;
+    const requestId = selectionStatsRequestIdRef.current + 1;
+    selectionStatsRequestIdRef.current = requestId;
+    setSelectionStatsLoading(true);
+    setSelectionStatsError(null);
+    try {
+      const folderPrefixes = selectionItems
+        .filter((item) => item.type === "folder")
+        .map((item) => normalizePrefix(item.key));
+      const sortedFolders = [...folderPrefixes].sort((a, b) => a.length - b.length);
+      const uniqueFolders: string[] = [];
+      sortedFolders.forEach((prefixKey) => {
+        if (uniqueFolders.some((parent) => prefixKey.startsWith(parent))) return;
+        uniqueFolders.push(prefixKey);
+      });
+
+      const isFileCoveredByFolder = (key: string) => uniqueFolders.some((prefixKey) => key.startsWith(prefixKey));
+      let objectCount = 0;
+      let totalBytes = 0;
+
+      const fileItems = selectionItems.filter((item) => item.type === "file" && !isFileCoveredByFolder(item.key));
+      for (const item of fileItems) {
+        const stats = await listVersionStats({ key: item.key });
+        if (selectionStatsRequestIdRef.current !== requestId) return;
+        objectCount += stats.objectCount;
+        totalBytes += stats.totalBytes;
+      }
+
+      for (const prefixKey of uniqueFolders) {
+        const stats = await listVersionStats({ prefix: prefixKey });
+        if (selectionStatsRequestIdRef.current !== requestId) return;
+        objectCount += stats.objectCount;
+        totalBytes += stats.totalBytes;
+      }
+
+      if (selectionStatsRequestIdRef.current !== requestId) return;
+      setSelectionStats({ objectCount, totalBytes });
+    } catch (err) {
+      if (selectionStatsRequestIdRef.current !== requestId) return;
+      setSelectionStatsError("Unable to calculate selection stats.");
+    } finally {
+      if (selectionStatsRequestIdRef.current === requestId) {
+        setSelectionStatsLoading(false);
       }
     }
   };
@@ -2279,6 +2516,9 @@ export default function BrowserPage() {
     if (!bucketName || !hasS3AccountContext || !accountIdForApi || items.length === 0) return;
     setWarningMessage(null);
     const batchId = makeId();
+    const previousQueueCount = uploadQueueRef.current.length;
+    const parallelism = uploadParallelismRef.current;
+    const availableSlots = Math.max(0, parallelism - activeUploadsRef.current);
     const queuedItems = items.map((item) => {
       const file = item.file;
       const relativePath = normalizeUploadPath(item.relativePath || file.name);
@@ -2297,9 +2537,14 @@ export default function BrowserPage() {
         itemLabel: grouping.itemLabel,
       };
     });
+    const availableForNew = Math.max(0, availableSlots - previousQueueCount);
+    const queuedFromBatch = Math.max(0, queuedItems.length - availableForNew);
     uploadQueueRef.current = [...uploadQueueRef.current, ...queuedItems];
     updateUploadQueue(uploadQueueRef.current);
     processUploadQueue();
+    if (queuedFromBatch > 0) {
+      setStatusMessage(queuedFromBatch === 1 ? "1 upload queued." : `${queuedFromBatch} uploads queued.`);
+    }
   };
 
   const uploadSimple = async (
@@ -4012,6 +4257,10 @@ export default function BrowserPage() {
   const openOperationsModal = () => {
     setShowOperationsModal(true);
   };
+  const contextItem = contextMenu?.kind === "item" ? contextMenu.item ?? null : null;
+  const contextSelectionInfo = contextMenu?.kind === "selection"
+    ? getSelectionInfo(contextMenu.items ?? [])
+    : null;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
@@ -4332,6 +4581,7 @@ export default function BrowserPage() {
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
+                    onContextMenu={handlePathContextMenu}
                   >
                     {dragging && (
                       <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-50/80 text-center text-sm font-semibold text-slate-600 backdrop-blur-sm dark:bg-slate-900/70 dark:text-slate-200">
@@ -4357,7 +4607,10 @@ export default function BrowserPage() {
                                   className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                                 />
                               </th>
-                              <th className={`px-4 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
+                              <th
+                                ref={nameHeaderRef}
+                                className={`px-4 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}
+                              >
                                 <div className="flex min-w-0 items-center gap-2">
                                   <button
                                     type="button"
@@ -4371,19 +4624,37 @@ export default function BrowserPage() {
                                       } ${sortKey === "name" && sortDirection === "asc" ? "-rotate-180" : ""}`}
                                     />
                                   </button>
-                                  <div className="relative w-full max-w-[180px] flex-1 normal-case">
-                                    <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">
-                                      <SearchIcon className="h-3 w-3" />
-                                    </span>
-                                    <input
-                                      type="text"
-                                      value={filter}
-                                      onChange={(event) => setFilter(event.target.value)}
-                                      placeholder="Filter"
-                                      aria-label="Filter by name"
-                                      className="h-6 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[10px] font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 normal-case"
-                                    />
-                                  </div>
+                                  {showNameColumnControls && (
+                                    <div className="flex min-w-0 flex-1 items-center gap-2 normal-case">
+                                      <div className="relative w-full max-w-[180px] flex-1">
+                                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">
+                                          <SearchIcon className="h-3 w-3" />
+                                        </span>
+                                        <input
+                                          type="text"
+                                          value={filter}
+                                          onChange={(event) => setFilter(event.target.value)}
+                                          placeholder="Filter"
+                                          aria-label="Filter by name"
+                                          className="h-6 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[10px] font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 normal-case"
+                                        />
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setShowFolderItems((prev) => !prev)}
+                                        aria-pressed={showFolderItems}
+                                        aria-label={showFolderItems ? "Hide folders" : "Show folders"}
+                                        title={showFolderItems ? "Hide folders" : "Show folders"}
+                                        className={`inline-flex h-6 w-6 items-center justify-center rounded-md border text-slate-500 transition hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                                          showFolderItems
+                                            ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
+                                            : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                                        }`}
+                                      >
+                                        <FolderIcon className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </th>
                               <th className={`w-20 px-2 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
@@ -4420,6 +4691,28 @@ export default function BrowserPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                            {canGoUp && bucketName && showFolderItems && (
+                              <tr className={`${rowHeightClasses} text-slate-600 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/40`}>
+                                <td className={`w-9 px-2 ${rowCellClasses} align-middle`} />
+                                <td
+                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} align-middle text-sm`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={handleGoUp}
+                                    className="flex min-w-0 items-center gap-3 text-left font-semibold text-slate-700 hover:text-primary-700 dark:text-slate-200 dark:hover:text-primary-200"
+                                  >
+                                    <span className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200`}>
+                                      <UpIcon className="h-3.5 w-3.5" />
+                                    </span>
+                                    <span className="truncate">Parent folder</span>
+                                  </button>
+                                </td>
+                                <td className={`px-2 ${rowCellClasses} !align-middle text-sm text-slate-400 whitespace-nowrap`}>-</td>
+                                <td className={`px-2 ${rowCellClasses} !align-middle text-sm text-slate-400 whitespace-nowrap`}>-</td>
+                                <td className={`w-44 px-2 ${rowCellClasses} align-middle text-right text-xs text-slate-400`} />
+                              </tr>
+                            )}
                             {objectsLoading && <TableEmptyState colSpan={5} message="Loading objects..." />}
                             {!objectsLoading && !bucketName && (
                               <TableEmptyState colSpan={5} message="Select a bucket to browse objects." />
@@ -4427,10 +4720,10 @@ export default function BrowserPage() {
                             {!objectsLoading && bucketName && objectsError && (
                               <TableEmptyState colSpan={5} message={objectsError} />
                             )}
-                            {!objectsLoading && bucketName && !objectsError && filteredItems.length === 0 && (
+                            {!objectsLoading && bucketName && !objectsError && listItems.length === 0 && (
                               <TableEmptyState colSpan={5} message="No objects found for this path." />
                             )}
-                            {filteredItems.map((item) => (
+                            {listItems.map((item) => (
                               <tr
                                 key={item.id}
                                 onClick={(event) => {
@@ -4444,6 +4737,7 @@ export default function BrowserPage() {
                                     selectSingleRow(item.id);
                                   }
                                 }}
+                                onContextMenu={(event) => handleItemContextMenu(event, item)}
                                 className={`${rowHeightClasses} transition-colors ${
                                   selectedSet.has(item.id)
                                     ? "bg-primary-100/80 hover:bg-primary-100 dark:bg-primary-500/30 dark:hover:bg-primary-500/40"
@@ -4605,6 +4899,7 @@ export default function BrowserPage() {
                                   ? "border-primary-200 bg-primary-50/60 shadow-[0_12px_24px_-16px_rgba(79,70,229,0.45)] dark:border-primary-700/60 dark:bg-primary-500/20"
                                   : "border-slate-200 bg-white/90 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-primary-700/60"
                               }`}
+                              onContextMenu={(event) => handleItemContextMenu(event, item)}
                             >
                               <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-slate-50/90 to-transparent dark:from-slate-900/60" />
                               <div className="relative flex items-center justify-between">
@@ -4925,7 +5220,7 @@ export default function BrowserPage() {
                                 )}
                                 <div className="mt-2 grid gap-2">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Objects</span>
+                                    <span className="text-slate-500">Current objects</span>
                                     <span className="font-semibold text-slate-700 dark:text-slate-100">
                                       {contextCountsLoading ? "..." : contextCounts ? contextCounts.objects : "-"}
                                     </span>
@@ -4976,7 +5271,7 @@ export default function BrowserPage() {
                           className="space-y-4"
                         >
                           {canSelectionActions ? (
-                          <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                          <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
                             <div className="flex items-start justify-between gap-2">
                               <div>
                                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Selection</p>
@@ -5070,64 +5365,78 @@ export default function BrowserPage() {
                                 <TrashIcon className="h-3.5 w-3.5" />
                                 Delete
                               </button>
-                              <div ref={inspectorActionsMenuRef} className="relative shrink-0">
+                              {selectionIsSingle && selectionPrimary && (
                                 <button
                                   type="button"
-                                  className={iconButtonClasses}
-                                  aria-label="More actions"
-                                  onClick={() => setShowInspectorActionsMenu((prev) => !prev)}
+                                  className={bulkActionClasses}
+                                  onClick={() => handleCopyPath(`${bucketName}/${selectionPrimary.key}`)}
                                 >
-                                  <MoreIcon />
+                                  <CopyIcon className="h-3.5 w-3.5" />
+                                  Copy path
                                 </button>
-                                {showInspectorActionsMenu && (
-                                  <div className="absolute right-0 z-20 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                                    {selectionIsSingle && selectionPrimary && (
-                                      <button
-                                        type="button"
-                                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                                        onClick={() => {
-                                          setShowInspectorActionsMenu(false);
-                                          handleCopyPath(`${bucketName}/${selectionPrimary.key}`);
-                                        }}
-                                      >
-                                        Copy path
-                                      </button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                                      onClick={() => {
-                                        setShowInspectorActionsMenu(false);
-                                        openBulkAttributesModal(selectionItems);
-                                      }}
-                                    >
-                                      Edit attributes
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                                      onClick={() => {
-                                        setShowInspectorActionsMenu(false);
-                                        openBulkRestoreModal(selectionItems);
-                                      }}
-                                    >
-                                      Restore to date
-                                    </button>
-                                    {canSelectionAdvanced && (
-                                      <button
-                                        type="button"
-                                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                                        onClick={() => {
-                                          setShowInspectorActionsMenu(false);
-                                          setShowAdvancedModal(true);
-                                        }}
-                                      >
-                                        Advanced
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
+                              )}
+                              <button
+                                type="button"
+                                className={bulkActionClasses}
+                                onClick={() => openBulkAttributesModal(selectionItems)}
+                              >
+                                Edit attributes
+                              </button>
+                              <button
+                                type="button"
+                                className={bulkActionClasses}
+                                onClick={() => openBulkRestoreModal(selectionItems)}
+                              >
+                                Restore to date
+                              </button>
+                              {canSelectionAdvanced && (
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={() => setShowAdvancedModal(true)}
+                                >
+                                  Advanced
+                                </button>
+                              )}
+                            </div>
+                            <div className="rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/40">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Selection stats</p>
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={calculateSelectionStats}
+                                  disabled={!bucketName || !hasS3AccountContext || selectionStatsLoading}
+                                >
+                                  {selectionStatsLoading ? "Calculating..." : selectionStats ? "Recalculate" : "Calculate"}
+                                </button>
                               </div>
+                              {selectionStatsError && (
+                                <p className="mt-2 text-[11px] font-semibold text-rose-600 dark:text-rose-200">
+                                  {selectionStatsError}
+                                </p>
+                              )}
+                              {!selectionStats && !selectionStatsLoading && !selectionStatsError && (
+                                <p className="mt-2 text-[11px] text-slate-400">
+                                  Calculates object count and size, including folder contents.
+                                </p>
+                              )}
+                              {selectionStats && (
+                                <div className="mt-2 grid gap-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Objects</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {selectionStats.objectCount.toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Total size</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {formatBytes(selectionStats.totalBytes)}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         ) : (
@@ -5329,6 +5638,344 @@ export default function BrowserPage() {
           </div>
         </div>
       </div>
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          role="menu"
+          className="fixed z-50 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          {contextMenu.kind === "path" && (
+            <>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  fileInputRef.current?.click();
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                Upload files
+              </button>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  folderInputRef.current?.click();
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                Upload folder
+              </button>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  void handleNewFolder();
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                New folder
+              </button>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!clipboard || !bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  void handlePasteItems();
+                }}
+                disabled={!clipboard || !bucketName || !hasS3AccountContext}
+              >
+                Paste
+              </button>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  setShowPrefixVersions(true);
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                Versions
+              </button>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!currentPath ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  void handleCopyPath(currentPath);
+                }}
+                disabled={!currentPath}
+              >
+                Copy path
+              </button>
+            </>
+          )}
+          {contextMenu.kind === "item" && contextItem && (
+            <>
+              <button
+                type="button"
+                className={contextMenuItemClasses}
+                onClick={() => {
+                  closeContextMenu();
+                  openItemDetails(contextItem);
+                }}
+              >
+                Details
+              </button>
+              {contextItem.type === "folder" ? (
+                <button
+                  type="button"
+                  className={contextMenuItemClasses}
+                  onClick={() => {
+                    closeContextMenu();
+                    handleOpenItem(contextItem);
+                  }}
+                >
+                  Open
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                  onClick={() => {
+                    closeContextMenu();
+                    handlePreviewItem(contextItem);
+                  }}
+                  disabled={!bucketName || !hasS3AccountContext}
+                >
+                  Preview
+                </button>
+              )}
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  handleDownloadTarget(contextItem);
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                {contextItem.type === "folder" ? "Download folder" : "Download"}
+              </button>
+              {contextItem.type === "file" && (
+                <button
+                  type="button"
+                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                  onClick={() => {
+                    closeContextMenu();
+                    void handleCopyUrl(contextItem);
+                  }}
+                  disabled={!bucketName || !hasS3AccountContext}
+                >
+                  Copy URL
+                </button>
+              )}
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  void handleCopyPath(`${bucketName}/${contextItem.key}`);
+                }}
+                disabled={!bucketName}
+              >
+                Copy path
+              </button>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  handleCopyItems([contextItem]);
+                }}
+                disabled={!bucketName}
+              >
+                Copy
+              </button>
+              <div className={contextMenuSeparatorClasses} />
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  openBulkAttributesModal([contextItem]);
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                Edit attributes
+              </button>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  openBulkRestoreModal([contextItem]);
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                Restore to date
+              </button>
+              {contextItem.type === "file" && (
+                <button
+                  type="button"
+                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                  onClick={() => {
+                    closeContextMenu();
+                    openAdvancedForItem(contextItem);
+                  }}
+                  disabled={!bucketName || !hasS3AccountContext}
+                >
+                  Advanced
+                </button>
+              )}
+              <div className={contextMenuSeparatorClasses} />
+              <button
+                type="button"
+                className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  void handleDeleteItems([contextItem]);
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                Delete
+              </button>
+            </>
+          )}
+          {contextMenu.kind === "selection" && contextSelectionInfo && (
+            <>
+              {contextSelectionInfo.canDownloadFolder && contextSelectionInfo.primary && (
+                <button
+                  type="button"
+                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                  onClick={() => {
+                    closeContextMenu();
+                    void handleDownloadFolder(contextSelectionInfo.primary);
+                  }}
+                  disabled={!bucketName || !hasS3AccountContext}
+                >
+                  Download folder
+                </button>
+              )}
+              {!contextSelectionInfo.canDownloadFolder && contextSelectionInfo.canDownloadFiles && (
+                <button
+                  type="button"
+                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                  onClick={() => {
+                    closeContextMenu();
+                    void handleDownloadItems(contextSelectionInfo.files);
+                  }}
+                  disabled={!bucketName || !hasS3AccountContext}
+                >
+                  Download
+                </button>
+              )}
+              {contextSelectionInfo.canOpen && contextSelectionInfo.primary && (
+                <button
+                  type="button"
+                  className={contextMenuItemClasses}
+                  onClick={() => {
+                    closeContextMenu();
+                    handleOpenItem(contextSelectionInfo.primary);
+                  }}
+                >
+                  Open
+                </button>
+              )}
+              {contextSelectionInfo.canCopyUrl && contextSelectionInfo.primary && (
+                <button
+                  type="button"
+                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                  onClick={() => {
+                    closeContextMenu();
+                    void handleCopyUrl(contextSelectionInfo.primary);
+                  }}
+                  disabled={!bucketName || !hasS3AccountContext}
+                >
+                  Copy URL
+                </button>
+              )}
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || contextSelectionInfo.items.length === 0 ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  handleCopyItems(contextSelectionInfo.items);
+                }}
+                disabled={!bucketName || contextSelectionInfo.items.length === 0}
+              >
+                Copy
+              </button>
+              <div className={contextMenuSeparatorClasses} />
+              {contextSelectionInfo.isSingle && contextSelectionInfo.primary && (
+                <button
+                  type="button"
+                  className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
+                  onClick={() => {
+                    closeContextMenu();
+                    void handleCopyPath(`${bucketName}/${contextSelectionInfo.primary.key}`);
+                  }}
+                  disabled={!bucketName}
+                >
+                  Copy path
+                </button>
+              )}
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  openBulkAttributesModal(contextSelectionInfo.items);
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                Edit attributes
+              </button>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  openBulkRestoreModal(contextSelectionInfo.items);
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                Restore to date
+              </button>
+              {contextSelectionInfo.canAdvanced && contextSelectionInfo.primary && (
+                <button
+                  type="button"
+                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                  onClick={() => {
+                    closeContextMenu();
+                    openAdvancedForItem(contextSelectionInfo.primary);
+                  }}
+                  disabled={!bucketName || !hasS3AccountContext}
+                >
+                  Advanced
+                </button>
+              )}
+              <div className={contextMenuSeparatorClasses} />
+              <button
+                type="button"
+                className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  closeContextMenu();
+                  void handleDeleteItems(contextSelectionInfo.items);
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                Delete
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {previewItem && (
         <Modal
           title={`Preview: ${previewItem.name}`}
