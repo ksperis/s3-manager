@@ -17,6 +17,8 @@ export type GeneralSettings = {
   manager_enabled: boolean;
   browser_enabled: boolean;
   portal_enabled: boolean;
+  allow_login_endpoint_list: boolean;
+  allow_login_custom_endpoint: boolean;
 };
 
 export type PortalIAMPolicySettings = {
@@ -50,6 +52,19 @@ export type AppSettings = {
   browser: BrowserSettings;
 };
 
+export type PublicStorageEndpoint = {
+  id: number;
+  name: string;
+  endpoint_url: string;
+  is_default: boolean;
+};
+
+export type LoginSettings = {
+  allow_login_endpoint_list: boolean;
+  allow_login_custom_endpoint: boolean;
+  endpoints: PublicStorageEndpoint[];
+};
+
 export async function fetchAppSettings(): Promise<AppSettings> {
   const { data } = await client.get<AppSettings>("/admin/settings");
   return data;
@@ -57,6 +72,11 @@ export async function fetchAppSettings(): Promise<AppSettings> {
 
 export async function fetchGeneralSettings(): Promise<GeneralSettings> {
   const { data } = await client.get<GeneralSettings>("/settings/general");
+  return data;
+}
+
+export async function fetchLoginSettings(): Promise<LoginSettings> {
+  const { data } = await client.get<LoginSettings>("/settings/login");
   return data;
 }
 

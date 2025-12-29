@@ -10,6 +10,7 @@ from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_iam import get_iam_service
 from app.services.traffic_service import TrafficService, TrafficWindow
+from app.utils.s3_endpoint import resolve_s3_endpoint
 
 router = APIRouter(prefix="/manager/stats", tags=["manager-stats"])
 
@@ -37,7 +38,7 @@ def account_stats(
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise HTTPException(status_code=400, detail="S3Account root keys missing")
-        iam = get_iam_service(access_key, secret_key)
+        iam = get_iam_service(access_key, secret_key, endpoint=resolve_s3_endpoint(account))
         try:
             users = iam.list_users()
             groups = iam.list_groups()

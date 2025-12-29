@@ -64,3 +64,10 @@ class StorageEndpoint(StorageEndpointBase):
 
     admin_secret_key: Optional[str] = Field(default=None, exclude=True)
     supervision_secret_key: Optional[str] = Field(default=None, exclude=True)
+
+
+class StorageEndpointPublic(BaseModel):
+    id: int
+    name: str
+    endpoint_url: str
+    is_default: bool = False

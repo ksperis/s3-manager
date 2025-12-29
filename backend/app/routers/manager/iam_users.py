@@ -14,6 +14,7 @@ from app.routers.dependencies import (
 )
 from app.services.audit_service import AuditService
 from app.services.rgw_iam import RGWIAMService, get_iam_service
+from app.utils.s3_endpoint import resolve_s3_endpoint
 
 router = APIRouter(prefix="/manager/iam/users", tags=["manager-iam-users"])
 
@@ -22,7 +23,7 @@ def get_account_and_service(account: S3Account) -> tuple[S3Account, RGWIAMServic
     access_key, secret_key = account.effective_rgw_credentials()
     if not access_key or not secret_key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account root keys missing")
-    service = get_iam_service(access_key, secret_key)
+    service = get_iam_service(access_key, secret_key, endpoint=resolve_s3_endpoint(account))
     return account, service
 
 

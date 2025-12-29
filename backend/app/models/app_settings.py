@@ -5,6 +5,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import get_settings
+from app.models.storage_endpoint import StorageEndpointPublic
 
 _settings = get_settings()
 
@@ -67,6 +68,14 @@ class GeneralSettings(BaseModel):
     manager_enabled: bool = True
     browser_enabled: bool = True
     portal_enabled: bool = True
+    allow_login_endpoint_list: bool = False
+    allow_login_custom_endpoint: bool = False
+
+
+class LoginSettings(BaseModel):
+    allow_login_endpoint_list: bool = False
+    allow_login_custom_endpoint: bool = False
+    endpoints: list[StorageEndpointPublic] = Field(default_factory=list)
 
 
 class PortalSettings(BaseModel):

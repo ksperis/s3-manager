@@ -23,7 +23,15 @@ export default function GeneralSettingsPage() {
       .catch(() => setError("Unable to load settings."));
   }, [setGeneralSettings]);
 
-  const handleToggle = (field: "manager_enabled" | "browser_enabled" | "portal_enabled", value: boolean) => {
+  const handleToggle = (
+    field:
+      | "manager_enabled"
+      | "browser_enabled"
+      | "portal_enabled"
+      | "allow_login_endpoint_list"
+      | "allow_login_custom_endpoint",
+    value: boolean
+  ) => {
     setSettings((prev) => (prev ? { ...prev, general: { ...prev.general, [field]: value } } : prev));
   };
 
@@ -129,6 +137,44 @@ export default function GeneralSettingsPage() {
                     className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                   />
                   <span>{settings.general.portal_enabled ? "Enabled" : "Disabled"}</span>
+                </label>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Access-key endpoint list</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Allow the access-key login screen to display the configured endpoints.
+                  </p>
+                </div>
+                <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.general.allow_login_endpoint_list)}
+                    onChange={(e) => handleToggle("allow_login_endpoint_list", e.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                  <span>{settings.general.allow_login_endpoint_list ? "Enabled" : "Disabled"}</span>
+                </label>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Custom login endpoint</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Allow access-key users to enter a custom endpoint URL on the login screen.
+                  </p>
+                </div>
+                <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.general.allow_login_custom_endpoint)}
+                    onChange={(e) => handleToggle("allow_login_custom_endpoint", e.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                  <span>{settings.general.allow_login_custom_endpoint ? "Enabled" : "Disabled"}</span>
                 </label>
               </div>
             </div>

@@ -13,10 +13,10 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
-def get_iam_client(access_key: str, secret_key: str):
+def get_iam_client(access_key: str, secret_key: str, endpoint: Optional[str] = None):
     return boto3.client(
         "iam",
-        endpoint_url=settings.s3_endpoint,
+        endpoint_url=endpoint or settings.s3_endpoint,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         config=Config(signature_version="s3v4"),
@@ -24,8 +24,8 @@ def get_iam_client(access_key: str, secret_key: str):
 
 
 class RGWIAMService:
-    def __init__(self, access_key: str, secret_key: str) -> None:
-        self.client = get_iam_client(access_key, secret_key)
+    def __init__(self, access_key: str, secret_key: str, endpoint: Optional[str] = None) -> None:
+        self.client = get_iam_client(access_key, secret_key, endpoint=endpoint)
         # Known Ceph-managed policies (subset supported by RGW IAM)
         self._default_policies: list[Policy] = [
             self._policy_from_data({"PolicyName": "AmazonS3FullAccess", "Arn": "arn:aws:iam::aws:policy/AmazonS3FullAccess"}),
@@ -541,5 +541,5 @@ class RGWIAMService:
             return None
 
 
-def get_iam_service(access_key: str, secret_key: str) -> RGWIAMService:
-    return RGWIAMService(access_key, secret_key)
+def get_iam_service(access_key: str, secret_key: str, endpoint: Optional[str] = None) -> RGWIAMService:
+    return RGWIAMService(access_key, secret_key, endpoint=endpoint)

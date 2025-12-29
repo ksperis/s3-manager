@@ -5,6 +5,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchOidcProviders, login, loginWithKeys, startOidcLogin, type OidcProviderInfo } from "../../api/auth";
+import { fetchLoginSettings, type LoginSettings } from "../../api/appSettings";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
 export default function LoginPage() {
@@ -20,6 +21,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [oidcLoading, setOidcLoading] = useState<string | null>(null);
   const [oidcProviders, setOidcProviders] = useState<OidcProviderInfo[]>([]);
+  const [loginSettings, setLoginSettings] = useState<LoginSettings | null>(null);
+  const [endpointError, setEndpointError] = useState<string | null>(null);
+  const [endpointLoading, setEndpointLoading] = useState(false);
+  const [selectedEndpoint, setSelectedEndpoint] = useState("");
+  const [customEndpoint, setCustomEndpoint] = useState("");
   const resolveDestination = (role?: string | null, accountLinks?: { account_role?: string | null; account_admin?: boolean | null }[] | null) => {
     if (role === "ui_admin") return "/admin";
     if (role === "ui_user") {
@@ -50,6 +56,30 @@ export default function LoginPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+    setEndpointLoading(true);
+    fetchLoginSettings()
+      .then((settings) => {
+        if (isMounted) {
+          setLoginSettings(settings);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setEndpointError("Unable to load endpoint options");
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setEndpointLoading(false);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handlePasswordLogin = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -58,6 +88,7 @@ export default function LoginPage() {
       const res = await login(email, password);
       localStorage.setItem("token", res.access_token);
       localStorage.setItem("user", JSON.stringify({ ...res.user, authType: "password" }));
+      localStorage.removeItem("s3SessionEndpoint");
       refreshGeneralSettings();
       const destination = resolveDestination(res.user.role, res.user.account_links ?? null);
       navigate(destination, { replace: true });
@@ -74,8 +105,16 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await loginWithKeys(accessKey.trim(), secretKey.trim());
+      const normalizedCustom = customEndpoint.trim().replace(/\/+$/, "");
+      const normalizedSelected = selectedEndpoint.trim().replace(/\/+$/, "");
+      const endpointUrl = normalizedCustom || normalizedSelected || undefined;
+      const res = await loginWithKeys(accessKey.trim(), secretKey.trim(), endpointUrl);
       localStorage.setItem("token", res.access_token);
+      if (endpointUrl) {
+        localStorage.setItem("s3SessionEndpoint", endpointUrl);
+      } else {
+        localStorage.removeItem("s3SessionEndpoint");
+      }
       const userPayload = {
         email: res.session.account_id ? `${res.session.account_id}@s3-session` : "s3-session",
         role: "ui_user",
@@ -120,6 +159,10 @@ export default function LoginPage() {
         ? "bg-white text-slate-900 shadow-sm"
         : "text-slate-500 hover:text-slate-800"
     }`;
+
+  const allowEndpointList = Boolean(loginSettings?.allow_login_endpoint_list);
+  const allowCustomEndpoint = Boolean(loginSettings?.allow_login_custom_endpoint);
+  const endpointOptions = loginSettings?.endpoints ?? [];
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900">
@@ -192,6 +235,49 @@ export default function LoginPage() {
                 required
               />
             </div>
+            {(allowEndpointList || allowCustomEndpoint) && (
+              <div className="space-y-3">
+                {allowEndpointList && (
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Endpoint</label>
+                    <select
+                      value={selectedEndpoint}
+                      onChange={(e) => setSelectedEndpoint(e.target.value)}
+                      disabled={endpointLoading}
+                      className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
+                    >
+                      {endpointLoading && <option value="">Loading endpoints...</option>}
+                      {!endpointLoading && <option value="">Default endpoint</option>}
+                      {!endpointLoading &&
+                        endpointOptions.map((endpoint) => (
+                          <option key={endpoint.id} value={endpoint.endpoint_url} title={endpoint.endpoint_url}>
+                            {endpoint.is_default ? `${endpoint.name} (default)` : endpoint.name}
+                          </option>
+                        ))}
+                    </select>
+                    {!endpointLoading && endpointOptions.length === 0 && (
+                      <p className="mt-1 text-xs text-slate-500">No endpoint configured. Default will be used.</p>
+                    )}
+                  </div>
+                )}
+                {allowCustomEndpoint && (
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Custom endpoint URL (optional)</label>
+                    <input
+                      type="url"
+                      value={customEndpoint}
+                      onChange={(e) => setCustomEndpoint(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      placeholder="https://s3.example.com"
+                    />
+                    {allowEndpointList && (
+                      <p className="mt-1 text-xs text-slate-500">Custom endpoint overrides the selection above.</p>
+                    )}
+                  </div>
+                )}
+                {endpointError && <p className="text-xs text-rose-600">{endpointError}</p>}
+              </div>
+            )}
             {error && <p className="text-sm text-rose-600">{error}</p>}
             <button
               type="submit"

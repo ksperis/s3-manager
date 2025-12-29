@@ -72,8 +72,13 @@ class SessionService:
         self.db.commit()
         return self._to_principal(session)
 
-    def introspect_credentials(self, access_key: str, secret_key: str) -> tuple[str, Optional[str], Optional[str], Optional[str], SessionCapabilities]:
-        raw_client = s3_client.get_s3_client(access_key, secret_key)
+    def introspect_credentials(
+        self,
+        access_key: str,
+        secret_key: str,
+        endpoint: Optional[str] = None,
+    ) -> tuple[str, Optional[str], Optional[str], Optional[str], SessionCapabilities]:
+        raw_client = s3_client.get_s3_client(access_key, secret_key, endpoint=endpoint)
         try:
             raw = raw_client.list_buckets()
         except (BotoCoreError, ClientError) as exc:
@@ -81,7 +86,7 @@ class SessionService:
         owner = raw.get("Owner") or {}
         owner_id = owner.get("ID") or owner.get("Id")
         account_name = owner.get("DisplayName") or owner.get("display_name")
-        user_info = self._fetch_admin_identity(access_key, secret_key)
+        user_info = self._fetch_admin_identity(access_key, secret_key, endpoint=endpoint)
         actor_type = "account_user"
         account_id = owner_id
         user_uid = None
@@ -96,7 +101,7 @@ class SessionService:
             account_name = user_info.get("account_name") or account_name
             if str(user_info.get("account_root")).lower() in {"true", "1", "yes"}:
                 actor_type = "account_root"
-        iam_full_access = self._probe_iam_manage(access_key, secret_key)
+        iam_full_access = self._probe_iam_manage(access_key, secret_key, endpoint=endpoint)
         capabilities = self._derive_capabilities(actor_type, user_info, iam_full_access)
         return actor_type, account_id, account_name, user_uid, capabilities
 
@@ -109,9 +114,9 @@ class SessionService:
         if existing:
             self.db.commit()
 
-    def _fetch_admin_identity(self, access_key: str, secret_key: str) -> Optional[dict]:
+    def _fetch_admin_identity(self, access_key: str, secret_key: str, endpoint: Optional[str] = None) -> Optional[dict]:
         try:
-            client = RGWAdminClient(access_key=access_key, secret_key=secret_key)
+            client = RGWAdminClient(access_key=access_key, secret_key=secret_key, endpoint=endpoint)
             data = client.get_user_by_access_key(access_key, allow_not_found=True)
             if data and data.get("not_found"):
                 return None
@@ -170,9 +175,9 @@ class SessionService:
     def _hash_key(self, access_key: str) -> str:
         return hashlib.sha256(access_key.encode()).hexdigest()
 
-    def _probe_iam_manage(self, access_key: str, secret_key: str) -> bool:
+    def _probe_iam_manage(self, access_key: str, secret_key: str, endpoint: Optional[str] = None) -> bool:
         try:
-            client = get_iam_client(access_key, secret_key)
+            client = get_iam_client(access_key, secret_key, endpoint=endpoint)
             client.list_users(MaxItems=1)
             return True
         except (ClientError, BotoCoreError):

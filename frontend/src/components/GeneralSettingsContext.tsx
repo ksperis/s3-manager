@@ -9,6 +9,8 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   manager_enabled: true,
   browser_enabled: true,
   portal_enabled: true,
+  allow_login_endpoint_list: false,
+  allow_login_custom_endpoint: false,
 };
 
 type GeneralSettingsContextValue = {
