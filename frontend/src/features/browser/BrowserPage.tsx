@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import JSZip from "jszip";
 import axios from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
-import Modal from "../../components/Modal";
+import { formatBytes } from "../../utils/format";
 import {
   BrowserBucket,
   BrowserObject,
@@ -42,717 +42,123 @@ import {
   abortMultipartUpload,
 } from "../../api/browser";
 import { useS3AccountContext } from "../manager/S3AccountContext";
+import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
+import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
+import BrowserContextMenu from "./BrowserContextMenu";
+import BrowserOperationsModal from "./BrowserOperationsModal";
+import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
+import BrowserPreviewModal from "./BrowserPreviewModal";
 import ObjectAdvancedModal from "./ObjectAdvancedModal";
-
-type BrowserItem = {
-  id: string;
-  key: string;
-  name: string;
-  type: "folder" | "file";
-  size: string;
-  sizeBytes?: number | null;
-  modified: string;
-  modifiedAt?: number | null;
-  owner: string;
-  storageClass?: string;
-};
-
-type TreeNode = {
-  id: string;
-  name: string;
-  prefix: string;
-  children: TreeNode[];
-  isExpanded: boolean;
-  isLoaded: boolean;
-  isLoading: boolean;
-};
-
-type OperationCompletionStatus = "done" | "failed" | "cancelled";
-
-type OperationItem = {
-  id: string;
-  label: string;
-  path: string;
-  progress: number;
-  status: "uploading" | "deleting" | "copying" | "downloading";
-  sizeBytes?: number;
-  kind?: "upload" | "download" | "delete" | "copy" | "other";
-  groupId?: string;
-  groupLabel?: string;
-  groupKind?: "folder" | "files";
-  itemLabel?: string;
-  cancelable?: boolean;
-  completedAt?: string;
-  completionStatus?: OperationCompletionStatus;
-};
-
-type UploadCandidate = {
-  file: File;
-  relativePath?: string;
-};
-
-type UploadQueueItem = {
-  id: string;
-  file: File;
-  relativePath: string;
-  key: string;
-  bucket: string;
-  accountId: string;
-  groupId: string;
-  groupLabel: string;
-  groupKind: "folder" | "files";
-  itemLabel: string;
-};
-
-type CompletedOperationItem = {
-  id: string;
-  label: string;
-  path: string;
-  when: string;
-};
-
-type DownloadDetailStatus = "queued" | "downloading" | "done" | "failed" | "cancelled";
-
-type DownloadDetailItem = {
-  id: string;
-  key: string;
-  label: string;
-  status: DownloadDetailStatus;
-  sizeBytes?: number;
-};
-
-type DeleteDetailStatus = "queued" | "deleting" | "done" | "failed";
-
-type DeleteDetailItem = {
-  id: string;
-  key: string;
-  label: string;
-  status: DeleteDetailStatus;
-};
-
-type CopyDetailStatus = "queued" | "copying" | "done" | "failed";
-
-type CopyDetailItem = {
-  id: string;
-  key: string;
-  label: string;
-  status: CopyDetailStatus;
-  sizeBytes?: number;
-};
-
-type SelectionStats = {
-  objectCount: number;
-  totalBytes: number;
-};
-
-type BulkMetadataDraft = {
-  contentType: string;
-  cacheControl: string;
-  contentDisposition: string;
-  contentEncoding: string;
-  contentLanguage: string;
-  expires: string;
-};
-
-type PreviewKind = "image" | "video" | "audio" | "pdf" | "text" | "generic";
-
-type ContextMenuKind = "item" | "selection" | "path";
-
-type ContextMenuState = {
-  kind: ContextMenuKind;
-  x: number;
-  y: number;
-  item?: BrowserItem | null;
-  items?: BrowserItem[];
-};
-
-const iconButtonClasses =
-  "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200";
-const iconButtonDangerClasses =
-  "inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 disabled:opacity-40 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30 dark:hover:text-rose-100";
-const gridQuickActionClasses =
-  `${iconButtonClasses} h-auto w-auto flex-1 min-w-0 justify-center gap-1 px-1.5 py-1 text-[10px] font-semibold leading-tight`;
-const gridQuickActionDangerClasses =
-  `${iconButtonDangerClasses} h-auto w-auto flex-1 min-w-0 justify-center gap-1 px-1.5 py-1 text-[10px] font-semibold leading-tight`;
-const gridTitleClampStyle = {
-  display: "-webkit-box",
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: "vertical",
-  overflow: "hidden",
-} as const;
-const bulkActionClasses =
-  "inline-flex items-center gap-2 rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100";
-const bulkDangerClasses =
-  "inline-flex items-center gap-2 rounded-full border border-rose-200 px-2.5 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 disabled:opacity-50 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30";
-const toolbarButtonClasses =
-  "inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100";
-const toolbarPrimaryClasses =
-  "inline-flex items-center gap-2 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
-const filterChipClasses =
-  "inline-flex items-center gap-2 rounded-full border border-slate-200 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100";
-const filterChipActiveClasses =
-  "border-primary-200 bg-primary-100 text-primary-800 dark:border-primary-600 dark:bg-primary-500/20 dark:text-primary-100";
-const countBadgeClasses =
-  "inline-flex w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 px-1 text-[9px] font-semibold text-slate-600 tabular-nums dark:bg-slate-800 dark:text-slate-200";
-const operationStopClasses =
-  "rounded-full border border-rose-200 px-2 py-0.5 text-[10px] font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30";
-const operationSecondaryClasses =
-  "rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:border-primary hover:text-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100";
-const viewToggleBaseClasses =
-  "inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100";
-const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-100";
-const formInputClasses =
-  "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
-const breadcrumbIconButtonClasses =
-  "inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-200";
-const contextMenuBaseClasses =
-  "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-semibold transition";
-const contextMenuItemClasses =
-  `${contextMenuBaseClasses} text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800`;
-const contextMenuItemDangerClasses =
-  `${contextMenuBaseClasses} text-rose-600 hover:bg-rose-50 dark:text-rose-200 dark:hover:bg-rose-900/30`;
-const contextMenuItemDisabledClasses = "cursor-not-allowed opacity-50";
-const contextMenuSeparatorClasses = "my-1 border-t border-slate-200 dark:border-slate-700";
-
-const bucketButtonClasses =
-  "inline-flex max-w-[220px] items-center gap-1 rounded-md px-1 py-0.5 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-800";
-const treeToggleButtonClasses =
-  "inline-flex h-4 w-4 items-center justify-center rounded border border-slate-200 text-[9px] font-semibold text-slate-500 transition hover:border-primary hover:text-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary-500 dark:hover:text-primary-200";
-const treeItemBaseClasses =
-  "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-[11px] font-semibold transition";
-const treeItemActiveClasses =
-  "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100";
-const treeItemInactiveClasses =
-  "text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100";
-
-const storageClassChipClasses: Record<string, string> = {
-  STANDARD: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-900/20 dark:text-emerald-200",
-  STANDARD_IA: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200",
-  GLACIER: "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-900/20 dark:text-indigo-200",
-};
-
-const storageClassOptions = [
-  { value: "STANDARD", label: "STANDARD" },
-  { value: "STANDARD_IA", label: "STANDARD_IA" },
-  { value: "ONEZONE_IA", label: "ONEZONE_IA" },
-  { value: "INTELLIGENT_TIERING", label: "INTELLIGENT_TIERING" },
-  { value: "GLACIER", label: "GLACIER" },
-  { value: "GLACIER_IR", label: "GLACIER_IR" },
-  { value: "DEEP_ARCHIVE", label: "DEEP_ARCHIVE" },
-];
-
-const aclOptions = [
-  { value: "private", label: "private" },
-  { value: "public-read", label: "public-read" },
-  { value: "public-read-write", label: "public-read-write" },
-  { value: "authenticated-read", label: "authenticated-read" },
-  { value: "bucket-owner-read", label: "bucket-owner-read" },
-  { value: "bucket-owner-full-control", label: "bucket-owner-full-control" },
-  { value: "aws-exec-read", label: "aws-exec-read" },
-];
-
-const MULTIPART_THRESHOLD = 25 * 1024 * 1024;
-const PART_SIZE = 8 * 1024 * 1024;
-const BUCKET_MENU_LIMIT = 50;
-const MULTIPART_CONCURRENCY = 4;
-const DEFAULT_DIRECT_UPLOAD_PARALLELISM = 5;
-const DEFAULT_PROXY_UPLOAD_PARALLELISM = 2;
-const DEFAULT_DIRECT_DOWNLOAD_PARALLELISM = 5;
-const DEFAULT_PROXY_DOWNLOAD_PARALLELISM = 2;
-const DEFAULT_OTHER_OPERATIONS_PARALLELISM = 3;
-const DEFAULT_QUEUED_VISIBLE_COUNT = 10;
-const COMPLETED_OPERATIONS_LIMIT = 20;
-const OBJECTS_PAGE_SIZE = 200;
-const VERSIONS_PAGE_SIZE = 200;
-const NAME_COLUMN_CONTROLS_MIN_WIDTH = 360;
-
-const clampParallelism = (value: number, fallback: number) => {
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(20, Math.max(1, Math.floor(value)));
-};
-
-const formatBytes = (bytes?: number | null): string => {
-  if (bytes === undefined || bytes === null) return "-";
-  if (bytes === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  let value = bytes;
-  let idx = 0;
-  while (value >= 1024 && idx < units.length - 1) {
-    value /= 1024;
-    idx += 1;
-  }
-  const decimals = value >= 10 || idx === 0 ? 0 : 1;
-  return `${value.toFixed(decimals)} ${units[idx]}`;
-};
-
-const formatDateTime = (value?: string | null): string => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const pad = (num: number) => `${num}`.padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
-    date.getMinutes()
-  )}`;
-};
-
-const formatLocalDateTime = (value?: string | Date | null) => {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (num: number) => `${num}`.padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
-    date.getMinutes()
-  )}`;
-};
-
-const toIsoString = (value: string) => {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString();
-};
-
-const formatBadgeCount = (count: number) => (count > 99 ? "99+" : `${count}`);
-
-const normalizePrefix = (value: string) => {
-  if (!value) return "";
-  return value.endsWith("/") ? value : `${value}/`;
-};
-
-const shortName = (key: string, basePrefix: string) => {
-  if (!basePrefix) return key;
-  if (key.startsWith(basePrefix)) return key.slice(basePrefix.length);
-  return key;
-};
-
-const buildTreeNodes = (prefixes: string[], parentPrefix: string): TreeNode[] => {
-  const base = normalizePrefix(parentPrefix);
-  return prefixes
-    .map((prefixValue) => {
-      const rawName = shortName(prefixValue, base);
-      const name = rawName.endsWith("/") ? rawName.slice(0, -1) : rawName;
-      return {
-        id: prefixValue,
-        name: name || prefixValue,
-        prefix: prefixValue,
-        children: [],
-        isExpanded: false,
-        isLoaded: false,
-        isLoading: false,
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
-};
-
-const updateTreeNodes = (
-  nodes: TreeNode[],
-  targetPrefix: string,
-  updater: (node: TreeNode) => TreeNode
-): TreeNode[] => {
-  return nodes.map((node) => {
-    if (node.prefix === targetPrefix) {
-      return updater(node);
-    }
-    if (node.children.length === 0) {
-      return node;
-    }
-    return { ...node, children: updateTreeNodes(node.children, targetPrefix, updater) };
-  });
-};
-
-const findTreeNodeByPrefix = (nodes: TreeNode[], targetPrefix: string): TreeNode | null => {
-  for (const node of nodes) {
-    if (node.prefix === targetPrefix) return node;
-    if (node.children.length > 0) {
-      const match = findTreeNodeByPrefix(node.children, targetPrefix);
-      if (match) return match;
-    }
-  }
-  return null;
-};
-
-const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-const isLikelyCorsError = (error: unknown) => {
-  if (!axios.isAxiosError(error)) return false;
-  if (!error.response) return true;
-  return error.code === "ERR_NETWORK" || error.message === "Network Error";
-};
-
-const isAbortError = (error: unknown) => {
-  if (axios.isAxiosError(error)) {
-    return error.code === "ERR_CANCELED" || error.name === "CanceledError";
-  }
-  return error instanceof DOMException && error.name === "AbortError";
-};
-
-const normalizeEtag = (raw?: string | string[] | null): string | undefined => {
-  if (!raw) return undefined;
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return value?.replace(/"/g, "");
-};
-
-const chunkItems = <T,>(items: T[], size: number): T[][] => {
-  if (size <= 0) return [items];
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size));
-  }
-  return chunks;
-};
-
-const parseKeyValueLines = (value: string) => {
-  return value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const equalsIndex = line.indexOf("=");
-      const colonIndex = line.indexOf(":");
-      const splitIndex = equalsIndex === -1 ? colonIndex : equalsIndex;
-      if (splitIndex === -1) return null;
-      const key = line.slice(0, splitIndex).trim();
-      const val = line.slice(splitIndex + 1).trim();
-      if (!key) return null;
-      return { key, value: val };
-    })
-    .filter((entry): entry is { key: string; value: string } => Boolean(entry));
-};
-
-const pairsToRecord = (items: { key: string; value: string }[]) =>
-  items.reduce<Record<string, string>>((acc, item) => {
-    acc[item.key] = item.value;
-    return acc;
-  }, {});
-
-type WebkitEntry = {
-  isFile: boolean;
-  isDirectory: boolean;
-  name: string;
-  file?: (success: (file: File) => void, error?: (error: unknown) => void) => void;
-  createReader?: () => { readEntries: (success: (entries: WebkitEntry[]) => void, error?: (error: unknown) => void) => void };
-};
-
-const normalizeUploadPath = (value: string) => value.replace(/\\/g, "/").replace(/^\/+/, "");
-
-const extractRelativePath = (file: File) => {
-  const relative = (file as { webkitRelativePath?: string }).webkitRelativePath;
-  return relative && relative.length > 0 ? relative : file.name;
-};
-
-const buildUploadCandidates = (files: File[]): UploadCandidate[] =>
-  files.map((file) => ({ file, relativePath: extractRelativePath(file) }));
-
-const buildUploadGrouping = (relativePath: string, batchId: string) => {
-  const normalized = normalizeUploadPath(relativePath);
-  const parts = normalized.split("/").filter(Boolean);
-  if (parts.length > 1) {
-    return {
-      groupId: `${batchId}:${parts[0]}`,
-      groupLabel: parts[0],
-      groupKind: "folder" as const,
-      itemLabel: parts.slice(1).join("/"),
-    };
-  }
-  return {
-    groupId: `${batchId}:files`,
-    groupLabel: "Files",
-    groupKind: "files" as const,
-    itemLabel: normalized || "Untitled",
-  };
-};
-
-const getWebkitEntry = (item: DataTransferItem): WebkitEntry | null => {
-  const cast = item as DataTransferItem & { webkitGetAsEntry?: () => WebkitEntry | null };
-  return cast.webkitGetAsEntry ? cast.webkitGetAsEntry() : null;
-};
-
-const readDirectoryEntries = (reader: { readEntries: (success: (entries: WebkitEntry[]) => void, error?: (error: unknown) => void) => void }) =>
-  new Promise<WebkitEntry[]>((resolve, reject) => {
-    reader.readEntries(resolve, reject);
-  });
-
-const walkEntry = async (entry: WebkitEntry, parentPath: string): Promise<UploadCandidate[]> => {
-  if (entry.isFile && entry.file) {
-    const file = await new Promise<File>((resolve, reject) => entry.file?.(resolve, reject));
-    return [{ file, relativePath: `${parentPath}${file.name}` }];
-  }
-  if (entry.isDirectory && entry.createReader) {
-    const reader = entry.createReader();
-    const entries: WebkitEntry[] = [];
-    while (true) {
-      const batch = await readDirectoryEntries(reader);
-      if (batch.length === 0) break;
-      entries.push(...batch);
-    }
-    const nextPath = `${parentPath}${entry.name}/`;
-    const nested = await Promise.all(entries.map((child) => walkEntry(child, nextPath)));
-    return nested.flat();
-  }
-  return [];
-};
-
-const collectDroppedFiles = async (dataTransfer: DataTransfer): Promise<UploadCandidate[]> => {
-  const items = Array.from(dataTransfer.items || []);
-  const entries = items
-    .map((item) => getWebkitEntry(item))
-    .filter((entry): entry is WebkitEntry => Boolean(entry));
-  if (entries.length > 0) {
-    const groups = await Promise.all(entries.map((entry) => walkEntry(entry, "")));
-    return groups.flat();
-  }
-  return buildUploadCandidates(Array.from(dataTransfer.files || []));
-};
-
-const getExtension = (name: string) => {
-  const idx = name.lastIndexOf(".");
-  if (idx === -1) return "";
-  return name.slice(idx + 1).toLowerCase();
-};
-
-const isImageFile = (name: string) => {
-  const ext = getExtension(name);
-  return ["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext);
-};
-
-const isVideoFile = (name: string) => {
-  const ext = getExtension(name);
-  return ["mp4", "webm", "ogg", "mov", "m4v"].includes(ext);
-};
-
-const isAudioFile = (name: string) => {
-  const ext = getExtension(name);
-  return ["mp3", "wav", "ogg", "m4a", "flac"].includes(ext);
-};
-
-const isPdfFile = (name: string) => getExtension(name) === "pdf";
-
-const isTextFile = (name: string) => {
-  const ext = getExtension(name);
-  return ["txt", "md", "markdown", "csv", "json", "yml", "yaml", "xml", "html", "css", "js", "ts", "log"].includes(ext);
-};
-
-const previewKindForItem = (item: BrowserItem, contentType?: string | null): PreviewKind => {
-  const normalized = (contentType ?? "").toLowerCase();
-  if (normalized.startsWith("image/")) return "image";
-  if (normalized.startsWith("video/")) return "video";
-  if (normalized.startsWith("audio/")) return "audio";
-  if (normalized.includes("pdf")) return "pdf";
-  if (normalized.startsWith("text/") || normalized.includes("json") || normalized.includes("xml")) return "text";
-  if (isImageFile(item.name)) return "image";
-  if (isVideoFile(item.name)) return "video";
-  if (isAudioFile(item.name)) return "audio";
-  if (isPdfFile(item.name)) return "pdf";
-  if (isTextFile(item.name)) return "text";
-  return "generic";
-};
-
-const previewLabelForItem = (item: BrowserItem) => {
-  if (item.type === "folder") return "FOLDER";
-  const ext = getExtension(item.name);
-  if (!ext) return "FILE";
-  return ext.toUpperCase();
-};
-
-const buildVersionRows = (versions: BrowserObjectVersion[], deleteMarkers: BrowserObjectVersion[]) => {
-  const entries = [...versions, ...deleteMarkers].map((entry) => ({
-    ...entry,
-    is_delete_marker: entry.is_delete_marker || false,
-  }));
-  return entries.sort((a, b) => {
-    const dateA = a.last_modified ? new Date(a.last_modified).getTime() : 0;
-    const dateB = b.last_modified ? new Date(b.last_modified).getTime() : 0;
-    return dateB - dateA;
-  });
-};
-
-const getSelectionInfo = (items: BrowserItem[]) => {
-  const files = items.filter((item) => item.type === "file");
-  const folders = items.filter((item) => item.type === "folder");
-  const isSingle = items.length === 1;
-  const primary = isSingle ? items[0] : null;
-  const hasFolder = folders.length > 0;
-  const hasFile = files.length > 0;
-  return {
-    items,
-    files,
-    folders,
-    isSingle,
-    primary,
-    hasFolder,
-    hasFile,
-    canDownloadFiles: hasFile && !hasFolder,
-    canDownloadFolder: isSingle && primary?.type === "folder",
-    canOpen: primary?.type === "folder",
-    canCopyUrl: primary?.type === "file",
-    canAdvanced: primary?.type === "file",
-  };
-};
-
-const FolderIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path
-      d="M2.5 6.5a2 2 0 0 1 2-2h3l1.6 1.6a2 2 0 0 0 1.4.6H15.5a2 2 0 0 1 2 2v5.6a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-8.8Z"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-const FolderPlusIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path
-      d="M2.5 6.5a2 2 0 0 1 2-2h3l1.6 1.6a2 2 0 0 0 1.4.6H15.5a2 2 0 0 1 2 2v5.6a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-8.8Z"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-    <path d="M10 9.5v5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    <path d="M7.5 12h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
-
-const FileIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path
-      d="M5 3.5h5.6L15.5 8v8.5a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 16.5v-11A2 2 0 0 1 5.5 3.5Z"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-    <path d="M10.6 3.5V7a1 1 0 0 0 1 1h3.4" stroke="currentColor" strokeWidth="1.4" />
-  </svg>
-);
-
-const BucketIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <ellipse cx="10" cy="5.5" rx="6.5" ry="2.8" stroke="currentColor" strokeWidth="1.4" />
-    <path
-      d="M3.5 5.5v6.5c0 1.7 2.9 3 6.5 3s6.5-1.3 6.5-3V5.5"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-const OpenIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path d="M7 5h8v8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="m7 13 8-8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-  </svg>
-);
-
-const EyeIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path
-      d="M2.5 10s2.8-4.5 7.5-4.5S17.5 10 17.5 10s-2.8 4.5-7.5 4.5S2.5 10 2.5 10Z"
-      stroke="currentColor"
-      strokeWidth="1.4"
-    />
-    <circle cx="10" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.4" />
-  </svg>
-);
-
-const DownloadIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path d="M10 3.5v8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="m6.5 9.5 3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="M4 15.5h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-  </svg>
-);
-
-const UploadIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path d="M10 16.5v-8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="m6.5 10.5 3.5-3.5 3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="M4 4.5h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-  </svg>
-);
-
-const RefreshIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path d="M16 10a6 6 0 1 1-2.1-4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="M12.5 3.5h3.5v3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const UpIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path d="M9 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M5 8h6a4 4 0 0 1 4 4v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-  </svg>
-);
-
-const CopyIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <rect x="7" y="7" width="9" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
-    <rect x="4" y="4" width="9" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
-  </svg>
-);
-
-const PasteIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <rect x="6.5" y="3" width="7" height="3.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-    <rect x="4.5" y="6" width="11" height="11" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
-  </svg>
-);
-
-const TrashIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path d="M4.5 6.5h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="M8 6.5V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" stroke="currentColor" strokeWidth="1.4" />
-    <path d="M6.5 6.5l.6 8a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8" stroke="currentColor" strokeWidth="1.4" />
-  </svg>
-);
-
-const MoreIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="currentColor" aria-hidden="true">
-    <circle cx="6" cy="10" r="1.4" />
-    <circle cx="10" cy="10" r="1.4" />
-    <circle cx="14" cy="10" r="1.4" />
-  </svg>
-);
-
-const SearchIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" />
-    <path d="M13 13l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
-
-const ListIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path d="M4 6h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="M4 10h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <path d="M4 14h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-  </svg>
-);
-
-const CompactIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path d="M4 5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    <path d="M4 8.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    <path d="M4 12h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    <path d="M4 15.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
-
-const GridIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <rect x="3.5" y="3.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-    <rect x="11" y="3.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-    <rect x="3.5" y="11" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-    <rect x="11" y="11" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
-  </svg>
-);
-
-const ChevronDownIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
-    <path d="m5 7 5 5 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
+import {
+  BucketIcon,
+  ChevronDownIcon,
+  CompactIcon,
+  CopyIcon,
+  DownloadIcon,
+  EyeIcon,
+  FileIcon,
+  FolderIcon,
+  FolderPlusIcon,
+  GridIcon,
+  ListIcon,
+  MoreIcon,
+  OpenIcon,
+  PasteIcon,
+  RefreshIcon,
+  SearchIcon,
+  TrashIcon,
+  UpIcon,
+  UploadIcon,
+} from "./browserIcons";
+import {
+  BUCKET_MENU_LIMIT,
+  COMPLETED_OPERATIONS_LIMIT,
+  DEFAULT_DIRECT_DOWNLOAD_PARALLELISM,
+  DEFAULT_DIRECT_UPLOAD_PARALLELISM,
+  DEFAULT_OTHER_OPERATIONS_PARALLELISM,
+  DEFAULT_PROXY_DOWNLOAD_PARALLELISM,
+  DEFAULT_PROXY_UPLOAD_PARALLELISM,
+  DEFAULT_QUEUED_VISIBLE_COUNT,
+  MULTIPART_CONCURRENCY,
+  MULTIPART_THRESHOLD,
+  NAME_COLUMN_CONTROLS_MIN_WIDTH,
+  OBJECTS_PAGE_SIZE,
+  PART_SIZE,
+  VERSIONS_PAGE_SIZE,
+  aclOptions,
+  bucketButtonClasses,
+  bulkActionClasses,
+  bulkDangerClasses,
+  breadcrumbIconButtonClasses,
+  countBadgeClasses,
+  filterChipActiveClasses,
+  filterChipClasses,
+  gridQuickActionClasses,
+  gridQuickActionDangerClasses,
+  gridTitleClampStyle,
+  iconButtonClasses,
+  iconButtonDangerClasses,
+  storageClassChipClasses,
+  storageClassOptions,
+  toolbarButtonClasses,
+  treeItemActiveClasses,
+  treeItemBaseClasses,
+  treeItemInactiveClasses,
+  treeToggleButtonClasses,
+  viewToggleActiveClasses,
+  viewToggleBaseClasses,
+} from "./browserConstants";
+import {
+  buildTreeNodes,
+  buildUploadCandidates,
+  buildUploadGrouping,
+  buildVersionRows,
+  chunkItems,
+  clampParallelism,
+  collectDroppedFiles,
+  findTreeNodeByPrefix,
+  formatBadgeCount,
+  formatDateTime,
+  formatLocalDateTime,
+  getSelectionInfo,
+  isAbortError,
+  isLikelyCorsError,
+  isAudioFile,
+  isImageFile,
+  isPdfFile,
+  isTextFile,
+  isVideoFile,
+  makeId,
+  normalizeEtag,
+  normalizePrefix,
+  normalizeUploadPath,
+  parseKeyValueLines,
+  pairsToRecord,
+  previewKindForItem,
+  previewLabelForItem,
+  shortName,
+  toIsoString,
+  updateTreeNodes,
+} from "./browserUtils";
+import type {
+  BrowserItem,
+  BulkMetadataDraft,
+  ClipboardState,
+  CompletedOperationItem,
+  ContextMenuState,
+  CopyDetailItem,
+  CopyDetailStatus,
+  DeleteDetailItem,
+  DeleteDetailStatus,
+  DownloadDetailItem,
+  DownloadDetailStatus,
+  OperationCompletionStatus,
+  OperationItem,
+  SelectionStats,
+  TreeNode,
+  UploadCandidate,
+  UploadQueueItem,
+} from "./browserTypes";
 
 export default function BrowserPage() {
   const { accountIdForApi, hasS3AccountContext } = useS3AccountContext();
@@ -878,10 +284,7 @@ export default function BrowserPage() {
   const [bulkRestoreLoading, setBulkRestoreLoading] = useState(false);
   const [bulkRestoreError, setBulkRestoreError] = useState<string | null>(null);
   const [bulkRestoreSummary, setBulkRestoreSummary] = useState<string | null>(null);
-  const [clipboard, setClipboard] = useState<{
-    items: BrowserItem[];
-    sourceBucket: string;
-  } | null>(null);
+  const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1657,18 +1060,17 @@ export default function BrowserPage() {
   }, [bucketName, inspectedItem?.id, prefix, selectedIds]);
 
   const selectionItems = selectedCount > 0 ? selectedItems : inspectedItem ? [inspectedItem] : [];
-  const selectionFiles = selectionItems.filter((item) => item.type === "file");
-  const selectionFolders = selectionItems.filter((item) => item.type === "folder");
-  const selectionIsSingle = selectionItems.length === 1;
-  const selectionPrimary = selectionIsSingle ? selectionItems[0] : null;
-  const selectionHasFolder = selectionFolders.length > 0;
-  const selectionHasFile = selectionFiles.length > 0;
-  const canSelectionDownloadFiles = selectionHasFile && !selectionHasFolder;
-  const canSelectionDownloadFolder = selectionIsSingle && selectionPrimary?.type === "folder";
-  const canSelectionOpen = selectionPrimary?.type === "folder";
-  const canSelectionCopyUrl = selectionPrimary?.type === "file";
-  const canSelectionAdvanced = selectionPrimary?.type === "file";
-  const canSelectionActions = selectionItems.length > 0;
+  const selectionInfo = getSelectionInfo(selectionItems);
+  const selectionFiles = selectionInfo.files;
+  const selectionFolders = selectionInfo.folders;
+  const selectionIsSingle = selectionInfo.isSingle;
+  const selectionPrimary = selectionInfo.primary;
+  const canSelectionDownloadFiles = selectionInfo.canDownloadFiles;
+  const canSelectionDownloadFolder = selectionInfo.canDownloadFolder;
+  const canSelectionOpen = selectionInfo.canOpen;
+  const canSelectionCopyUrl = selectionInfo.canCopyUrl;
+  const canSelectionAdvanced = selectionInfo.canAdvanced;
+  const canSelectionActions = selectionInfo.items.length > 0;
 
   const previewKind = useMemo(() => {
     if (!previewItem) return null;
@@ -3912,36 +3314,6 @@ export default function BrowserPage() {
     }
   };
 
-  const statusLabel = (status: OperationItem["status"]) => {
-    if (status === "uploading") return "Uploading";
-    if (status === "downloading") return "Downloading";
-    if (status === "copying") return "Copying";
-    return "Deleting";
-  };
-
-  const statusClasses = (status: OperationItem["status"]) => {
-    if (status === "uploading") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
-    if (status === "downloading") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
-    if (status === "copying") return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200";
-    return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
-  };
-
-  const completionLabel = (status?: OperationCompletionStatus) => {
-    if (status === "failed") return "Failed";
-    if (status === "cancelled") return "Cancelled";
-    return "Completed";
-  };
-
-  const completionClasses = (status?: OperationCompletionStatus) => {
-    if (status === "failed") {
-      return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
-    }
-    if (status === "cancelled") {
-      return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
-    }
-    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
-  };
-
   const activeOperations = useMemo(() => operations.filter((op) => !op.completedAt), [operations]);
   const operationSummary = useMemo(() => {
     return activeOperations.reduce(
@@ -3952,8 +3324,6 @@ export default function BrowserPage() {
       { uploading: 0, deleting: 0, copying: 0, downloading: 0 } as Record<OperationItem["status"], number>
     );
   }, [activeOperations]);
-  const operationsPanelHeightClasses = "h-[240px]";
-  const operationsListAreaClasses = "flex-1 overflow-y-auto pr-1";
   const uploadGroups = useMemo(() => {
     const groups = new Map<
       string,
@@ -4234,14 +3604,6 @@ export default function BrowserPage() {
       );
     });
   }, [copyGroups, showActiveOperations, showQueuedOperations, showCompletedOperations]);
-  const hasVisibleCompletedActivity = showCompletedOperations && completedOperations.length > 0;
-  const hasVisibleOperations =
-    visibleUploadGroups.length > 0 ||
-    visibleDownloadGroups.length > 0 ||
-    visibleDeleteGroups.length > 0 ||
-    visibleCopyGroups.length > 0 ||
-    visibleOtherOperations.length > 0 ||
-    hasVisibleCompletedActivity;
   const isGroupExpanded = (groupId: string) => Boolean(expandedOperationGroups[groupId]);
   const toggleGroupExpanded = (groupId: string) => {
     setExpandedOperationGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
@@ -4257,10 +3619,6 @@ export default function BrowserPage() {
   const openOperationsModal = () => {
     setShowOperationsModal(true);
   };
-  const contextItem = contextMenu?.kind === "item" ? contextMenu.item ?? null : null;
-  const contextSelectionInfo = contextMenu?.kind === "selection"
-    ? getSelectionInfo(contextMenu.items ?? [])
-    : null;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
@@ -4598,7 +3956,7 @@ export default function BrowserPage() {
                         <table className="manager-table min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
                           <thead className="bg-slate-50 dark:bg-slate-900/50">
                             <tr>
-                              <th className={`w-9 px-2 ${headerPadding} text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
+                              <th className={`w-9 px-2 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 <input
                                   type="checkbox"
                                   checked={allSelected}
@@ -4693,9 +4051,9 @@ export default function BrowserPage() {
                           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                             {canGoUp && bucketName && showFolderItems && (
                               <tr className={`${rowHeightClasses} text-slate-600 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/40`}>
-                                <td className={`w-9 px-2 ${rowCellClasses} align-middle`} />
+                                <td className={`w-9 px-2 ${rowCellClasses} !align-middle`} />
                                 <td
-                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} align-middle text-sm`}
+                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle text-sm`}
                                 >
                                   <button
                                     type="button"
@@ -4710,7 +4068,7 @@ export default function BrowserPage() {
                                 </td>
                                 <td className={`px-2 ${rowCellClasses} !align-middle text-sm text-slate-400 whitespace-nowrap`}>-</td>
                                 <td className={`px-2 ${rowCellClasses} !align-middle text-sm text-slate-400 whitespace-nowrap`}>-</td>
-                                <td className={`w-44 px-2 ${rowCellClasses} align-middle text-right text-xs text-slate-400`} />
+                                <td className={`w-44 px-2 ${rowCellClasses} !align-middle text-right text-xs text-slate-400`} />
                               </tr>
                             )}
                             {objectsLoading && <TableEmptyState colSpan={5} message="Loading objects..." />}
@@ -4744,7 +4102,7 @@ export default function BrowserPage() {
                                     : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
                                 }`}
                               >
-                                <td className={`w-9 px-2 ${rowCellClasses} align-middle`}>
+                                <td className={`w-9 px-2 ${rowCellClasses} !align-middle`}>
                                   <input
                                     type="checkbox"
                                     checked={selectedSet.has(item.id)}
@@ -5638,426 +4996,43 @@ export default function BrowserPage() {
           </div>
         </div>
       </div>
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          role="menu"
-          className="fixed z-50 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          {contextMenu.kind === "path" && (
-            <>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  fileInputRef.current?.click();
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                Upload files
-              </button>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  folderInputRef.current?.click();
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                Upload folder
-              </button>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  void handleNewFolder();
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                New folder
-              </button>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!clipboard || !bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  void handlePasteItems();
-                }}
-                disabled={!clipboard || !bucketName || !hasS3AccountContext}
-              >
-                Paste
-              </button>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  setShowPrefixVersions(true);
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                Versions
-              </button>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!currentPath ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  void handleCopyPath(currentPath);
-                }}
-                disabled={!currentPath}
-              >
-                Copy path
-              </button>
-            </>
-          )}
-          {contextMenu.kind === "item" && contextItem && (
-            <>
-              <button
-                type="button"
-                className={contextMenuItemClasses}
-                onClick={() => {
-                  closeContextMenu();
-                  openItemDetails(contextItem);
-                }}
-              >
-                Details
-              </button>
-              {contextItem.type === "folder" ? (
-                <button
-                  type="button"
-                  className={contextMenuItemClasses}
-                  onClick={() => {
-                    closeContextMenu();
-                    handleOpenItem(contextItem);
-                  }}
-                >
-                  Open
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                  onClick={() => {
-                    closeContextMenu();
-                    handlePreviewItem(contextItem);
-                  }}
-                  disabled={!bucketName || !hasS3AccountContext}
-                >
-                  Preview
-                </button>
-              )}
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  handleDownloadTarget(contextItem);
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                {contextItem.type === "folder" ? "Download folder" : "Download"}
-              </button>
-              {contextItem.type === "file" && (
-                <button
-                  type="button"
-                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                  onClick={() => {
-                    closeContextMenu();
-                    void handleCopyUrl(contextItem);
-                  }}
-                  disabled={!bucketName || !hasS3AccountContext}
-                >
-                  Copy URL
-                </button>
-              )}
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  void handleCopyPath(`${bucketName}/${contextItem.key}`);
-                }}
-                disabled={!bucketName}
-              >
-                Copy path
-              </button>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  handleCopyItems([contextItem]);
-                }}
-                disabled={!bucketName}
-              >
-                Copy
-              </button>
-              <div className={contextMenuSeparatorClasses} />
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  openBulkAttributesModal([contextItem]);
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                Edit attributes
-              </button>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  openBulkRestoreModal([contextItem]);
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                Restore to date
-              </button>
-              {contextItem.type === "file" && (
-                <button
-                  type="button"
-                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                  onClick={() => {
-                    closeContextMenu();
-                    openAdvancedForItem(contextItem);
-                  }}
-                  disabled={!bucketName || !hasS3AccountContext}
-                >
-                  Advanced
-                </button>
-              )}
-              <div className={contextMenuSeparatorClasses} />
-              <button
-                type="button"
-                className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  void handleDeleteItems([contextItem]);
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                Delete
-              </button>
-            </>
-          )}
-          {contextMenu.kind === "selection" && contextSelectionInfo && (
-            <>
-              {contextSelectionInfo.canDownloadFolder && contextSelectionInfo.primary && (
-                <button
-                  type="button"
-                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                  onClick={() => {
-                    closeContextMenu();
-                    void handleDownloadFolder(contextSelectionInfo.primary);
-                  }}
-                  disabled={!bucketName || !hasS3AccountContext}
-                >
-                  Download folder
-                </button>
-              )}
-              {!contextSelectionInfo.canDownloadFolder && contextSelectionInfo.canDownloadFiles && (
-                <button
-                  type="button"
-                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                  onClick={() => {
-                    closeContextMenu();
-                    void handleDownloadItems(contextSelectionInfo.files);
-                  }}
-                  disabled={!bucketName || !hasS3AccountContext}
-                >
-                  Download
-                </button>
-              )}
-              {contextSelectionInfo.canOpen && contextSelectionInfo.primary && (
-                <button
-                  type="button"
-                  className={contextMenuItemClasses}
-                  onClick={() => {
-                    closeContextMenu();
-                    handleOpenItem(contextSelectionInfo.primary);
-                  }}
-                >
-                  Open
-                </button>
-              )}
-              {contextSelectionInfo.canCopyUrl && contextSelectionInfo.primary && (
-                <button
-                  type="button"
-                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                  onClick={() => {
-                    closeContextMenu();
-                    void handleCopyUrl(contextSelectionInfo.primary);
-                  }}
-                  disabled={!bucketName || !hasS3AccountContext}
-                >
-                  Copy URL
-                </button>
-              )}
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || contextSelectionInfo.items.length === 0 ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  handleCopyItems(contextSelectionInfo.items);
-                }}
-                disabled={!bucketName || contextSelectionInfo.items.length === 0}
-              >
-                Copy
-              </button>
-              <div className={contextMenuSeparatorClasses} />
-              {contextSelectionInfo.isSingle && contextSelectionInfo.primary && (
-                <button
-                  type="button"
-                  className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
-                  onClick={() => {
-                    closeContextMenu();
-                    void handleCopyPath(`${bucketName}/${contextSelectionInfo.primary.key}`);
-                  }}
-                  disabled={!bucketName}
-                >
-                  Copy path
-                </button>
-              )}
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  openBulkAttributesModal(contextSelectionInfo.items);
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                Edit attributes
-              </button>
-              <button
-                type="button"
-                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  openBulkRestoreModal(contextSelectionInfo.items);
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                Restore to date
-              </button>
-              {contextSelectionInfo.canAdvanced && contextSelectionInfo.primary && (
-                <button
-                  type="button"
-                  className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                  onClick={() => {
-                    closeContextMenu();
-                    openAdvancedForItem(contextSelectionInfo.primary);
-                  }}
-                  disabled={!bucketName || !hasS3AccountContext}
-                >
-                  Advanced
-                </button>
-              )}
-              <div className={contextMenuSeparatorClasses} />
-              <button
-                type="button"
-                className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-                onClick={() => {
-                  closeContextMenu();
-                  void handleDeleteItems(contextSelectionInfo.items);
-                }}
-                disabled={!bucketName || !hasS3AccountContext}
-              >
-                Delete
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      {previewItem && (
-        <Modal
-          title={`Preview: ${previewItem.name}`}
-          onClose={closePreview}
-          maxWidthClass="max-w-4xl"
-        >
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1">
-                <p className="break-all text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {previewItem.key}
-                </p>
-                <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 dark:text-slate-400">
-                  <span>{previewItem.size}</span>
-                  <span>{previewItem.modified}</span>
-                  <span>{previewLabelForItem(previewItem)}</span>
-                  {previewContentType && <span>{previewContentType}</span>}
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  className={bulkActionClasses}
-                  onClick={() => handleDownloadItems([previewItem])}
-                >
-                  Download
-                </button>
-                {previewUrl && (
-                  <a
-                    className={bulkActionClasses}
-                    href={previewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open
-                  </a>
-                )}
-              </div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/40">
-              {previewLoading && (
-                <div className="text-sm text-slate-500 dark:text-slate-300">Loading preview...</div>
-              )}
-              {previewError && (
-                <div className="text-sm font-semibold text-rose-600 dark:text-rose-200">{previewError}</div>
-              )}
-              {!previewLoading && !previewError && previewUrl && previewKind === "image" && (
-                <img
-                  src={previewUrl}
-                  alt={previewItem.name}
-                  className="max-h-[60vh] w-full rounded-lg bg-white object-contain dark:bg-slate-950"
-                />
-              )}
-              {!previewLoading && !previewError && previewUrl && previewKind === "video" && (
-                <video
-                  src={previewUrl}
-                  controls
-                  className="max-h-[60vh] w-full rounded-lg bg-black"
-                />
-              )}
-              {!previewLoading && !previewError && previewUrl && previewKind === "audio" && (
-                <audio src={previewUrl} controls className="w-full" />
-              )}
-              {!previewLoading &&
-                !previewError &&
-                previewUrl &&
-                (previewKind === "pdf" || previewKind === "text") && (
-                  <iframe
-                    title="Object preview"
-                    src={previewUrl}
-                    className="h-[60vh] w-full rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950"
-                  />
-                )}
-              {!previewLoading && !previewError && (!previewUrl || previewKind === "generic") && (
-                <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                  Preview not available for this file type.
-                </div>
-              )}
-            </div>
-          </div>
-        </Modal>
-      )}
+      <BrowserContextMenu
+        contextMenu={contextMenu}
+        contextMenuRef={contextMenuRef}
+        bucketName={bucketName}
+        hasS3AccountContext={hasS3AccountContext}
+        clipboard={clipboard}
+        currentPath={currentPath}
+        fileInputRef={fileInputRef}
+        folderInputRef={folderInputRef}
+        onClose={closeContextMenu}
+        onNewFolder={handleNewFolder}
+        onPasteItems={handlePasteItems}
+        onCopyPath={handleCopyPath}
+        onOpenPrefixVersions={() => setShowPrefixVersions(true)}
+        onDownloadTarget={handleDownloadTarget}
+        onPreviewItem={handlePreviewItem}
+        onCopyUrl={handleCopyUrl}
+        onCopyItems={handleCopyItems}
+        onOpenBulkAttributes={openBulkAttributesModal}
+        onOpenBulkRestore={openBulkRestoreModal}
+        onOpenAdvanced={openAdvancedForItem}
+        onDeleteItems={handleDeleteItems}
+        onDownloadFolder={handleDownloadFolder}
+        onDownloadItems={handleDownloadItems}
+        onOpenItem={handleOpenItem}
+        onOpenDetails={openItemDetails}
+      />
+      <BrowserPreviewModal
+        previewItem={previewItem}
+        previewUrl={previewUrl}
+        previewContentType={previewContentType}
+        previewKind={previewKind}
+        previewLoading={previewLoading}
+        previewError={previewError}
+        onClose={closePreview}
+        onDownload={handleDownloadItems}
+      />
       {showAdvancedModal && inspectedItem && inspectedItem.type === "file" && (
         <ObjectAdvancedModal
           accountId={accountIdForApi}
@@ -6071,1010 +5046,105 @@ export default function BrowserPage() {
         />
       )}
       {showPrefixVersions && (
-        <Modal
-          title={`Prefix versions${normalizedPrefix ? ` · ${normalizedPrefix}` : ""}`}
+        <BrowserPrefixVersionsModal
+          bucketName={bucketName}
+          normalizedPrefix={normalizedPrefix}
+          prefixVersionsLoading={prefixVersionsLoading}
+          prefixVersionsError={prefixVersionsError}
+          prefixVersionRows={prefixVersionRows}
+          prefixVersionKeyMarker={prefixVersionKeyMarker}
+          prefixVersionIdMarker={prefixVersionIdMarker}
           onClose={() => setShowPrefixVersions(false)}
-          maxWidthClass="max-w-4xl"
-        >
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-300">
-              <span className="font-semibold">
-                Prefix {normalizedPrefix ? normalizedPrefix : "/"}
-              </span>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                {prefixVersionsLoading && <span>Loading...</span>}
-                <button
-                  type="button"
-                  className={toolbarButtonClasses}
-                  onClick={() => loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null })}
-                  disabled={!bucketName || prefixVersionsLoading}
-                >
-                  Refresh
-                </button>
-              </div>
-            </div>
-            {prefixVersionsError && <div className="text-xs text-rose-600 dark:text-rose-200">{prefixVersionsError}</div>}
-            <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800">
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {prefixVersionRows.length === 0 && !prefixVersionsLoading && (
-                  <div className="px-3 py-3 text-xs text-slate-500 dark:text-slate-300">No versions found.</div>
-                )}
-                {prefixVersionRows.map((ver) => (
-                  <div
-                    key={`${ver.key}-${ver.version_id ?? "none"}-${ver.is_delete_marker ? "marker" : "version"}`}
-                    className="flex flex-wrap items-start justify-between gap-3 px-3 py-2 text-xs"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate font-semibold text-slate-800 dark:text-slate-100">{ver.key}</span>
-                        {ver.is_delete_marker && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
-                            delete marker
-                          </span>
-                        )}
-                        {ver.is_latest && (
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
-                            latest
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 dark:text-slate-300">
-                        {ver.version_id && <span>v: {ver.version_id}</span>}
-                        {ver.last_modified && <span>{formatDateTime(ver.last_modified)}</span>}
-                        {ver.size != null && <span>{formatBytes(ver.size)}</span>}
-                        {ver.etag && <span>ETag {ver.etag}</span>}
-                        {ver.storage_class && <span>{ver.storage_class}</span>}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {!ver.is_delete_marker && (
-                        <button
-                          type="button"
-                          className={bulkActionClasses}
-                          onClick={() => handleRestoreVersion(ver)}
-                        >
-                          Restore
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className={bulkDangerClasses}
-                        onClick={() => handleDeleteVersion(ver)}
-                      >
-                        {ver.is_delete_marker ? "Delete marker" : "Delete version"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {(prefixVersionKeyMarker || prefixVersionIdMarker) && (
-              <div className="text-right">
-                <button
-                  type="button"
-                  className={toolbarButtonClasses}
-                  onClick={() => loadPrefixVersions({ append: true })}
-                  disabled={prefixVersionsLoading}
-                >
-                  Load more versions
-                </button>
-              </div>
-            )}
-          </div>
-        </Modal>
+          onRefresh={() => loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null })}
+          onLoadMore={() => loadPrefixVersions({ append: true })}
+          onRestoreVersion={handleRestoreVersion}
+          onDeleteVersion={handleDeleteVersion}
+        />
       )}
       {showBulkAttributesModal && (
-        <Modal
-          title="Bulk attributes"
+        <BrowserBulkAttributesModal
+          bulkActionFileCount={bulkActionFileCount}
+          bulkActionFolderCount={bulkActionFolderCount}
+          bulkAttributesError={bulkAttributesError}
+          bulkAttributesSummary={bulkAttributesSummary}
+          bulkApplyMetadata={bulkApplyMetadata}
+          setBulkApplyMetadata={setBulkApplyMetadata}
+          bulkMetadataDraft={bulkMetadataDraft}
+          setBulkMetadataDraft={setBulkMetadataDraft}
+          bulkMetadataEntries={bulkMetadataEntries}
+          setBulkMetadataEntries={setBulkMetadataEntries}
+          bulkApplyTags={bulkApplyTags}
+          setBulkApplyTags={setBulkApplyTags}
+          bulkTagsDraft={bulkTagsDraft}
+          setBulkTagsDraft={setBulkTagsDraft}
+          bulkApplyStorageClass={bulkApplyStorageClass}
+          setBulkApplyStorageClass={setBulkApplyStorageClass}
+          bulkStorageClass={bulkStorageClass}
+          setBulkStorageClass={setBulkStorageClass}
+          bulkApplyAcl={bulkApplyAcl}
+          setBulkApplyAcl={setBulkApplyAcl}
+          bulkAclValue={bulkAclValue}
+          setBulkAclValue={setBulkAclValue}
+          bulkApplyLegalHold={bulkApplyLegalHold}
+          setBulkApplyLegalHold={setBulkApplyLegalHold}
+          bulkLegalHoldStatus={bulkLegalHoldStatus}
+          setBulkLegalHoldStatus={setBulkLegalHoldStatus}
+          bulkApplyRetention={bulkApplyRetention}
+          setBulkApplyRetention={setBulkApplyRetention}
+          bulkRetentionMode={bulkRetentionMode}
+          setBulkRetentionMode={setBulkRetentionMode}
+          bulkRetentionDate={bulkRetentionDate}
+          setBulkRetentionDate={setBulkRetentionDate}
+          bulkRetentionBypass={bulkRetentionBypass}
+          setBulkRetentionBypass={setBulkRetentionBypass}
+          bulkAttributesLoading={bulkAttributesLoading}
+          onApply={handleBulkAttributesApply}
           onClose={() => setShowBulkAttributesModal(false)}
-          maxWidthClass="max-w-3xl"
-        >
-          <div className="space-y-4 text-xs text-slate-600 dark:text-slate-300">
-            <div className="space-y-1">
-              <p className="font-semibold text-slate-800 dark:text-slate-100">Targets</p>
-              <p>
-                {bulkActionFileCount} file(s) · {bulkActionFolderCount} folder(s)
-                {bulkActionFolderCount > 0 && " (folders expanded to files)"}
-              </p>
-            </div>
-            {bulkAttributesError && (
-              <p className="font-semibold text-rose-600 dark:text-rose-200">{bulkAttributesError}</p>
-            )}
-            {bulkAttributesSummary && (
-              <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkAttributesSummary}</p>
-            )}
-            <div className="space-y-3">
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={bulkApplyMetadata}
-                    onChange={(event) => setBulkApplyMetadata(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
-                  Metadata headers
-                </label>
-                {bulkApplyMetadata && (
-                  <div className="mt-3 grid gap-2">
-                    <input
-                      className={formInputClasses}
-                      placeholder="Content-Type"
-                      value={bulkMetadataDraft.contentType}
-                      onChange={(event) =>
-                        setBulkMetadataDraft((prev) => ({ ...prev, contentType: event.target.value }))
-                      }
-                    />
-                    <input
-                      className={formInputClasses}
-                      placeholder="Cache-Control"
-                      value={bulkMetadataDraft.cacheControl}
-                      onChange={(event) =>
-                        setBulkMetadataDraft((prev) => ({ ...prev, cacheControl: event.target.value }))
-                      }
-                    />
-                    <input
-                      className={formInputClasses}
-                      placeholder="Content-Disposition"
-                      value={bulkMetadataDraft.contentDisposition}
-                      onChange={(event) =>
-                        setBulkMetadataDraft((prev) => ({ ...prev, contentDisposition: event.target.value }))
-                      }
-                    />
-                    <input
-                      className={formInputClasses}
-                      placeholder="Content-Encoding"
-                      value={bulkMetadataDraft.contentEncoding}
-                      onChange={(event) =>
-                        setBulkMetadataDraft((prev) => ({ ...prev, contentEncoding: event.target.value }))
-                      }
-                    />
-                    <input
-                      className={formInputClasses}
-                      placeholder="Content-Language"
-                      value={bulkMetadataDraft.contentLanguage}
-                      onChange={(event) =>
-                        setBulkMetadataDraft((prev) => ({ ...prev, contentLanguage: event.target.value }))
-                      }
-                    />
-                    <input
-                      type="datetime-local"
-                      className={formInputClasses}
-                      placeholder="Expires"
-                      value={bulkMetadataDraft.expires}
-                      onChange={(event) =>
-                        setBulkMetadataDraft((prev) => ({ ...prev, expires: event.target.value }))
-                      }
-                    />
-                    <div className="space-y-1">
-                      <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                        Custom metadata (key=value per line)
-                      </p>
-                      <textarea
-                        rows={3}
-                        className={formInputClasses}
-                        value={bulkMetadataEntries}
-                        onChange={(event) => setBulkMetadataEntries(event.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={bulkApplyTags}
-                    onChange={(event) => setBulkApplyTags(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
-                  Tags (key=value per line)
-                </label>
-                {bulkApplyTags && (
-                  <textarea
-                    rows={3}
-                    className={`${formInputClasses} mt-3`}
-                    value={bulkTagsDraft}
-                    onChange={(event) => setBulkTagsDraft(event.target.value)}
-                  />
-                )}
-              </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={bulkApplyStorageClass}
-                    onChange={(event) => setBulkApplyStorageClass(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
-                  Storage class
-                </label>
-                {bulkApplyStorageClass && (
-                  <select
-                    className={`${formInputClasses} mt-3`}
-                    value={bulkStorageClass}
-                    onChange={(event) => setBulkStorageClass(event.target.value)}
-                  >
-                    <option value="">Select storage class</option>
-                    {storageClassOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={bulkApplyAcl}
-                    onChange={(event) => setBulkApplyAcl(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
-                  ACL
-                </label>
-                {bulkApplyAcl && (
-                  <select
-                    className={`${formInputClasses} mt-3`}
-                    value={bulkAclValue}
-                    onChange={(event) => setBulkAclValue(event.target.value)}
-                  >
-                    {aclOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={bulkApplyLegalHold}
-                    onChange={(event) => setBulkApplyLegalHold(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
-                  Legal hold
-                </label>
-                {bulkApplyLegalHold && (
-                  <select
-                    className={`${formInputClasses} mt-3`}
-                    value={bulkLegalHoldStatus}
-                    onChange={(event) => setBulkLegalHoldStatus(event.target.value as "ON" | "OFF")}
-                  >
-                    <option value="OFF">OFF</option>
-                    <option value="ON">ON</option>
-                  </select>
-                )}
-              </div>
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={bulkApplyRetention}
-                    onChange={(event) => setBulkApplyRetention(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
-                  Retention
-                </label>
-                {bulkApplyRetention && (
-                  <div className="mt-3 grid gap-2">
-                    <select
-                      className={formInputClasses}
-                      value={bulkRetentionMode}
-                      onChange={(event) =>
-                        setBulkRetentionMode(event.target.value as "" | "GOVERNANCE" | "COMPLIANCE")
-                      }
-                    >
-                      <option value="">Select mode</option>
-                      <option value="GOVERNANCE">GOVERNANCE</option>
-                      <option value="COMPLIANCE">COMPLIANCE</option>
-                    </select>
-                    <input
-                      type="datetime-local"
-                      className={formInputClasses}
-                      value={bulkRetentionDate}
-                      onChange={(event) => setBulkRetentionDate(event.target.value)}
-                    />
-                    <label className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                      <input
-                        type="checkbox"
-                        checked={bulkRetentionBypass}
-                        onChange={(event) => setBulkRetentionBypass(event.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                      />
-                      Bypass governance
-                    </label>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                className={bulkActionClasses}
-                onClick={() => setShowBulkAttributesModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={toolbarPrimaryClasses}
-                onClick={handleBulkAttributesApply}
-                disabled={bulkAttributesLoading}
-              >
-                {bulkAttributesLoading ? "Updating..." : "Apply changes"}
-              </button>
-            </div>
-          </div>
-        </Modal>
+        />
       )}
       {showBulkRestoreModal && (
-        <Modal
-          title="Restore to date"
+        <BrowserBulkRestoreModal
+          bulkActionFileCount={bulkActionFileCount}
+          bulkActionFolderCount={bulkActionFolderCount}
+          bulkRestoreError={bulkRestoreError}
+          bulkRestoreSummary={bulkRestoreSummary}
+          bulkRestoreDate={bulkRestoreDate}
+          setBulkRestoreDate={setBulkRestoreDate}
+          bulkRestoreDeleteMissing={bulkRestoreDeleteMissing}
+          setBulkRestoreDeleteMissing={setBulkRestoreDeleteMissing}
+          bulkRestoreLoading={bulkRestoreLoading}
+          onApply={handleBulkRestoreApply}
           onClose={() => setShowBulkRestoreModal(false)}
-          maxWidthClass="max-w-2xl"
-        >
-          <div className="space-y-4 text-xs text-slate-600 dark:text-slate-300">
-            <div className="space-y-1">
-              <p className="font-semibold text-slate-800 dark:text-slate-100">Targets</p>
-              <p>
-                {bulkActionFileCount} file(s) · {bulkActionFolderCount} folder(s)
-                {bulkActionFolderCount > 0 && " (folders use prefix history)"}
-              </p>
-            </div>
-            {bulkRestoreError && (
-              <p className="font-semibold text-rose-600 dark:text-rose-200">{bulkRestoreError}</p>
-            )}
-            {bulkRestoreSummary && (
-              <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkRestoreSummary}</p>
-            )}
-            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-              <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Target date</label>
-              <input
-                type="datetime-local"
-                className={`${formInputClasses} mt-2`}
-                value={bulkRestoreDate}
-                onChange={(event) => setBulkRestoreDate(event.target.value)}
-              />
-              <label className="mt-3 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                <input
-                  type="checkbox"
-                  checked={bulkRestoreDeleteMissing}
-                  onChange={(event) => setBulkRestoreDeleteMissing(event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                />
-                Delete objects not present at the selected date
-              </label>
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Restores the latest version at or before the selected date. Objects with a delete marker at that date are
-              skipped unless deletion is enabled.
-            </p>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                className={bulkActionClasses}
-                onClick={() => setShowBulkRestoreModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={toolbarPrimaryClasses}
-                onClick={handleBulkRestoreApply}
-                disabled={bulkRestoreLoading}
-              >
-                {bulkRestoreLoading ? "Restoring..." : "Run restore"}
-              </button>
-            </div>
-          </div>
-        </Modal>
+        />
       )}
       {showOperationsModal && (
-        <Modal title="Operations overview" onClose={() => setShowOperationsModal(false)} maxWidthClass="max-w-3xl">
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Operations</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Uploads, downloads, deletions, copies, and queued files.
-                </p>
-              </div>
-              <span className={countBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setShowActiveOperations((prev) => !prev)}
-                className={`${filterChipClasses} text-[10px] ${showActiveOperations ? filterChipActiveClasses : ""}`}
-              >
-                Active
-                <span className={countBadgeClasses}>{formatBadgeCount(activeOperations.length)}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowQueuedOperations((prev) => !prev)}
-                className={`${filterChipClasses} text-[10px] ${showQueuedOperations ? filterChipActiveClasses : ""}`}
-              >
-                Queue
-                <span className={countBadgeClasses}>
-                  {formatBadgeCount(uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount)}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCompletedOperations((prev) => !prev)}
-                className={`${filterChipClasses} text-[10px] ${showCompletedOperations ? filterChipActiveClasses : ""}`}
-              >
-                Completed
-                <span className={countBadgeClasses}>{formatBadgeCount(completedOperationsCount)}</span>
-              </button>
-            </div>
-            <div className={operationsPanelHeightClasses}>
-              <div className="flex h-full flex-col gap-2">
-                <div className={operationsListAreaClasses}>
-                  {!hasVisibleOperations ? (
-                    <div className="flex h-full items-center justify-center text-xs text-slate-500 dark:text-slate-400">
-                      No operations to show.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {visibleDownloadGroups.map((group) => {
-                        const queuedItems = group.items.filter((item) => item.status === "queued");
-                        const activeItems = group.items.filter((item) => item.status === "downloading");
-                        const completedItems = group.items.filter(
-                          (item) => item.status === "done" || item.status === "failed" || item.status === "cancelled"
-                        );
-                        const visibleQueuedItems = queuedItems.slice(
-                          0,
-                          getSectionVisibleCount(group.op.id, "queued")
-                        );
-                        const visibleCompletedItems = completedItems.slice(
-                          0,
-                          getSectionVisibleCount(group.op.id, "completed")
-                        );
-                        const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
-                        const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
-                        const completedCount = completedItems.length;
-                        return (
-                          <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div>
-                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                                  {group.op.path}
-                                </p>
-                                <p className="text-[10px] text-slate-400">
-                                  {group.counts.downloading} active · {group.counts.queued} queued · {completedCount} completed ·{" "}
-                                  {group.op.progress}%
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  className={operationSecondaryClasses}
-                                  onClick={() => toggleGroupExpanded(group.op.id)}
-                                >
-                                  {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
-                                </button>
-                                {group.op.cancelable && !group.op.completedAt && (
-                                  <button
-                                    type="button"
-                                    className={operationStopClasses}
-                                    onClick={() => cancelOperation(group.op.id)}
-                                  >
-                                    Stop
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                              <div className="h-full bg-primary-500" style={{ width: `${group.op.progress}%` }} />
-                            </div>
-                            {isGroupExpanded(group.op.id) && (
-                              <div className="mt-2 space-y-1.5">
-                                {group.items.length === 0 ? (
-                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    {group.op.completedAt ? "No files found." : "Preparing download list..."}
-                                  </div>
-                                ) : (
-                                  <>
-                                    {showActiveOperations &&
-                                      activeItems.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                              {item.label}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">
-                                              Downloading
-                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    {showQueuedOperations &&
-                                      visibleQueuedItems.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                              {item.label}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">
-                                              Queued
-                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    {showQueuedOperations && hasMoreQueued && (
-                                      <button
-                                        type="button"
-                                        className={operationSecondaryClasses}
-                                        onClick={() => showMoreSection(group.op.id, "queued")}
-                                      >
-                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                      </button>
-                                    )}
-                                    {showCompletedOperations &&
-                                      visibleCompletedItems.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                              {item.label}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">
-                                              {item.status === "done" && "Done"}
-                                              {item.status === "failed" && "Failed"}
-                                              {item.status === "cancelled" && "Cancelled"}
-                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    {showCompletedOperations && hasMoreCompleted && (
-                                      <button
-                                        type="button"
-                                        className={operationSecondaryClasses}
-                                        onClick={() => showMoreSection(group.op.id, "completed")}
-                                      >
-                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                      </button>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {visibleDeleteGroups.map((group) => {
-                        const queuedItems = group.items.filter((item) => item.status === "queued");
-                        const activeItems = group.items.filter((item) => item.status === "deleting");
-                        const completedItems = group.items.filter(
-                          (item) => item.status === "done" || item.status === "failed"
-                        );
-                        const visibleQueuedItems = queuedItems.slice(
-                          0,
-                          getSectionVisibleCount(group.op.id, "queued")
-                        );
-                        const visibleCompletedItems = completedItems.slice(
-                          0,
-                          getSectionVisibleCount(group.op.id, "completed")
-                        );
-                        const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
-                        const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
-                        const completedCount = completedItems.length;
-                        return (
-                          <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div>
-                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                                  {group.op.path}
-                                </p>
-                                <p className="text-[10px] text-slate-400">
-                                  {group.counts.deleting} active · {group.counts.queued} queued · {completedCount} completed ·{" "}
-                                  {group.op.progress}%
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                className={operationSecondaryClasses}
-                                onClick={() => toggleGroupExpanded(group.op.id)}
-                              >
-                                {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
-                              </button>
-                            </div>
-                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                              <div className="h-full bg-primary-500" style={{ width: `${group.op.progress}%` }} />
-                            </div>
-                            {isGroupExpanded(group.op.id) && (
-                              <div className="mt-2 space-y-1.5">
-                                {group.items.length === 0 ? (
-                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    {group.op.completedAt ? "No items to delete." : "Preparing delete list..."}
-                                  </div>
-                                ) : (
-                                  <>
-                                    {showActiveOperations &&
-                                      activeItems.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                              {item.label}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">Deleting</p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    {showQueuedOperations &&
-                                      visibleQueuedItems.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                              {item.label}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">Queued</p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    {showQueuedOperations && hasMoreQueued && (
-                                      <button
-                                        type="button"
-                                        className={operationSecondaryClasses}
-                                        onClick={() => showMoreSection(group.op.id, "queued")}
-                                      >
-                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                      </button>
-                                    )}
-                                    {showCompletedOperations &&
-                                      visibleCompletedItems.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                              {item.label}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">
-                                              {item.status === "done" && "Done"}
-                                              {item.status === "failed" && "Failed"}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    {showCompletedOperations && hasMoreCompleted && (
-                                      <button
-                                        type="button"
-                                        className={operationSecondaryClasses}
-                                        onClick={() => showMoreSection(group.op.id, "completed")}
-                                      >
-                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                      </button>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {visibleCopyGroups.map((group) => {
-                        const queuedItems = group.items.filter((item) => item.status === "queued");
-                        const activeItems = group.items.filter((item) => item.status === "copying");
-                        const completedItems = group.items.filter((item) => item.status === "done" || item.status === "failed");
-                        const visibleQueuedItems = queuedItems.slice(
-                          0,
-                          getSectionVisibleCount(group.op.id, "queued")
-                        );
-                        const visibleCompletedItems = completedItems.slice(
-                          0,
-                          getSectionVisibleCount(group.op.id, "completed")
-                        );
-                        const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
-                        const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
-                        const completedCount = completedItems.length;
-                        return (
-                          <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div>
-                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                                  {group.op.path}
-                                </p>
-                                <p className="text-[10px] text-slate-400">
-                                  {group.counts.copying} active · {group.counts.queued} queued · {completedCount} completed ·{" "}
-                                  {group.op.progress}%
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                className={operationSecondaryClasses}
-                                onClick={() => toggleGroupExpanded(group.op.id)}
-                              >
-                                {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
-                              </button>
-                            </div>
-                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                              <div className="h-full bg-primary-500" style={{ width: `${group.op.progress}%` }} />
-                            </div>
-                            {isGroupExpanded(group.op.id) && (
-                              <div className="mt-2 space-y-1.5">
-                                {group.items.length === 0 ? (
-                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    {group.op.completedAt ? "No items copied." : "Preparing copy list..."}
-                                  </div>
-                                ) : (
-                                  <>
-                                    {showActiveOperations &&
-                                      activeItems.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                              {item.label}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">
-                                              Copying
-                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    {showQueuedOperations &&
-                                      visibleQueuedItems.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                              {item.label}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">
-                                              Queued
-                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    {showQueuedOperations && hasMoreQueued && (
-                                      <button
-                                        type="button"
-                                        className={operationSecondaryClasses}
-                                        onClick={() => showMoreSection(group.op.id, "queued")}
-                                      >
-                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                      </button>
-                                    )}
-                                    {showCompletedOperations &&
-                                      visibleCompletedItems.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                          <div className="min-w-0">
-                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                              {item.label}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">
-                                              {item.status === "done" && "Done"}
-                                              {item.status === "failed" && "Failed"}
-                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    {showCompletedOperations && hasMoreCompleted && (
-                                      <button
-                                        type="button"
-                                        className={operationSecondaryClasses}
-                                        onClick={() => showMoreSection(group.op.id, "completed")}
-                                      >
-                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                      </button>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {visibleUploadGroups.map((group) => {
-                        const activeCount = group.activeItems.length;
-                        const queuedCount = group.queuedItems.length;
-                        const completedCount = group.completedItems.length;
-                        const visibleQueuedItems = group.queuedItems.slice(
-                          0,
-                          getSectionVisibleCount(group.id, "queued")
-                        );
-                        const visibleCompletedItems = group.completedItems.slice(
-                          0,
-                          getSectionVisibleCount(group.id, "completed")
-                        );
-                        const hasMoreQueued = group.queuedItems.length > visibleQueuedItems.length;
-                        const hasMoreCompleted = group.completedItems.length > visibleCompletedItems.length;
-                        return (
-                          <div key={group.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div>
-                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                                  {group.kind === "folder" ? `Upload folder ${group.label}` : `Upload ${group.label}`}
-                                </p>
-                                <p className="text-[10px] text-slate-400">
-                                  {activeCount} active · {queuedCount} queued · {completedCount} completed · {group.progress}%
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  className={operationSecondaryClasses}
-                                  onClick={() => toggleGroupExpanded(group.id)}
-                                >
-                                  {isGroupExpanded(group.id) ? "Hide files" : "Show files"}
-                                </button>
-                                {(activeCount > 0 || queuedCount > 0) && (
-                                  <button
-                                    type="button"
-                                    className={operationStopClasses}
-                                    onClick={() => cancelUploadGroup(group.id)}
-                                  >
-                                    Stop all
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                              <div className="h-full bg-primary-500" style={{ width: `${group.progress}%` }} />
-                            </div>
-                            {isGroupExpanded(group.id) && (
-                              <div className="mt-2 space-y-1.5">
-                                {showActiveOperations &&
-                                  group.activeItems.map((op) => (
-                                    <div key={op.id} className="flex items-center justify-between gap-3 text-xs">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {op.itemLabel ?? op.path}
-                                        </p>
-                                        <p className="text-[10px] text-slate-400">
-                                          Uploading · {op.progress > 0 ? `${op.progress}%` : "In progress"}
-                                        </p>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        className={operationStopClasses}
-                                        onClick={() => cancelUploadOperation(op.id)}
-                                        disabled={!op.cancelable}
-                                      >
-                                        Stop
-                                      </button>
-                                    </div>
-                                  ))}
-                                {showQueuedOperations &&
-                                  visibleQueuedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.itemLabel || item.key}
-                                        </p>
-                                        <p className="text-[10px] text-slate-400">
-                                          Queued · {formatBytes(item.file.size)}
-                                        </p>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        className={operationStopClasses}
-                                        onClick={() => removeQueuedUpload(item.id)}
-                                      >
-                                        Stop
-                                      </button>
-                                    </div>
-                                  ))}
-                                {showQueuedOperations && hasMoreQueued && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.id, "queued")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                                {showCompletedOperations &&
-                                  visibleCompletedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.itemLabel ?? item.path}
-                                        </p>
-                                        <p className="text-[10px] text-slate-400">
-                                          {completionLabel(item.completionStatus)}
-                                          {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showCompletedOperations && hasMoreCompleted && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.id, "completed")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {visibleOtherOperations.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Other operations</p>
-                          {visibleOtherOperations.map((op) => {
-                            const isCompleted = Boolean(op.completedAt);
-                            return (
-                            <div
-                              key={op.id}
-                              className="space-y-2 rounded-lg border border-slate-200 px-4 py-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClasses(op.status)}`}>
-                                  {statusLabel(op.status)}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  {isCompleted ? (
-                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${completionClasses(op.completionStatus)}`}>
-                                      {completionLabel(op.completionStatus)}
-                                    </span>
-                                  ) : (
-                                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                                      {op.progress > 0 ? `${op.progress}%` : "In progress"}
-                                    </span>
-                                  )}
-                                  {!isCompleted && op.cancelable && (
-                                    <button
-                                      type="button"
-                                      className={operationStopClasses}
-                                      onClick={() => cancelOperation(op.id)}
-                                    >
-                                      Stop
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                              <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{op.path}</p>
-                              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                                <div className="h-full bg-primary-500" style={{ width: `${op.progress}%` }} />
-                              </div>
-                              <p className="text-[11px] text-slate-400">
-                                {isCompleted ? `${completionLabel(op.completionStatus)}.` : `${op.label} in progress.`}
-                              </p>
-                            </div>
-                          );
-                          })}
-                        </div>
-                      )}
-                      {showCompletedOperations && completedOperations.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Completed</p>
-                          {completedOperations.map((activity) => (
-                            <div
-                              key={activity.id}
-                              className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-4 py-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                            >
-                              <div className="min-w-0 space-y-1">
-                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
-                                  Completed
-                                </span>
-                                <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">
-                                  {activity.label}
-                                </p>
-                                <p className="truncate text-[11px] text-slate-400">{activity.path}</p>
-                              </div>
-                              <span className="shrink-0 text-[11px] text-slate-400">{activity.when}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </Modal>
+        <BrowserOperationsModal
+          totalOperationsCount={totalOperationsCount}
+          activeOperationsCount={activeOperations.length}
+          queuedOperationsCount={uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount}
+          completedOperationsCount={completedOperationsCount}
+          showActiveOperations={showActiveOperations}
+          showQueuedOperations={showQueuedOperations}
+          showCompletedOperations={showCompletedOperations}
+          onToggleActive={() => setShowActiveOperations((prev) => !prev)}
+          onToggleQueued={() => setShowQueuedOperations((prev) => !prev)}
+          onToggleCompleted={() => setShowCompletedOperations((prev) => !prev)}
+          visibleDownloadGroups={visibleDownloadGroups}
+          visibleDeleteGroups={visibleDeleteGroups}
+          visibleCopyGroups={visibleCopyGroups}
+          visibleUploadGroups={visibleUploadGroups}
+          visibleOtherOperations={visibleOtherOperations}
+          completedOperations={completedOperations}
+          isGroupExpanded={isGroupExpanded}
+          toggleGroupExpanded={toggleGroupExpanded}
+          getSectionVisibleCount={getSectionVisibleCount}
+          showMoreSection={showMoreSection}
+          cancelOperation={cancelOperation}
+          cancelUploadGroup={cancelUploadGroup}
+          cancelUploadOperation={cancelUploadOperation}
+          removeQueuedUpload={removeQueuedUpload}
+          onClose={() => setShowOperationsModal(false)}
+        />
       )}
     </div>
   );
