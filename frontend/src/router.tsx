@@ -15,6 +15,7 @@ import AdminMetricsPage from "./features/admin/AdminMetricsPage";
 import S3UsersPage from "./features/admin/S3UsersPage";
 import S3UserKeysPage from "./features/admin/S3UserKeysPage";
 import PortalSettingsPage from "./features/admin/PortalSettingsPage";
+import BrowserSettingsPage from "./features/admin/BrowserSettingsPage";
 import BucketsPage from "./features/manager/BucketsPage";
 import ManagerDashboard from "./features/manager/ManagerDashboard";
 import PoliciesPage from "./features/manager/PoliciesPage";
@@ -82,7 +83,10 @@ const adminNav = [
   },
   {
     label: "Settings",
-    links: [{ to: "/admin/portal-settings", label: "Portal" }],
+    links: [
+      { to: "/admin/portal-settings", label: "Portal" },
+      { to: "/admin/browser-settings", label: "Browser" },
+    ],
   },
 ];
 
@@ -157,6 +161,7 @@ export default function AppRouter() {
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="metrics" element={<AdminMetricsPage />} />
               <Route path="portal-settings" element={<PortalSettingsPage />} />
+              <Route path="browser-settings" element={<BrowserSettingsPage />} />
             </Route>
           </Route>
 

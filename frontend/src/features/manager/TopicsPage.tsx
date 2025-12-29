@@ -118,6 +118,11 @@ export default function TopicsPage() {
     fetchTopics(accountIdForApi);
   }, [accountIdForApi, needsS3AccountSelection]);
 
+  const openCreateModal = () => {
+    setShowCreateModal(true);
+    setCreateError(null);
+  };
+
   const handleCreateTopic = async (event: FormEvent) => {
     event.preventDefault();
     if (needsS3AccountSelection) return;
@@ -317,18 +322,16 @@ export default function TopicsPage() {
       <PageHeader
         title="SNS Topics"
         description="List, create, and secure account-owned SNS topics."
+        breadcrumbs={[{ label: "Manager" }, { label: "Events" }, { label: "SNS Topics" }]}
         actions={
-          !needsS3AccountSelection ? (
-            <button
-              onClick={() => {
-                setShowCreateModal(true);
-                setCreateError(null);
-              }}
-              className="rounded-full bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600"
-            >
-              New topic
-            </button>
-          ) : null
+          !needsS3AccountSelection
+            ? [
+                {
+                  label: "Create topic",
+                  onClick: openCreateModal,
+                },
+              ]
+            : []
         }
       />
 
@@ -357,16 +360,6 @@ export default function TopicsPage() {
             <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               {accountLabel} · Topics
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setShowCreateModal(true);
-                setCreateError(null);
-              }}
-              className="rounded-full border border-primary/30 px-3 py-1 text-xs font-semibold text-primary shadow-sm transition hover:border-primary hover:bg-primary/10 dark:border-primary-500/40 dark:text-primary-100"
-            >
-              + Create topic
-            </button>
           </div>
           {loading ? (
             <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Loading topics…</div>

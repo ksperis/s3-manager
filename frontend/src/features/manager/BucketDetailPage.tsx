@@ -1383,7 +1383,7 @@ export default function BucketDetailPage() {
                       <button
                         className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
                           currentPrefix === ""
-                            ? "bg-primary-100/70 text-primary-800 dark:bg-primary-900/25 dark:text-primary-100"
+                            ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
                             : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                         }`}
                         onClick={() => setCurrentPrefix("")}
@@ -1407,7 +1407,7 @@ export default function BucketDetailPage() {
                             key={prefix}
                             className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
                               isActive
-                                ? "bg-primary-100/70 text-primary-800 dark:bg-primary-900/25 dark:text-primary-100"
+                                ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
                                 : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                             }`}
                             onClick={() => setCurrentPrefix(prefix)}

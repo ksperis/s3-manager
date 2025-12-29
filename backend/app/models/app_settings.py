@@ -81,6 +81,15 @@ class ManagerSettings(BaseModel):
     allow_manager_user_usage_stats: bool = True
 
 
+class BrowserSettings(BaseModel):
+    direct_upload_parallelism: int = Field(default=5, ge=1, le=20)
+    proxy_upload_parallelism: int = Field(default=2, ge=1, le=20)
+    direct_download_parallelism: int = Field(default=5, ge=1, le=20)
+    proxy_download_parallelism: int = Field(default=2, ge=1, le=20)
+    other_operations_parallelism: int = Field(default=3, ge=1, le=20)
+
+
 class AppSettings(BaseModel):
     portal: PortalSettings = PortalSettings()
     manager: ManagerSettings = ManagerSettings()
+    browser: BrowserSettings = BrowserSettings()

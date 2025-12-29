@@ -84,7 +84,7 @@ function ManagerShell() {
   const inlineAction = (
     <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-4">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">S3Account</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Account</span>
         {requiresS3AccountSelection ? (
           showSelector ? (
             <div className="relative">

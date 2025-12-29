@@ -332,16 +332,8 @@ export default function StorageEndpointsPage() {
       <PageHeader
         title="Storage endpoints"
         description="Manage the S3/Ceph endpoints used by the console."
-        rightContent={[
-          <button
-            key="new-endpoint"
-            className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600"
-            onClick={startCreate}
-            type="button"
-          >
-            New endpoint
-          </button>,
-        ]}
+        breadcrumbs={[{ label: "Admin" }, { label: "Endpoints" }]}
+        actions={[{ label: "New endpoint", onClick: startCreate }]}
         inlineContent={
           defaultEndpoint ? (
             <span className="text-sm font-semibold text-slate-500 dark:text-slate-300">

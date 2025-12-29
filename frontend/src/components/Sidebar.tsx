@@ -32,7 +32,7 @@ export default function Sidebar({ title = "s3-manager", sections, links = [], he
     "group flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-semibold leading-4 transition-colors";
   const inactiveLinkClasses =
     "text-slate-600 hover:bg-primary-50 hover:text-primary-700 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-primary-100";
-  const activeLinkClasses = "bg-primary-100/80 text-primary-800 dark:bg-primary-900/30 dark:text-primary-100";
+  const activeLinkClasses = "bg-primary-100/80 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100";
   const badgeClasses =
     "rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 group-hover:bg-primary-100 group-hover:text-primary-700 dark:bg-slate-800 dark:text-slate-300 dark:group-hover:bg-primary-800/50 dark:group-hover:text-primary-50";
 

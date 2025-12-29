@@ -419,7 +419,7 @@ export default function BucketsPage() {
                   <div
                     className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold ${
                       index === wizardStep
-                        ? "border-primary bg-primary-100/70 text-primary-800 dark:border-primary-500 dark:bg-primary-900/30 dark:text-primary-100"
+                        ? "border-primary bg-primary-100/70 text-primary-800 dark:border-primary-500 dark:bg-primary-500/20 dark:text-primary-100"
                         : "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
                     }`}
                   >

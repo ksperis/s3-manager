@@ -29,9 +29,18 @@ export type ManagerSettings = {
   allow_manager_user_usage_stats: boolean;
 };
 
+export type BrowserSettings = {
+  direct_upload_parallelism: number;
+  proxy_upload_parallelism: number;
+  direct_download_parallelism: number;
+  proxy_download_parallelism: number;
+  other_operations_parallelism: number;
+};
+
 export type AppSettings = {
   portal: PortalSettings;
   manager: ManagerSettings;
+  browser: BrowserSettings;
 };
 
 export async function fetchAppSettings(): Promise<AppSettings> {

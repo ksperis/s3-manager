@@ -20,6 +20,11 @@ from app.models.browser import (
     MultipartUploadInitRequest,
     MultipartUploadInitResponse,
     ObjectMetadata,
+    ObjectMetadataUpdate,
+    ObjectAcl,
+    ObjectLegalHold,
+    ObjectRetention,
+    ObjectRestoreRequest,
     ObjectTags,
     PresignPartRequest,
     PresignPartResponse,
@@ -31,6 +36,8 @@ from app.models.browser import (
 from app.models.browser import BrowserBucket
 from app.services.audit_service import AuditService
 from app.services.browser_service import BrowserService, get_browser_service
+from app.services.app_settings_service import load_app_settings
+from app.models.app_settings import BrowserSettings
 from app.routers.dependencies import get_account_context, get_audit_logger, get_current_account_admin
 
 router = APIRouter(prefix="/manager/browser", tags=["manager-browser"])
@@ -47,6 +54,13 @@ class ProxyUploadResponse(BaseModel):
 
 class EnsureCorsPayload(BaseModel):
     origin: str
+
+
+@router.get("/settings", response_model=BrowserSettings)
+def get_browser_settings(
+    _: User = Depends(get_current_account_admin),
+) -> BrowserSettings:
+    return load_app_settings().browser
 
 
 @router.get("/buckets", response_model=list[BrowserBucket])
@@ -67,12 +81,26 @@ def list_objects(
     prefix: str = "",
     continuation_token: Optional[str] = None,
     max_keys: int = Query(default=1000, ge=1, le=1000),
+    query: Optional[str] = None,
+    item_type: Optional[str] = None,
+    storage_class: Optional[str] = None,
+    recursive: bool = Query(default=False),
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: User = Depends(get_current_account_admin),
 ) -> ListBrowserObjectsResponse:
     try:
-        return service.list_objects(bucket_name, account, prefix=prefix, continuation_token=continuation_token, max_keys=max_keys)
+        return service.list_objects(
+            bucket_name,
+            account,
+            prefix=prefix,
+            continuation_token=continuation_token,
+            max_keys=max_keys,
+            query=query,
+            item_type=item_type,
+            storage_class=storage_class,
+            recursive=recursive,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -167,6 +195,33 @@ def head_object(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
+@router.put("/buckets/{bucket_name}/object-meta", response_model=ObjectMetadata)
+def update_object_metadata(
+    bucket_name: str,
+    payload: ObjectMetadataUpdate,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> ObjectMetadata:
+    if not payload.key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    try:
+        updated = service.update_object_metadata(bucket_name, account, payload)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="update_object_metadata",
+            entity_type="object",
+            entity_id=payload.key,
+            account=account,
+            metadata={"version_id": payload.version_id, "bucket": bucket_name},
+        )
+        return updated
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
 @router.get("/buckets/{bucket_name}/object-tags", response_model=ObjectTags)
 def get_object_tags(
     bucket_name: str,
@@ -207,6 +262,148 @@ def put_object_tags(
             metadata={"count": len(payload.tags or []), "version_id": payload.version_id},
         )
         return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/{bucket_name}/object-acl", response_model=ObjectAcl)
+def put_object_acl(
+    bucket_name: str,
+    payload: ObjectAcl,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> ObjectAcl:
+    if not payload.key or not payload.acl:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key or acl")
+    try:
+        result = service.put_object_acl(bucket_name, account, payload)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="put_object_acl",
+            entity_type="object",
+            entity_id=payload.key,
+            account=account,
+            metadata={"acl": payload.acl, "version_id": payload.version_id},
+        )
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/{bucket_name}/object-legal-hold", response_model=ObjectLegalHold)
+def get_object_legal_hold(
+    bucket_name: str,
+    key: str,
+    version_id: Optional[str] = None,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    _: User = Depends(get_current_account_admin),
+) -> ObjectLegalHold:
+    if not key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    try:
+        return service.get_object_legal_hold(bucket_name, account, key, version_id=version_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/{bucket_name}/object-legal-hold", response_model=ObjectLegalHold)
+def put_object_legal_hold(
+    bucket_name: str,
+    payload: ObjectLegalHold,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> ObjectLegalHold:
+    if not payload.key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    try:
+        result = service.put_object_legal_hold(bucket_name, account, payload)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="put_object_legal_hold",
+            entity_type="object",
+            entity_id=payload.key,
+            account=account,
+            metadata={"status": payload.status, "version_id": payload.version_id},
+        )
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/{bucket_name}/object-retention", response_model=ObjectRetention)
+def get_object_retention(
+    bucket_name: str,
+    key: str,
+    version_id: Optional[str] = None,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    _: User = Depends(get_current_account_admin),
+) -> ObjectRetention:
+    if not key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    try:
+        return service.get_object_retention(bucket_name, account, key, version_id=version_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/{bucket_name}/object-retention", response_model=ObjectRetention)
+def put_object_retention(
+    bucket_name: str,
+    payload: ObjectRetention,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> ObjectRetention:
+    if not payload.key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    try:
+        result = service.put_object_retention(bucket_name, account, payload)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="put_object_retention",
+            entity_type="object",
+            entity_id=payload.key,
+            account=account,
+            metadata={"mode": payload.mode, "version_id": payload.version_id},
+        )
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/buckets/{bucket_name}/object-restore")
+def restore_object(
+    bucket_name: str,
+    payload: ObjectRestoreRequest,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+):
+    if not payload.key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    try:
+        service.restore_object(bucket_name, account, payload)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="restore_object",
+            entity_type="object",
+            entity_id=payload.key,
+            account=account,
+            metadata={"days": payload.days, "tier": payload.tier, "version_id": payload.version_id},
+        )
+        return {"message": "restoring"}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -313,6 +510,8 @@ def copy_object(
             account=account,
             metadata={
                 "source": payload.source_key,
+                "source_bucket": payload.source_bucket or bucket_name,
+                "destination_bucket": bucket_name,
                 "destination": payload.destination_key,
                 "move": payload.move,
                 "version_id": payload.source_version_id,

@@ -2,13 +2,16 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import JSZip from "jszip";
 import axios from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
+import Modal from "../../components/Modal";
 import {
   BrowserBucket,
   BrowserObject,
   BrowserObjectVersion,
+  BrowserSettings,
   BucketCorsStatus,
   ObjectMetadata,
   ObjectTag,
@@ -25,6 +28,12 @@ import {
   listBrowserBuckets,
   listBrowserObjects,
   listObjectVersions,
+  updateObjectAcl,
+  updateObjectLegalHold,
+  updateObjectMetadata,
+  updateObjectRetention,
+  updateObjectTags,
+  fetchBrowserSettings,
   presignPart,
   presignObject,
   proxyDownload,
@@ -33,6 +42,7 @@ import {
   abortMultipartUpload,
 } from "../../api/browser";
 import { useS3AccountContext } from "../manager/S3AccountContext";
+import ObjectAdvancedModal from "./ObjectAdvancedModal";
 
 type BrowserItem = {
   id: string;
@@ -57,12 +67,23 @@ type TreeNode = {
   isLoading: boolean;
 };
 
+type OperationCompletionStatus = "done" | "failed" | "cancelled";
+
 type OperationItem = {
   id: string;
   label: string;
   path: string;
   progress: number;
-  status: "uploading" | "deleting" | "copying";
+  status: "uploading" | "deleting" | "copying" | "downloading";
+  sizeBytes?: number;
+  kind?: "upload" | "download" | "delete" | "copy" | "other";
+  groupId?: string;
+  groupLabel?: string;
+  groupKind?: "folder" | "files";
+  itemLabel?: string;
+  cancelable?: boolean;
+  completedAt?: string;
+  completionStatus?: OperationCompletionStatus;
 };
 
 type UploadCandidate = {
@@ -70,13 +91,65 @@ type UploadCandidate = {
   relativePath?: string;
 };
 
-type ActivityItem = {
+type UploadQueueItem = {
   id: string;
-  action: string;
+  file: File;
+  relativePath: string;
+  key: string;
+  bucket: string;
+  accountId: string;
+  groupId: string;
+  groupLabel: string;
+  groupKind: "folder" | "files";
+  itemLabel: string;
+};
+
+type CompletedOperationItem = {
+  id: string;
+  label: string;
   path: string;
-  actor: string;
   when: string;
 };
+
+type DownloadDetailStatus = "queued" | "downloading" | "done" | "failed" | "cancelled";
+
+type DownloadDetailItem = {
+  id: string;
+  key: string;
+  label: string;
+  status: DownloadDetailStatus;
+  sizeBytes?: number;
+};
+
+type DeleteDetailStatus = "queued" | "deleting" | "done" | "failed";
+
+type DeleteDetailItem = {
+  id: string;
+  key: string;
+  label: string;
+  status: DeleteDetailStatus;
+};
+
+type CopyDetailStatus = "queued" | "copying" | "done" | "failed";
+
+type CopyDetailItem = {
+  id: string;
+  key: string;
+  label: string;
+  status: CopyDetailStatus;
+  sizeBytes?: number;
+};
+
+type BulkMetadataDraft = {
+  contentType: string;
+  cacheControl: string;
+  contentDisposition: string;
+  contentEncoding: string;
+  contentLanguage: string;
+  expires: string;
+};
+
+type PreviewKind = "image" | "video" | "audio" | "pdf" | "text" | "generic";
 
 const iconButtonClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200";
@@ -93,10 +166,18 @@ const toolbarPrimaryClasses =
 const filterChipClasses =
   "inline-flex items-center gap-2 rounded-full border border-slate-200 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100";
 const filterChipActiveClasses =
-  "border-primary-200 bg-primary-100 text-primary-800 dark:border-primary-600 dark:bg-primary-900/30 dark:text-primary-100";
+  "border-primary-200 bg-primary-100 text-primary-800 dark:border-primary-600 dark:bg-primary-500/20 dark:text-primary-100";
+const countBadgeClasses =
+  "inline-flex w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 px-1 text-[9px] font-semibold text-slate-600 tabular-nums dark:bg-slate-800 dark:text-slate-200";
+const operationStopClasses =
+  "rounded-full border border-rose-200 px-2 py-0.5 text-[10px] font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30";
+const operationSecondaryClasses =
+  "rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:border-primary hover:text-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100";
 const viewToggleBaseClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100";
-const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-100";
+const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-100";
+const formInputClasses =
+  "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
 const breadcrumbIconButtonClasses =
   "inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-200";
 
@@ -105,7 +186,7 @@ const treeToggleButtonClasses =
 const treeItemBaseClasses =
   "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-[11px] font-semibold transition";
 const treeItemActiveClasses =
-  "bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-100";
+  "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100";
 const treeItemInactiveClasses =
   "text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100";
 
@@ -115,10 +196,43 @@ const storageClassChipClasses: Record<string, string> = {
   GLACIER: "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-900/20 dark:text-indigo-200",
 };
 
+const storageClassOptions = [
+  { value: "STANDARD", label: "STANDARD" },
+  { value: "STANDARD_IA", label: "STANDARD_IA" },
+  { value: "ONEZONE_IA", label: "ONEZONE_IA" },
+  { value: "INTELLIGENT_TIERING", label: "INTELLIGENT_TIERING" },
+  { value: "GLACIER", label: "GLACIER" },
+  { value: "GLACIER_IR", label: "GLACIER_IR" },
+  { value: "DEEP_ARCHIVE", label: "DEEP_ARCHIVE" },
+];
+
+const aclOptions = [
+  { value: "private", label: "private" },
+  { value: "public-read", label: "public-read" },
+  { value: "public-read-write", label: "public-read-write" },
+  { value: "authenticated-read", label: "authenticated-read" },
+  { value: "bucket-owner-read", label: "bucket-owner-read" },
+  { value: "bucket-owner-full-control", label: "bucket-owner-full-control" },
+  { value: "aws-exec-read", label: "aws-exec-read" },
+];
+
 const MULTIPART_THRESHOLD = 25 * 1024 * 1024;
 const PART_SIZE = 8 * 1024 * 1024;
 const MULTIPART_CONCURRENCY = 4;
-const MULTI_FILE_CONCURRENCY = 3;
+const DEFAULT_DIRECT_UPLOAD_PARALLELISM = 5;
+const DEFAULT_PROXY_UPLOAD_PARALLELISM = 2;
+const DEFAULT_DIRECT_DOWNLOAD_PARALLELISM = 5;
+const DEFAULT_PROXY_DOWNLOAD_PARALLELISM = 2;
+const DEFAULT_OTHER_OPERATIONS_PARALLELISM = 3;
+const DEFAULT_QUEUED_VISIBLE_COUNT = 10;
+const COMPLETED_OPERATIONS_LIMIT = 20;
+const OBJECTS_PAGE_SIZE = 200;
+const VERSIONS_PAGE_SIZE = 200;
+
+const clampParallelism = (value: number, fallback: number) => {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(20, Math.max(1, Math.floor(value)));
+};
 
 const formatBytes = (bytes?: number | null): string => {
   if (bytes === undefined || bytes === null) return "-";
@@ -143,6 +257,25 @@ const formatDateTime = (value?: string | null): string => {
     date.getMinutes()
   )}`;
 };
+
+const formatLocalDateTime = (value?: string | Date | null) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (num: number) => `${num}`.padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}`;
+};
+
+const toIsoString = (value: string) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString();
+};
+
+const formatBadgeCount = (count: number) => (count > 99 ? "99+" : `${count}`);
 
 const normalizePrefix = (value: string) => {
   if (!value) return "";
@@ -190,6 +323,17 @@ const updateTreeNodes = (
   });
 };
 
+const findTreeNodeByPrefix = (nodes: TreeNode[], targetPrefix: string): TreeNode | null => {
+  for (const node of nodes) {
+    if (node.prefix === targetPrefix) return node;
+    if (node.children.length > 0) {
+      const match = findTreeNodeByPrefix(node.children, targetPrefix);
+      if (match) return match;
+    }
+  }
+  return null;
+};
+
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const isLikelyCorsError = (error: unknown) => {
@@ -198,11 +342,51 @@ const isLikelyCorsError = (error: unknown) => {
   return error.code === "ERR_NETWORK" || error.message === "Network Error";
 };
 
+const isAbortError = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    return error.code === "ERR_CANCELED" || error.name === "CanceledError";
+  }
+  return error instanceof DOMException && error.name === "AbortError";
+};
+
 const normalizeEtag = (raw?: string | string[] | null): string | undefined => {
   if (!raw) return undefined;
   const value = Array.isArray(raw) ? raw[0] : raw;
   return value?.replace(/"/g, "");
 };
+
+const chunkItems = <T,>(items: T[], size: number): T[][] => {
+  if (size <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+};
+
+const parseKeyValueLines = (value: string) => {
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const equalsIndex = line.indexOf("=");
+      const colonIndex = line.indexOf(":");
+      const splitIndex = equalsIndex === -1 ? colonIndex : equalsIndex;
+      if (splitIndex === -1) return null;
+      const key = line.slice(0, splitIndex).trim();
+      const val = line.slice(splitIndex + 1).trim();
+      if (!key) return null;
+      return { key, value: val };
+    })
+    .filter((entry): entry is { key: string; value: string } => Boolean(entry));
+};
+
+const pairsToRecord = (items: { key: string; value: string }[]) =>
+  items.reduce<Record<string, string>>((acc, item) => {
+    acc[item.key] = item.value;
+    return acc;
+  }, {});
 
 type WebkitEntry = {
   isFile: boolean;
@@ -221,6 +405,25 @@ const extractRelativePath = (file: File) => {
 
 const buildUploadCandidates = (files: File[]): UploadCandidate[] =>
   files.map((file) => ({ file, relativePath: extractRelativePath(file) }));
+
+const buildUploadGrouping = (relativePath: string, batchId: string) => {
+  const normalized = normalizeUploadPath(relativePath);
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length > 1) {
+    return {
+      groupId: `${batchId}:${parts[0]}`,
+      groupLabel: parts[0],
+      groupKind: "folder" as const,
+      itemLabel: parts.slice(1).join("/"),
+    };
+  }
+  return {
+    groupId: `${batchId}:files`,
+    groupLabel: "Files",
+    groupKind: "files" as const,
+    itemLabel: normalized || "Untitled",
+  };
+};
 
 const getWebkitEntry = (item: DataTransferItem): WebkitEntry | null => {
   const cast = item as DataTransferItem & { webkitGetAsEntry?: () => WebkitEntry | null };
@@ -275,6 +478,38 @@ const isImageFile = (name: string) => {
   return ["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext);
 };
 
+const isVideoFile = (name: string) => {
+  const ext = getExtension(name);
+  return ["mp4", "webm", "ogg", "mov", "m4v"].includes(ext);
+};
+
+const isAudioFile = (name: string) => {
+  const ext = getExtension(name);
+  return ["mp3", "wav", "ogg", "m4a", "flac"].includes(ext);
+};
+
+const isPdfFile = (name: string) => getExtension(name) === "pdf";
+
+const isTextFile = (name: string) => {
+  const ext = getExtension(name);
+  return ["txt", "md", "markdown", "csv", "json", "yml", "yaml", "xml", "html", "css", "js", "ts", "log"].includes(ext);
+};
+
+const previewKindForItem = (item: BrowserItem, contentType?: string | null): PreviewKind => {
+  const normalized = (contentType ?? "").toLowerCase();
+  if (normalized.startsWith("image/")) return "image";
+  if (normalized.startsWith("video/")) return "video";
+  if (normalized.startsWith("audio/")) return "audio";
+  if (normalized.includes("pdf")) return "pdf";
+  if (normalized.startsWith("text/") || normalized.includes("json") || normalized.includes("xml")) return "text";
+  if (isImageFile(item.name)) return "image";
+  if (isVideoFile(item.name)) return "video";
+  if (isAudioFile(item.name)) return "audio";
+  if (isPdfFile(item.name)) return "pdf";
+  if (isTextFile(item.name)) return "text";
+  return "generic";
+};
+
 const previewLabelForItem = (item: BrowserItem) => {
   if (item.type === "folder") return "FOLDER";
   const ext = getExtension(item.name);
@@ -302,6 +537,19 @@ const FolderIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
       strokeWidth="1.4"
       strokeLinejoin="round"
     />
+  </svg>
+);
+
+const FolderPlusIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <path
+      d="M2.5 6.5a2 2 0 0 1 2-2h3l1.6 1.6a2 2 0 0 0 1.4.6H15.5a2 2 0 0 1 2 2v5.6a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-8.8Z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+    <path d="M10 9.5v5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M7.5 12h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </svg>
 );
 
@@ -355,6 +603,21 @@ const DownloadIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
+const UploadIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <path d="M10 16.5v-8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="m6.5 10.5 3.5-3.5 3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M4 4.5h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+const RefreshIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <path d="M16 10a6 6 0 1 1-2.1-4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M12.5 3.5h3.5v3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const UpIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
     <path d="M9 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -366,6 +629,13 @@ const CopyIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
     <rect x="7" y="7" width="9" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
     <rect x="4" y="4" width="9" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+);
+
+const PasteIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <rect x="6.5" y="3" width="7" height="3.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    <rect x="4.5" y="6" width="11" height="11" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
   </svg>
 );
 
@@ -400,6 +670,15 @@ const ListIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   </svg>
 );
 
+const CompactIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
+    <path d="M4 5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M4 8.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M4 12h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M4 15.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
 const GridIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true">
     <rect x="3.5" y="3.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
@@ -422,9 +701,12 @@ export default function BrowserPage() {
   const [prefix, setPrefix] = useState("");
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
+  const [objectsNextToken, setObjectsNextToken] = useState<string | null>(null);
+  const [objectsIsTruncated, setObjectsIsTruncated] = useState(false);
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
-  const [showFolders, setShowFolders] = useState(true);
-  const [showInspector, setShowInspector] = useState(true);
+  const [showFolders, setShowFolders] = useState(false);
+  const [showInspector, setShowInspector] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<"context" | "selection" | "details">("context");
   const [compactMode, setCompactMode] = useState(true);
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
   const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
@@ -441,9 +723,11 @@ export default function BrowserPage() {
   const [loadingBuckets, setLoadingBuckets] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
+  const [objectsLoadingMore, setObjectsLoadingMore] = useState(false);
   const [objectsError, setObjectsError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
+  const [browserSettings, setBrowserSettings] = useState<BrowserSettings | null>(null);
   const [corsStatus, setCorsStatus] = useState<BucketCorsStatus | null>(null);
   const [stsStatus, setStsStatus] = useState<StsStatus | null>(null);
   const [useProxyTransfers, setUseProxyTransfers] = useState(false);
@@ -458,26 +742,116 @@ export default function BrowserPage() {
   const [storageFilter, setStorageFilter] = useState<string>("all");
   const [sortId, setSortId] = useState("name-asc");
   const [operations, setOperations] = useState<OperationItem[]>([]);
-  const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+  const uploadQueueRef = useRef<UploadQueueItem[]>([]);
+  const activeUploadsRef = useRef(0);
+  const uploadControllersRef = useRef(new Map<string, AbortController>());
+  const downloadControllersRef = useRef(new Map<string, AbortController>());
+  const [showActiveOperations, setShowActiveOperations] = useState(true);
+  const [showQueuedOperations, setShowQueuedOperations] = useState(true);
+  const [showCompletedOperations, setShowCompletedOperations] = useState(false);
+  const [expandedOperationGroups, setExpandedOperationGroups] = useState<Record<string, boolean>>({});
+  const [queuedVisibleCountByGroup, setQueuedVisibleCountByGroup] = useState<Record<string, number>>({});
+  const [completedOperations, setCompletedOperations] = useState<CompletedOperationItem[]>([]);
+  const [downloadDetails, setDownloadDetails] = useState<Record<string, DownloadDetailItem[]>>({});
+  const [deleteDetails, setDeleteDetails] = useState<Record<string, DeleteDetailItem[]>>({});
+  const [copyDetails, setCopyDetails] = useState<Record<string, CopyDetailItem[]>>({});
   const [inspectedMetadata, setInspectedMetadata] = useState<ObjectMetadata | null>(null);
   const [inspectedTags, setInspectedTags] = useState<ObjectTag[]>([]);
+  const [inspectedTagsVersionId, setInspectedTagsVersionId] = useState<string | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
+  const [showOperationsModal, setShowOperationsModal] = useState(false);
+  const [previewItem, setPreviewItem] = useState<BrowserItem | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewContentType, setPreviewContentType] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
   const [showUploadMenu, setShowUploadMenu] = useState(false);
+  const [showInspectorActionsMenu, setShowInspectorActionsMenu] = useState(false);
+  const [showBulkAttributesModal, setShowBulkAttributesModal] = useState(false);
+  const [showBulkRestoreModal, setShowBulkRestoreModal] = useState(false);
+  const [bulkActionItems, setBulkActionItems] = useState<BrowserItem[]>([]);
+  const [bulkAttributesLoading, setBulkAttributesLoading] = useState(false);
+  const [bulkAttributesError, setBulkAttributesError] = useState<string | null>(null);
+  const [bulkAttributesSummary, setBulkAttributesSummary] = useState<string | null>(null);
+  const [bulkApplyMetadata, setBulkApplyMetadata] = useState(false);
+  const [bulkApplyTags, setBulkApplyTags] = useState(false);
+  const [bulkApplyStorageClass, setBulkApplyStorageClass] = useState(false);
+  const [bulkApplyAcl, setBulkApplyAcl] = useState(false);
+  const [bulkApplyLegalHold, setBulkApplyLegalHold] = useState(false);
+  const [bulkApplyRetention, setBulkApplyRetention] = useState(false);
+  const [bulkMetadataDraft, setBulkMetadataDraft] = useState<BulkMetadataDraft>({
+    contentType: "",
+    cacheControl: "",
+    contentDisposition: "",
+    contentEncoding: "",
+    contentLanguage: "",
+    expires: "",
+  });
+  const [bulkMetadataEntries, setBulkMetadataEntries] = useState("");
+  const [bulkTagsDraft, setBulkTagsDraft] = useState("");
+  const [bulkStorageClass, setBulkStorageClass] = useState("");
+  const [bulkAclValue, setBulkAclValue] = useState("private");
+  const [bulkLegalHoldStatus, setBulkLegalHoldStatus] = useState<"ON" | "OFF">("OFF");
+  const [bulkRetentionMode, setBulkRetentionMode] = useState<"" | "GOVERNANCE" | "COMPLIANCE">("");
+  const [bulkRetentionDate, setBulkRetentionDate] = useState("");
+  const [bulkRetentionBypass, setBulkRetentionBypass] = useState(false);
+  const [bulkRestoreDate, setBulkRestoreDate] = useState("");
+  const [bulkRestoreDeleteMissing, setBulkRestoreDeleteMissing] = useState(false);
+  const [bulkRestoreLoading, setBulkRestoreLoading] = useState(false);
+  const [bulkRestoreError, setBulkRestoreError] = useState<string | null>(null);
+  const [bulkRestoreSummary, setBulkRestoreSummary] = useState<string | null>(null);
+  const [clipboard, setClipboard] = useState<{
+    items: BrowserItem[];
+    sourceBucket: string;
+  } | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const uploadMenuRef = useRef<HTMLDivElement | null>(null);
+  const inspectorActionsMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
+  const objectsRefreshTimeoutRef = useRef<number | null>(null);
+  const previewObjectUrlRef = useRef<string | null>(null);
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   const uiOrigin = useMemo(
     () => (typeof window === "undefined" ? undefined : window.location.origin),
     []
   );
+  const uploadParallelism = useMemo(() => {
+    const direct = browserSettings?.direct_upload_parallelism ?? DEFAULT_DIRECT_UPLOAD_PARALLELISM;
+    const proxy = browserSettings?.proxy_upload_parallelism ?? DEFAULT_PROXY_UPLOAD_PARALLELISM;
+    const fallback = useProxyTransfers ? DEFAULT_PROXY_UPLOAD_PARALLELISM : DEFAULT_DIRECT_UPLOAD_PARALLELISM;
+    return clampParallelism(useProxyTransfers ? proxy : direct, fallback);
+  }, [browserSettings, useProxyTransfers]);
+  const uploadParallelismRef = useRef(uploadParallelism);
+  useEffect(() => {
+    uploadParallelismRef.current = uploadParallelism;
+  }, [uploadParallelism]);
+  const downloadParallelism = useMemo(() => {
+    const direct = browserSettings?.direct_download_parallelism ?? DEFAULT_DIRECT_DOWNLOAD_PARALLELISM;
+    const proxy = browserSettings?.proxy_download_parallelism ?? DEFAULT_PROXY_DOWNLOAD_PARALLELISM;
+    const fallback = useProxyTransfers ? DEFAULT_PROXY_DOWNLOAD_PARALLELISM : DEFAULT_DIRECT_DOWNLOAD_PARALLELISM;
+    return clampParallelism(useProxyTransfers ? proxy : direct, fallback);
+  }, [browserSettings, useProxyTransfers]);
+  const downloadParallelismRef = useRef(downloadParallelism);
+  useEffect(() => {
+    downloadParallelismRef.current = downloadParallelism;
+  }, [downloadParallelism]);
+  const otherOperationsParallelism = useMemo(() => {
+    const value = browserSettings?.other_operations_parallelism ?? DEFAULT_OTHER_OPERATIONS_PARALLELISM;
+    return clampParallelism(value, DEFAULT_OTHER_OPERATIONS_PARALLELISM);
+  }, [browserSettings]);
+  const otherOperationsParallelismRef = useRef(otherOperationsParallelism);
+  useEffect(() => {
+    otherOperationsParallelismRef.current = otherOperationsParallelism;
+  }, [otherOperationsParallelism]);
   const warnings = useMemo(() => {
     const items: string[] = [];
     if (warningMessage) {
@@ -544,6 +918,26 @@ export default function BrowserPage() {
   }, [showUploadMenu]);
 
   useEffect(() => {
+    if (!showInspectorActionsMenu) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      if (inspectorActionsMenuRef.current && !inspectorActionsMenuRef.current.contains(event.target as Node)) {
+        setShowInspectorActionsMenu(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowInspectorActionsMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showInspectorActionsMenu]);
+
+  useEffect(() => {
     if (!hasS3AccountContext) {
       setBuckets([]);
       setBucketName("");
@@ -585,21 +979,85 @@ export default function BrowserPage() {
     };
   }, [accountIdForApi, hasS3AccountContext]);
 
-  const loadObjects = async (nextPrefix?: string) => {
+  useEffect(() => {
+    if (!hasS3AccountContext || !accountIdForApi) {
+      setBrowserSettings(null);
+      return;
+    }
+    let isMounted = true;
+    fetchBrowserSettings(accountIdForApi)
+      .then((data) => {
+        if (isMounted) {
+          setBrowserSettings(data);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setBrowserSettings(null);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [accountIdForApi, hasS3AccountContext]);
+
+  const loadObjects = async (opts?: {
+    append?: boolean;
+    continuationToken?: string | null;
+    prefixOverride?: string;
+    silent?: boolean;
+  }) => {
     if (!bucketName || !hasS3AccountContext) return;
-    const targetPrefix = normalizePrefix(nextPrefix ?? prefix);
-    setObjectsLoading(true);
-    setObjectsError(null);
+    const targetPrefix = normalizePrefix(opts?.prefixOverride ?? prefix);
+    const isAppend = Boolean(opts?.append);
+    const isSilent = Boolean(opts?.silent);
+    if (!isAppend) {
+      if (!isSilent) {
+        setObjectsLoading(true);
+        setObjectsLoadingMore(false);
+        setObjectsError(null);
+        setObjectsNextToken(null);
+        setObjectsIsTruncated(false);
+      }
+    } else {
+      setObjectsLoadingMore(true);
+    }
+    const query = filter.trim();
     try {
-      const data = await listBrowserObjects(accountIdForApi, bucketName, { prefix: targetPrefix });
-      setObjects(data.objects);
-      setPrefixes(data.prefixes);
+      const data = await listBrowserObjects(accountIdForApi, bucketName, {
+        prefix: targetPrefix,
+        continuationToken: opts?.continuationToken ?? undefined,
+        maxKeys: OBJECTS_PAGE_SIZE,
+        query: query || undefined,
+        type: typeFilter,
+        storageClass: storageFilter,
+      });
+      setObjects((prev) => (opts?.append ? [...prev, ...data.objects] : data.objects));
+      setPrefixes((prev) => {
+        if (!opts?.append) {
+          return data.prefixes;
+        }
+        const merged = [...prev, ...data.prefixes];
+        return Array.from(new Set(merged));
+      });
+      setObjectsNextToken(data.next_continuation_token ?? null);
+      setObjectsIsTruncated(data.is_truncated);
     } catch (err) {
       setObjectsError("Unable to list objects for this prefix.");
-      setObjects([]);
-      setPrefixes([]);
+      if (!isAppend && !isSilent) {
+        setObjects([]);
+        setPrefixes([]);
+        setObjectsNextToken(null);
+        setObjectsIsTruncated(false);
+      }
     } finally {
-      setObjectsLoading(false);
+      if (!isAppend) {
+        if (!isSilent) {
+          setObjectsLoading(false);
+        }
+      } else {
+        setObjectsLoadingMore(false);
+      }
     }
   };
 
@@ -618,6 +1076,7 @@ export default function BrowserPage() {
         prefix: normalizedPrefix,
         keyMarker: resolvedKeyMarker ?? undefined,
         versionIdMarker: resolvedVersionIdMarker ?? undefined,
+        maxKeys: VERSIONS_PAGE_SIZE,
       });
       setPrefixVersionKeyMarker(data.next_key_marker ?? null);
       setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
@@ -656,6 +1115,7 @@ export default function BrowserPage() {
         key: targetKey,
         keyMarker: resolvedKeyMarker ?? undefined,
         versionIdMarker: resolvedVersionIdMarker ?? undefined,
+        maxKeys: VERSIONS_PAGE_SIZE,
       });
       setObjectVersionKeyMarker(data.next_key_marker ?? null);
       setObjectVersionIdMarker(data.next_version_id_marker ?? null);
@@ -676,10 +1136,13 @@ export default function BrowserPage() {
     if (!bucketName || !hasS3AccountContext) {
       setObjects([]);
       setPrefixes([]);
+      setObjectsNextToken(null);
+      setObjectsIsTruncated(false);
+      setObjectsLoadingMore(false);
       return;
     }
-    loadObjects(prefix);
-  }, [accountIdForApi, bucketName, hasS3AccountContext, prefix]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadObjects({ prefixOverride: prefix });
+  }, [accountIdForApi, bucketName, filter, hasS3AccountContext, prefix, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!showPrefixVersions || !bucketName || !hasS3AccountContext) {
@@ -735,6 +1198,50 @@ export default function BrowserPage() {
       isMounted = false;
     };
   }, [accountIdForApi, bucketName, hasS3AccountContext]);
+
+  useEffect(() => {
+    if (!bucketName || !hasS3AccountContext || treeNodes.length === 0) return;
+    const rootNode = treeNodes.find((node) => node.prefix === "");
+    if (!rootNode || rootNode.isLoading) return;
+    const targetPrefix = prefix ? normalizePrefix(prefix) : "";
+    if (!targetPrefix) {
+      if (!rootNode.isExpanded) {
+        setTreeNodes((prev) => updateTreeNodes(prev, "", (node) => ({ ...node, isExpanded: true })));
+      }
+      return;
+    }
+    const segments = targetPrefix.split("/").filter(Boolean);
+    let currentPrefix = "";
+    const prefixesToExpand: string[] = [];
+    for (const segment of segments) {
+      currentPrefix = `${currentPrefix}${segment}/`;
+      prefixesToExpand.push(currentPrefix);
+      const node = findTreeNodeByPrefix(treeNodes, currentPrefix);
+      if (!node) return;
+      if (!node.isLoaded && !node.isLoading) {
+        loadTreeChildren(currentPrefix);
+        return;
+      }
+    }
+    const prefixesNeedingExpansion = prefixesToExpand.filter((prefixKey) => {
+      const node = findTreeNodeByPrefix(treeNodes, prefixKey);
+      return Boolean(node && !node.isExpanded);
+    });
+    const needsRootExpansion = !rootNode.isExpanded;
+    if (!needsRootExpansion && prefixesNeedingExpansion.length === 0) return;
+    setTreeNodes((prev) => {
+      let next = prev;
+      if (needsRootExpansion) {
+        next = updateTreeNodes(next, "", (node) => ({ ...node, isExpanded: true }));
+      }
+      prefixesNeedingExpansion.forEach((prefixKey) => {
+        const node = findTreeNodeByPrefix(next, prefixKey);
+        if (!node || node.isExpanded) return;
+        next = updateTreeNodes(next, prefixKey, (entry) => ({ ...entry, isExpanded: true }));
+      });
+      return next;
+    });
+  }, [bucketName, hasS3AccountContext, prefix, treeNodes]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {
@@ -825,15 +1332,7 @@ export default function BrowserPage() {
   const activeSort = sortOptions.find((option) => option.id === sortId) ?? sortOptions[0];
 
   const filteredItems = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    let next = q ? items.filter((item) => item.name.toLowerCase().includes(q)) : items;
-    if (typeFilter !== "all") {
-      next = next.filter((item) => item.type === typeFilter);
-    }
-    if (storageFilter !== "all") {
-      next = next.filter((item) => item.type === "folder" || item.storageClass === storageFilter);
-    }
-    return [...next].sort((a, b) => {
+    return [...items].sort((a, b) => {
       if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
       if (activeSort.key === "size") {
         const aSize = a.sizeBytes ?? 0;
@@ -847,7 +1346,7 @@ export default function BrowserPage() {
       const result = a.name.localeCompare(b.name);
       return activeSort.direction === "asc" ? result : -result;
     });
-  }, [activeSort.direction, activeSort.key, filter, items, storageFilter, typeFilter]);
+  }, [activeSort.direction, activeSort.key, items]);
 
   const prefixParts = useMemo(() => prefix.split("/").filter(Boolean), [prefix]);
   const bucketOptions = useMemo(() => buckets.map((bucket) => bucket.name), [buckets]);
@@ -870,9 +1369,14 @@ export default function BrowserPage() {
   const allSelected = filteredItems.length > 0 && filteredItems.every((item) => selectedSet.has(item.id));
   const selectedItems = useMemo(() => items.filter((item) => selectedSet.has(item.id)), [items, selectedSet]);
   const selectedCount = selectedItems.length;
-  const selectedFiles = selectedItems.filter((item) => item.type === "file");
-  const hasFolderSelection = selectedItems.some((item) => item.type === "folder");
-  const canBulkActions = selectedFiles.length > 0 && !hasFolderSelection;
+  const bulkActionFileCount = useMemo(
+    () => bulkActionItems.filter((item) => item.type === "file").length,
+    [bulkActionItems]
+  );
+  const bulkActionFolderCount = useMemo(
+    () => bulkActionItems.filter((item) => item.type === "folder").length,
+    [bulkActionItems]
+  );
   const selectedBytes = useMemo(() => {
     return selectedItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
   }, [selectedItems]);
@@ -914,6 +1418,24 @@ export default function BrowserPage() {
     }
     return null;
   }, [activeItem, items, selectedIds]);
+  const selectionItems = selectedCount > 0 ? selectedItems : inspectedItem ? [inspectedItem] : [];
+  const selectionFiles = selectionItems.filter((item) => item.type === "file");
+  const selectionFolders = selectionItems.filter((item) => item.type === "folder");
+  const selectionIsSingle = selectionItems.length === 1;
+  const selectionPrimary = selectionIsSingle ? selectionItems[0] : null;
+  const selectionHasFolder = selectionFolders.length > 0;
+  const selectionHasFile = selectionFiles.length > 0;
+  const canSelectionDownloadFiles = selectionHasFile && !selectionHasFolder;
+  const canSelectionDownloadFolder = selectionIsSingle && selectionPrimary?.type === "folder";
+  const canSelectionOpen = selectionPrimary?.type === "folder";
+  const canSelectionCopyUrl = selectionPrimary?.type === "file";
+  const canSelectionAdvanced = selectionPrimary?.type === "file";
+  const canSelectionActions = selectionItems.length > 0;
+
+  const previewKind = useMemo(() => {
+    if (!previewItem) return null;
+    return previewKindForItem(previewItem, previewContentType);
+  }, [previewContentType, previewItem]);
 
   const layoutClass = showFolders && showInspector
     ? "xl:grid-cols-[200px_minmax(0,1fr)_320px]"
@@ -922,10 +1444,14 @@ export default function BrowserPage() {
       : showInspector
         ? "xl:grid-cols-[minmax(0,1fr)_320px]"
         : "xl:grid-cols-[minmax(0,1fr)]";
-  const rowPadding = compactMode ? "py-2" : "py-4";
+  const rowPadding = compactMode ? "py-1" : "py-2.5";
+  const rowHeightClasses = compactMode ? "h-10" : "h-16";
+  const rowCellClasses = rowPadding;
   const headerPadding = compactMode ? "py-2" : "py-3";
   const iconBoxClasses = compactMode ? "h-7 w-7" : "h-9 w-9";
   const nameGapClasses = compactMode ? "gap-2" : "gap-3";
+  const gridCardHeightClasses = "h-52";
+  const gridCardGapClasses = "gap-3";
 
   const prefixVersionRows = useMemo(
     () => buildVersionRows(prefixVersions, prefixDeleteMarkers),
@@ -947,6 +1473,33 @@ export default function BrowserPage() {
   const handleOpenItem = (item: BrowserItem) => {
     if (item.type !== "folder") return;
     handleSelectPrefix(item.key);
+  };
+
+  const clearPreviewObjectUrl = useCallback(() => {
+    if (!previewObjectUrlRef.current) return;
+    URL.revokeObjectURL(previewObjectUrlRef.current);
+    previewObjectUrlRef.current = null;
+  }, []);
+
+  const closePreview = () => {
+    clearPreviewObjectUrl();
+    setPreviewItem(null);
+    setPreviewUrl(null);
+    setPreviewContentType(null);
+    setPreviewLoading(false);
+    setPreviewError(null);
+  };
+
+  const handlePreviewItem = (item: BrowserItem) => {
+    if (item.type !== "file") return;
+    setActiveItem(item);
+    setShowInspector(true);
+    clearPreviewObjectUrl();
+    setPreviewError(null);
+    setPreviewUrl(null);
+    setPreviewContentType(null);
+    setPreviewLoading(true);
+    setPreviewItem(item);
   };
 
   const handleSelectPrefix = (nextPrefix: string) => {
@@ -991,7 +1544,13 @@ export default function BrowserPage() {
     setStatusMessage(null);
     setWarningMessage(null);
     setIsEditingPath(false);
-  }, [bucketName, prefix]);
+    clearPreviewObjectUrl();
+    setPreviewItem(null);
+    setPreviewUrl(null);
+    setPreviewContentType(null);
+    setPreviewLoading(false);
+    setPreviewError(null);
+  }, [bucketName, clearPreviewObjectUrl, prefix]);
 
   useEffect(() => {
     if (!isEditingPath) {
@@ -1019,6 +1578,7 @@ export default function BrowserPage() {
     if (!bucketName || !inspectedItem || inspectedItem.type === "folder" || !hasS3AccountContext) {
       setInspectedMetadata(null);
       setInspectedTags([]);
+      setInspectedTagsVersionId(null);
       setMetadataError(null);
       setMetadataLoading(false);
       return;
@@ -1034,12 +1594,14 @@ export default function BrowserPage() {
         if (!isMounted) return;
         setInspectedMetadata(meta);
         setInspectedTags(tags.tags ?? []);
+        setInspectedTagsVersionId(tags.version_id ?? null);
       })
       .catch(() => {
         if (!isMounted) return;
         setMetadataError("Unable to load object details.");
         setInspectedMetadata(null);
         setInspectedTags([]);
+        setInspectedTagsVersionId(null);
       })
       .finally(() => {
         if (isMounted) {
@@ -1050,6 +1612,81 @@ export default function BrowserPage() {
       isMounted = false;
     };
   }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.key, inspectedItem?.type]);
+
+  useEffect(() => {
+    if (!previewItem || !bucketName || !hasS3AccountContext || !accountIdForApi) {
+      return;
+    }
+    if (previewItem.type !== "file") {
+      setPreviewError("Preview is available for files only.");
+      setPreviewLoading(false);
+      return;
+    }
+    let isMounted = true;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewUrl(null);
+    setPreviewContentType(null);
+    clearPreviewObjectUrl();
+
+    const loadPreview = async () => {
+      const contentTypePromise = fetchObjectMetadata(accountIdForApi, bucketName, previewItem.key)
+        .then((meta) => meta.content_type ?? null)
+        .catch(() => null);
+
+      if (useProxyTransfers) {
+        const blob = await proxyDownload(accountIdForApi, bucketName, previewItem.key);
+        if (!isMounted) return;
+        const url = URL.createObjectURL(blob);
+        previewObjectUrlRef.current = url;
+        setPreviewUrl(url);
+        const contentType = (await contentTypePromise) ?? (blob.type || null);
+        setPreviewContentType(contentType);
+        return;
+      }
+
+      const [contentType, presign] = await Promise.all([
+        contentTypePromise,
+        presignObject(accountIdForApi, bucketName, {
+          key: previewItem.key,
+          operation: "get_object",
+          expires_in: 900,
+        }),
+      ]);
+      if (!isMounted) return;
+      setPreviewContentType(contentType);
+      setPreviewUrl(presign.url);
+    };
+
+    loadPreview()
+      .catch(() => {
+        if (!isMounted) return;
+        setPreviewError(useProxyTransfers ? "Unable to load preview." : "Unable to generate preview URL.");
+      })
+      .finally(() => {
+        if (isMounted) {
+          setPreviewLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    accountIdForApi,
+    bucketName,
+    clearPreviewObjectUrl,
+    hasS3AccountContext,
+    previewItem,
+    useProxyTransfers,
+  ]);
+
+  useEffect(() => {
+    if (!showAdvancedModal) return;
+    if (!inspectedItem || inspectedItem.type !== "file") {
+      setShowAdvancedModal(false);
+    }
+  }, [inspectedItem?.key, inspectedItem?.type, showAdvancedModal]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext || !inspectedItem || inspectedItem.type === "folder") {
@@ -1066,7 +1703,26 @@ export default function BrowserPage() {
   }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.key, inspectedItem?.type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleSelection = (id: string) => {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]));
+    setSelectedIds((prev) => {
+      const isSelected = prev.includes(id);
+      const next = isSelected ? prev.filter((itemId) => itemId !== id) : [...prev, id];
+      if (!isSelected) {
+        setInspectorTab("selection");
+        setShowInspector(true);
+      }
+      return next;
+    });
+  };
+
+  const selectSingleRow = (id: string) => {
+    setSelectedIds((prev) => {
+      if (prev.length === 1 && prev[0] === id) {
+        return [];
+      }
+      setInspectorTab("selection");
+      setShowInspector(true);
+      return [id];
+    });
   };
 
   const toggleAllSelection = () => {
@@ -1075,6 +1731,20 @@ export default function BrowserPage() {
       return;
     }
     setSelectedIds(filteredItems.map((item) => item.id));
+    if (filteredItems.length > 0) {
+      setInspectorTab("selection");
+      setShowInspector(true);
+    }
+  };
+
+  const toggleInspectorForItem = (item: BrowserItem) => {
+    if (showInspector) {
+      setShowInspector(false);
+      return;
+    }
+    setActiveItem(item);
+    setInspectorTab("details");
+    setShowInspector(true);
   };
 
   const handleBucketChange = (value: string) => {
@@ -1086,7 +1756,7 @@ export default function BrowserPage() {
 
   const handleRefresh = () => {
     if (!bucketName) return;
-    loadObjects(prefix);
+    loadObjects({ prefixOverride: prefix });
     if (showPrefixVersions) {
       loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
     }
@@ -1141,7 +1811,7 @@ export default function BrowserPage() {
   };
 
   const renderTreeNodes = (nodes: TreeNode[], depth = 0) => (
-    <ul className="space-y-1">
+    <ul className="min-w-max space-y-1">
       {nodes.map((node) => {
         const isActive = prefix === node.prefix;
         const canToggle = node.isLoaded ? node.children.length > 0 : true;
@@ -1165,7 +1835,7 @@ export default function BrowserPage() {
                 title={node.name}
               >
                 {node.prefix === "" ? <BucketIcon className="h-3.5 w-3.5" /> : <FolderIcon className="h-3.5 w-3.5" />}
-                <span className="truncate">{node.name}</span>
+                <span className="whitespace-nowrap">{node.name}</span>
               </button>
             </div>
             {node.isExpanded && (
@@ -1212,7 +1882,118 @@ export default function BrowserPage() {
   };
 
   const addActivity = (action: string, path: string) => {
-    setActivityLog((prev) => [{ id: makeId(), action, path, actor: "You", when: new Date().toLocaleTimeString() }, ...prev].slice(0, 6));
+    setCompletedOperations((prev) => [
+      { id: makeId(), label: action, path, when: new Date().toLocaleTimeString() },
+      ...prev,
+    ].slice(0, COMPLETED_OPERATIONS_LIMIT));
+  };
+
+  const resetBulkAttributesDraft = () => {
+    setBulkApplyMetadata(false);
+    setBulkApplyTags(false);
+    setBulkApplyStorageClass(false);
+    setBulkApplyAcl(false);
+    setBulkApplyLegalHold(false);
+    setBulkApplyRetention(false);
+    setBulkMetadataDraft({
+      contentType: "",
+      cacheControl: "",
+      contentDisposition: "",
+      contentEncoding: "",
+      contentLanguage: "",
+      expires: "",
+    });
+    setBulkMetadataEntries("");
+    setBulkTagsDraft("");
+    setBulkStorageClass("");
+    setBulkAclValue("private");
+    setBulkLegalHoldStatus("OFF");
+    setBulkRetentionMode("");
+    setBulkRetentionDate("");
+    setBulkRetentionBypass(false);
+    setBulkAttributesError(null);
+    setBulkAttributesSummary(null);
+  };
+
+  const resetBulkRestoreDraft = () => {
+    setBulkRestoreDate(formatLocalDateTime(new Date()));
+    setBulkRestoreDeleteMissing(false);
+    setBulkRestoreError(null);
+    setBulkRestoreSummary(null);
+  };
+
+  const openBulkAttributesModal = (items: BrowserItem[]) => {
+    setBulkActionItems(items);
+    resetBulkAttributesDraft();
+    setShowBulkAttributesModal(true);
+  };
+
+  const openBulkRestoreModal = (items: BrowserItem[]) => {
+    setBulkActionItems(items);
+    resetBulkRestoreDraft();
+    setShowBulkRestoreModal(true);
+  };
+
+  const requestObjectsRefresh = (prefixOverride: string) => {
+    if (typeof window === "undefined") return;
+    if (objectsRefreshTimeoutRef.current !== null) return;
+    objectsRefreshTimeoutRef.current = window.setTimeout(() => {
+      objectsRefreshTimeoutRef.current = null;
+      void loadObjects({ prefixOverride, silent: true });
+    }, 400);
+  };
+
+  const startOperation = (
+    status: OperationItem["status"],
+    label: string,
+    path: string,
+    options?: {
+      kind?: OperationItem["kind"];
+      groupId?: string;
+      groupLabel?: string;
+      groupKind?: OperationItem["groupKind"];
+      itemLabel?: string;
+      cancelable?: boolean;
+      sizeBytes?: number;
+    },
+    progress = status === "uploading" || status === "downloading" ? 0 : 20
+  ) => {
+    const operationId = makeId();
+    setOperations((prev) => [
+      {
+        id: operationId,
+        status,
+        label,
+        path,
+        progress,
+        sizeBytes: options?.sizeBytes,
+        kind: options?.kind ?? "other",
+        groupId: options?.groupId,
+        groupLabel: options?.groupLabel,
+        groupKind: options?.groupKind,
+        itemLabel: options?.itemLabel,
+        cancelable: options?.cancelable ?? false,
+      },
+      ...prev,
+    ]);
+    return operationId;
+  };
+
+  const completeOperation = (operationId: string, status: OperationCompletionStatus = "done") => {
+    const completedAt = new Date().toLocaleTimeString();
+    setOperations((prev) =>
+      prev.map((op) =>
+        op.id === operationId
+          ? {
+              ...op,
+              progress: 100,
+              cancelable: false,
+              completedAt,
+              completionStatus: status,
+            }
+          : op
+      )
+    );
   };
 
   const handleNewFolder = async () => {
@@ -1226,35 +2007,127 @@ export default function BrowserPage() {
       await createFolder(accountIdForApi, bucketName, folderPrefix);
       addActivity("Created", `${bucketName}/${folderPrefix}`);
       setStatusMessage(`Folder ${clean} created`);
-      await loadObjects(prefix);
+      await loadObjects({ prefixOverride: prefix });
       loadTreeChildren(prefix);
     } catch (err) {
       setStatusMessage("Unable to create folder.");
     }
   };
 
-  const handleUploadFiles = async (items: UploadCandidate[]) => {
-    if (!bucketName || !hasS3AccountContext || items.length === 0) return;
-    setWarningMessage(null);
-    const queue = [...items];
-    const workerCount = Math.min(MULTI_FILE_CONCURRENCY, queue.length);
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (queue.length > 0) {
-        const next = queue.shift();
-        if (!next) return;
-        await startUpload(next);
-      }
-    });
-    await Promise.all(workers);
+  const updateUploadQueue = (nextQueue: UploadQueueItem[]) => {
+    uploadQueueRef.current = nextQueue;
+    setUploadQueue([...nextQueue]);
   };
 
-  const uploadSimple = async (file: File, key: string, onProgress: (event: ProgressEvent) => void) => {
-    if (!bucketName || !hasS3AccountContext) return;
+  const removeQueuedUpload = (uploadId: string) => {
+    updateUploadQueue(uploadQueueRef.current.filter((item) => item.id !== uploadId));
+  };
+
+  const removeQueuedUploadsByGroup = (groupId: string) => {
+    updateUploadQueue(uploadQueueRef.current.filter((item) => item.groupId !== groupId));
+  };
+
+  const cancelUploadOperation = (operationId: string) => {
+    const controller = uploadControllersRef.current.get(operationId);
+    if (controller) {
+      controller.abort();
+    }
+  };
+
+  const cancelDownloadOperation = (operationId: string) => {
+    const controller = downloadControllersRef.current.get(operationId);
+    if (controller) {
+      controller.abort();
+    }
+  };
+
+  const cancelDownloadDetails = (operationId: string) => {
+    setDownloadDetails((prev) => {
+      const items = prev[operationId];
+      if (!items) return prev;
+      const nextItems = items.map((item) =>
+        item.status === "queued" || item.status === "downloading"
+          ? { ...item, status: "cancelled" }
+          : item
+      );
+      return { ...prev, [operationId]: nextItems };
+    });
+  };
+
+  const cancelOperation = (operationId: string) => {
+    cancelUploadOperation(operationId);
+    cancelDownloadOperation(operationId);
+    cancelDownloadDetails(operationId);
+  };
+
+  const cancelUploadGroup = (groupId: string) => {
+    removeQueuedUploadsByGroup(groupId);
+    const activeGroupOperations = operations.filter(
+      (op) => op.kind === "upload" && op.groupId === groupId && !op.completedAt
+    );
+    activeGroupOperations.forEach((op) => cancelUploadOperation(op.id));
+  };
+
+  const processUploadQueue = () => {
+    if (!hasS3AccountContext) return;
+    const parallelism = uploadParallelismRef.current;
+    if (activeUploadsRef.current >= parallelism) return;
+    if (uploadQueueRef.current.length === 0) return;
+    const availableSlots = Math.max(0, parallelism - activeUploadsRef.current);
+    const nextBatch = uploadQueueRef.current.splice(0, availableSlots);
+    if (nextBatch.length === 0) return;
+    updateUploadQueue(uploadQueueRef.current);
+    nextBatch.forEach((item) => {
+      activeUploadsRef.current += 1;
+      startQueuedUpload(item)
+        .catch(() => undefined)
+        .finally(() => {
+          activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1);
+          processUploadQueue();
+        });
+    });
+  };
+
+  const handleUploadFiles = (items: UploadCandidate[]) => {
+    if (!bucketName || !hasS3AccountContext || !accountIdForApi || items.length === 0) return;
+    setWarningMessage(null);
+    const batchId = makeId();
+    const queuedItems = items.map((item) => {
+      const file = item.file;
+      const relativePath = normalizeUploadPath(item.relativePath || file.name);
+      const key = `${normalizedPrefix}${relativePath}`;
+      const grouping = buildUploadGrouping(relativePath, batchId);
+      return {
+        id: makeId(),
+        file,
+        relativePath,
+        key,
+        bucket: bucketName,
+        accountId: accountIdForApi,
+        groupId: grouping.groupId,
+        groupLabel: grouping.groupLabel,
+        groupKind: grouping.groupKind,
+        itemLabel: grouping.itemLabel,
+      };
+    });
+    uploadQueueRef.current = [...uploadQueueRef.current, ...queuedItems];
+    updateUploadQueue(uploadQueueRef.current);
+    processUploadQueue();
+  };
+
+  const uploadSimple = async (
+    accountId: string,
+    bucket: string,
+    file: File,
+    key: string,
+    onProgress: (event: ProgressEvent) => void,
+    controller?: AbortController
+  ) => {
     if (useProxyTransfers) {
-      await proxyUpload(accountIdForApi, bucketName, key, file, onProgress);
+      await proxyUpload(accountId, bucket, key, file, onProgress, controller?.signal);
       return;
     }
-    const presign = await presignObject(accountIdForApi, bucketName, {
+    const presign = await presignObject(accountId, bucket, {
       key,
       operation: "put_object",
       content_type: file.type || undefined,
@@ -1263,15 +2136,21 @@ export default function BrowserPage() {
     await axios.put(presign.url, file, {
       headers: { ...(presign.headers || {}), "Content-Type": file.type || "application/octet-stream" },
       onUploadProgress: onProgress,
+      signal: controller?.signal,
     });
   };
 
-  const uploadMultipart = async (file: File, key: string, operationId: string) => {
-    if (!bucketName || !hasS3AccountContext) return;
+  const uploadMultipart = async (
+    accountId: string,
+    bucket: string,
+    file: File,
+    key: string,
+    operationId: string,
+    controller: AbortController
+  ) => {
     let uploadId: string | null = null;
     const totalParts = Math.ceil(file.size / PART_SIZE);
     const partProgress = new Map<number, number>();
-    const controller = new AbortController();
 
     const updateProgress = () => {
       const loaded = Array.from(partProgress.values()).reduce((sum, value) => sum + value, 0);
@@ -1298,7 +2177,7 @@ export default function BrowserPage() {
         throw new Error("Missing multipart upload ID.");
       }
       const blob = file.slice(part.start, part.end);
-      const presignedPart = await presignPart(accountIdForApi, bucketName, uploadId, {
+      const presignedPart = await presignPart(accountId, bucket, uploadId, {
         key,
         part_number: part.partNumber,
         expires_in: 1800,
@@ -1321,7 +2200,7 @@ export default function BrowserPage() {
 
     try {
       setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, label: "Multipart upload" } : op)));
-      const init = await initiateMultipartUpload(accountIdForApi, bucketName, {
+      const init = await initiateMultipartUpload(accountId, bucket, {
         key,
         content_type: file.type || undefined,
       });
@@ -1344,12 +2223,12 @@ export default function BrowserPage() {
       await Promise.all(workers);
       setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 95 } : op)));
       uploadedParts.sort((a, b) => a.part_number - b.part_number);
-      await completeMultipartUpload(accountIdForApi, bucketName, uploadId, key, { parts: uploadedParts });
+      await completeMultipartUpload(accountId, bucket, uploadId, key, { parts: uploadedParts });
       setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
     } catch (err) {
       if (uploadId) {
         try {
-          await abortMultipartUpload(accountIdForApi, bucketName, uploadId, key);
+          await abortMultipartUpload(accountId, bucket, uploadId, key);
         } catch {
           // ignore abort failures
         }
@@ -1358,39 +2237,56 @@ export default function BrowserPage() {
     }
   };
 
-  const startUpload = async (item: UploadCandidate) => {
-    if (!bucketName || !hasS3AccountContext) return;
-    const file = item.file;
-    const relativePath = normalizeUploadPath(item.relativePath || file.name);
-    const key = `${normalizedPrefix}${relativePath}`;
-    const operationId = makeId();
-    setOperations((prev) => [
-      { id: operationId, label: "Uploading", path: `${bucketName}/${key}`, progress: 0, status: "uploading" },
-      ...prev,
-    ]);
+  const startQueuedUpload = async (item: UploadQueueItem) => {
+    if (!item.bucket || !item.accountId) return;
+    const { file, relativePath, key, bucket, accountId, groupId, groupLabel, groupKind, itemLabel } = item;
+    const operationId = startOperation(
+      "uploading",
+      "Uploading",
+      `${bucket}/${key}`,
+      {
+        kind: "upload",
+        groupId,
+        groupLabel,
+        groupKind,
+        itemLabel,
+        cancelable: true,
+        sizeBytes: file.size,
+      }
+    );
+    const controller = new AbortController();
+    uploadControllersRef.current.set(operationId, controller);
     try {
       if (!useProxyTransfers && file.size >= MULTIPART_THRESHOLD) {
-        await uploadMultipart(file, key, operationId);
+        await uploadMultipart(accountId, bucket, file, key, operationId, controller);
       } else {
         const onProgress = (event: ProgressEvent) => {
           const total = event.total ?? file.size;
           const progress = total ? Math.round((event.loaded / total) * 100) : 0;
           setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress } : op)));
         };
-        await uploadSimple(file, key, onProgress);
+        await uploadSimple(accountId, bucket, file, key, onProgress, controller);
       }
-      setOperations((prev) => prev.filter((op) => op.id !== operationId));
-      addActivity("Uploaded", `${bucketName}/${key}`);
+      completeOperation(operationId, "done");
       setStatusMessage(`Uploaded ${relativePath}`);
-      await loadObjects(prefix);
-    } catch (err) {
-      setOperations((prev) => prev.filter((op) => op.id !== operationId));
-      setStatusMessage(`Upload failed for ${relativePath}`);
-      if (!useProxyTransfers && isLikelyCorsError(err)) {
-        setWarningMessage(
-          `Possible CORS or endpoint issue. Ensure bucket CORS allows origin ${window.location.origin} with PUT/GET/HEAD and headers like Content-Type or x-amz-*.`
-        );
+      if (bucket === bucketName) {
+        requestObjectsRefresh(prefix);
       }
+    } catch (err) {
+      if (isAbortError(err)) {
+        completeOperation(operationId, "cancelled");
+        setStatusMessage(`Upload cancelled for ${relativePath}`);
+      } else {
+        completeOperation(operationId, "failed");
+        setStatusMessage(`Upload failed for ${relativePath}`);
+        if (!useProxyTransfers && isLikelyCorsError(err)) {
+          setWarningMessage(
+            `Possible CORS or endpoint issue. Ensure bucket CORS allows origin ${window.location.origin} with PUT/GET/HEAD and headers like Content-Type or x-amz-*.`
+          );
+        }
+      }
+    } finally {
+      uploadControllersRef.current.delete(operationId);
     }
   };
 
@@ -1453,8 +2349,507 @@ export default function BrowserPage() {
     handleUploadFiles(files);
   };
 
+  const downloadObjectBlob = async (key: string, signal?: AbortSignal) => {
+    if (!bucketName || !hasS3AccountContext) {
+      throw new Error("Missing bucket context.");
+    }
+    if (useProxyTransfers) {
+      return proxyDownload(accountIdForApi, bucketName, key, signal);
+    }
+    const presign = await presignObject(accountIdForApi, bucketName, {
+      key,
+      operation: "get_object",
+      expires_in: 900,
+    });
+    const response = await fetch(presign.url, {
+      headers: presign.headers || undefined,
+      signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Download failed for ${key}`);
+    }
+    return response.blob();
+  };
+
+  const listAllObjectsForPrefix = async (targetPrefix: string, targetBucket?: string) => {
+    const bucket = targetBucket ?? bucketName;
+    if (!bucket || !hasS3AccountContext) return [];
+    const collected: BrowserObject[] = [];
+    let continuation: string | null = null;
+    let hasMore = true;
+    while (hasMore) {
+      const data = await listBrowserObjects(accountIdForApi, bucket, {
+        prefix: targetPrefix,
+        continuationToken: continuation,
+        maxKeys: 1000,
+        type: "file",
+        recursive: true,
+      });
+      collected.push(...data.objects);
+      continuation = data.next_continuation_token ?? null;
+      hasMore = Boolean(data.is_truncated && continuation);
+    }
+    return collected;
+  };
+
+  const listAllVersionsForPrefix = async (targetPrefix: string) => {
+    if (!bucketName || !hasS3AccountContext) return { versions: [], deleteMarkers: [] };
+    const versions: BrowserObjectVersion[] = [];
+    const deleteMarkers: BrowserObjectVersion[] = [];
+    let keyMarker: string | null = null;
+    let versionIdMarker: string | null = null;
+    let hasMore = true;
+    while (hasMore) {
+      const data = await listObjectVersions(accountIdForApi, bucketName, {
+        prefix: targetPrefix,
+        keyMarker,
+        versionIdMarker,
+        maxKeys: 1000,
+      });
+      versions.push(...data.versions);
+      deleteMarkers.push(...data.delete_markers);
+      keyMarker = data.next_key_marker ?? null;
+      versionIdMarker = data.next_version_id_marker ?? null;
+      hasMore = Boolean(data.is_truncated && keyMarker);
+    }
+    return { versions, deleteMarkers };
+  };
+
+  const listAllVersionsForKey = async (key: string) => {
+    if (!bucketName || !hasS3AccountContext) return { versions: [], deleteMarkers: [] };
+    const versions: BrowserObjectVersion[] = [];
+    const deleteMarkers: BrowserObjectVersion[] = [];
+    let keyMarker: string | null = null;
+    let versionIdMarker: string | null = null;
+    let hasMore = true;
+    while (hasMore) {
+      const data = await listObjectVersions(accountIdForApi, bucketName, {
+        key,
+        keyMarker,
+        versionIdMarker,
+        maxKeys: 1000,
+      });
+      versions.push(...data.versions);
+      deleteMarkers.push(...data.delete_markers);
+      keyMarker = data.next_key_marker ?? null;
+      versionIdMarker = data.next_version_id_marker ?? null;
+      hasMore = Boolean(data.is_truncated && keyMarker);
+    }
+    return { versions, deleteMarkers };
+  };
+
+  const resolveBulkAttributeKeys = async (items: BrowserItem[]) => {
+    const keys = new Set<string>();
+    items
+      .filter((item) => item.type === "file")
+      .forEach((item) => keys.add(item.key));
+    const folders = items.filter((item) => item.type === "folder");
+    for (const folder of folders) {
+      const folderPrefix = normalizePrefix(folder.key);
+      const objects = await listAllObjectsForPrefix(folderPrefix);
+      objects.forEach((obj) => keys.add(obj.key));
+    }
+    return Array.from(keys);
+  };
+
+  const findVersionForDate = (entries: BrowserObjectVersion[], targetTime: number) => {
+    const sorted = entries.slice().sort((a, b) => {
+      const timeA = a.last_modified ? new Date(a.last_modified).getTime() : 0;
+      const timeB = b.last_modified ? new Date(b.last_modified).getTime() : 0;
+      return timeB - timeA;
+    });
+    return sorted.find((entry) => {
+      if (!entry.last_modified) return false;
+      return new Date(entry.last_modified).getTime() <= targetTime;
+    });
+  };
+
+  const updateDeleteDetailsStatus = (operationId: string, keys: string[], status: DeleteDetailStatus) => {
+    setDeleteDetails((prev) => {
+      const items = prev[operationId];
+      if (!items) return prev;
+      const keySet = new Set(keys);
+      const nextItems = items.map((item) => (keySet.has(item.key) ? { ...item, status } : item));
+      return { ...prev, [operationId]: nextItems };
+    });
+  };
+
+  const deleteObjectsInBatches = async (
+    keys: string[],
+    onProgress?: (deleted: number, total: number) => void,
+    detailOperationId?: string
+  ) => {
+    if (!bucketName || !hasS3AccountContext || keys.length === 0) return;
+    const uniqueKeys = Array.from(new Set(keys));
+    const total = uniqueKeys.length;
+    const chunks = chunkItems(uniqueKeys, 1000);
+    let deletedCount = 0;
+    let hasError: unknown = null;
+    const queue = [...chunks];
+    const workerCount = Math.max(1, Math.min(otherOperationsParallelismRef.current, queue.length));
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (queue.length > 0 && !hasError) {
+        const chunk = queue.shift();
+        if (!chunk) return;
+        try {
+          if (detailOperationId) {
+            updateDeleteDetailsStatus(detailOperationId, chunk, "deleting");
+          }
+          await deleteObjects(
+            accountIdForApi,
+            bucketName,
+            chunk.map((key) => ({ key }))
+          );
+          if (detailOperationId) {
+            updateDeleteDetailsStatus(detailOperationId, chunk, "done");
+          }
+          deletedCount += chunk.length;
+          onProgress?.(deletedCount, total);
+        } catch (err) {
+          if (detailOperationId) {
+            updateDeleteDetailsStatus(detailOperationId, chunk, "failed");
+          }
+          hasError = err;
+        }
+      }
+    });
+    await Promise.all(workers);
+    if (hasError) {
+      throw hasError;
+    }
+  };
+
+  const deleteFolderRecursive = async (folderItem: BrowserItem) => {
+    if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder") return;
+    const folderPrefix = normalizePrefix(folderItem.key);
+    const operationId = startOperation(
+      "deleting",
+      "Deleting folder",
+      `${bucketName}/${folderPrefix}`,
+      { kind: "delete" },
+      0
+    );
+    let completionStatus: OperationCompletionStatus = "done";
+    try {
+      const objects = await listAllObjectsForPrefix(folderPrefix);
+      const keys = Array.from(new Set([...objects.map((obj) => obj.key), folderPrefix]));
+      if (keys.length === 0) {
+        setStatusMessage("Folder is empty.");
+        return;
+      }
+      const detailItems = objects.map((obj) => {
+        const relativeKey = obj.key.startsWith(folderPrefix) ? obj.key.slice(folderPrefix.length) : obj.key;
+        return {
+          id: makeId(),
+          key: obj.key,
+          label: relativeKey || obj.key,
+          status: "queued" as DeleteDetailStatus,
+        };
+      });
+      if (detailItems.length === 0) {
+        detailItems.push({
+          id: makeId(),
+          key: folderPrefix,
+          label: folderItem.name || folderPrefix,
+          status: "queued",
+        });
+      }
+      if (detailItems.length > 0) {
+        setDeleteDetails((prev) => ({ ...prev, [operationId]: detailItems }));
+      }
+      await deleteObjectsInBatches(keys, (deleted, total) => {
+        const progress = total > 0 ? Math.min(100, Math.round((deleted / total) * 100)) : 0;
+        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress } : op)));
+      }, detailItems.length > 0 ? operationId : undefined);
+      setStatusMessage(`Deleted folder ${folderItem.name}`);
+    } catch (err) {
+      completionStatus = "failed";
+      setStatusMessage("Unable to delete folder.");
+    } finally {
+      completeOperation(operationId, completionStatus);
+    }
+  };
+
+  const updateDownloadDetail = (operationId: string, detailId: string, status: DownloadDetailStatus) => {
+    setDownloadDetails((prev) => {
+      const items = prev[operationId];
+      if (!items) return prev;
+      const nextItems = items.map((item) => (item.id === detailId ? { ...item, status } : item));
+      return { ...prev, [operationId]: nextItems };
+    });
+  };
+
+  const updateCopyDetailStatus = (operationId: string, detailId: string, status: CopyDetailStatus) => {
+    setCopyDetails((prev) => {
+      const items = prev[operationId];
+      if (!items) return prev;
+      const nextItems = items.map((item) => (item.id === detailId ? { ...item, status } : item));
+      return { ...prev, [operationId]: nextItems };
+    });
+  };
+
+  const handleDownloadFolder = async (folderItem: BrowserItem) => {
+    if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder") return;
+    setWarningMessage(null);
+    const folderPrefix = normalizePrefix(folderItem.key);
+    const rawLabel = folderItem.name || folderPrefix.replace(/\/$/, "") || "folder";
+    const folderLabel = rawLabel.replace(/[\\/]/g, "-") || "folder";
+    const operationId = startOperation(
+      "downloading",
+      "Preparing download",
+      `${bucketName}/${folderPrefix}`,
+      { kind: "download", cancelable: true }
+    );
+    const controller = new AbortController();
+    downloadControllersRef.current.set(operationId, controller);
+    let completionStatus: OperationCompletionStatus = "done";
+    try {
+      const objects = await listAllObjectsForPrefix(folderPrefix);
+      if (controller.signal.aborted) {
+        completionStatus = "cancelled";
+        setStatusMessage(`Download cancelled for ${folderLabel}`);
+        return;
+      }
+      const downloadTargets = objects
+        .map((obj) => {
+          const relativeKey = obj.key.startsWith(folderPrefix) ? obj.key.slice(folderPrefix.length) : obj.key;
+          if (!relativeKey) return null;
+          if (relativeKey.endsWith("/") && (obj.size ?? 0) === 0) return null;
+          return {
+            obj,
+            relativeKey,
+            detailId: makeId(),
+          };
+        })
+        .filter((entry): entry is { obj: BrowserObject; relativeKey: string; detailId: string } => Boolean(entry));
+      if (downloadTargets.length === 0) {
+        setStatusMessage("Folder is empty.");
+        return;
+      }
+      setDownloadDetails((prev) => ({
+        ...prev,
+        [operationId]: downloadTargets.map((target) => ({
+          id: target.detailId,
+          key: target.obj.key,
+          label: target.relativeKey,
+          status: "queued",
+          sizeBytes: target.obj.size,
+        })),
+      }));
+      const zip = new JSZip();
+      const totalBytes = downloadTargets.reduce((sum, target) => sum + (target.obj.size ?? 0), 0);
+      const totalCount = downloadTargets.length;
+      let downloadedBytes = 0;
+      let completed = 0;
+      let aborted = false;
+      const errors: string[] = [];
+
+      const updateProgress = () => {
+        const base = totalBytes > 0 ? downloadedBytes / totalBytes : completed / totalCount;
+        const percent = Math.min(80, Math.round(base * 80));
+        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+      };
+
+      const queue = [...downloadTargets];
+      const workerCount = Math.max(1, Math.min(downloadParallelismRef.current, queue.length));
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (queue.length > 0 && !aborted) {
+          if (controller.signal.aborted) {
+            aborted = true;
+            return;
+          }
+          const obj = queue.shift();
+          if (!obj) return;
+          updateDownloadDetail(operationId, obj.detailId, "downloading");
+          try {
+            const blob = await downloadObjectBlob(obj.obj.key, controller.signal);
+            zip.file(`${folderLabel}/${obj.relativeKey}`, blob);
+            updateDownloadDetail(operationId, obj.detailId, "done");
+          } catch (err) {
+            if (isAbortError(err) || controller.signal.aborted) {
+              updateDownloadDetail(operationId, obj.detailId, "cancelled");
+              aborted = true;
+              controller.abort();
+              return;
+            }
+            console.error(err);
+            updateDownloadDetail(operationId, obj.detailId, "failed");
+            errors.push(obj.obj.key);
+          } finally {
+            completed += 1;
+            downloadedBytes += obj.obj.size ?? 0;
+            updateProgress();
+          }
+        }
+      });
+      await Promise.all(workers);
+
+      if (aborted || controller.signal.aborted) {
+        completionStatus = "cancelled";
+        setStatusMessage(`Download cancelled for ${folderLabel}`);
+        cancelDownloadDetails(operationId);
+        return;
+      }
+
+      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, label: "Packaging zip" } : op)));
+      const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
+        const percent = Math.min(99, 80 + Math.round(metadata.percent * 0.2));
+        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+      });
+      if (controller.signal.aborted) {
+        setStatusMessage(`Download cancelled for ${folderLabel}`);
+        cancelDownloadDetails(operationId);
+        return;
+      }
+      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
+
+      const downloadName = `${folderLabel}.zip`;
+      const url = window.URL.createObjectURL(zipBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = downloadName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      if (errors.length > 0) {
+        completionStatus = "failed";
+        setStatusMessage(`Downloaded ${folderLabel} with ${errors.length} failed file(s).`);
+      } else {
+        setStatusMessage(`Downloaded ${folderLabel}`);
+      }
+    } catch (err) {
+      if (isAbortError(err) || controller.signal.aborted) {
+        completionStatus = "cancelled";
+        setStatusMessage(`Download cancelled for ${folderLabel}`);
+      } else {
+        completionStatus = "failed";
+        console.error(err);
+        setStatusMessage("Unable to download folder.");
+      }
+    } finally {
+      downloadControllersRef.current.delete(operationId);
+      completeOperation(operationId, completionStatus);
+    }
+  };
+
+  const handleDownloadMultipleFiles = async (targets: BrowserItem[]) => {
+    if (!bucketName || !hasS3AccountContext) return;
+    setWarningMessage(null);
+    const files = targets.filter((item) => item.type === "file");
+    if (files.length <= 1) {
+      await handleDownloadItems(files);
+      return;
+    }
+    const operationId = startOperation(
+      "downloading",
+      `Downloading ${files.length} files`,
+      currentPath || bucketName,
+      { kind: "download", cancelable: true }
+    );
+    const controller = new AbortController();
+    downloadControllersRef.current.set(operationId, controller);
+    let completionStatus: OperationCompletionStatus = "done";
+    const downloadTargets = files.map((item) => ({
+      item,
+      detailId: makeId(),
+    }));
+    setDownloadDetails((prev) => ({
+      ...prev,
+      [operationId]: downloadTargets.map((target) => ({
+        id: target.detailId,
+        key: target.item.key,
+        label: target.item.name,
+        status: "queued",
+        sizeBytes: target.item.sizeBytes ?? undefined,
+      })),
+    }));
+    const totalBytes = downloadTargets.reduce((sum, target) => sum + (target.item.sizeBytes ?? 0), 0);
+    const totalCount = downloadTargets.length;
+    let downloadedBytes = 0;
+    let completed = 0;
+    let aborted = false;
+    let failedCount = 0;
+
+    const updateProgress = () => {
+      const base = totalBytes > 0 ? downloadedBytes / totalBytes : completed / totalCount;
+      const percent = Math.min(100, Math.round(base * 100));
+      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+    };
+
+    try {
+      const queue = [...downloadTargets];
+      const workerCount = Math.max(1, Math.min(downloadParallelismRef.current, queue.length));
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (queue.length > 0 && !aborted) {
+          if (controller.signal.aborted) {
+            aborted = true;
+            return;
+          }
+          const target = queue.shift();
+          if (!target) return;
+          updateDownloadDetail(operationId, target.detailId, "downloading");
+          try {
+            const blob = await downloadObjectBlob(target.item.key, controller.signal);
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = target.item.name || "download";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            updateDownloadDetail(operationId, target.detailId, "done");
+          } catch (err) {
+            if (isAbortError(err) || controller.signal.aborted) {
+              updateDownloadDetail(operationId, target.detailId, "cancelled");
+              aborted = true;
+              controller.abort();
+              return;
+            }
+            console.error(err);
+            updateDownloadDetail(operationId, target.detailId, "failed");
+            failedCount += 1;
+          } finally {
+            completed += 1;
+            downloadedBytes += target.item.sizeBytes ?? 0;
+            updateProgress();
+          }
+        }
+      });
+      await Promise.all(workers);
+      if (aborted || controller.signal.aborted) {
+        completionStatus = "cancelled";
+        setStatusMessage("Download cancelled.");
+        cancelDownloadDetails(operationId);
+        return;
+      }
+      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
+      setStatusMessage(`Downloaded ${files.length} files`);
+      if (failedCount > 0) {
+        completionStatus = "failed";
+      }
+    } catch (err) {
+      if (isAbortError(err) || controller.signal.aborted) {
+        completionStatus = "cancelled";
+        setStatusMessage("Download cancelled.");
+      } else {
+        completionStatus = "failed";
+        setStatusMessage("Unable to download files.");
+      }
+    } finally {
+      downloadControllersRef.current.delete(operationId);
+      completeOperation(operationId, completionStatus);
+    }
+  };
+
   const handleDownloadItems = async (targets: BrowserItem[]) => {
     if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
+    if (targets.length > 1) {
+      await handleDownloadMultipleFiles(targets);
+      return;
+    }
     setWarningMessage(null);
     try {
       for (const item of targets) {
@@ -1483,25 +2878,511 @@ export default function BrowserPage() {
     }
   };
 
+  const handleDownloadTarget = (item: BrowserItem) => {
+    if (item.type === "folder") {
+      void handleDownloadFolder(item);
+      return;
+    }
+    void handleDownloadItems([item]);
+  };
+
   const handleDeleteItems = async (targets: BrowserItem[]) => {
     if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
     const fileTargets = targets.filter((item) => item.type === "file");
-    if (fileTargets.length === 0) return;
+    const folderTargets = targets.filter((item) => item.type === "folder");
+    if (fileTargets.length === 0 && folderTargets.length === 0) return;
     setWarningMessage(null);
-    const confirmed = window.confirm(`Delete ${fileTargets.length} object(s)?`);
+    const confirmed = window.confirm(
+      folderTargets.length > 0
+        ? `Delete ${fileTargets.length} object(s) and ${folderTargets.length} folder(s)? This removes all objects within the selected folders.`
+        : `Delete ${fileTargets.length} object(s)?`
+    );
     if (!confirmed) return;
     try {
-      await deleteObjects(
-        accountIdForApi,
-        bucketName,
-        fileTargets.map((item) => ({ key: item.key }))
+      if (fileTargets.length > 0) {
+        const targetPath =
+          fileTargets.length === 1 ? `${bucketName}/${fileTargets[0].key}` : (currentPath || bucketName);
+        const operationLabel =
+          fileTargets.length === 1 ? "Deleting object" : `Deleting ${fileTargets.length} objects`;
+        const operationKind = fileTargets.length > 1 ? "delete" : "other";
+        const operationId = startOperation("deleting", operationLabel, targetPath, { kind: operationKind }, 0);
+        let completionStatus: OperationCompletionStatus = "done";
+        try {
+          if (fileTargets.length > 1) {
+            setDeleteDetails((prev) => ({
+              ...prev,
+              [operationId]: fileTargets.map((item) => ({
+                id: makeId(),
+                key: item.key,
+                label: item.name,
+                status: "queued",
+              })),
+            }));
+          }
+          await deleteObjectsInBatches(
+            fileTargets.map((item) => item.key),
+            (deleted, total) => {
+              const progress = total > 0 ? Math.min(100, Math.round((deleted / total) * 100)) : 0;
+              setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress } : op)));
+            },
+            fileTargets.length > 1 ? operationId : undefined
+          );
+          setStatusMessage(`Deleted ${fileTargets.length} object(s)`);
+        } catch (err) {
+          completionStatus = "failed";
+          setStatusMessage("Unable to delete selected objects.");
+        } finally {
+          completeOperation(operationId, completionStatus);
+        }
+      }
+      for (const folder of folderTargets) {
+        await deleteFolderRecursive(folder);
+      }
+      setSelectedIds((prev) =>
+        prev.filter((id) => !targets.some((item) => item.id === id))
       );
-      fileTargets.forEach((item) => addActivity("Deleted", `${bucketName}/${item.key}`));
-      setSelectedIds((prev) => prev.filter((id) => !fileTargets.some((item) => item.id === id)));
-      setStatusMessage(`Deleted ${fileTargets.length} object(s)`);
-      await loadObjects(prefix);
+      await loadObjects({ prefixOverride: prefix });
+      loadTreeChildren(prefix);
     } catch (err) {
       setStatusMessage("Unable to delete objects.");
+    }
+  };
+
+  const handleBulkAttributesApply = async () => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const shouldApplyMetadata = bulkApplyMetadata;
+    const shouldApplyTags = bulkApplyTags;
+    const shouldApplyStorage = bulkApplyStorageClass;
+    const shouldApplyAcl = bulkApplyAcl;
+    const shouldApplyLegalHold = bulkApplyLegalHold;
+    const shouldApplyRetention = bulkApplyRetention;
+    if (!shouldApplyMetadata && !shouldApplyTags && !shouldApplyStorage && !shouldApplyAcl && !shouldApplyLegalHold && !shouldApplyRetention) {
+      setBulkAttributesError("Select at least one attribute to update.");
+      return;
+    }
+
+    const metadataPairs = parseKeyValueLines(bulkMetadataEntries);
+    const tagsPairs = parseKeyValueLines(bulkTagsDraft);
+    const expiresIso = bulkMetadataDraft.expires.trim() ? toIsoString(bulkMetadataDraft.expires) : "";
+    const metadataHasValues =
+      Boolean(bulkMetadataDraft.contentType.trim()) ||
+      Boolean(bulkMetadataDraft.cacheControl.trim()) ||
+      Boolean(bulkMetadataDraft.contentDisposition.trim()) ||
+      Boolean(bulkMetadataDraft.contentEncoding.trim()) ||
+      Boolean(bulkMetadataDraft.contentLanguage.trim()) ||
+      Boolean(expiresIso) ||
+      metadataPairs.length > 0;
+
+    if (shouldApplyMetadata && !metadataHasValues) {
+      setBulkAttributesError("Provide at least one metadata field.");
+      return;
+    }
+    if (shouldApplyStorage && !bulkStorageClass) {
+      setBulkAttributesError("Select a storage class.");
+      return;
+    }
+    if (shouldApplyMetadata && bulkMetadataDraft.expires.trim() && !expiresIso) {
+      setBulkAttributesError("Provide a valid expires date.");
+      return;
+    }
+    if (shouldApplyTags && tagsPairs.length === 0) {
+      setBulkAttributesError("Provide at least one tag.");
+      return;
+    }
+    const retentionIso = bulkRetentionDate ? toIsoString(bulkRetentionDate) : "";
+    if (shouldApplyRetention && (!bulkRetentionMode || !bulkRetentionDate || !retentionIso)) {
+      setBulkAttributesError("Provide retention mode and date.");
+      return;
+    }
+
+    setBulkAttributesLoading(true);
+    setBulkAttributesError(null);
+    setBulkAttributesSummary(null);
+    try {
+      const keys = await resolveBulkAttributeKeys(bulkActionItems);
+      if (keys.length === 0) {
+        setBulkAttributesError("No objects to update.");
+        return;
+      }
+      const operationId = startOperation(
+        "copying",
+        "Updating attributes",
+        currentPath || bucketName,
+        { kind: "other" },
+        0
+      );
+      const total = keys.length;
+      let completed = 0;
+      let failures = 0;
+
+      const updateProgress = () => {
+        const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
+        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+      };
+
+      const metadataRecord = metadataPairs.length > 0 ? pairsToRecord(metadataPairs) : undefined;
+
+      const applyForKey = async (key: string) => {
+        if (shouldApplyMetadata || shouldApplyStorage) {
+          const payload = {
+            key,
+            content_type: shouldApplyMetadata && bulkMetadataDraft.contentType.trim() ? bulkMetadataDraft.contentType.trim() : undefined,
+            cache_control: shouldApplyMetadata && bulkMetadataDraft.cacheControl.trim() ? bulkMetadataDraft.cacheControl.trim() : undefined,
+            content_disposition:
+              shouldApplyMetadata && bulkMetadataDraft.contentDisposition.trim()
+                ? bulkMetadataDraft.contentDisposition.trim()
+                : undefined,
+            content_encoding:
+              shouldApplyMetadata && bulkMetadataDraft.contentEncoding.trim() ? bulkMetadataDraft.contentEncoding.trim() : undefined,
+            content_language:
+              shouldApplyMetadata && bulkMetadataDraft.contentLanguage.trim() ? bulkMetadataDraft.contentLanguage.trim() : undefined,
+            expires: shouldApplyMetadata && expiresIso ? expiresIso : undefined,
+            metadata: shouldApplyMetadata && metadataRecord ? metadataRecord : undefined,
+            storage_class: shouldApplyStorage ? bulkStorageClass : undefined,
+          };
+          await updateObjectMetadata(accountIdForApi, bucketName, payload);
+        }
+        if (shouldApplyTags) {
+          await updateObjectTags(accountIdForApi, bucketName, { key, tags: tagsPairs });
+        }
+        if (shouldApplyAcl) {
+          await updateObjectAcl(accountIdForApi, bucketName, { key, acl: bulkAclValue });
+        }
+        if (shouldApplyLegalHold) {
+          await updateObjectLegalHold(accountIdForApi, bucketName, { key, status: bulkLegalHoldStatus });
+        }
+        if (shouldApplyRetention) {
+          await updateObjectRetention(accountIdForApi, bucketName, {
+            key,
+            mode: bulkRetentionMode,
+            retain_until: retentionIso,
+            bypass_governance: bulkRetentionBypass,
+          });
+        }
+      };
+
+      const queue = [...keys];
+      const workerCount = Math.max(1, Math.min(otherOperationsParallelismRef.current, queue.length));
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (queue.length > 0) {
+          const key = queue.shift();
+          if (!key) return;
+          try {
+            await applyForKey(key);
+          } catch (err) {
+            failures += 1;
+          } finally {
+            completed += 1;
+            updateProgress();
+          }
+        }
+      });
+      await Promise.all(workers);
+      completeOperation(operationId, failures > 0 ? "failed" : "done");
+      const successCount = Math.max(0, total - failures);
+      const summary = `Updated ${successCount} of ${total} object(s).`;
+      setBulkAttributesSummary(summary);
+      setStatusMessage(summary);
+      requestObjectsRefresh(prefix);
+    } catch (err) {
+      setBulkAttributesError("Unable to update attributes.");
+    } finally {
+      setBulkAttributesLoading(false);
+    }
+  };
+
+  const handleBulkRestoreApply = async () => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const targetTime = bulkRestoreDate ? new Date(bulkRestoreDate).getTime() : Number.NaN;
+    if (!bulkRestoreDate || Number.isNaN(targetTime)) {
+      setBulkRestoreError("Select a valid date.");
+      return;
+    }
+    setBulkRestoreLoading(true);
+    setBulkRestoreError(null);
+    setBulkRestoreSummary(null);
+    try {
+      const fileItems = bulkActionItems.filter((item) => item.type === "file");
+      const folderItems = bulkActionItems.filter((item) => item.type === "folder");
+      const restoreCandidates = new Map<string, string>();
+      const presentAtDate = new Set<string>();
+      const deleteCandidates = new Set<string>();
+
+      for (const item of fileItems) {
+        const { versions, deleteMarkers } = await listAllVersionsForKey(item.key);
+        const match = findVersionForDate([...versions, ...deleteMarkers], targetTime);
+        if (match && !match.is_delete_marker && match.version_id) {
+          restoreCandidates.set(item.key, match.version_id);
+          presentAtDate.add(item.key);
+        } else if (bulkRestoreDeleteMissing) {
+          deleteCandidates.add(item.key);
+        }
+      }
+
+      for (const folder of folderItems) {
+        const folderPrefix = normalizePrefix(folder.key);
+        const { versions, deleteMarkers } = await listAllVersionsForPrefix(folderPrefix);
+        const byKey = new Map<string, BrowserObjectVersion[]>();
+        [...versions, ...deleteMarkers].forEach((entry) => {
+          const list = byKey.get(entry.key) ?? [];
+          list.push(entry);
+          byKey.set(entry.key, list);
+        });
+        byKey.forEach((entries, key) => {
+          const match = findVersionForDate(entries, targetTime);
+          if (match && !match.is_delete_marker && match.version_id) {
+            restoreCandidates.set(key, match.version_id);
+            presentAtDate.add(key);
+          }
+        });
+        if (bulkRestoreDeleteMissing) {
+          const currentObjects = await listAllObjectsForPrefix(folderPrefix);
+          currentObjects.forEach((obj) => {
+            if (!presentAtDate.has(obj.key)) {
+              deleteCandidates.add(obj.key);
+            }
+          });
+        }
+      }
+
+      const restoreList = Array.from(restoreCandidates.entries()).map(([key, versionId]) => ({
+        key,
+        versionId,
+      }));
+      const deleteList = bulkRestoreDeleteMissing ? Array.from(deleteCandidates) : [];
+      const total = restoreList.length + deleteList.length;
+      if (total === 0) {
+        setBulkRestoreError("No objects matched the selected date.");
+        return;
+      }
+
+      const operationId = startOperation(
+        "copying",
+        "Restoring snapshot",
+        currentPath || bucketName,
+        { kind: "other" },
+        0
+      );
+      let completed = 0;
+      let restoreFailures = 0;
+      let deleteFailures = 0;
+
+      const updateProgress = (count: number) => {
+        const percent = total > 0 ? Math.round((count / total) * 100) : 100;
+        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+      };
+
+      if (restoreList.length > 0) {
+        const queue = [...restoreList];
+        const workerCount = Math.max(1, Math.min(otherOperationsParallelismRef.current, queue.length));
+        const workers = Array.from({ length: workerCount }, async () => {
+          while (queue.length > 0) {
+            const item = queue.shift();
+            if (!item) return;
+            try {
+              await copyObject(accountIdForApi, bucketName, {
+                source_key: item.key,
+                source_version_id: item.versionId,
+                destination_key: item.key,
+                replace_metadata: false,
+                move: false,
+              });
+            } catch (err) {
+              restoreFailures += 1;
+            } finally {
+              completed += 1;
+              updateProgress(completed);
+            }
+          }
+        });
+        await Promise.all(workers);
+      }
+
+      if (deleteList.length > 0) {
+        try {
+          await deleteObjectsInBatches(deleteList, (deleted) => {
+            updateProgress(completed + deleted);
+          });
+        } catch (err) {
+          deleteFailures = deleteList.length;
+        }
+      }
+
+      const failures = restoreFailures + deleteFailures;
+      completeOperation(operationId, failures > 0 ? "failed" : "done");
+      const summary = `Restored ${restoreList.length - restoreFailures} object(s), deleted ${deleteList.length - deleteFailures} object(s).`;
+      setBulkRestoreSummary(summary);
+      setStatusMessage(summary);
+      requestObjectsRefresh(prefix);
+    } catch (err) {
+      setBulkRestoreError("Unable to restore objects.");
+    } finally {
+      setBulkRestoreLoading(false);
+    }
+  };
+
+  const handleCopyItems = (items: BrowserItem[]) => {
+    if (!bucketName || items.length === 0) return;
+    setClipboard({ items, sourceBucket: bucketName });
+    setStatusMessage("Items copied.");
+  };
+
+  const handlePasteItems = async () => {
+    if (!clipboard || !bucketName || !hasS3AccountContext) return;
+    setWarningMessage(null);
+    const destinationBucket = bucketName;
+    const destinationPrefix = normalizedPrefix;
+    const { items, sourceBucket } = clipboard;
+    const copyTasks: Array<{
+      sourceBucket: string;
+      sourceKey: string;
+      destinationBucket: string;
+      destinationKey: string;
+      detailId: string;
+    }> = [];
+    const copyDetailItems: CopyDetailItem[] = [];
+    let skipped = 0;
+
+    for (const item of items) {
+      if (item.type === "file") {
+        const destinationKey = `${destinationPrefix}${item.name}`;
+        if (sourceBucket === destinationBucket && destinationKey === item.key) {
+          skipped += 1;
+          continue;
+        }
+        const detailId = makeId();
+        copyTasks.push({
+          sourceBucket,
+          sourceKey: item.key,
+          destinationBucket,
+          destinationKey,
+          detailId,
+        });
+        copyDetailItems.push({
+          id: detailId,
+          key: destinationKey,
+          label: shortName(destinationKey, destinationPrefix) || destinationKey,
+          status: "queued",
+          sizeBytes: item.sizeBytes ?? undefined,
+        });
+      } else {
+        const sourcePrefix = normalizePrefix(item.key);
+        const destFolderPrefix = `${destinationPrefix}${item.name}/`;
+        if (sourceBucket === destinationBucket && destFolderPrefix === sourcePrefix) {
+          skipped += 1;
+          continue;
+        }
+        try {
+          await createFolder(accountIdForApi, destinationBucket, destFolderPrefix);
+        } catch {
+          // ignore folder creation failures
+        }
+        const objects = await listAllObjectsForPrefix(sourcePrefix, sourceBucket);
+        objects.forEach((obj) => {
+          const relativeKey = obj.key.startsWith(sourcePrefix) ? obj.key.slice(sourcePrefix.length) : obj.key;
+          if (!relativeKey) return;
+          const destinationKey = `${destFolderPrefix}${relativeKey}`;
+          if (sourceBucket === destinationBucket && destinationKey === obj.key) {
+            skipped += 1;
+            return;
+          }
+          const detailId = makeId();
+          copyTasks.push({
+            sourceBucket,
+            sourceKey: obj.key,
+            destinationBucket,
+            destinationKey,
+            detailId,
+          });
+          copyDetailItems.push({
+            id: detailId,
+            key: destinationKey,
+            label: shortName(destinationKey, destinationPrefix) || destinationKey,
+            status: "queued",
+            sizeBytes: obj.size ?? undefined,
+          });
+        });
+      }
+    }
+
+    if (copyTasks.length === 0) {
+      setStatusMessage(skipped > 0 ? "Nothing new to paste here." : "No items to paste.");
+      return;
+    }
+
+    const operationId = startOperation(
+      "copying",
+      "Copying items",
+      destinationPrefix ? `${destinationBucket}/${destinationPrefix}` : destinationBucket,
+      { kind: "copy" },
+      0
+    );
+    if (copyDetailItems.length > 0) {
+      setCopyDetails((prev) => ({ ...prev, [operationId]: copyDetailItems }));
+    }
+    const total = copyTasks.length;
+    let completed = 0;
+    let failures = 0;
+    const updateProgress = () => {
+      const percent = total > 0 ? Math.round((completed / total) * 100) : 100;
+      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+    };
+
+    try {
+      const queue = [...copyTasks];
+      const workerCount = Math.max(1, Math.min(otherOperationsParallelismRef.current, queue.length));
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (queue.length > 0) {
+          const task = queue.shift();
+          if (!task) return;
+          try {
+            updateCopyDetailStatus(operationId, task.detailId, "copying");
+            await copyObject(accountIdForApi, destinationBucket, {
+              source_bucket: task.sourceBucket,
+              source_key: task.sourceKey,
+              destination_key: task.destinationKey,
+            });
+            updateCopyDetailStatus(operationId, task.detailId, "done");
+          } catch (err) {
+            updateCopyDetailStatus(operationId, task.detailId, "failed");
+            failures += 1;
+          } finally {
+            completed += 1;
+            updateProgress();
+          }
+        }
+      });
+      await Promise.all(workers);
+
+      completeOperation(operationId, failures > 0 ? "failed" : "done");
+      const summary = `Copied ${total - failures} of ${total} item(s).`;
+      setStatusMessage(summary);
+      requestObjectsRefresh(prefix);
+    } catch (err) {
+      completeOperation(operationId, "failed");
+      setStatusMessage("Unable to paste items.");
+    }
+  };
+
+  const refreshInspectedObject = async (targetKey?: string) => {
+    if (!bucketName || !hasS3AccountContext || !targetKey) return;
+    setMetadataLoading(true);
+    setMetadataError(null);
+    try {
+      const [meta, tags] = await Promise.all([
+        fetchObjectMetadata(accountIdForApi, bucketName, targetKey),
+        getObjectTags(accountIdForApi, bucketName, targetKey),
+      ]);
+      setInspectedMetadata(meta);
+      setInspectedTags(tags.tags ?? []);
+      setInspectedTagsVersionId(tags.version_id ?? null);
+    } catch (err) {
+      setMetadataError("Unable to load object details.");
+      setInspectedMetadata(null);
+      setInspectedTags([]);
+      setInspectedTagsVersionId(null);
+    } finally {
+      setMetadataLoading(false);
     }
   };
 
@@ -1514,9 +3395,17 @@ export default function BrowserPage() {
     }
   };
 
+  const handleAdvancedRefresh = async (targetKey: string) => {
+    await refreshInspectedObject(targetKey);
+    await loadObjects({ prefixOverride: prefix });
+    await refreshVersionsForKey(targetKey);
+  };
+
   const handleRestoreVersion = async (item: BrowserObjectVersion) => {
     if (!bucketName || !hasS3AccountContext || !item.version_id || item.is_delete_marker) return;
     setWarningMessage(null);
+    const operationId = startOperation("copying", "Restoring version", `${bucketName}/${item.key}`);
+    let completionStatus: OperationCompletionStatus = "done";
     try {
       await copyObject(accountIdForApi, bucketName, {
         source_key: item.key,
@@ -1525,12 +3414,14 @@ export default function BrowserPage() {
         replace_metadata: false,
         move: false,
       });
-      addActivity("Restored", `${bucketName}/${item.key}`);
       setStatusMessage(`Restored version ${item.version_id}`);
-      await loadObjects(prefix);
+      await loadObjects({ prefixOverride: prefix });
       await refreshVersionsForKey(item.key);
     } catch (err) {
+      completionStatus = "failed";
       setStatusMessage("Unable to restore version.");
+    } finally {
+      completeOperation(operationId, completionStatus);
     }
   };
 
@@ -1540,14 +3431,19 @@ export default function BrowserPage() {
     const label = item.is_delete_marker ? "delete marker" : "version";
     const confirmed = window.confirm(`Delete ${label} for ${item.key}?`);
     if (!confirmed) return;
+    const operationLabel = item.is_delete_marker ? "Removing delete marker" : "Deleting version";
+    const operationId = startOperation("deleting", operationLabel, `${bucketName}/${item.key}`);
+    let completionStatus: OperationCompletionStatus = "done";
     try {
       await deleteObjects(accountIdForApi, bucketName, [{ key: item.key, version_id: item.version_id }]);
-      addActivity(item.is_delete_marker ? "Removed delete marker" : "Deleted version", `${bucketName}/${item.key}`);
       setStatusMessage(item.is_delete_marker ? "Delete marker removed." : "Version deleted.");
-      await loadObjects(prefix);
+      await loadObjects({ prefixOverride: prefix });
       await refreshVersionsForKey(item.key);
     } catch (err) {
+      completionStatus = "failed";
       setStatusMessage(item.is_delete_marker ? "Unable to delete marker." : "Unable to delete version.");
+    } finally {
+      completeOperation(operationId, completionStatus);
     }
   };
 
@@ -1570,21 +3466,397 @@ export default function BrowserPage() {
     }
   };
 
+  const handleCopyPath = async (path: string) => {
+    if (!path) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(path);
+        setStatusMessage("Path copied to clipboard.");
+      } else {
+        window.prompt("Copy path:", path);
+      }
+    } catch (err) {
+      setStatusMessage("Unable to copy path.");
+    }
+  };
+
   const statusLabel = (status: OperationItem["status"]) => {
     if (status === "uploading") return "Uploading";
+    if (status === "downloading") return "Downloading";
     if (status === "copying") return "Copying";
     return "Deleting";
   };
 
   const statusClasses = (status: OperationItem["status"]) => {
     if (status === "uploading") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
+    if (status === "downloading") return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
     if (status === "copying") return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200";
     return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
   };
 
+  const completionLabel = (status?: OperationCompletionStatus) => {
+    if (status === "failed") return "Failed";
+    if (status === "cancelled") return "Cancelled";
+    return "Completed";
+  };
+
+  const completionClasses = (status?: OperationCompletionStatus) => {
+    if (status === "failed") {
+      return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
+    }
+    if (status === "cancelled") {
+      return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
+    }
+    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
+  };
+
+  const activeOperations = useMemo(() => operations.filter((op) => !op.completedAt), [operations]);
+  const operationSummary = useMemo(() => {
+    return activeOperations.reduce(
+      (acc, op) => {
+        acc[op.status] += 1;
+        return acc;
+      },
+      { uploading: 0, deleting: 0, copying: 0, downloading: 0 } as Record<OperationItem["status"], number>
+    );
+  }, [activeOperations]);
+  const operationsPanelHeightClasses = "h-[240px]";
+  const operationsListAreaClasses = "flex-1 overflow-y-auto pr-1";
+  const uploadGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        id: string;
+        label: string;
+        kind: "folder" | "files";
+        activeItems: OperationItem[];
+        completedItems: OperationItem[];
+        queuedItems: UploadQueueItem[];
+        cancelable: boolean;
+        progress: number;
+        totalBytes: number;
+      }
+    >();
+    operations
+      .filter((op) => op.kind === "upload")
+      .forEach((op) => {
+        const groupId = op.groupId ?? op.id;
+        const label = op.groupLabel ?? "Files";
+        const kind = op.groupKind ?? "files";
+        const existing = groups.get(groupId);
+        const isCompleted = Boolean(op.completedAt);
+        if (existing) {
+          if (isCompleted) {
+            existing.completedItems.push(op);
+          } else {
+            existing.activeItems.push(op);
+          }
+          existing.cancelable = existing.cancelable || Boolean(op.cancelable);
+        } else {
+          groups.set(groupId, {
+            id: groupId,
+            label,
+            kind,
+            activeItems: isCompleted ? [] : [op],
+            completedItems: isCompleted ? [op] : [],
+            queuedItems: [],
+            cancelable: Boolean(op.cancelable),
+            progress: 0,
+            totalBytes: 0,
+          });
+        }
+      });
+    uploadQueue.forEach((item) => {
+      const existing = groups.get(item.groupId);
+      if (existing) {
+        existing.queuedItems.push(item);
+      } else {
+        groups.set(item.groupId, {
+          id: item.groupId,
+          label: item.groupLabel,
+          kind: item.groupKind,
+          activeItems: [],
+          completedItems: [],
+          queuedItems: [item],
+          cancelable: false,
+          progress: 0,
+          totalBytes: 0,
+        });
+      }
+    });
+    return Array.from(groups.values()).map((group) => {
+      const activeBytes = group.activeItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
+      const completedBytes = group.completedItems.reduce((sum, item) => sum + (item.sizeBytes ?? 0), 0);
+      const queuedBytes = group.queuedItems.reduce((sum, item) => sum + item.file.size, 0);
+      const totalBytes = activeBytes + completedBytes + queuedBytes;
+      const loadedBytes = group.activeItems.reduce((sum, item) => {
+        const size = item.sizeBytes ?? 0;
+        const progress = Math.min(100, Math.max(0, item.progress));
+        return sum + (size * progress) / 100;
+      }, 0);
+      const completedLoadedBytes = completedBytes;
+      const totalLoadedBytes = loadedBytes + completedLoadedBytes;
+      const progress = totalBytes > 0 ? Math.round((totalLoadedBytes / totalBytes) * 100) : 0;
+      return { ...group, progress, totalBytes };
+    });
+  }, [operations, uploadQueue]);
+  const downloadGroups = useMemo(() => {
+    return operations
+      .filter((op) => op.kind === "download")
+      .map((op) => {
+        const items = downloadDetails[op.id] ?? [];
+        const counts = items.reduce(
+          (acc, item) => {
+            acc.total += 1;
+            acc[item.status] += 1;
+            return acc;
+          },
+          {
+            total: 0,
+            queued: 0,
+            downloading: 0,
+            done: 0,
+            failed: 0,
+            cancelled: 0,
+          } as Record<DownloadDetailStatus | "total", number>
+        );
+        return { op, items, counts };
+      });
+  }, [downloadDetails, operations]);
+  const deleteGroups = useMemo(() => {
+    return operations
+      .filter((op) => op.kind === "delete")
+      .map((op) => {
+        const items = deleteDetails[op.id] ?? [];
+        const counts = items.reduce(
+          (acc, item) => {
+            acc.total += 1;
+            acc[item.status] += 1;
+            return acc;
+          },
+          { total: 0, queued: 0, deleting: 0, done: 0, failed: 0 } as Record<DeleteDetailStatus | "total", number>
+        );
+        return { op, items, counts };
+      });
+  }, [deleteDetails, operations]);
+  const copyGroups = useMemo(() => {
+    return operations
+      .filter((op) => op.kind === "copy")
+      .map((op) => {
+        const items = copyDetails[op.id] ?? [];
+        const counts = items.reduce(
+          (acc, item) => {
+            acc.total += 1;
+            acc[item.status] += 1;
+            return acc;
+          },
+          { total: 0, queued: 0, copying: 0, done: 0, failed: 0 } as Record<CopyDetailStatus | "total", number>
+        );
+        return { op, items, counts };
+      });
+  }, [copyDetails, operations]);
+  const queuedDownloadCount = useMemo(
+    () => downloadGroups.reduce((sum, group) => sum + group.counts.queued, 0),
+    [downloadGroups]
+  );
+  const queuedDeleteCount = useMemo(
+    () => deleteGroups.reduce((sum, group) => sum + group.counts.queued, 0),
+    [deleteGroups]
+  );
+  const queuedCopyCount = useMemo(
+    () => copyGroups.reduce((sum, group) => sum + group.counts.queued, 0),
+    [copyGroups]
+  );
+  const totalOperationsCount =
+    activeOperations.length + uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount;
+  const completedUploadCount = useMemo(
+    () => operations.filter((op) => op.kind === "upload" && op.completedAt).length,
+    [operations]
+  );
+  const completedDownloadCount = useMemo(
+    () =>
+      downloadGroups.reduce(
+        (sum, group) => {
+          const completedItems = group.items.filter(
+            (item) => item.status === "done" || item.status === "failed" || item.status === "cancelled"
+          ).length;
+          const fallback = completedItems === 0 && group.op.completedAt ? 1 : 0;
+          return sum + completedItems + fallback;
+        },
+        0
+      ),
+    [downloadGroups]
+  );
+  const completedDeleteCount = useMemo(
+    () =>
+      deleteGroups.reduce(
+        (sum, group) => {
+          const completedItems = group.items.filter((item) => item.status === "done" || item.status === "failed").length;
+          const fallback = completedItems === 0 && group.op.completedAt ? 1 : 0;
+          return sum + completedItems + fallback;
+        },
+        0
+      ),
+    [deleteGroups]
+  );
+  const completedCopyCount = useMemo(
+    () =>
+      copyGroups.reduce(
+        (sum, group) => {
+          const completedItems = group.items.filter((item) => item.status === "done" || item.status === "failed").length;
+          const fallback = completedItems === 0 && group.op.completedAt ? 1 : 0;
+          return sum + completedItems + fallback;
+        },
+        0
+      ),
+    [copyGroups]
+  );
+  const completedOtherOperations = useMemo(
+    () =>
+      operations.filter(
+        (op) =>
+          op.kind !== "upload" &&
+          op.kind !== "download" &&
+          op.kind !== "delete" &&
+          op.kind !== "copy" &&
+          op.completedAt
+      ),
+    [operations]
+  );
+  const completedOperationsCount =
+    completedOperations.length +
+    completedUploadCount +
+    completedDownloadCount +
+    completedDeleteCount +
+    completedCopyCount +
+    completedOtherOperations.length;
+  const activeOtherOperations = useMemo(
+    () =>
+      activeOperations.filter(
+        (op) => op.kind !== "upload" && op.kind !== "download" && op.kind !== "delete" && op.kind !== "copy"
+      ),
+    [activeOperations]
+  );
+  const visibleOtherOperations = useMemo(() => {
+    return [
+      ...(showActiveOperations ? activeOtherOperations : []),
+      ...(showCompletedOperations ? completedOtherOperations : []),
+    ];
+  }, [activeOtherOperations, completedOtherOperations, showActiveOperations, showCompletedOperations]);
+  const visibleUploadGroups = useMemo(() => {
+    return uploadGroups.filter((group) => {
+      const hasActive = group.activeItems.length > 0;
+      const hasQueued = group.queuedItems.length > 0;
+      const hasCompleted = group.completedItems.length > 0;
+      return (
+        (showActiveOperations && hasActive) ||
+        (showQueuedOperations && hasQueued) ||
+        (showCompletedOperations && hasCompleted)
+      );
+    });
+  }, [uploadGroups, showActiveOperations, showQueuedOperations, showCompletedOperations]);
+  const visibleDownloadGroups = useMemo(() => {
+    return downloadGroups.filter((group) => {
+      const hasActive =
+        !group.op.completedAt &&
+        (group.op.status === "downloading" || group.items.some((item) => item.status === "downloading"));
+      const hasQueued = group.items.some((item) => item.status === "queued");
+      const hasCompleted = group.items.some(
+        (item) => item.status === "done" || item.status === "failed" || item.status === "cancelled"
+      );
+      return (
+        (showActiveOperations && hasActive) ||
+        (showQueuedOperations && hasQueued) ||
+        (showCompletedOperations && hasCompleted) ||
+        (showCompletedOperations && Boolean(group.op.completedAt))
+      );
+    });
+  }, [downloadGroups, showActiveOperations, showQueuedOperations, showCompletedOperations]);
+  const visibleDeleteGroups = useMemo(() => {
+    return deleteGroups.filter((group) => {
+      const hasActive =
+        !group.op.completedAt &&
+        (group.op.status === "deleting" || group.items.some((item) => item.status === "deleting"));
+      const hasQueued = group.items.some((item) => item.status === "queued");
+      const hasCompleted = group.items.some((item) => item.status === "done" || item.status === "failed");
+      return (
+        (showActiveOperations && hasActive) ||
+        (showQueuedOperations && hasQueued) ||
+        (showCompletedOperations && hasCompleted) ||
+        (showCompletedOperations && Boolean(group.op.completedAt))
+      );
+    });
+  }, [deleteGroups, showActiveOperations, showQueuedOperations, showCompletedOperations]);
+  const visibleCopyGroups = useMemo(() => {
+    return copyGroups.filter((group) => {
+      const hasActive =
+        !group.op.completedAt &&
+        (group.op.status === "copying" || group.items.some((item) => item.status === "copying"));
+      const hasQueued = group.items.some((item) => item.status === "queued");
+      const hasCompleted = group.items.some((item) => item.status === "done" || item.status === "failed");
+      return (
+        (showActiveOperations && hasActive) ||
+        (showQueuedOperations && hasQueued) ||
+        (showCompletedOperations && hasCompleted) ||
+        (showCompletedOperations && Boolean(group.op.completedAt))
+      );
+    });
+  }, [copyGroups, showActiveOperations, showQueuedOperations, showCompletedOperations]);
+  const hasVisibleCompletedActivity = showCompletedOperations && completedOperations.length > 0;
+  const hasVisibleOperations =
+    visibleUploadGroups.length > 0 ||
+    visibleDownloadGroups.length > 0 ||
+    visibleDeleteGroups.length > 0 ||
+    visibleCopyGroups.length > 0 ||
+    visibleOtherOperations.length > 0 ||
+    hasVisibleCompletedActivity;
+  const isGroupExpanded = (groupId: string) => Boolean(expandedOperationGroups[groupId]);
+  const toggleGroupExpanded = (groupId: string) => {
+    setExpandedOperationGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
+  const getSectionVisibleCount = (groupId: string, section: "queued" | "completed") =>
+    queuedVisibleCountByGroup[`${groupId}:${section}`] ?? DEFAULT_QUEUED_VISIBLE_COUNT;
+  const showMoreSection = (groupId: string, section: "queued" | "completed") => {
+    setQueuedVisibleCountByGroup((prev) => ({
+      ...prev,
+      [`${groupId}:${section}`]: getSectionVisibleCount(groupId, section) + DEFAULT_QUEUED_VISIBLE_COUNT,
+    }));
+  };
+  const openOperationsModal = () => {
+    setShowOperationsModal(true);
+  };
+
   return (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setShowFolders((prev) => !prev)}
+        aria-label={showFolders ? "Hide folders panel" : "Show folders panel"}
+        aria-pressed={showFolders}
+        title={showFolders ? "Hide folders" : "Show folders"}
+        className={`fixed left-0 top-1/2 z-30 -translate-y-1/2 rounded-r-xl border px-2 py-3 shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+          showFolders
+            ? "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/40 dark:text-amber-100"
+            : "border-slate-200 bg-white/90 text-slate-600 hover:text-primary dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200"
+        }`}
+      >
+        <FolderIcon className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setShowInspector((prev) => !prev)}
+        aria-label={showInspector ? "Hide inspector panel" : "Show inspector panel"}
+        aria-pressed={showInspector}
+        title={showInspector ? "Hide inspector" : "Show inspector"}
+        className={`fixed right-0 top-1/2 z-30 -translate-y-1/2 rounded-l-xl border px-2 py-3 shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+          showInspector
+            ? "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/40 dark:text-sky-100"
+            : "border-slate-200 bg-white/90 text-slate-600 hover:text-primary dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200"
+        }`}
+      >
+        <MoreIcon className="h-4 w-4" />
+      </button>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Browser</span>
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
@@ -1723,9 +3995,25 @@ export default function BrowserPage() {
             <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1 py-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <button
                 type="button"
-                onClick={() => setViewMode("list")}
-                className={`${viewToggleBaseClasses} ${viewMode === "list" ? viewToggleActiveClasses : ""}`}
+                onClick={() => {
+                  setViewMode("list");
+                  setCompactMode(true);
+                }}
+                className={`${viewToggleBaseClasses} ${viewMode === "list" && compactMode ? viewToggleActiveClasses : ""}`}
+                aria-label="Compact list view"
+                aria-pressed={viewMode === "list" && compactMode}
+              >
+                <CompactIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode("list");
+                  setCompactMode(false);
+                }}
+                className={`${viewToggleBaseClasses} ${viewMode === "list" && !compactMode ? viewToggleActiveClasses : ""}`}
                 aria-label="List view"
+                aria-pressed={viewMode === "list" && !compactMode}
               >
                 <ListIcon className="h-3.5 w-3.5" />
               </button>
@@ -1734,68 +4022,55 @@ export default function BrowserPage() {
                 onClick={() => setViewMode("grid")}
                 className={`${viewToggleBaseClasses} ${viewMode === "grid" ? viewToggleActiveClasses : ""}`}
                 aria-label="Grid view"
+                aria-pressed={viewMode === "grid"}
               >
                 <GridIcon className="h-3.5 w-3.5" />
               </button>
             </div>
             <button
               type="button"
-              onClick={() => setShowFolders((prev) => !prev)}
-              className={`${filterChipClasses} ${showFolders ? filterChipActiveClasses : ""}`}
+              onClick={openOperationsModal}
+              className={`${filterChipClasses} ${
+                totalOperationsCount > 0
+                  ? "border-emerald-300 bg-emerald-100 text-emerald-800 shadow-sm dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-100"
+                  : ""
+              }`}
             >
-              Folders
+              Operations
+              <span className={`${countBadgeClasses} text-[10px]`}>{formatBadgeCount(totalOperationsCount)}</span>
             </button>
             <button
               type="button"
-              onClick={() => setShowInspector((prev) => !prev)}
-              className={`${filterChipClasses} ${showInspector ? filterChipActiveClasses : ""}`}
-            >
-              Inspector
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowPrefixVersions((prev) => !prev)}
-              className={`${filterChipClasses} ${showPrefixVersions ? filterChipActiveClasses : ""}`}
-            >
-              Versions
-            </button>
-            <button
-              type="button"
-              onClick={() => setCompactMode((prev) => !prev)}
-              className={`${filterChipClasses} ${compactMode ? filterChipActiveClasses : ""}`}
-            >
-              Compact
-            </button>
-            <button
-              type="button"
-              className={toolbarButtonClasses}
+              className={iconButtonClasses}
               onClick={handleRefresh}
               disabled={!bucketName || objectsLoading}
+              aria-label="Refresh"
+              title="Refresh"
             >
-              Refresh
-            </button>
-            <button type="button" className={toolbarButtonClasses} onClick={handleNewFolder} disabled={!bucketName}>
-              New folder
+              <RefreshIcon className="h-3.5 w-3.5" />
             </button>
             <div ref={uploadMenuRef} className="relative">
-              <div className="inline-flex items-center">
+              <div className="inline-flex items-center gap-1">
                 <button
                   type="button"
-                  className={`${toolbarPrimaryClasses} rounded-r-none`}
+                  className={iconButtonClasses}
                   onClick={() => {
                     setShowUploadMenu(false);
                     fileInputRef.current?.click();
                   }}
                   disabled={!bucketName}
+                  aria-label="Upload files"
+                  title="Upload files"
                 >
-                  Upload
+                  <UploadIcon className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
-                  className={`${toolbarPrimaryClasses} rounded-l-none px-2`}
+                  className={iconButtonClasses}
                   onClick={() => setShowUploadMenu((prev) => !prev)}
                   disabled={!bucketName}
                   aria-label="Upload options"
+                  title="Upload options"
                 >
                   <ChevronDownIcon className="h-3.5 w-3.5" />
                 </button>
@@ -1843,7 +4118,7 @@ export default function BrowserPage() {
         </div>
 
         {(bucketError || objectsError || statusMessage || warnings.length > 0) && (
-          <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
+          <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
             {bucketError && <p className="font-semibold text-rose-600 dark:text-rose-200">{bucketError}</p>}
             {!bucketError && objectsError && <p className="font-semibold text-rose-600 dark:text-rose-200">{objectsError}</p>}
             {statusMessage && <p className="text-slate-500 dark:text-slate-400">{statusMessage}</p>}
@@ -1867,12 +4142,12 @@ export default function BrowserPage() {
           </div>
         )}
 
-        <div className="p-2">
-          <div className={`grid gap-3 ${layoutClass}`}>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
+          <div className={`grid min-h-0 flex-1 grid-rows-1 gap-3 ${layoutClass}`}>
             {showFolders && (
-              <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+              <div className="flex min-h-0 h-full flex-col rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Folders</p>
-                <div className="mt-3 max-h-[520px] overflow-auto pr-1">
+                <div className="mt-3 min-h-0 flex-1 overflow-x-auto overflow-y-auto pr-1">
                   {!bucketName ? (
                     <p className="text-xs text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
                   ) : (
@@ -1881,55 +4156,9 @@ export default function BrowserPage() {
                 </div>
               </div>
             )}
-            <div className="space-y-3">
-              {selectedCount > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {selectedCount} selected
-                    </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{formatBytes(selectedBytes)}</span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedIds([])}
-                      className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
-                    <button
-                      type="button"
-                      className={bulkActionClasses}
-                      disabled={!canBulkActions}
-                      onClick={() => handleDownloadItems(selectedFiles)}
-                    >
-                      <DownloadIcon className="h-3.5 w-3.5" />
-                      Download
-                    </button>
-                    <button
-                      type="button"
-                      className={bulkActionClasses}
-                      disabled={selectedFiles.length !== 1 || hasFolderSelection}
-                      onClick={() => handleCopyUrl(selectedFiles[0] ?? null)}
-                    >
-                      <CopyIcon className="h-3.5 w-3.5" />
-                      Copy URL
-                    </button>
-                    <button
-                      type="button"
-                      className={bulkDangerClasses}
-                      disabled={!canBulkActions}
-                      onClick={() => handleDeleteItems(selectedFiles)}
-                    >
-                      <TrashIcon className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              )}
+            <div className="flex min-h-0 h-full flex-1 flex-col gap-3">
                   <div
-                    className={`relative rounded-xl border transition ${
+                    className={`relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border transition ${
                       dragging
                         ? "border-primary/60 bg-primary/5 dark:border-primary-500/60 dark:bg-primary-500/10"
                         : "border-slate-200 dark:border-slate-800"
@@ -1950,8 +4179,8 @@ export default function BrowserPage() {
                       </div>
                     )}
                     {viewMode === "list" ? (
-                      <div className="overflow-x-auto">
-                        <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+                        <table className="manager-table min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
                           <thead className="bg-slate-50 dark:bg-slate-900/50">
                             <tr>
                               <th className={`w-9 px-2 ${headerPadding} text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
@@ -1991,11 +4220,24 @@ export default function BrowserPage() {
                             {filteredItems.map((item) => (
                               <tr
                                 key={item.id}
-                                className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${
-                                  selectedSet.has(item.id) ? "bg-primary-50/50 dark:bg-primary-900/20" : ""
+                                onClick={(event) => {
+                                  const target = event.target as HTMLElement;
+                                  if (target.closest("button, a, input, textarea, select, label")) {
+                                    return;
+                                  }
+                                  if (event.metaKey || event.ctrlKey) {
+                                    toggleSelection(item.id);
+                                  } else {
+                                    selectSingleRow(item.id);
+                                  }
+                                }}
+                                className={`${rowHeightClasses} transition-colors ${
+                                  selectedSet.has(item.id)
+                                    ? "bg-primary-100/80 hover:bg-primary-100 dark:bg-primary-500/30 dark:hover:bg-primary-500/40"
+                                    : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
                                 }`}
                               >
-                                <td className={`w-9 px-2 ${rowPadding}`}>
+                                <td className={`w-9 px-2 ${rowCellClasses} align-middle`}>
                                   <input
                                     type="checkbox"
                                     checked={selectedSet.has(item.id)}
@@ -2004,21 +4246,38 @@ export default function BrowserPage() {
                                     className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                                   />
                                 </td>
-                                <td className={`manager-table-cell px-4 ${rowPadding} text-sm text-slate-700 dark:text-slate-200`}>
-                                  <div className={`flex items-center ${nameGapClasses}`}>
-                                    <span className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200`}>
+                                <td
+                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} align-middle text-sm text-slate-700 dark:text-slate-200`}
+                                >
+                                  <div className={`flex min-w-0 items-center ${nameGapClasses}`}>
+                                    <span
+                                      className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-lg border ${
+                                        item.type === "folder"
+                                          ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
+                                          : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200"
+                                      }`}
+                                    >
                                       {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
                                     </span>
-                                    <div>
+                                    <div className="min-w-0 flex-1">
                                       <button
                                         type="button"
-                                        onClick={() => (item.type === "folder" ? handleOpenItem(item) : setActiveItem(item))}
-                                        className="block text-left font-semibold text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
+                                        onClick={() => {
+                                          if (item.type === "folder") {
+                                            handleOpenItem(item);
+                                            return;
+                                          }
+                                          setActiveItem(item);
+                                          setShowInspector(true);
+                                          setInspectorTab("details");
+                                        }}
+                                        className="block w-full truncate text-left font-semibold text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
+                                        title={item.name}
                                       >
                                         {item.name}
                                       </button>
                                       {!compactMode && (
-                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                        <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden text-xs text-slate-500 dark:text-slate-400">
                                           <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
                                             {item.type === "folder" ? "Prefix" : "Object"}
                                           </span>
@@ -2037,37 +4296,42 @@ export default function BrowserPage() {
                                     </div>
                                   </div>
                                 </td>
-                                <td className={`px-2 ${rowPadding} text-sm text-slate-600 dark:text-slate-300`}>{item.size}</td>
-                                <td className={`px-2 ${rowPadding} text-sm text-slate-600 dark:text-slate-300`}>{item.modified}</td>
-                                <td className={`w-44 px-2 ${rowPadding} text-right`}>
+                                <td className={`px-2 ${rowCellClasses} align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
+                                  {item.size}
+                                </td>
+                                <td className={`px-2 ${rowCellClasses} align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
+                                  {item.modified}
+                                </td>
+                                <td className={`w-44 px-2 ${rowCellClasses} align-middle text-right`}>
                                   <div className="flex flex-nowrap justify-end gap-1.5">
-                                    <button
-                                      type="button"
-                                      className={iconButtonClasses}
-                                      aria-label="Open"
-                                      title="Open"
-                                      onClick={() => handleOpenItem(item)}
-                                      disabled={item.type !== "folder"}
-                                    >
-                                      <OpenIcon />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={iconButtonClasses}
-                                      aria-label="Preview"
-                                      title="Preview"
-                                      disabled={item.type === "folder"}
-                                      onClick={() => setActiveItem(item)}
-                                    >
-                                      <EyeIcon />
-                                    </button>
+                                    {item.type === "folder" && (
+                                      <button
+                                        type="button"
+                                        className={iconButtonClasses}
+                                        aria-label="Open"
+                                        title="Open"
+                                        onClick={() => handleOpenItem(item)}
+                                      >
+                                        <OpenIcon />
+                                      </button>
+                                    )}
+                                    {item.type === "file" && (
+                                      <button
+                                        type="button"
+                                        className={iconButtonClasses}
+                                        aria-label="Preview"
+                                        title="Preview"
+                                        onClick={() => handlePreviewItem(item)}
+                                      >
+                                        <EyeIcon />
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       className={iconButtonClasses}
                                       aria-label="Download"
                                       title="Download"
-                                      disabled={item.type === "folder"}
-                                      onClick={() => handleDownloadItems([item])}
+                                      onClick={() => handleDownloadTarget(item)}
                                     >
                                       <DownloadIcon />
                                     </button>
@@ -2076,7 +4340,6 @@ export default function BrowserPage() {
                                       className={iconButtonDangerClasses}
                                       aria-label="Delete"
                                       title="Delete"
-                                      disabled={item.type === "folder"}
                                       onClick={() => handleDeleteItems([item])}
                                     >
                                       <TrashIcon />
@@ -2086,7 +4349,7 @@ export default function BrowserPage() {
                                       className={iconButtonClasses}
                                       aria-label="More actions"
                                       title="More"
-                                      onClick={() => setActiveItem(item)}
+                                      onClick={() => toggleInspectorForItem(item)}
                                     >
                                       <MoreIcon />
                                     </button>
@@ -2098,7 +4361,7 @@ export default function BrowserPage() {
                         </table>
                       </div>
                     ) : (
-                      <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2 xl:grid-cols-3">
                         {objectsLoading && (
                           <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             Loading objects...
@@ -2124,9 +4387,9 @@ export default function BrowserPage() {
                           return (
                             <div
                               key={item.id}
-                              className={`flex flex-col gap-3 rounded-xl border px-3 py-3 transition ${
+                              className={`flex ${gridCardGapClasses} ${gridCardHeightClasses} flex-col overflow-hidden rounded-xl border px-3 py-3 transition ${
                                 selected
-                                  ? "border-primary-200 bg-primary-50/50 dark:border-primary-700/60 dark:bg-primary-900/20"
+                                  ? "border-primary-200 bg-primary-50/50 dark:border-primary-700/60 dark:bg-primary-500/20"
                                   : "border-slate-200 bg-white hover:border-primary-200 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-primary-700/60"
                               }`}
                             >
@@ -2142,20 +4405,36 @@ export default function BrowserPage() {
                                   type="button"
                                   className={iconButtonClasses}
                                   aria-label="Focus"
-                                  onClick={() => setActiveItem(item)}
+                                  onClick={() => toggleInspectorForItem(item)}
                                 >
                                   <MoreIcon />
                                 </button>
                               </div>
                               <button
                                 type="button"
-                                onClick={() => (item.type === "folder" ? handleOpenItem(item) : setActiveItem(item))}
-                                className="flex items-center gap-2 text-left"
+                                onClick={() => {
+                                  if (item.type === "folder") {
+                                    handleOpenItem(item);
+                                    return;
+                                  }
+                                  setActiveItem(item);
+                                  setShowInspector(true);
+                                  setInspectorTab("details");
+                                }}
+                                className="flex min-w-0 items-start gap-2 text-left"
                               >
-                                <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                                <span
+                                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${
+                                    item.type === "folder"
+                                      ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
+                                      : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200"
+                                  }`}
+                                >
                                   {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
                                 </span>
-                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{item.name}</span>
+                                <span className="min-w-0 break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                  {item.name}
+                                </span>
                               </button>
                               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                 <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
@@ -2172,23 +4451,23 @@ export default function BrowserPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="text-xs text-slate-500 dark:text-slate-400">
-                                Size: {item.size} | Modified: {item.modified}
+                              <div className="space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                <div>Size: {item.size}</div>
+                                <div>Modified: {item.modified}</div>
                               </div>
                               <div className="mt-auto flex flex-wrap gap-2">
                                 <button
                                   type="button"
                                   className={bulkActionClasses}
                                   disabled={item.type === "folder"}
-                                  onClick={() => setActiveItem(item)}
+                                  onClick={() => handlePreviewItem(item)}
                                 >
                                   Preview
                                 </button>
                                 <button
                                   type="button"
                                   className={bulkActionClasses}
-                                  disabled={item.type === "folder"}
-                                  onClick={() => handleDownloadItems([item])}
+                                  onClick={() => handleDownloadTarget(item)}
                                 >
                                   Download
                                 </button>
@@ -2198,428 +4477,1651 @@ export default function BrowserPage() {
                         })}
                       </div>
                     )}
+                    {objectsIsTruncated && objectsNextToken && (
+                      <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900/60">
+                        <button
+                          type="button"
+                          className={toolbarButtonClasses}
+                          onClick={() => loadObjects({ append: true, continuationToken: objectsNextToken })}
+                          disabled={objectsLoadingMore}
+                        >
+                          {objectsLoadingMore ? "Loading..." : "Load more"}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {showPrefixVersions && (
-                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/40">
-                      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-100">
-                        <div>Versions {normalizedPrefix ? `· ${normalizedPrefix}` : ""}</div>
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                          {prefixVersionsLoading && <span>Loading...</span>}
-                          <button
-                            type="button"
-                            className={toolbarButtonClasses}
-                            onClick={() => loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null })}
-                            disabled={!bucketName || prefixVersionsLoading}
-                          >
-                            Refresh
-                          </button>
+                </div>
+
+                {showInspector && (
+                  <div className="flex min-h-0 h-full flex-col gap-3">
+                    <div className="flex min-h-0 h-full flex-1 flex-col rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+                      <div className="flex items-center justify-between gap-2">
+                        <div />
+                        <div className="flex items-center gap-2">
+                          {(selectedCount > 0 || inspectedItem) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (selectedCount > 0) {
+                                  setSelectedIds([]);
+                                } else {
+                                  setActiveItem(null);
+                                }
+                              }}
+                              className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                            >
+                              {selectedCount > 0 ? "Clear selection" : "Clear"}
+                            </button>
+                          )}
                         </div>
                       </div>
-                      {prefixVersionsError && <div className="px-3 py-2 text-xs text-rose-500">{prefixVersionsError}</div>}
-                      <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {prefixVersionRows.length === 0 && !prefixVersionsLoading && (
-                          <div className="px-3 py-3 text-xs text-slate-500 dark:text-slate-300">No versions found.</div>
-                        )}
-                        {prefixVersionRows.map((ver) => (
+                      <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label="Inspector tabs">
+                        <button
+                          type="button"
+                          role="tab"
+                          id="inspector-tab-context"
+                          aria-selected={inspectorTab === "context"}
+                          aria-controls="inspector-panel-context"
+                          onClick={() => setInspectorTab("context")}
+                          className={`${filterChipClasses} ${inspectorTab === "context" ? filterChipActiveClasses : ""}`}
+                        >
+                          Context
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          id="inspector-tab-selection"
+                          aria-selected={inspectorTab === "selection"}
+                          aria-controls="inspector-panel-selection"
+                          onClick={() => setInspectorTab("selection")}
+                          className={`${filterChipClasses} ${inspectorTab === "selection" ? filterChipActiveClasses : ""}`}
+                        >
+                          Selection
+                          {selectedCount > 0 && <span className={countBadgeClasses}>{selectedCount}</span>}
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          id="inspector-tab-details"
+                          aria-selected={inspectorTab === "details"}
+                          aria-controls="inspector-panel-details"
+                          onClick={() => setInspectorTab("details")}
+                          className={`${filterChipClasses} ${inspectorTab === "details" ? filterChipActiveClasses : ""}`}
+                        >
+                          Details
+                        </button>
+                      </div>
+
+                      <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+                        {inspectorTab === "context" && (
                           <div
-                            key={`${ver.key}-${ver.version_id ?? "none"}-${ver.is_delete_marker ? "marker" : "version"}`}
-                            className="flex flex-wrap items-start justify-between gap-3 px-3 py-2 text-xs"
+                            role="tabpanel"
+                            id="inspector-panel-context"
+                            aria-labelledby="inspector-tab-context"
+                            className="space-y-4"
                           >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="truncate font-semibold text-slate-800 dark:text-slate-100">{ver.key}</span>
-                                {ver.is_delete_marker && (
-                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
-                                    delete marker
-                                  </span>
-                                )}
-                                {ver.is_latest && (
-                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
-                                    latest
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 dark:text-slate-300">
-                                {ver.version_id && <span>v: {ver.version_id}</span>}
-                                {ver.last_modified && <span>{formatDateTime(ver.last_modified)}</span>}
-                                {ver.size != null && <span>{formatBytes(ver.size)}</span>}
-                                {ver.etag && <span>ETag {ver.etag}</span>}
-                                {ver.storage_class && <span>{ver.storage_class}</span>}
-                              </div>
+                            <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-xs text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current location</p>
+                              <p className="break-all text-[11px] text-slate-500 dark:text-slate-400">
+                                {currentPath || "Select a bucket to get started."}
+                              </p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              {!ver.is_delete_marker && (
+                          </div>
+                          <div className="mt-3 space-y-3">
+                            <div>
+                              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Actions</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
                                 <button
                                   type="button"
                                   className={bulkActionClasses}
-                                  onClick={() => handleRestoreVersion(ver)}
+                                  onClick={() => {
+                                    setShowUploadMenu(false);
+                                    fileInputRef.current?.click();
+                                  }}
+                                  disabled={!bucketName || !hasS3AccountContext}
                                 >
-                                  Restore
+                                  <UploadIcon className="h-3.5 w-3.5" />
+                                  Upload files
+                                </button>
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={() => {
+                                    setShowUploadMenu(false);
+                                    folderInputRef.current?.click();
+                                  }}
+                                  disabled={!bucketName || !hasS3AccountContext}
+                                >
+                                  <FolderIcon className="h-3.5 w-3.5" />
+                                  Upload folder
+                                </button>
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={handleNewFolder}
+                                  disabled={!bucketName || !hasS3AccountContext}
+                                >
+                                  <FolderPlusIcon className="h-3.5 w-3.5" />
+                                  New folder
+                                </button>
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={handlePasteItems}
+                                  disabled={!clipboard || !bucketName || !hasS3AccountContext}
+                                >
+                                  <PasteIcon className="h-3.5 w-3.5" />
+                                  Paste
+                                </button>
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={() => setShowPrefixVersions(true)}
+                                  disabled={!bucketName || !hasS3AccountContext}
+                                >
+                                  <ListIcon className="h-3.5 w-3.5" />
+                                  Versions
+                                </button>
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={() => handleCopyPath(currentPath)}
+                                  disabled={!currentPath}
+                                >
+                                  <CopyIcon className="h-3.5 w-3.5" />
+                                  Copy path
+                                </button>
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+                              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Prefix summary</p>
+                              <div className="mt-2 grid gap-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500">Files</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.files}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500">Folders</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.folders}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-500">Total size</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                    {formatBytes(pathStats.totalBytes)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Storage classes</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {Object.keys(pathStats.storageCounts).length === 0 ? (
+                                  <span className="text-xs text-slate-500 dark:text-slate-400">No file data yet.</span>
+                                ) : (
+                                  Object.entries(pathStats.storageCounts).map(([storage, count]) => (
+                                    <span
+                                      key={storage}
+                                      className={`rounded-full border px-2 py-1 text-xs font-semibold ${
+                                        storageClassChipClasses[storage] ??
+                                        "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                      }`}
+                                    >
+                                      {storage} ({count})
+                                    </span>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      )}
+
+                      {inspectorTab === "selection" && (
+                        <div
+                          role="tabpanel"
+                          id="inspector-panel-selection"
+                          aria-labelledby="inspector-tab-selection"
+                          className="space-y-4"
+                        >
+                          {canSelectionActions ? (
+                          <div className="rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 text-xs text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Selection</p>
+                                <p className="mt-1 text-[11px] text-slate-400">
+                                  {selectedCount > 0
+                                    ? `${selectedCount} selected`
+                                    : selectionPrimary
+                                      ? `Focused: ${selectionPrimary.name}`
+                                      : "No selection"}
+                                </p>
+                                {selectedCount > 0 && (
+                                  <p className="text-[11px] text-slate-400">
+                                    {selectionIsSingle && selectionPrimary
+                                      ? selectionPrimary.name
+                                      : `${selectionFiles.length} files · ${selectionFolders.length} folders`}
+                                  </p>
+                                )}
+                                {selectedCount > 0 && (
+                                  <p className="text-[11px] text-slate-400">Total size: {formatBytes(selectedBytes)}</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {canSelectionDownloadFolder && selectionPrimary && (
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={() => handleDownloadFolder(selectionPrimary)}
+                                  disabled={!bucketName || !hasS3AccountContext}
+                                >
+                                  <DownloadIcon className="h-3.5 w-3.5" />
+                                  Download folder
+                                </button>
+                              )}
+                              {!canSelectionDownloadFolder && canSelectionDownloadFiles && (
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={() => handleDownloadItems(selectionFiles)}
+                                  disabled={!bucketName || !hasS3AccountContext}
+                                >
+                                  <DownloadIcon className="h-3.5 w-3.5" />
+                                  Download
+                                </button>
+                              )}
+                              {canSelectionOpen && selectionPrimary && (
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={() => handleOpenItem(selectionPrimary)}
+                                >
+                                  <OpenIcon className="h-3.5 w-3.5" />
+                                  Open
+                                </button>
+                              )}
+                              {canSelectionCopyUrl && selectionPrimary && (
+                                <button
+                                  type="button"
+                                  className={bulkActionClasses}
+                                  onClick={() => handleCopyUrl(selectionPrimary)}
+                                  disabled={!hasS3AccountContext}
+                                >
+                                  <CopyIcon className="h-3.5 w-3.5" />
+                                  Copy URL
                                 </button>
                               )}
                               <button
                                 type="button"
-                                className={bulkDangerClasses}
-                                onClick={() => handleDeleteVersion(ver)}
+                                className={bulkActionClasses}
+                                onClick={() => handleCopyItems(selectionItems)}
+                                disabled={!canSelectionActions}
                               >
-                                {ver.is_delete_marker ? "Delete marker" : "Delete version"}
+                                <CopyIcon className="h-3.5 w-3.5" />
+                                Copy
                               </button>
+                              <button
+                                type="button"
+                                className={bulkDangerClasses}
+                                onClick={() => handleDeleteItems(selectionItems)}
+                                disabled={!hasS3AccountContext}
+                              >
+                                <TrashIcon className="h-3.5 w-3.5" />
+                                Delete
+                              </button>
+                              <div ref={inspectorActionsMenuRef} className="relative shrink-0">
+                                <button
+                                  type="button"
+                                  className={iconButtonClasses}
+                                  aria-label="More actions"
+                                  onClick={() => setShowInspectorActionsMenu((prev) => !prev)}
+                                >
+                                  <MoreIcon />
+                                </button>
+                                {showInspectorActionsMenu && (
+                                  <div className="absolute right-0 z-20 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                                    {selectionIsSingle && selectionPrimary && (
+                                      <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                        onClick={() => {
+                                          setShowInspectorActionsMenu(false);
+                                          handleCopyPath(`${bucketName}/${selectionPrimary.key}`);
+                                        }}
+                                      >
+                                        Copy path
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                      onClick={() => {
+                                        setShowInspectorActionsMenu(false);
+                                        openBulkAttributesModal(selectionItems);
+                                      }}
+                                    >
+                                      Edit attributes
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                      onClick={() => {
+                                        setShowInspectorActionsMenu(false);
+                                        openBulkRestoreModal(selectionItems);
+                                      }}
+                                    >
+                                      Restore to date
+                                    </button>
+                                    {canSelectionAdvanced && (
+                                      <button
+                                        type="button"
+                                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                        onClick={() => {
+                                          setShowInspectorActionsMenu(false);
+                                          setShowAdvancedModal(true);
+                                        }}
+                                      >
+                                        Advanced
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        ))}
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                            Select one or more objects to see selection actions.
+                          </div>
+                        )}
                       </div>
-                      {(prefixVersionKeyMarker || prefixVersionIdMarker) && (
-                        <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900/60">
-                          <button
-                            type="button"
-                            className={toolbarButtonClasses}
-                            onClick={() => loadPrefixVersions({ append: true })}
-                            disabled={prefixVersionsLoading}
-                          >
-                            Load more versions
-                          </button>
+                    )}
+
+                    {inspectorTab === "details" && (
+                      <div
+                        role="tabpanel"
+                        id="inspector-panel-details"
+                        aria-labelledby="inspector-tab-details"
+                        className="space-y-4"
+                      >
+                        {inspectedItem ? (
+                          <div className="space-y-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Object details</p>
+                            <div className="rounded-lg border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-sky-50 px-3 py-2.5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900/60 dark:to-slate-900">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`flex h-10 w-10 items-center justify-center rounded-lg border text-[10px] font-bold ${
+                                    isImageFile(inspectedItem.name)
+                                      ? "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/30 dark:text-sky-200"
+                                      : "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                  }`}
+                                >
+                                  {previewLabelForItem(inspectedItem)}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                    {inspectedItem.name}
+                                  </p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    {inspectedItem.type === "folder" ? "Prefix" : "Object"} | {inspectedItem.size}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Metadata</p>
+                              {metadataLoading && (
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Loading metadata...</p>
+                              )}
+                              {metadataError && (
+                                <p className="text-xs font-semibold text-rose-600 dark:text-rose-200">{metadataError}</p>
+                              )}
+                              <div className="grid gap-2 text-xs text-slate-600 dark:text-slate-300">
+                                <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+                                  <span className="text-slate-500">Path</span>
+                                  <span className="truncate font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedPath}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-slate-500">Owner</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedItem.owner}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-slate-500">Last modified</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedItem.modified}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-slate-500">Content type</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedMetadata?.content_type ?? "unknown"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-slate-500">ETag</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedMetadata?.etag ?? "-"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-slate-500">Storage class</span>
+                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                    {inspectedMetadata?.storage_class ?? inspectedItem.storageClass ?? "-"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tags</p>
+                              <div className="flex flex-wrap gap-2">
+                                {inspectedTags.length ? (
+                                  inspectedTags.map((tag) => (
+                                    <span
+                                      key={`${tag.key}:${tag.value}`}
+                                      className={`${filterChipClasses} border-slate-200 dark:border-slate-700`}
+                                    >
+                                      {tag.key}
+                                      {tag.value ? `=${tag.value}` : ""}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-xs text-slate-500 dark:text-slate-400">No tags defined.</span>
+                                )}
+                              </div>
+                            </div>
+                            {inspectedItem.type === "file" && (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Versions</p>
+                                  {objectVersionsLoading && (
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">Loading...</span>
+                                  )}
+                                </div>
+                                {objectVersionsError && (
+                                  <p className="text-xs font-semibold text-rose-600 dark:text-rose-200">
+                                    {objectVersionsError}
+                                  </p>
+                                )}
+                                <div className="space-y-2">
+                                  {objectVersionRows.length === 0 && !objectVersionsLoading && (
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">No versions found.</span>
+                                  )}
+                                  {objectVersionRows.map((ver) => (
+                                    <div
+                                      key={`${ver.key}-${ver.version_id ?? "none"}-${ver.is_delete_marker ? "marker" : "version"}`}
+                                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                    >
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          {ver.is_delete_marker && (
+                                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+                                              delete marker
+                                            </span>
+                                          )}
+                                          {ver.is_latest && (
+                                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
+                                              latest
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          {!ver.is_delete_marker && (
+                                            <button
+                                              type="button"
+                                              className={bulkActionClasses}
+                                              onClick={() => handleRestoreVersion(ver)}
+                                            >
+                                              Restore
+                                            </button>
+                                          )}
+                                          <button
+                                            type="button"
+                                            className={bulkDangerClasses}
+                                            onClick={() => handleDeleteVersion(ver)}
+                                          >
+                                            {ver.is_delete_marker ? "Delete marker" : "Delete version"}
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                        {ver.version_id && <div>v: {ver.version_id}</div>}
+                                        {ver.last_modified && <div>Modified: {formatDateTime(ver.last_modified)}</div>}
+                                        {ver.size != null && <div>Size: {formatBytes(ver.size)}</div>}
+                                        {ver.etag && <div>ETag: {ver.etag}</div>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                {(objectVersionKeyMarker || objectVersionIdMarker) && (
+                                  <button
+                                    type="button"
+                                    className={toolbarButtonClasses}
+                                    onClick={() => loadObjectVersions({ append: true })}
+                                    disabled={objectVersionsLoading}
+                                  >
+                                    Load more versions
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                            Select a single object to view details.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+          </div>
+        </div>
+      </div>
+      {previewItem && (
+        <Modal
+          title={`Preview: ${previewItem.name}`}
+          onClose={closePreview}
+          maxWidthClass="max-w-4xl"
+        >
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <p className="break-all text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {previewItem.key}
+                </p>
+                <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>{previewItem.size}</span>
+                  <span>{previewItem.modified}</span>
+                  <span>{previewLabelForItem(previewItem)}</span>
+                  {previewContentType && <span>{previewContentType}</span>}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={bulkActionClasses}
+                  onClick={() => handleDownloadItems([previewItem])}
+                >
+                  Download
+                </button>
+                {previewUrl && (
+                  <a
+                    className={bulkActionClasses}
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open
+                  </a>
+                )}
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+              {previewLoading && (
+                <div className="text-sm text-slate-500 dark:text-slate-300">Loading preview...</div>
+              )}
+              {previewError && (
+                <div className="text-sm font-semibold text-rose-600 dark:text-rose-200">{previewError}</div>
+              )}
+              {!previewLoading && !previewError && previewUrl && previewKind === "image" && (
+                <img
+                  src={previewUrl}
+                  alt={previewItem.name}
+                  className="max-h-[60vh] w-full rounded-lg bg-white object-contain dark:bg-slate-950"
+                />
+              )}
+              {!previewLoading && !previewError && previewUrl && previewKind === "video" && (
+                <video
+                  src={previewUrl}
+                  controls
+                  className="max-h-[60vh] w-full rounded-lg bg-black"
+                />
+              )}
+              {!previewLoading && !previewError && previewUrl && previewKind === "audio" && (
+                <audio src={previewUrl} controls className="w-full" />
+              )}
+              {!previewLoading &&
+                !previewError &&
+                previewUrl &&
+                (previewKind === "pdf" || previewKind === "text") && (
+                  <iframe
+                    title="Object preview"
+                    src={previewUrl}
+                    className="h-[60vh] w-full rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950"
+                  />
+                )}
+              {!previewLoading && !previewError && (!previewUrl || previewKind === "generic") && (
+                <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  Preview not available for this file type.
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+      {showAdvancedModal && inspectedItem && inspectedItem.type === "file" && (
+        <ObjectAdvancedModal
+          accountId={accountIdForApi}
+          bucketName={bucketName}
+          item={inspectedItem}
+          metadata={inspectedMetadata}
+          tags={inspectedTags}
+          tagsVersionId={inspectedTagsVersionId}
+          onClose={() => setShowAdvancedModal(false)}
+          onRefresh={handleAdvancedRefresh}
+        />
+      )}
+      {showPrefixVersions && (
+        <Modal
+          title={`Prefix versions${normalizedPrefix ? ` · ${normalizedPrefix}` : ""}`}
+          onClose={() => setShowPrefixVersions(false)}
+          maxWidthClass="max-w-4xl"
+        >
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <span className="font-semibold">
+                Prefix {normalizedPrefix ? normalizedPrefix : "/"}
+              </span>
+              <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                {prefixVersionsLoading && <span>Loading...</span>}
+                <button
+                  type="button"
+                  className={toolbarButtonClasses}
+                  onClick={() => loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null })}
+                  disabled={!bucketName || prefixVersionsLoading}
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+            {prefixVersionsError && <div className="text-xs text-rose-600 dark:text-rose-200">{prefixVersionsError}</div>}
+            <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {prefixVersionRows.length === 0 && !prefixVersionsLoading && (
+                  <div className="px-3 py-3 text-xs text-slate-500 dark:text-slate-300">No versions found.</div>
+                )}
+                {prefixVersionRows.map((ver) => (
+                  <div
+                    key={`${ver.key}-${ver.version_id ?? "none"}-${ver.is_delete_marker ? "marker" : "version"}`}
+                    className="flex flex-wrap items-start justify-between gap-3 px-3 py-2 text-xs"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate font-semibold text-slate-800 dark:text-slate-100">{ver.key}</span>
+                        {ver.is_delete_marker && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+                            delete marker
+                          </span>
+                        )}
+                        {ver.is_latest && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
+                            latest
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 dark:text-slate-300">
+                        {ver.version_id && <span>v: {ver.version_id}</span>}
+                        {ver.last_modified && <span>{formatDateTime(ver.last_modified)}</span>}
+                        {ver.size != null && <span>{formatBytes(ver.size)}</span>}
+                        {ver.etag && <span>ETag {ver.etag}</span>}
+                        {ver.storage_class && <span>{ver.storage_class}</span>}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!ver.is_delete_marker && (
+                        <button
+                          type="button"
+                          className={bulkActionClasses}
+                          onClick={() => handleRestoreVersion(ver)}
+                        >
+                          Restore
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className={bulkDangerClasses}
+                        onClick={() => handleDeleteVersion(ver)}
+                      >
+                        {ver.is_delete_marker ? "Delete marker" : "Delete version"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {(prefixVersionKeyMarker || prefixVersionIdMarker) && (
+              <div className="text-right">
+                <button
+                  type="button"
+                  className={toolbarButtonClasses}
+                  onClick={() => loadPrefixVersions({ append: true })}
+                  disabled={prefixVersionsLoading}
+                >
+                  Load more versions
+                </button>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+      {showBulkAttributesModal && (
+        <Modal
+          title="Bulk attributes"
+          onClose={() => setShowBulkAttributesModal(false)}
+          maxWidthClass="max-w-3xl"
+        >
+          <div className="space-y-4 text-xs text-slate-600 dark:text-slate-300">
+            <div className="space-y-1">
+              <p className="font-semibold text-slate-800 dark:text-slate-100">Targets</p>
+              <p>
+                {bulkActionFileCount} file(s) · {bulkActionFolderCount} folder(s)
+                {bulkActionFolderCount > 0 && " (folders expanded to files)"}
+              </p>
+            </div>
+            {bulkAttributesError && (
+              <p className="font-semibold text-rose-600 dark:text-rose-200">{bulkAttributesError}</p>
+            )}
+            {bulkAttributesSummary && (
+              <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkAttributesSummary}</p>
+            )}
+            <div className="space-y-3">
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={bulkApplyMetadata}
+                    onChange={(event) => setBulkApplyMetadata(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                  Metadata headers
+                </label>
+                {bulkApplyMetadata && (
+                  <div className="mt-3 grid gap-2">
+                    <input
+                      className={formInputClasses}
+                      placeholder="Content-Type"
+                      value={bulkMetadataDraft.contentType}
+                      onChange={(event) =>
+                        setBulkMetadataDraft((prev) => ({ ...prev, contentType: event.target.value }))
+                      }
+                    />
+                    <input
+                      className={formInputClasses}
+                      placeholder="Cache-Control"
+                      value={bulkMetadataDraft.cacheControl}
+                      onChange={(event) =>
+                        setBulkMetadataDraft((prev) => ({ ...prev, cacheControl: event.target.value }))
+                      }
+                    />
+                    <input
+                      className={formInputClasses}
+                      placeholder="Content-Disposition"
+                      value={bulkMetadataDraft.contentDisposition}
+                      onChange={(event) =>
+                        setBulkMetadataDraft((prev) => ({ ...prev, contentDisposition: event.target.value }))
+                      }
+                    />
+                    <input
+                      className={formInputClasses}
+                      placeholder="Content-Encoding"
+                      value={bulkMetadataDraft.contentEncoding}
+                      onChange={(event) =>
+                        setBulkMetadataDraft((prev) => ({ ...prev, contentEncoding: event.target.value }))
+                      }
+                    />
+                    <input
+                      className={formInputClasses}
+                      placeholder="Content-Language"
+                      value={bulkMetadataDraft.contentLanguage}
+                      onChange={(event) =>
+                        setBulkMetadataDraft((prev) => ({ ...prev, contentLanguage: event.target.value }))
+                      }
+                    />
+                    <input
+                      type="datetime-local"
+                      className={formInputClasses}
+                      placeholder="Expires"
+                      value={bulkMetadataDraft.expires}
+                      onChange={(event) =>
+                        setBulkMetadataDraft((prev) => ({ ...prev, expires: event.target.value }))
+                      }
+                    />
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                        Custom metadata (key=value per line)
+                      </p>
+                      <textarea
+                        rows={3}
+                        className={formInputClasses}
+                        value={bulkMetadataEntries}
+                        onChange={(event) => setBulkMetadataEntries(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={bulkApplyTags}
+                    onChange={(event) => setBulkApplyTags(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                  Tags (key=value per line)
+                </label>
+                {bulkApplyTags && (
+                  <textarea
+                    rows={3}
+                    className={`${formInputClasses} mt-3`}
+                    value={bulkTagsDraft}
+                    onChange={(event) => setBulkTagsDraft(event.target.value)}
+                  />
+                )}
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={bulkApplyStorageClass}
+                    onChange={(event) => setBulkApplyStorageClass(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                  Storage class
+                </label>
+                {bulkApplyStorageClass && (
+                  <select
+                    className={`${formInputClasses} mt-3`}
+                    value={bulkStorageClass}
+                    onChange={(event) => setBulkStorageClass(event.target.value)}
+                  >
+                    <option value="">Select storage class</option>
+                    {storageClassOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={bulkApplyAcl}
+                    onChange={(event) => setBulkApplyAcl(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                  ACL
+                </label>
+                {bulkApplyAcl && (
+                  <select
+                    className={`${formInputClasses} mt-3`}
+                    value={bulkAclValue}
+                    onChange={(event) => setBulkAclValue(event.target.value)}
+                  >
+                    {aclOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={bulkApplyLegalHold}
+                    onChange={(event) => setBulkApplyLegalHold(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                  Legal hold
+                </label>
+                {bulkApplyLegalHold && (
+                  <select
+                    className={`${formInputClasses} mt-3`}
+                    value={bulkLegalHoldStatus}
+                    onChange={(event) => setBulkLegalHoldStatus(event.target.value as "ON" | "OFF")}
+                  >
+                    <option value="OFF">OFF</option>
+                    <option value="ON">ON</option>
+                  </select>
+                )}
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={bulkApplyRetention}
+                    onChange={(event) => setBulkApplyRetention(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                  Retention
+                </label>
+                {bulkApplyRetention && (
+                  <div className="mt-3 grid gap-2">
+                    <select
+                      className={formInputClasses}
+                      value={bulkRetentionMode}
+                      onChange={(event) =>
+                        setBulkRetentionMode(event.target.value as "" | "GOVERNANCE" | "COMPLIANCE")
+                      }
+                    >
+                      <option value="">Select mode</option>
+                      <option value="GOVERNANCE">GOVERNANCE</option>
+                      <option value="COMPLIANCE">COMPLIANCE</option>
+                    </select>
+                    <input
+                      type="datetime-local"
+                      className={formInputClasses}
+                      value={bulkRetentionDate}
+                      onChange={(event) => setBulkRetentionDate(event.target.value)}
+                    />
+                    <label className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      <input
+                        type="checkbox"
+                        checked={bulkRetentionBypass}
+                        onChange={(event) => setBulkRetentionBypass(event.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      />
+                      Bypass governance
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className={bulkActionClasses}
+                onClick={() => setShowBulkAttributesModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={toolbarPrimaryClasses}
+                onClick={handleBulkAttributesApply}
+                disabled={bulkAttributesLoading}
+              >
+                {bulkAttributesLoading ? "Updating..." : "Apply changes"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {showBulkRestoreModal && (
+        <Modal
+          title="Restore to date"
+          onClose={() => setShowBulkRestoreModal(false)}
+          maxWidthClass="max-w-2xl"
+        >
+          <div className="space-y-4 text-xs text-slate-600 dark:text-slate-300">
+            <div className="space-y-1">
+              <p className="font-semibold text-slate-800 dark:text-slate-100">Targets</p>
+              <p>
+                {bulkActionFileCount} file(s) · {bulkActionFolderCount} folder(s)
+                {bulkActionFolderCount > 0 && " (folders use prefix history)"}
+              </p>
+            </div>
+            {bulkRestoreError && (
+              <p className="font-semibold text-rose-600 dark:text-rose-200">{bulkRestoreError}</p>
+            )}
+            {bulkRestoreSummary && (
+              <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkRestoreSummary}</p>
+            )}
+            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+              <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Target date</label>
+              <input
+                type="datetime-local"
+                className={`${formInputClasses} mt-2`}
+                value={bulkRestoreDate}
+                onChange={(event) => setBulkRestoreDate(event.target.value)}
+              />
+              <label className="mt-3 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={bulkRestoreDeleteMissing}
+                  onChange={(event) => setBulkRestoreDeleteMissing(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                />
+                Delete objects not present at the selected date
+              </label>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Restores the latest version at or before the selected date. Objects with a delete marker at that date are
+              skipped unless deletion is enabled.
+            </p>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className={bulkActionClasses}
+                onClick={() => setShowBulkRestoreModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={toolbarPrimaryClasses}
+                onClick={handleBulkRestoreApply}
+                disabled={bulkRestoreLoading}
+              >
+                {bulkRestoreLoading ? "Restoring..." : "Run restore"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {showOperationsModal && (
+        <Modal title="Operations overview" onClose={() => setShowOperationsModal(false)} maxWidthClass="max-w-3xl">
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Operations</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Uploads, downloads, deletions, copies, and queued files.
+                </p>
+              </div>
+              <span className={countBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShowActiveOperations((prev) => !prev)}
+                className={`${filterChipClasses} text-[10px] ${showActiveOperations ? filterChipActiveClasses : ""}`}
+              >
+                Active
+                <span className={countBadgeClasses}>{formatBadgeCount(activeOperations.length)}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowQueuedOperations((prev) => !prev)}
+                className={`${filterChipClasses} text-[10px] ${showQueuedOperations ? filterChipActiveClasses : ""}`}
+              >
+                Queue
+                <span className={countBadgeClasses}>
+                  {formatBadgeCount(uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount)}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCompletedOperations((prev) => !prev)}
+                className={`${filterChipClasses} text-[10px] ${showCompletedOperations ? filterChipActiveClasses : ""}`}
+              >
+                Completed
+                <span className={countBadgeClasses}>{formatBadgeCount(completedOperationsCount)}</span>
+              </button>
+            </div>
+            <div className={operationsPanelHeightClasses}>
+              <div className="flex h-full flex-col gap-2">
+                <div className={operationsListAreaClasses}>
+                  {!hasVisibleOperations ? (
+                    <div className="flex h-full items-center justify-center text-xs text-slate-500 dark:text-slate-400">
+                      No operations to show.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {visibleDownloadGroups.map((group) => {
+                        const queuedItems = group.items.filter((item) => item.status === "queued");
+                        const activeItems = group.items.filter((item) => item.status === "downloading");
+                        const completedItems = group.items.filter(
+                          (item) => item.status === "done" || item.status === "failed" || item.status === "cancelled"
+                        );
+                        const visibleQueuedItems = queuedItems.slice(
+                          0,
+                          getSectionVisibleCount(group.op.id, "queued")
+                        );
+                        const visibleCompletedItems = completedItems.slice(
+                          0,
+                          getSectionVisibleCount(group.op.id, "completed")
+                        );
+                        const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
+                        const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
+                        const completedCount = completedItems.length;
+                        return (
+                          <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                  {group.op.path}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {group.counts.downloading} active · {group.counts.queued} queued · {completedCount} completed ·{" "}
+                                  {group.op.progress}%
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  className={operationSecondaryClasses}
+                                  onClick={() => toggleGroupExpanded(group.op.id)}
+                                >
+                                  {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
+                                </button>
+                                {group.op.cancelable && !group.op.completedAt && (
+                                  <button
+                                    type="button"
+                                    className={operationStopClasses}
+                                    onClick={() => cancelOperation(group.op.id)}
+                                  >
+                                    Stop
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                              <div className="h-full bg-primary-500" style={{ width: `${group.op.progress}%` }} />
+                            </div>
+                            {isGroupExpanded(group.op.id) && (
+                              <div className="mt-2 space-y-1.5">
+                                {group.items.length === 0 ? (
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    {group.op.completedAt ? "No files found." : "Preparing download list..."}
+                                  </div>
+                                ) : (
+                                  <>
+                                    {showActiveOperations &&
+                                      activeItems.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                              {item.label}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">
+                                              Downloading
+                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    {showQueuedOperations &&
+                                      visibleQueuedItems.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                              {item.label}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">
+                                              Queued
+                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    {showQueuedOperations && hasMoreQueued && (
+                                      <button
+                                        type="button"
+                                        className={operationSecondaryClasses}
+                                        onClick={() => showMoreSection(group.op.id, "queued")}
+                                      >
+                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+                                      </button>
+                                    )}
+                                    {showCompletedOperations &&
+                                      visibleCompletedItems.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                              {item.label}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">
+                                              {item.status === "done" && "Done"}
+                                              {item.status === "failed" && "Failed"}
+                                              {item.status === "cancelled" && "Cancelled"}
+                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    {showCompletedOperations && hasMoreCompleted && (
+                                      <button
+                                        type="button"
+                                        className={operationSecondaryClasses}
+                                        onClick={() => showMoreSection(group.op.id, "completed")}
+                                      >
+                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {visibleDeleteGroups.map((group) => {
+                        const queuedItems = group.items.filter((item) => item.status === "queued");
+                        const activeItems = group.items.filter((item) => item.status === "deleting");
+                        const completedItems = group.items.filter(
+                          (item) => item.status === "done" || item.status === "failed"
+                        );
+                        const visibleQueuedItems = queuedItems.slice(
+                          0,
+                          getSectionVisibleCount(group.op.id, "queued")
+                        );
+                        const visibleCompletedItems = completedItems.slice(
+                          0,
+                          getSectionVisibleCount(group.op.id, "completed")
+                        );
+                        const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
+                        const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
+                        const completedCount = completedItems.length;
+                        return (
+                          <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                  {group.op.path}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {group.counts.deleting} active · {group.counts.queued} queued · {completedCount} completed ·{" "}
+                                  {group.op.progress}%
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                className={operationSecondaryClasses}
+                                onClick={() => toggleGroupExpanded(group.op.id)}
+                              >
+                                {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
+                              </button>
+                            </div>
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                              <div className="h-full bg-primary-500" style={{ width: `${group.op.progress}%` }} />
+                            </div>
+                            {isGroupExpanded(group.op.id) && (
+                              <div className="mt-2 space-y-1.5">
+                                {group.items.length === 0 ? (
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    {group.op.completedAt ? "No items to delete." : "Preparing delete list..."}
+                                  </div>
+                                ) : (
+                                  <>
+                                    {showActiveOperations &&
+                                      activeItems.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                              {item.label}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">Deleting</p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    {showQueuedOperations &&
+                                      visibleQueuedItems.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                              {item.label}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">Queued</p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    {showQueuedOperations && hasMoreQueued && (
+                                      <button
+                                        type="button"
+                                        className={operationSecondaryClasses}
+                                        onClick={() => showMoreSection(group.op.id, "queued")}
+                                      >
+                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+                                      </button>
+                                    )}
+                                    {showCompletedOperations &&
+                                      visibleCompletedItems.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                              {item.label}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">
+                                              {item.status === "done" && "Done"}
+                                              {item.status === "failed" && "Failed"}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    {showCompletedOperations && hasMoreCompleted && (
+                                      <button
+                                        type="button"
+                                        className={operationSecondaryClasses}
+                                        onClick={() => showMoreSection(group.op.id, "completed")}
+                                      >
+                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {visibleCopyGroups.map((group) => {
+                        const queuedItems = group.items.filter((item) => item.status === "queued");
+                        const activeItems = group.items.filter((item) => item.status === "copying");
+                        const completedItems = group.items.filter((item) => item.status === "done" || item.status === "failed");
+                        const visibleQueuedItems = queuedItems.slice(
+                          0,
+                          getSectionVisibleCount(group.op.id, "queued")
+                        );
+                        const visibleCompletedItems = completedItems.slice(
+                          0,
+                          getSectionVisibleCount(group.op.id, "completed")
+                        );
+                        const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
+                        const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
+                        const completedCount = completedItems.length;
+                        return (
+                          <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                  {group.op.path}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {group.counts.copying} active · {group.counts.queued} queued · {completedCount} completed ·{" "}
+                                  {group.op.progress}%
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                className={operationSecondaryClasses}
+                                onClick={() => toggleGroupExpanded(group.op.id)}
+                              >
+                                {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
+                              </button>
+                            </div>
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                              <div className="h-full bg-primary-500" style={{ width: `${group.op.progress}%` }} />
+                            </div>
+                            {isGroupExpanded(group.op.id) && (
+                              <div className="mt-2 space-y-1.5">
+                                {group.items.length === 0 ? (
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    {group.op.completedAt ? "No items copied." : "Preparing copy list..."}
+                                  </div>
+                                ) : (
+                                  <>
+                                    {showActiveOperations &&
+                                      activeItems.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                              {item.label}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">
+                                              Copying
+                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    {showQueuedOperations &&
+                                      visibleQueuedItems.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                              {item.label}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">
+                                              Queued
+                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    {showQueuedOperations && hasMoreQueued && (
+                                      <button
+                                        type="button"
+                                        className={operationSecondaryClasses}
+                                        onClick={() => showMoreSection(group.op.id, "queued")}
+                                      >
+                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+                                      </button>
+                                    )}
+                                    {showCompletedOperations &&
+                                      visibleCompletedItems.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                          <div className="min-w-0">
+                                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                              {item.label}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400">
+                                              {item.status === "done" && "Done"}
+                                              {item.status === "failed" && "Failed"}
+                                              {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    {showCompletedOperations && hasMoreCompleted && (
+                                      <button
+                                        type="button"
+                                        className={operationSecondaryClasses}
+                                        onClick={() => showMoreSection(group.op.id, "completed")}
+                                      >
+                                        Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {visibleUploadGroups.map((group) => {
+                        const activeCount = group.activeItems.length;
+                        const queuedCount = group.queuedItems.length;
+                        const completedCount = group.completedItems.length;
+                        const visibleQueuedItems = group.queuedItems.slice(
+                          0,
+                          getSectionVisibleCount(group.id, "queued")
+                        );
+                        const visibleCompletedItems = group.completedItems.slice(
+                          0,
+                          getSectionVisibleCount(group.id, "completed")
+                        );
+                        const hasMoreQueued = group.queuedItems.length > visibleQueuedItems.length;
+                        const hasMoreCompleted = group.completedItems.length > visibleCompletedItems.length;
+                        return (
+                          <div key={group.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                  {group.kind === "folder" ? `Upload folder ${group.label}` : `Upload ${group.label}`}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {activeCount} active · {queuedCount} queued · {completedCount} completed · {group.progress}%
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  className={operationSecondaryClasses}
+                                  onClick={() => toggleGroupExpanded(group.id)}
+                                >
+                                  {isGroupExpanded(group.id) ? "Hide files" : "Show files"}
+                                </button>
+                                {(activeCount > 0 || queuedCount > 0) && (
+                                  <button
+                                    type="button"
+                                    className={operationStopClasses}
+                                    onClick={() => cancelUploadGroup(group.id)}
+                                  >
+                                    Stop all
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                              <div className="h-full bg-primary-500" style={{ width: `${group.progress}%` }} />
+                            </div>
+                            {isGroupExpanded(group.id) && (
+                              <div className="mt-2 space-y-1.5">
+                                {showActiveOperations &&
+                                  group.activeItems.map((op) => (
+                                    <div key={op.id} className="flex items-center justify-between gap-3 text-xs">
+                                      <div className="min-w-0">
+                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                          {op.itemLabel ?? op.path}
+                                        </p>
+                                        <p className="text-[10px] text-slate-400">
+                                          Uploading · {op.progress > 0 ? `${op.progress}%` : "In progress"}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className={operationStopClasses}
+                                        onClick={() => cancelUploadOperation(op.id)}
+                                        disabled={!op.cancelable}
+                                      >
+                                        Stop
+                                      </button>
+                                    </div>
+                                  ))}
+                                {showQueuedOperations &&
+                                  visibleQueuedItems.map((item) => (
+                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                      <div className="min-w-0">
+                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                          {item.itemLabel || item.key}
+                                        </p>
+                                        <p className="text-[10px] text-slate-400">
+                                          Queued · {formatBytes(item.file.size)}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className={operationStopClasses}
+                                        onClick={() => removeQueuedUpload(item.id)}
+                                      >
+                                        Stop
+                                      </button>
+                                    </div>
+                                  ))}
+                                {showQueuedOperations && hasMoreQueued && (
+                                  <button
+                                    type="button"
+                                    className={operationSecondaryClasses}
+                                    onClick={() => showMoreSection(group.id, "queued")}
+                                  >
+                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+                                  </button>
+                                )}
+                                {showCompletedOperations &&
+                                  visibleCompletedItems.map((item) => (
+                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                      <div className="min-w-0">
+                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                                          {item.itemLabel ?? item.path}
+                                        </p>
+                                        <p className="text-[10px] text-slate-400">
+                                          {completionLabel(item.completionStatus)}
+                                          {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                {showCompletedOperations && hasMoreCompleted && (
+                                  <button
+                                    type="button"
+                                    className={operationSecondaryClasses}
+                                    onClick={() => showMoreSection(group.id, "completed")}
+                                  >
+                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {visibleOtherOperations.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Other operations</p>
+                          {visibleOtherOperations.map((op) => {
+                            const isCompleted = Boolean(op.completedAt);
+                            return (
+                            <div
+                              key={op.id}
+                              className="space-y-2 rounded-lg border border-slate-200 px-4 py-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClasses(op.status)}`}>
+                                  {statusLabel(op.status)}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  {isCompleted ? (
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${completionClasses(op.completionStatus)}`}>
+                                      {completionLabel(op.completionStatus)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                                      {op.progress > 0 ? `${op.progress}%` : "In progress"}
+                                    </span>
+                                  )}
+                                  {!isCompleted && op.cancelable && (
+                                    <button
+                                      type="button"
+                                      className={operationStopClasses}
+                                      onClick={() => cancelOperation(op.id)}
+                                    >
+                                      Stop
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{op.path}</p>
+                              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                                <div className="h-full bg-primary-500" style={{ width: `${op.progress}%` }} />
+                              </div>
+                              <p className="text-[11px] text-slate-400">
+                                {isCompleted ? `${completionLabel(op.completionStatus)}.` : `${op.label} in progress.`}
+                              </p>
+                            </div>
+                          );
+                          })}
+                        </div>
+                      )}
+                      {showCompletedOperations && completedOperations.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Completed</p>
+                          {completedOperations.map((activity) => (
+                            <div
+                              key={activity.id}
+                              className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-4 py-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                            >
+                              <div className="min-w-0 space-y-1">
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
+                                  Completed
+                                </span>
+                                <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                  {activity.label}
+                                </p>
+                                <p className="truncate text-[11px] text-slate-400">{activity.path}</p>
+                              </div>
+                              <span className="shrink-0 text-[11px] text-slate-400">{activity.when}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
                   )}
                 </div>
-
-                {showInspector && (
-                <div className="space-y-4">
-                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Inspector</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {inspectedItem ? "Object details and metadata" : "Select an object to inspect."}
-                        </p>
-                      </div>
-                      {inspectedItem && (
-                        <button
-                          type="button"
-                          onClick={() => setActiveItem(null)}
-                          className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-
-                    {inspectedItem ? (
-                      <div className="mt-4 space-y-4">
-                        <div className="rounded-lg border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-sky-50 px-3 py-2.5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900/60 dark:to-slate-900">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`flex h-10 w-10 items-center justify-center rounded-lg border text-[10px] font-bold ${
-                                isImageFile(inspectedItem.name)
-                                  ? "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/30 dark:text-sky-200"
-                                  : "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                              }`}
-                            >
-                              {previewLabelForItem(inspectedItem)}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                {inspectedItem.name}
-                              </p>
-                              <p className="text-xs text-slate-500 dark:text-slate-400">
-                                {inspectedItem.type === "folder" ? "Prefix" : "Object"} | {inspectedItem.size}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className={bulkActionClasses}
-                              disabled={inspectedItem.type === "folder"}
-                              onClick={() => handleDownloadItems([inspectedItem])}
-                            >
-                              <DownloadIcon className="h-3.5 w-3.5" />
-                              Download
-                            </button>
-                            <button
-                              type="button"
-                              className={bulkActionClasses}
-                              disabled={inspectedItem.type === "folder"}
-                              onClick={() => handleCopyUrl(inspectedItem)}
-                            >
-                              <CopyIcon className="h-3.5 w-3.5" />
-                              Copy URL
-                            </button>
-                            <button
-                              type="button"
-                              className={bulkActionClasses}
-                              onClick={() => (inspectedItem.type === "folder" ? handleOpenItem(inspectedItem) : undefined)}
-                              disabled={inspectedItem.type !== "folder"}
-                            >
-                              <OpenIcon className="h-3.5 w-3.5" />
-                              Open
-                            </button>
-                            <button
-                              type="button"
-                              className={bulkDangerClasses}
-                              disabled={inspectedItem.type === "folder"}
-                              onClick={() => handleDeleteItems([inspectedItem])}
-                            >
-                              <TrashIcon className="h-3.5 w-3.5" />
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Metadata</p>
-                          {metadataLoading && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Loading metadata...</p>
-                          )}
-                          {metadataError && (
-                            <p className="text-xs font-semibold text-rose-600 dark:text-rose-200">{metadataError}</p>
-                          )}
-                          <div className="grid gap-2 text-xs text-slate-600 dark:text-slate-300">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-slate-500">Path</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedPath}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-slate-500">Owner</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedItem.owner}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-slate-500">Last modified</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">{inspectedItem.modified}</span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-slate-500">Content type</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                {inspectedMetadata?.content_type ?? "unknown"}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-slate-500">ETag</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                {inspectedMetadata?.etag ?? "-"}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-slate-500">Storage class</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                {inspectedMetadata?.storage_class ?? inspectedItem.storageClass ?? "-"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tags</p>
-                          <div className="flex flex-wrap gap-2">
-                            {inspectedTags.length ? (
-                              inspectedTags.map((tag) => (
-                                <span
-                                  key={`${tag.key}:${tag.value}`}
-                                  className={`${filterChipClasses} border-slate-200 dark:border-slate-700`}
-                                >
-                                  {tag.key}
-                                  {tag.value ? `=${tag.value}` : ""}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-xs text-slate-500 dark:text-slate-400">No tags defined.</span>
-                            )}
-                          </div>
-                        </div>
-                        {inspectedItem.type === "file" && (
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Versions</p>
-                              {objectVersionsLoading && (
-                                <span className="text-xs text-slate-500 dark:text-slate-400">Loading...</span>
-                              )}
-                            </div>
-                            {objectVersionsError && (
-                              <p className="text-xs font-semibold text-rose-600 dark:text-rose-200">
-                                {objectVersionsError}
-                              </p>
-                            )}
-                            <div className="space-y-2">
-                              {objectVersionRows.length === 0 && !objectVersionsLoading && (
-                                <span className="text-xs text-slate-500 dark:text-slate-400">No versions found.</span>
-                              )}
-                              {objectVersionRows.map((ver) => (
-                                <div
-                                  key={`${ver.key}-${ver.version_id ?? "none"}-${ver.is_delete_marker ? "marker" : "version"}`}
-                                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {ver.is_delete_marker && (
-                                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
-                                          delete marker
-                                        </span>
-                                      )}
-                                      {ver.is_latest && (
-                                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
-                                          latest
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {!ver.is_delete_marker && (
-                                        <button
-                                          type="button"
-                                          className={bulkActionClasses}
-                                          onClick={() => handleRestoreVersion(ver)}
-                                        >
-                                          Restore
-                                        </button>
-                                      )}
-                                      <button
-                                        type="button"
-                                        className={bulkDangerClasses}
-                                        onClick={() => handleDeleteVersion(ver)}
-                                      >
-                                        {ver.is_delete_marker ? "Delete marker" : "Delete version"}
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <div className="mt-2 space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                    {ver.version_id && <div>v: {ver.version_id}</div>}
-                                    {ver.last_modified && <div>Modified: {formatDateTime(ver.last_modified)}</div>}
-                                    {ver.size != null && <div>Size: {formatBytes(ver.size)}</div>}
-                                    {ver.etag && <div>ETag: {ver.etag}</div>}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                            {(objectVersionKeyMarker || objectVersionIdMarker) && (
-                              <button
-                                type="button"
-                                className={toolbarButtonClasses}
-                                onClick={() => loadObjectVersions({ append: true })}
-                                disabled={objectVersionsLoading}
-                              >
-                                Load more versions
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="mt-4 space-y-4">
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Prefix summary</p>
-                          <div className="mt-3 grid gap-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-slate-500">Files</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.files}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-slate-500">Folders</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.folders}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-slate-500">Total size</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                {formatBytes(pathStats.totalBytes)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Storage classes</p>
-                          <div className="flex flex-wrap gap-2">
-                            {Object.keys(pathStats.storageCounts).length === 0 ? (
-                              <span className="text-xs text-slate-500 dark:text-slate-400">No file data yet.</span>
-                            ) : (
-                              Object.entries(pathStats.storageCounts).map(([storage, count]) => (
-                                <span
-                                  key={storage}
-                                  className={`rounded-full border px-2 py-1 text-xs font-semibold ${
-                                    storageClassChipClasses[storage] ??
-                                    "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                  }`}
-                                >
-                                  {storage} ({count})
-                                </span>
-                              ))
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Recent activity</p>
-                          <div className="space-y-2">
-                            {activityLog.length === 0 ? (
-                              <div className="text-xs text-slate-500 dark:text-slate-400">
-                                No activity recorded for this session yet.
-                              </div>
-                            ) : (
-                              activityLog.map((activity) => (
-                                <div
-                                  key={activity.id}
-                                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {activity.action}
-                                    </span>
-                                    <span className="text-slate-400">{activity.when}</span>
-                                  </div>
-                                  <p className="mt-1 text-slate-500 dark:text-slate-400">{activity.path}</p>
-                                  <p className="mt-1 text-slate-400">by {activity.actor}</p>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Transfers</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Live operations for this account.</p>
-                      </div>
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-slate-500 transition hover:text-primary dark:text-slate-400 dark:hover:text-primary-200"
-                        disabled
-                      >
-                        View all
-                      </button>
-                    </div>
-                    <div className="mt-3 space-y-3">
-                      {operations.length === 0 ? (
-                        <div className="text-xs text-slate-500 dark:text-slate-400">No active transfers.</div>
-                      ) : (
-                        operations.map((op) => (
-                          <div
-                            key={op.id}
-                            className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClasses(op.status)}`}>
-                                {statusLabel(op.status)}
-                              </span>
-                              <span className="text-xs text-slate-500 dark:text-slate-400">{op.progress}%</span>
-                            </div>
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">{op.path}</p>
-                            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                              <div className="h-full bg-primary-500" style={{ width: `${op.progress}%` }} />
-                            </div>
-                            <p className="text-[11px] text-slate-400">{op.label} in progress.</p>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-                )}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </Modal>
+      )}
     </div>
   );
 }
