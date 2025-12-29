@@ -480,6 +480,30 @@ def require_usage_capable_manager(
     return actor
 
 
+def require_manager_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.manager_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager feature is disabled")
+
+
+def require_browser_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.browser_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser feature is disabled")
+
+
+def require_portal_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.portal_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal feature is disabled")
+
+
+def require_manager_context_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.manager_enabled and not settings.general.browser_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access is disabled")
+
+
 def _resolve_admin_rgw_credentials(user: User) -> tuple[str, str]:
     access_key = user.rgw_access_key or settings.rgw_admin_access_key or settings.s3_access_key
     secret_key = user.rgw_secret_key or settings.rgw_admin_secret_key or settings.s3_secret_key

@@ -181,6 +181,7 @@ export default function AuditLogsPage() {
       <PageHeader
         title="Audit trail"
         description="Last administrative actions performed through the UI."
+        breadcrumbs={[{ label: "Admin" }, { label: "Governance" }, { label: "Audit trail" }]}
         inlineContent={filters}
         actions={[
           {

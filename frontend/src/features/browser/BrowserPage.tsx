@@ -155,6 +155,16 @@ const iconButtonClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200";
 const iconButtonDangerClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 disabled:opacity-40 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30 dark:hover:text-rose-100";
+const gridQuickActionClasses =
+  `${iconButtonClasses} h-auto w-auto flex-1 min-w-0 justify-center gap-1 px-1.5 py-1 text-[10px] font-semibold leading-tight`;
+const gridQuickActionDangerClasses =
+  `${iconButtonDangerClasses} h-auto w-auto flex-1 min-w-0 justify-center gap-1 px-1.5 py-1 text-[10px] font-semibold leading-tight`;
+const gridTitleClampStyle = {
+  display: "-webkit-box",
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: "vertical",
+  overflow: "hidden",
+} as const;
 const bulkActionClasses =
   "inline-flex items-center gap-2 rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100";
 const bulkDangerClasses =
@@ -181,6 +191,8 @@ const formInputClasses =
 const breadcrumbIconButtonClasses =
   "inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-200";
 
+const bucketButtonClasses =
+  "inline-flex max-w-[220px] items-center gap-1 rounded-md px-1 py-0.5 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-800";
 const treeToggleButtonClasses =
   "inline-flex h-4 w-4 items-center justify-center rounded border border-slate-200 text-[9px] font-semibold text-slate-500 transition hover:border-primary hover:text-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary-500 dark:hover:text-primary-200";
 const treeItemBaseClasses =
@@ -218,6 +230,7 @@ const aclOptions = [
 
 const MULTIPART_THRESHOLD = 25 * 1024 * 1024;
 const PART_SIZE = 8 * 1024 * 1024;
+const BUCKET_MENU_LIMIT = 50;
 const MULTIPART_CONCURRENCY = 4;
 const DEFAULT_DIRECT_UPLOAD_PARALLELISM = 5;
 const DEFAULT_PROXY_UPLOAD_PARALLELISM = 2;
@@ -698,6 +711,8 @@ export default function BrowserPage() {
   const { accountIdForApi, hasS3AccountContext } = useS3AccountContext();
   const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
   const [bucketName, setBucketName] = useState("");
+  const [showBucketMenu, setShowBucketMenu] = useState(false);
+  const [bucketFilter, setBucketFilter] = useState("");
   const [prefix, setPrefix] = useState("");
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
@@ -735,6 +750,13 @@ export default function BrowserPage() {
   const [corsFixing, setCorsFixing] = useState(false);
   const [corsFixError, setCorsFixError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [contextCounts, setContextCounts] = useState<{
+    objects: number;
+    versions: number;
+    deleteMarkers: number;
+  } | null>(null);
+  const [contextCountsLoading, setContextCountsLoading] = useState(false);
+  const [contextCountsError, setContextCountsError] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
@@ -770,7 +792,6 @@ export default function BrowserPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
-  const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [showInspectorActionsMenu, setShowInspectorActionsMenu] = useState(false);
   const [showBulkAttributesModal, setShowBulkAttributesModal] = useState(false);
   const [showBulkRestoreModal, setShowBulkRestoreModal] = useState(false);
@@ -813,13 +834,24 @@ export default function BrowserPage() {
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
-  const uploadMenuRef = useRef<HTMLDivElement | null>(null);
+  const bucketMenuRef = useRef<HTMLDivElement | null>(null);
+  const bucketFilterRef = useRef<HTMLInputElement | null>(null);
   const inspectorActionsMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
   const previewObjectUrlRef = useRef<string | null>(null);
+  const contextCountIdRef = useRef(0);
+  const browserPathRef = useRef("");
+  const browserHistoryStateRef = useRef<{ bucketName: string; prefix: string } | null>(null);
+  const skipHistoryPushRef = useRef(false);
+  const bucketNameRef = useRef(bucketName);
+  const prefixRef = useRef(prefix);
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
+  useEffect(() => {
+    bucketNameRef.current = bucketName;
+    prefixRef.current = prefix;
+  }, [bucketName, prefix]);
   const uiOrigin = useMemo(
     () => (typeof window === "undefined" ? undefined : window.location.origin),
     []
@@ -898,15 +930,89 @@ export default function BrowserPage() {
   }, []);
 
   useEffect(() => {
-    if (!showUploadMenu) return;
+    if (typeof window === "undefined") return;
+    browserPathRef.current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state as { browserPage?: boolean; bucketName?: string; prefix?: string } | null;
+      if (state?.browserPage) {
+        const nextBucket = state.bucketName ?? "";
+        const nextPrefix = state.prefix ?? "";
+        const isSame = nextBucket === bucketNameRef.current && nextPrefix === prefixRef.current;
+        skipHistoryPushRef.current = !isSame;
+        if (nextBucket !== bucketNameRef.current) {
+          setBucketName(nextBucket);
+        }
+        setPrefix(nextPrefix);
+        setActiveItem(null);
+        setIsEditingPath(false);
+        return;
+      }
+      const safeState = {
+        ...(window.history.state ?? {}),
+        browserPage: true,
+        bucketName: bucketNameRef.current,
+        prefix: prefixRef.current,
+      };
+      window.history.pushState(
+        safeState,
+        "",
+        browserPathRef.current || `${window.location.pathname}${window.location.search}${window.location.hash}`
+      );
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (skipHistoryPushRef.current) {
+      skipHistoryPushRef.current = false;
+      browserHistoryStateRef.current = { bucketName, prefix };
+      return;
+    }
+    const last = browserHistoryStateRef.current;
+    if (last && last.bucketName === bucketName && last.prefix === prefix) {
+      return;
+    }
+    const baseState = window.history.state ?? {};
+    const nextState = { ...baseState, browserPage: true, bucketName, prefix };
+    if (!baseState?.browserPage) {
+      window.history.replaceState(
+        nextState,
+        "",
+        browserPathRef.current || `${window.location.pathname}${window.location.search}${window.location.hash}`
+      );
+      browserHistoryStateRef.current = { bucketName, prefix };
+      return;
+    }
+    window.history.pushState(
+      nextState,
+      "",
+      browserPathRef.current || `${window.location.pathname}${window.location.search}${window.location.hash}`
+    );
+    browserHistoryStateRef.current = { bucketName, prefix };
+  }, [bucketName, prefix]);
+
+  useEffect(() => {
+    setInspectorTab("context");
+  }, [bucketName, prefix]);
+
+  useEffect(() => {
+    if (!showBucketMenu) return;
     const handleMouseDown = (event: MouseEvent) => {
-      if (uploadMenuRef.current && !uploadMenuRef.current.contains(event.target as Node)) {
-        setShowUploadMenu(false);
+      if (bucketMenuRef.current && !bucketMenuRef.current.contains(event.target as Node)) {
+        setShowBucketMenu(false);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setShowUploadMenu(false);
+        setShowBucketMenu(false);
       }
     };
     document.addEventListener("mousedown", handleMouseDown);
@@ -915,7 +1021,13 @@ export default function BrowserPage() {
       document.removeEventListener("mousedown", handleMouseDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [showUploadMenu]);
+  }, [showBucketMenu]);
+
+  useEffect(() => {
+    if (showBucketMenu) {
+      bucketFilterRef.current?.focus();
+    }
+  }, [showBucketMenu]);
 
   useEffect(() => {
     if (!showInspectorActionsMenu) return;
@@ -936,6 +1048,13 @@ export default function BrowserPage() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [showInspectorActionsMenu]);
+
+  useEffect(() => {
+    contextCountIdRef.current += 1;
+    setContextCounts(null);
+    setContextCountsError(null);
+    setContextCountsLoading(false);
+  }, [bucketName, prefix, filter, storageFilter, typeFilter]);
 
   useEffect(() => {
     if (!hasS3AccountContext) {
@@ -1350,6 +1469,24 @@ export default function BrowserPage() {
 
   const prefixParts = useMemo(() => prefix.split("/").filter(Boolean), [prefix]);
   const bucketOptions = useMemo(() => buckets.map((bucket) => bucket.name), [buckets]);
+  const normalizedBucketFilter = bucketFilter.trim().toLowerCase();
+  const filteredBucketOptions = useMemo(() => {
+    if (!normalizedBucketFilter) return bucketOptions;
+    return bucketOptions.filter((bucket) => bucket.toLowerCase().includes(normalizedBucketFilter));
+  }, [bucketOptions, normalizedBucketFilter]);
+  const visibleBucketOptions = useMemo(
+    () => filteredBucketOptions.slice(0, BUCKET_MENU_LIMIT),
+    [filteredBucketOptions]
+  );
+  const bucketOverflowCount = Math.max(0, filteredBucketOptions.length - visibleBucketOptions.length);
+  const bucketButtonLabel = useMemo(() => {
+    if (bucketName) return bucketName;
+    if (loadingBuckets) return "Loading buckets...";
+    if (bucketOptions.length === 0) return "No buckets";
+    return "Select bucket";
+  }, [bucketName, bucketOptions.length, loadingBuckets]);
+  const sortKey = sortId.split("-")[0] as "name" | "size" | "modified";
+  const sortDirection = sortId.endsWith("asc") ? "asc" : "desc";
 
   const breadcrumbs = useMemo(() => {
     let current = "";
@@ -1450,7 +1587,7 @@ export default function BrowserPage() {
   const headerPadding = compactMode ? "py-2" : "py-3";
   const iconBoxClasses = compactMode ? "h-7 w-7" : "h-9 w-9";
   const nameGapClasses = compactMode ? "gap-2" : "gap-3";
-  const gridCardHeightClasses = "h-52";
+  const gridCardHeightClasses = "min-h-[240px]";
   const gridCardGapClasses = "gap-3";
 
   const prefixVersionRows = useMemo(
@@ -1748,10 +1885,62 @@ export default function BrowserPage() {
   };
 
   const handleBucketChange = (value: string) => {
+    setShowBucketMenu(false);
+    setBucketFilter("");
     if (!value || value === bucketName) return;
     setBucketName(value);
     setPrefix("");
     setActiveItem(null);
+  };
+  const handleContextCount = async () => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const requestId = contextCountIdRef.current + 1;
+    contextCountIdRef.current = requestId;
+    setContextCountsLoading(true);
+    setContextCountsError(null);
+    const objectsCount = filteredItems.length;
+    let versionsCount = 0;
+    let deleteMarkersCount = 0;
+    let keyMarker: string | null = null;
+    let versionIdMarker: string | null = null;
+    try {
+      let isTruncated = true;
+      let pageGuard = 0;
+      while (isTruncated) {
+        const data = await listObjectVersions(accountIdForApi, bucketName, {
+          prefix: normalizedPrefix,
+          keyMarker: keyMarker ?? undefined,
+          versionIdMarker: versionIdMarker ?? undefined,
+          maxKeys: VERSIONS_PAGE_SIZE,
+        });
+        versionsCount += data.versions.length;
+        deleteMarkersCount += data.delete_markers.length;
+        isTruncated = data.is_truncated;
+        keyMarker = data.next_key_marker ?? null;
+        versionIdMarker = data.next_version_id_marker ?? null;
+        pageGuard += 1;
+        if (!isTruncated || pageGuard > 500 || (!keyMarker && !versionIdMarker)) {
+          break;
+        }
+      }
+      if (contextCountIdRef.current !== requestId) return;
+      setContextCounts({ objects: objectsCount, versions: versionsCount, deleteMarkers: deleteMarkersCount });
+    } catch (err) {
+      if (contextCountIdRef.current !== requestId) return;
+      setContextCountsError("Unable to count versions for this prefix.");
+    } finally {
+      if (contextCountIdRef.current === requestId) {
+        setContextCountsLoading(false);
+      }
+    }
+  };
+  const handleSortToggle = (key: "name" | "size" | "modified") => {
+    setSortId((prev) => {
+      if (!prev.startsWith(key)) {
+        return `${key}-asc`;
+      }
+      return prev.endsWith("asc") ? `${key}-desc` : `${key}-asc`;
+    });
   };
 
   const handleRefresh = () => {
@@ -1838,12 +2027,10 @@ export default function BrowserPage() {
                 <span className="whitespace-nowrap">{node.name}</span>
               </button>
             </div>
-            {node.isExpanded && (
+            {node.isExpanded && (node.isLoading || node.children.length > 0) && (
               <div className="mt-1">
                 {node.isLoading ? (
                   <div className="pl-6 text-xs text-slate-400 dark:text-slate-500">Loading...</div>
-                ) : node.children.length === 0 ? (
-                  <div className="pl-6 text-xs text-slate-400 dark:text-slate-500">No folders</div>
                 ) : (
                   renderTreeNodes(node.children, depth + 1)
                 )}
@@ -3441,7 +3628,7 @@ export default function BrowserPage() {
       await refreshVersionsForKey(item.key);
     } catch (err) {
       completionStatus = "failed";
-      setStatusMessage(item.is_delete_marker ? "Unable to delete marker." : "Unable to delete version.");
+      setWarningMessage(item.is_delete_marker ? "Unable to delete marker." : "Unable to delete version.");
     } finally {
       completeOperation(operationId, completionStatus);
     }
@@ -3860,22 +4047,80 @@ export default function BrowserPage() {
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Browser</span>
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-            <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
-            <select
-              className="bg-transparent text-[11px] font-semibold text-slate-700 focus:outline-none dark:text-slate-200"
-              value={bucketName || ""}
-              onChange={(event) => handleBucketChange(event.target.value)}
-              disabled={loadingBuckets || bucketOptions.length === 0}
-            >
-              {loadingBuckets && <option value="">Loading buckets...</option>}
-              {!loadingBuckets && bucketOptions.length === 0 && <option value="">No buckets</option>}
-              {!loadingBuckets && bucketOptions.length > 0 && !bucketName && <option value="">Select bucket</option>}
-              {bucketOptions.map((bucket) => (
-                <option key={bucket} value={bucket}>
-                  {bucket}
-                </option>
-              ))}
-            </select>
+            <div ref={bucketMenuRef} className="relative">
+              <button
+                type="button"
+                className={bucketButtonClasses}
+                onClick={() => setShowBucketMenu((prev) => !prev)}
+                disabled={loadingBuckets || bucketOptions.length === 0}
+                aria-haspopup="listbox"
+                aria-expanded={showBucketMenu}
+                aria-label="Select bucket"
+              >
+                <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
+                <span className="max-w-[160px] truncate">{bucketButtonLabel}</span>
+                <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
+              </button>
+              {showBucketMenu && (
+                <div className="absolute left-0 z-30 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                  <div className="flex items-center gap-2 px-2 pb-2 pt-1">
+                    <SearchIcon className="h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      ref={bucketFilterRef}
+                      type="text"
+                      value={bucketFilter}
+                      onChange={(event) => setBucketFilter(event.target.value)}
+                      placeholder="Filter buckets"
+                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div className="max-h-56 overflow-y-auto px-1 pb-1">
+                    {loadingBuckets ? (
+                      <div className="px-2 py-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        Loading buckets...
+                      </div>
+                    ) : bucketOptions.length === 0 ? (
+                      <div className="px-2 py-2 text-[11px] text-slate-500 dark:text-slate-400">No buckets</div>
+                    ) : filteredBucketOptions.length === 0 ? (
+                      <div className="px-2 py-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        No buckets match this filter.
+                      </div>
+                    ) : (
+                      visibleBucketOptions.map((bucket) => {
+                        const isActive = bucket === bucketName;
+                        return (
+                          <button
+                            key={bucket}
+                            type="button"
+                            onClick={() => handleBucketChange(bucket)}
+                            className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left font-semibold transition ${
+                              isActive
+                                ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
+                                : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                            }`}
+                          >
+                            <span className="truncate">{bucket}</span>
+                            {isActive && (
+                              <span className="text-[10px] font-semibold uppercase text-primary-600 dark:text-primary-200">
+                                Active
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                  {!loadingBuckets && filteredBucketOptions.length > 0 && (
+                    <div className="border-t border-slate-200 px-2 py-1 text-[10px] text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                      {bucketOverflowCount > 0
+                        ? `Showing ${visibleBucketOptions.length} of ${filteredBucketOptions.length} buckets. Use filter to narrow.`
+                        : `${filteredBucketOptions.length} bucket${filteredBucketOptions.length === 1 ? "" : "s"}`}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <div
               className="flex flex-wrap items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400"
               onClick={isEditingPath ? undefined : startEditingPath}
@@ -3942,56 +4187,7 @@ export default function BrowserPage() {
               )}
             </div>
           </div>
-          <span className="text-[11px] text-slate-500 dark:text-slate-400">
-            {filteredItems.length} items · {pathStats.files} files · {pathStats.folders} folders
-          </span>
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-            <div className="relative w-full sm:w-44">
-              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">
-                <SearchIcon className="h-3.5 w-3.5" />
-              </span>
-              <input
-                type="text"
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-                placeholder="Filter"
-                className="w-full rounded-md border border-slate-200 bg-white py-1.5 pl-7 pr-2 text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </div>
-            <select
-              className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-              value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value as "all" | "file" | "folder")}
-            >
-              <option value="all">All</option>
-              <option value="file">Files</option>
-              <option value="folder">Folders</option>
-            </select>
-            {availableStorageClasses.length > 0 && (
-              <select
-                className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                value={storageFilter}
-                onChange={(event) => setStorageFilter(event.target.value)}
-              >
-                <option value="all">Storage: All</option>
-                {availableStorageClasses.map((storage) => (
-                  <option key={storage} value={storage}>
-                    {storage}
-                  </option>
-                ))}
-              </select>
-            )}
-            <select
-              className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-              value={sortId}
-              onChange={(event) => setSortId(event.target.value)}
-            >
-              {sortOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
             <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1 py-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <button
                 type="button"
@@ -4029,15 +4225,23 @@ export default function BrowserPage() {
             </div>
             <button
               type="button"
-              onClick={openOperationsModal}
-              className={`${filterChipClasses} ${
-                totalOperationsCount > 0
-                  ? "border-emerald-300 bg-emerald-100 text-emerald-800 shadow-sm dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-100"
-                  : ""
-              }`}
+              className={iconButtonClasses}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!bucketName}
+              aria-label="Upload files"
+              title="Upload files"
             >
-              Operations
-              <span className={`${countBadgeClasses} text-[10px]`}>{formatBadgeCount(totalOperationsCount)}</span>
+              <UploadIcon className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className={iconButtonClasses}
+              onClick={handleNewFolder}
+              disabled={!bucketName || !hasS3AccountContext}
+              aria-label="New folder"
+              title="New folder"
+            >
+              <FolderPlusIcon className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -4049,57 +4253,18 @@ export default function BrowserPage() {
             >
               <RefreshIcon className="h-3.5 w-3.5" />
             </button>
-            <div ref={uploadMenuRef} className="relative">
-              <div className="inline-flex items-center gap-1">
-                <button
-                  type="button"
-                  className={iconButtonClasses}
-                  onClick={() => {
-                    setShowUploadMenu(false);
-                    fileInputRef.current?.click();
-                  }}
-                  disabled={!bucketName}
-                  aria-label="Upload files"
-                  title="Upload files"
-                >
-                  <UploadIcon className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  className={iconButtonClasses}
-                  onClick={() => setShowUploadMenu((prev) => !prev)}
-                  disabled={!bucketName}
-                  aria-label="Upload options"
-                  title="Upload options"
-                >
-                  <ChevronDownIcon className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              {showUploadMenu && (
-                <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                    onClick={() => {
-                      setShowUploadMenu(false);
-                      fileInputRef.current?.click();
-                    }}
-                  >
-                    Upload files
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                    onClick={() => {
-                      setShowUploadMenu(false);
-                      folderInputRef.current?.click();
-                    }}
-                  >
-                    Upload folder
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={openOperationsModal}
+              className={`${filterChipClasses} ${
+                totalOperationsCount > 0
+                  ? "border-emerald-300 bg-emerald-100 text-emerald-800 shadow-sm dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-100"
+                  : ""
+              }`}
+            >
+              Operations
+              <span className={`${countBadgeClasses} text-[10px]`}>{formatBadgeCount(totalOperationsCount)}</span>
+            </button>
             <input
               ref={fileInputRef}
               type="file"
@@ -4192,17 +4357,65 @@ export default function BrowserPage() {
                                   className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                                 />
                               </th>
-                              <th className={`px-4 ${headerPadding} text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
-                                Name
+                              <th className={`px-4 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSortToggle("name")}
+                                    className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
+                                  >
+                                    <span>Name</span>
+                                    <ChevronDownIcon
+                                      className={`h-3 w-3 transition ${
+                                        sortKey === "name" ? "opacity-100" : "opacity-30"
+                                      } ${sortKey === "name" && sortDirection === "asc" ? "-rotate-180" : ""}`}
+                                    />
+                                  </button>
+                                  <div className="relative w-full max-w-[180px] flex-1 normal-case">
+                                    <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">
+                                      <SearchIcon className="h-3 w-3" />
+                                    </span>
+                                    <input
+                                      type="text"
+                                      value={filter}
+                                      onChange={(event) => setFilter(event.target.value)}
+                                      placeholder="Filter"
+                                      aria-label="Filter by name"
+                                      className="h-6 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[10px] font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 normal-case"
+                                    />
+                                  </div>
+                                </div>
                               </th>
-                              <th className={`w-16 px-2 ${headerPadding} text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
-                                Size
+                              <th className={`w-20 px-2 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSortToggle("size")}
+                                  className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
+                                >
+                                  <span>Size</span>
+                                  <ChevronDownIcon
+                                    className={`h-3 w-3 transition ${
+                                      sortKey === "size" ? "opacity-100" : "opacity-30"
+                                    } ${sortKey === "size" && sortDirection === "asc" ? "-rotate-180" : ""}`}
+                                  />
+                                </button>
                               </th>
-                              <th className={`w-32 px-2 ${headerPadding} text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
-                                Modified
+                              <th className={`w-32 px-2 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSortToggle("modified")}
+                                  className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
+                                >
+                                  <span>Modified</span>
+                                  <ChevronDownIcon
+                                    className={`h-3 w-3 transition ${
+                                      sortKey === "modified" ? "opacity-100" : "opacity-30"
+                                    } ${sortKey === "modified" && sortDirection === "asc" ? "-rotate-180" : ""}`}
+                                  />
+                                </button>
                               </th>
-                              <th className={`w-44 px-2 ${headerPadding} text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
-                                Actions
+                              <th className={`w-44 px-2 ${headerPadding} !align-middle text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
+                                <span className="inline-flex h-6 items-center">Actions</span>
                               </th>
                             </tr>
                           </thead>
@@ -4296,13 +4509,13 @@ export default function BrowserPage() {
                                     </div>
                                   </div>
                                 </td>
-                                <td className={`px-2 ${rowCellClasses} align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
+                                <td className={`px-2 ${rowCellClasses} !align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
                                   {item.size}
                                 </td>
-                                <td className={`px-2 ${rowCellClasses} align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
+                                <td className={`px-2 ${rowCellClasses} !align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
                                   {item.modified}
                                 </td>
-                                <td className={`w-44 px-2 ${rowCellClasses} align-middle text-right`}>
+                                <td className={`w-44 px-2 ${rowCellClasses} !align-middle text-right`}>
                                   <div className="flex flex-nowrap justify-end gap-1.5">
                                     {item.type === "folder" && (
                                       <button
@@ -4361,7 +4574,7 @@ export default function BrowserPage() {
                         </table>
                       </div>
                     ) : (
-                      <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-3 sm:grid-cols-2 xl:grid-cols-3">
+                      <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                         {objectsLoading && (
                           <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             Loading objects...
@@ -4387,13 +4600,14 @@ export default function BrowserPage() {
                           return (
                             <div
                               key={item.id}
-                              className={`flex ${gridCardGapClasses} ${gridCardHeightClasses} flex-col overflow-hidden rounded-xl border px-3 py-3 transition ${
+                              className={`group relative flex ${gridCardGapClasses} ${gridCardHeightClasses} flex-col overflow-hidden rounded-2xl border p-4 shadow-sm transition ${
                                 selected
-                                  ? "border-primary-200 bg-primary-50/50 dark:border-primary-700/60 dark:bg-primary-500/20"
-                                  : "border-slate-200 bg-white hover:border-primary-200 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-primary-700/60"
+                                  ? "border-primary-200 bg-primary-50/60 shadow-[0_12px_24px_-16px_rgba(79,70,229,0.45)] dark:border-primary-700/60 dark:bg-primary-500/20"
+                                  : "border-slate-200 bg-white/90 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-primary-700/60"
                               }`}
                             >
-                              <div className="flex items-start justify-between">
+                              <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-slate-50/90 to-transparent dark:from-slate-900/60" />
+                              <div className="relative flex items-center justify-between">
                                 <input
                                   type="checkbox"
                                   checked={selected}
@@ -4421,10 +4635,10 @@ export default function BrowserPage() {
                                   setShowInspector(true);
                                   setInspectorTab("details");
                                 }}
-                                className="flex min-w-0 items-start gap-2 text-left"
+                                className="relative flex min-w-0 flex-1 items-start gap-3 text-left"
                               >
                                 <span
-                                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${
+                                  className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border shadow-sm ${
                                     item.type === "folder"
                                       ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
                                       : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200"
@@ -4432,8 +4646,17 @@ export default function BrowserPage() {
                                 >
                                   {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
                                 </span>
-                                <span className="min-w-0 break-words text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                  {item.name}
+                                <span className="min-w-0">
+                                  <span
+                                    className="block min-w-0 break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100"
+                                    style={gridTitleClampStyle}
+                                    title={item.name}
+                                  >
+                                    {item.name}
+                                  </span>
+                                  <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    {item.type === "folder" ? "Folder" : "File"}
+                                  </span>
                                 </span>
                               </button>
                               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -4451,25 +4674,79 @@ export default function BrowserPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-                                <div>Size: {item.size}</div>
-                                <div>Modified: {item.modified}</div>
+                              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                                <div className="min-w-0 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2 py-1 dark:border-slate-700/60 dark:bg-slate-900/50">
+                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Size
+                                  </div>
+                                  <div className="font-semibold text-slate-700 dark:text-slate-200">{item.size}</div>
+                                </div>
+                                <div className="min-w-0 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2 py-1 dark:border-slate-700/60 dark:bg-slate-900/50">
+                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Modified
+                                  </div>
+                                  <div
+                                    className="truncate font-semibold text-slate-700 dark:text-slate-200"
+                                    title={item.modified}
+                                  >
+                                    {item.modified}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="mt-auto flex flex-wrap gap-2">
+                              <div className="mt-auto flex flex-nowrap gap-1.5">
+                                {item.type === "folder" && (
+                                  <button
+                                    type="button"
+                                    className={gridQuickActionClasses}
+                                    aria-label="Open"
+                                    title="Open"
+                                    onClick={() => handleOpenItem(item)}
+                                  >
+                                    <OpenIcon className="h-3.5 w-3.5" />
+                                    <span className="min-w-0 truncate">Open</span>
+                                  </button>
+                                )}
+                                {item.type === "file" && (
+                                  <button
+                                    type="button"
+                                    className={gridQuickActionClasses}
+                                    aria-label="Preview"
+                                    title="Preview"
+                                    onClick={() => handlePreviewItem(item)}
+                                  >
+                                    <EyeIcon className="h-3.5 w-3.5" />
+                                    <span className="min-w-0 truncate">Preview</span>
+                                  </button>
+                                )}
                                 <button
                                   type="button"
-                                  className={bulkActionClasses}
-                                  disabled={item.type === "folder"}
-                                  onClick={() => handlePreviewItem(item)}
+                                  className={gridQuickActionClasses}
+                                  aria-label="Download"
+                                  title="Download"
+                                  onClick={() => handleDownloadTarget(item)}
                                 >
-                                  Preview
+                                  <DownloadIcon className="h-3.5 w-3.5" />
+                                  <span className="min-w-0 truncate">Download</span>
                                 </button>
                                 <button
                                   type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => handleDownloadTarget(item)}
+                                  className={gridQuickActionDangerClasses}
+                                  aria-label="Delete"
+                                  title="Delete"
+                                  onClick={() => handleDeleteItems([item])}
                                 >
-                                  Download
+                                  <TrashIcon className="h-3.5 w-3.5" />
+                                  <span className="min-w-0 truncate">Delete</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className={gridQuickActionClasses}
+                                  aria-label="More actions"
+                                  title="More"
+                                  onClick={() => toggleInspectorForItem(item)}
+                                >
+                                  <MoreIcon className="h-3.5 w-3.5" />
+                                  <span className="min-w-0 truncate">More</span>
                                 </button>
                               </div>
                             </div>
@@ -4495,27 +4772,18 @@ export default function BrowserPage() {
                 {showInspector && (
                   <div className="flex min-h-0 h-full flex-col gap-3">
                     <div className="flex min-h-0 h-full flex-1 flex-col rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-                      <div className="flex items-center justify-between gap-2">
-                        <div />
-                        <div className="flex items-center gap-2">
-                          {(selectedCount > 0 || inspectedItem) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (selectedCount > 0) {
-                                  setSelectedIds([]);
-                                } else {
-                                  setActiveItem(null);
-                                }
-                              }}
-                              className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                            >
-                              {selectedCount > 0 ? "Clear selection" : "Clear"}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label="Inspector tabs">
+                      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Inspector tabs">
+                        <button
+                          type="button"
+                          role="tab"
+                          id="inspector-tab-details"
+                          aria-selected={inspectorTab === "details"}
+                          aria-controls="inspector-panel-details"
+                          onClick={() => setInspectorTab("details")}
+                          className={`${filterChipClasses} ${inspectorTab === "details" ? filterChipActiveClasses : ""}`}
+                        >
+                          Details
+                        </button>
                         <button
                           type="button"
                           role="tab"
@@ -4539,145 +4807,166 @@ export default function BrowserPage() {
                           Selection
                           {selectedCount > 0 && <span className={countBadgeClasses}>{selectedCount}</span>}
                         </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          id="inspector-tab-details"
-                          aria-selected={inspectorTab === "details"}
-                          aria-controls="inspector-panel-details"
-                          onClick={() => setInspectorTab("details")}
-                          className={`${filterChipClasses} ${inspectorTab === "details" ? filterChipActiveClasses : ""}`}
-                        >
-                          Details
-                        </button>
                       </div>
 
-                      <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+                      <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-2">
                         {inspectorTab === "context" && (
                           <div
                             role="tabpanel"
                             id="inspector-panel-context"
                             aria-labelledby="inspector-tab-context"
-                            className="space-y-4"
+                            className="space-y-4 text-xs text-slate-600 dark:text-slate-300"
                           >
-                            <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2.5 text-xs text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
+                            <div className="space-y-1">
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current location</p>
                               <p className="break-all text-[11px] text-slate-500 dark:text-slate-400">
                                 {currentPath || "Select a bucket to get started."}
                               </p>
                             </div>
-                          </div>
-                          <div className="mt-3 space-y-3">
-                            <div>
-                              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Actions</p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => {
-                                    setShowUploadMenu(false);
-                                    fileInputRef.current?.click();
-                                  }}
-                                  disabled={!bucketName || !hasS3AccountContext}
-                                >
-                                  <UploadIcon className="h-3.5 w-3.5" />
-                                  Upload files
-                                </button>
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => {
-                                    setShowUploadMenu(false);
-                                    folderInputRef.current?.click();
-                                  }}
-                                  disabled={!bucketName || !hasS3AccountContext}
-                                >
-                                  <FolderIcon className="h-3.5 w-3.5" />
-                                  Upload folder
-                                </button>
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={handleNewFolder}
-                                  disabled={!bucketName || !hasS3AccountContext}
-                                >
-                                  <FolderPlusIcon className="h-3.5 w-3.5" />
-                                  New folder
-                                </button>
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={handlePasteItems}
-                                  disabled={!clipboard || !bucketName || !hasS3AccountContext}
-                                >
-                                  <PasteIcon className="h-3.5 w-3.5" />
-                                  Paste
-                                </button>
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => setShowPrefixVersions(true)}
-                                  disabled={!bucketName || !hasS3AccountContext}
-                                >
-                                  <ListIcon className="h-3.5 w-3.5" />
-                                  Versions
-                                </button>
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => handleCopyPath(currentPath)}
-                                  disabled={!currentPath}
-                                >
-                                  <CopyIcon className="h-3.5 w-3.5" />
-                                  Copy path
-                                </button>
-                              </div>
-                            </div>
-                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-                              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Prefix summary</p>
-                              <div className="mt-2 grid gap-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-slate-500">Files</span>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.files}</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-slate-500">Folders</span>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.folders}</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-slate-500">Total size</span>
-                                  <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                    {formatBytes(pathStats.totalBytes)}
-                                  </span>
+                            <div className="space-y-3">
+                              <div>
+                                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Actions</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={() => {
+                                      fileInputRef.current?.click();
+                                    }}
+                                    disabled={!bucketName || !hasS3AccountContext}
+                                  >
+                                    <UploadIcon className="h-3.5 w-3.5" />
+                                    Upload files
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={() => {
+                                      folderInputRef.current?.click();
+                                    }}
+                                    disabled={!bucketName || !hasS3AccountContext}
+                                  >
+                                    <FolderIcon className="h-3.5 w-3.5" />
+                                    Upload folder
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={handleNewFolder}
+                                    disabled={!bucketName || !hasS3AccountContext}
+                                  >
+                                    <FolderPlusIcon className="h-3.5 w-3.5" />
+                                    New folder
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={handlePasteItems}
+                                    disabled={!clipboard || !bucketName || !hasS3AccountContext}
+                                  >
+                                    <PasteIcon className="h-3.5 w-3.5" />
+                                    Paste
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={() => setShowPrefixVersions(true)}
+                                    disabled={!bucketName || !hasS3AccountContext}
+                                  >
+                                    <ListIcon className="h-3.5 w-3.5" />
+                                    Versions
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={() => handleCopyPath(currentPath)}
+                                    disabled={!currentPath}
+                                  >
+                                    <CopyIcon className="h-3.5 w-3.5" />
+                                    Copy path
+                                  </button>
                                 </div>
                               </div>
-                            </div>
-                            <div>
-                              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Storage classes</p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {Object.keys(pathStats.storageCounts).length === 0 ? (
-                                  <span className="text-xs text-slate-500 dark:text-slate-400">No file data yet.</span>
-                                ) : (
-                                  Object.entries(pathStats.storageCounts).map(([storage, count]) => (
-                                    <span
-                                      key={storage}
-                                      className={`rounded-full border px-2 py-1 text-xs font-semibold ${
-                                        storageClassChipClasses[storage] ??
-                                        "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                      }`}
-                                    >
-                                      {storage} ({count})
+                              <div>
+                                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Prefix summary</p>
+                                <div className="mt-2 grid gap-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Files</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.files}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Folders</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.folders}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Total size</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {formatBytes(pathStats.totalBytes)}
                                     </span>
-                                  ))
+                                  </div>
+                                </div>
+                              </div>
+                              <div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Counts</p>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={handleContextCount}
+                                    disabled={!bucketName || !hasS3AccountContext || contextCountsLoading}
+                                  >
+                                    {contextCountsLoading ? "Counting..." : contextCounts ? "Recount" : "Count"}
+                                  </button>
+                                </div>
+                                {contextCountsError && (
+                                  <p className="mt-2 text-[11px] font-semibold text-rose-600 dark:text-rose-200">
+                                    {contextCountsError}
+                                  </p>
                                 )}
+                                <div className="mt-2 grid gap-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Objects</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {contextCountsLoading ? "..." : contextCounts ? contextCounts.objects : "-"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Versions</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {contextCountsLoading ? "..." : contextCounts ? contextCounts.versions : "-"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500">Delete markers</span>
+                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                      {contextCountsLoading ? "..." : contextCounts ? contextCounts.deleteMarkers : "-"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Storage classes</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {Object.keys(pathStats.storageCounts).length === 0 ? (
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">No file data yet.</span>
+                                  ) : (
+                                    Object.entries(pathStats.storageCounts).map(([storage, count]) => (
+                                      <span
+                                        key={storage}
+                                        className={`rounded-full border px-2 py-1 text-xs font-semibold ${
+                                          storageClassChipClasses[storage] ??
+                                          "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                        }`}
+                                      >
+                                        {storage} ({count})
+                                      </span>
+                                    ))
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                      )}
+                        )}
 
                       {inspectorTab === "selection" && (
                         <div
@@ -4687,7 +4976,7 @@ export default function BrowserPage() {
                           className="space-y-4"
                         >
                           {canSelectionActions ? (
-                          <div className="rounded-lg border border-slate-200/80 bg-white px-3 py-2.5 text-xs text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
+                          <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
                             <div className="flex items-start justify-between gap-2">
                               <div>
                                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Selection</p>
@@ -4709,6 +4998,15 @@ export default function BrowserPage() {
                                   <p className="text-[11px] text-slate-400">Total size: {formatBytes(selectedBytes)}</p>
                                 )}
                               </div>
+                              {selectedCount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedIds([])}
+                                  className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                >
+                                  Clear
+                                </button>
+                              )}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {canSelectionDownloadFolder && selectionPrimary && (
@@ -4849,7 +5147,16 @@ export default function BrowserPage() {
                       >
                         {inspectedItem ? (
                           <div className="space-y-3">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Object details</p>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Object details</p>
+                              <button
+                                type="button"
+                                onClick={() => setActiveItem(null)}
+                                className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                              >
+                                Clear
+                              </button>
+                            </div>
                             <div className="rounded-lg border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-sky-50 px-3 py-2.5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900/60 dark:to-slate-900">
                               <div className="flex items-center gap-3">
                                 <div

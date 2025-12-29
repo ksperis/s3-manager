@@ -497,10 +497,31 @@ def _delete_objects(client, bucket_name: str, items: Iterable[dict]) -> None:
     for item in items:
         chunk.append(item)
         if len(chunk) == 1000:
-            client.delete_objects(Bucket=bucket_name, Delete={"Objects": chunk})
+            _delete_objects_chunk(client, bucket_name, chunk)
             chunk = []
     if chunk:
-        client.delete_objects(Bucket=bucket_name, Delete={"Objects": chunk})
+        _delete_objects_chunk(client, bucket_name, chunk)
+
+
+def _delete_objects_chunk(client, bucket_name: str, chunk: list[dict]) -> None:
+    resp = client.delete_objects(Bucket=bucket_name, Delete={"Objects": chunk})
+    errors = resp.get("Errors", []) if isinstance(resp, dict) else []
+    if errors:
+        sample = []
+        for err in errors[:3]:
+            key = err.get("Key", "unknown")
+            version_id = err.get("VersionId")
+            code = err.get("Code", "Error")
+            message = err.get("Message", "")
+            suffix = f" ({message})" if message else ""
+            if version_id:
+                sample.append(f"{code} for {key} (version {version_id}){suffix}")
+            else:
+                sample.append(f"{code} for {key}{suffix}")
+        extra = f" (+{len(errors) - 3} more)" if len(errors) > 3 else ""
+        raise RuntimeError(
+            f"Unable to delete {len(errors)} object(s) in bucket '{bucket_name}': {', '.join(sample)}{extra}"
+        )
 
 
 def _delete_versions(client, bucket_name: str) -> None:

@@ -13,6 +13,12 @@ export type PortalSettings = {
   bucket_defaults: PortalBucketDefaults;
 };
 
+export type GeneralSettings = {
+  manager_enabled: boolean;
+  browser_enabled: boolean;
+  portal_enabled: boolean;
+};
+
 export type PortalIAMPolicySettings = {
   actions: string[];
   advanced_policy?: Record<string, unknown> | null;
@@ -38,6 +44,7 @@ export type BrowserSettings = {
 };
 
 export type AppSettings = {
+  general: GeneralSettings;
   portal: PortalSettings;
   manager: ManagerSettings;
   browser: BrowserSettings;
@@ -45,6 +52,11 @@ export type AppSettings = {
 
 export async function fetchAppSettings(): Promise<AppSettings> {
   const { data } = await client.get<AppSettings>("/admin/settings");
+  return data;
+}
+
+export async function fetchGeneralSettings(): Promise<GeneralSettings> {
+  const { data } = await client.get<GeneralSettings>("/settings/general");
   return data;
 }
 

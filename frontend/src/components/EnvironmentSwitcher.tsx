@@ -4,6 +4,8 @@
  */
 import { ChangeEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import type { GeneralSettings } from "../api/appSettings";
+import { useGeneralSettings } from "./GeneralSettingsContext";
 
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
@@ -67,7 +69,8 @@ export default function EnvironmentSwitcher() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = getStoredUser();
-  const environments = resolveAvailableEnvironments(user);
+  const { generalSettings } = useGeneralSettings();
+  const environments = resolveAvailableEnvironmentsWithFlags(user, generalSettings);
   const current = resolveEnvironmentId(location.pathname, environments);
 
   if (environments.length <= 1 || !current) return null;
@@ -99,4 +102,14 @@ export default function EnvironmentSwitcher() {
       </div>
     </div>
   );
+}
+
+function resolveAvailableEnvironmentsWithFlags(user: StoredUser | null, generalSettings: GeneralSettings): EnvironmentOption[] {
+  const filtered = resolveAvailableEnvironments(user);
+  return filtered.filter((env) => {
+    if (env.id === "manager") return generalSettings.manager_enabled;
+    if (env.id === "browser") return generalSettings.browser_enabled;
+    if (env.id === "portal") return generalSettings.portal_enabled;
+    return true;
+  });
 }

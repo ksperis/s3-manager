@@ -366,8 +366,9 @@ export default function BucketDetailPage() {
   }, [accountId, bucketName, hasAccountContext]);
 
   useEffect(() => {
+    if (activeTab !== "overview" && activeTab !== "metrics") return;
     refreshBucketMeta();
-  }, [refreshBucketMeta]);
+  }, [activeTab, refreshBucketMeta]);
 
   const loadProperties = useCallback(async () => {
     if (!bucketName || !hasAccountContext) {

@@ -5,9 +5,11 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchOidcProviders, login, loginWithKeys, startOidcLogin, type OidcProviderInfo } from "../../api/auth";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { refresh: refreshGeneralSettings } = useGeneralSettings();
   const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("changeme");
   const [accessKey, setAccessKey] = useState("");
@@ -56,6 +58,7 @@ export default function LoginPage() {
       const res = await login(email, password);
       localStorage.setItem("token", res.access_token);
       localStorage.setItem("user", JSON.stringify({ ...res.user, authType: "password" }));
+      refreshGeneralSettings();
       const destination = resolveDestination(res.user.role, res.user.account_links ?? null);
       navigate(destination, { replace: true });
     } catch (err) {
@@ -83,6 +86,7 @@ export default function LoginPage() {
         capabilities: res.session.capabilities,
       };
       localStorage.setItem("user", JSON.stringify(userPayload));
+      refreshGeneralSettings();
       navigate("/manager", { replace: true });
     } catch (err) {
       console.error(err);

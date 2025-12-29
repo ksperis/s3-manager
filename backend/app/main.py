@@ -2,13 +2,13 @@
 # Licensed under the Apache License, Version 2.0
 import logging
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.database import engine, SessionLocal
 from app.core.db_init import init_db
-from app.routers import auth, users, portal
+from app.routers import auth, users, portal, settings as public_settings
 from app.routers.admin import s3_accounts as admin_s3_accounts
 from app.routers.admin import audit as admin_audit
 from app.routers.admin import stats as admin_stats
@@ -26,6 +26,12 @@ from app.routers.manager import objects as manager_objects
 from app.routers.manager import iam_policies as manager_iam_policies
 from app.routers.manager import topics as manager_topics
 from app.routers.manager import stats as manager_stats
+from app.routers.dependencies import (
+    require_browser_enabled,
+    require_manager_context_enabled,
+    require_manager_enabled,
+    require_portal_enabled,
+)
 
 settings = get_settings()
 
@@ -61,7 +67,8 @@ def health_check():
 # API routers
 app.include_router(auth.router, prefix=settings.api_v1_prefix)
 app.include_router(users.router, prefix=settings.api_v1_prefix)
-app.include_router(portal.router, prefix=settings.api_v1_prefix)
+app.include_router(portal.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_portal_enabled)])
+app.include_router(public_settings.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_s3_accounts.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_s3_users.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_audit.router, prefix=settings.api_v1_prefix)
@@ -69,15 +76,63 @@ app.include_router(admin_stats.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_users.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_storage_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_settings.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_accounts.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_context.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_buckets.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_browser.router, prefix=settings.api_v1_prefix)
-app.include_router(iam_users.router, prefix=settings.api_v1_prefix)
-app.include_router(iam_groups.router, prefix=settings.api_v1_prefix)
-app.include_router(iam_roles.router, prefix=settings.api_v1_prefix)
-app.include_router(iam_overview.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_objects.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_iam_policies.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_topics.router, prefix=settings.api_v1_prefix)
-app.include_router(manager_stats.router, prefix=settings.api_v1_prefix)
+app.include_router(
+    manager_accounts.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_context_enabled)],
+)
+app.include_router(
+    manager_context.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_context_enabled)],
+)
+app.include_router(
+    manager_buckets.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_browser.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_browser_enabled)],
+)
+app.include_router(
+    iam_users.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    iam_groups.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    iam_roles.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    iam_overview.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_objects.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_iam_policies.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_topics.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_stats.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)

@@ -1,4 +1,9 @@
 {
+  "general": {
+    "manager_enabled": true,
+    "browser_enabled": true,
+    "portal_enabled": true
+  },
   "portal": {
     "allow_portal_key": true,
     "allow_portal_user_bucket_create": true
