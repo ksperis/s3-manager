@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 from app.core.security import EncryptedString
 
@@ -45,6 +45,7 @@ class StorageEndpoint(Base):
     admin_secret_key = Column(EncryptedString, nullable=True)
     supervision_access_key = Column(String, nullable=True)
     supervision_secret_key = Column(EncryptedString, nullable=True)
+    capabilities = Column(JSON, nullable=True)
     is_default = Column(Boolean, default=False, nullable=False, server_default="0")
     is_editable = Column(Boolean, default=True, nullable=False, server_default="1")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

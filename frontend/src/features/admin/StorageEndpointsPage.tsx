@@ -25,6 +25,8 @@ type FormState = {
   admin_secret_key: string;
   supervision_access_key: string;
   supervision_secret_key: string;
+  capabilities_sts: boolean;
+  capabilities_static_website: boolean;
 };
 
 const EMPTY_FORM: FormState = {
@@ -37,6 +39,8 @@ const EMPTY_FORM: FormState = {
   admin_secret_key: "",
   supervision_access_key: "",
   supervision_secret_key: "",
+  capabilities_sts: true,
+  capabilities_static_website: true,
 };
 
 function extractError(err: unknown): string {
@@ -76,6 +80,10 @@ function LockBadge({ label }: { label: string }) {
       🔒 {label}
     </span>
   );
+}
+
+function resolveCapability(endpoint: StorageEndpoint, key: string, fallback = true) {
+  return endpoint.capabilities?.[key] ?? fallback;
 }
 
 export default function StorageEndpointsPage() {
@@ -135,6 +143,8 @@ export default function StorageEndpointsPage() {
       admin_secret_key: "",
       supervision_access_key: endpoint.supervision_access_key ?? "",
       supervision_secret_key: "",
+      capabilities_sts: resolveCapability(endpoint, "sts"),
+      capabilities_static_website: resolveCapability(endpoint, "static_website"),
     });
     setFormError(null);
     setShowForm(true);
@@ -187,6 +197,14 @@ export default function StorageEndpointsPage() {
       region: trimmedRegion || null,
       provider: form.provider,
     };
+    if (form.provider === "ceph") {
+      payload.capabilities = {
+        sts: form.capabilities_sts,
+        static_website: form.capabilities_static_website,
+      };
+    } else {
+      payload.capabilities = null;
+    }
 
     if (form.provider === "ceph") {
       if (editingId) {
@@ -236,6 +254,8 @@ export default function StorageEndpointsPage() {
   const renderEndpointCard = (endpoint: StorageEndpoint) => {
     const isLocked = !endpoint.is_editable || endpoint.is_default;
     const showSupervision = endpoint.supervision_access_key || endpoint.has_supervision_secret;
+    const stsEnabled = resolveCapability(endpoint, "sts");
+    const staticWebsiteEnabled = resolveCapability(endpoint, "static_website");
 
     return (
       <div
@@ -322,6 +342,31 @@ export default function StorageEndpointsPage() {
               <p className="font-semibold text-slate-500">Not set</p>
             )}
           </div>
+          {endpoint.provider === "ceph" && (
+            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+              <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Capabilities</p>
+              <div className="mt-1 flex flex-wrap gap-2 text-xs font-semibold">
+                <span
+                  className={`rounded-full px-2 py-0.5 ${
+                    stsEnabled
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                      : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  STS {stsEnabled ? "on" : "off"}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 ${
+                    staticWebsiteEnabled
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                      : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  Static website {staticWebsiteEnabled ? "on" : "off"}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -471,38 +516,66 @@ export default function StorageEndpointsPage() {
             </div>
 
             {cephMode && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
-                  Admin secret key {editingId ? <span className="text-xs font-normal text-slate-500">(leave blank to keep)</span> : null}
-                  <input
-                    type="password"
-                    value={form.admin_secret_key}
-                    onChange={(e) => setForm((prev) => ({ ...prev, admin_secret_key: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                    placeholder="••••••"
-                    required={!editingId}
-                  />
-                </label>
-                <div className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
-                  Supervision (optional)
-                  <div className="grid gap-3">
-                    <input
-                      type="text"
-                      value={form.supervision_access_key}
-                      onChange={(e) => setForm((prev) => ({ ...prev, supervision_access_key: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                      placeholder="Access key supervision"
-                    />
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
+                    Admin secret key {editingId ? <span className="text-xs font-normal text-slate-500">(leave blank to keep)</span> : null}
                     <input
                       type="password"
-                      value={form.supervision_secret_key}
-                      onChange={(e) => setForm((prev) => ({ ...prev, supervision_secret_key: e.target.value }))}
+                      value={form.admin_secret_key}
+                      onChange={(e) => setForm((prev) => ({ ...prev, admin_secret_key: e.target.value }))}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                      placeholder="Secret key supervision"
+                      placeholder="••••••"
+                      required={!editingId}
                     />
+                  </label>
+                  <div className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
+                    Supervision (optional)
+                    <div className="grid gap-3">
+                      <input
+                        type="text"
+                        value={form.supervision_access_key}
+                        onChange={(e) => setForm((prev) => ({ ...prev, supervision_access_key: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder="Access key supervision"
+                      />
+                      <input
+                        type="password"
+                        value={form.supervision_secret_key}
+                        onChange={(e) => setForm((prev) => ({ ...prev, supervision_secret_key: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder="Secret key supervision"
+                      />
+                    </div>
+                    <p className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                      Use these keys for read-only monitoring actions.
+                    </p>
                   </div>
-                  <p className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                    Use these keys for read-only monitoring actions.
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Capabilities</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                      STS enabled
+                      <input
+                        type="checkbox"
+                        checked={form.capabilities_sts}
+                        onChange={(e) => setForm((prev) => ({ ...prev, capabilities_sts: e.target.checked }))}
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                      Static website enabled
+                      <input
+                        type="checkbox"
+                        checked={form.capabilities_static_website}
+                        onChange={(e) => setForm((prev) => ({ ...prev, capabilities_static_website: e.target.checked }))}
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      />
+                    </label>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Disable a capability if the endpoint does not expose it.
                   </p>
                 </div>
               </div>

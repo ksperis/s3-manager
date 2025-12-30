@@ -17,6 +17,7 @@ export type StorageEndpoint = {
   has_admin_secret: boolean;
   supervision_access_key?: string | null;
   has_supervision_secret: boolean;
+  capabilities?: Record<string, boolean> | null;
   is_default: boolean;
   is_editable: boolean;
   created_at: string;
@@ -33,6 +34,7 @@ export type StorageEndpointPayload = {
   admin_secret_key?: string | null;
   supervision_access_key?: string | null;
   supervision_secret_key?: string | null;
+  capabilities?: Record<string, boolean> | null;
 };
 
 export async function listStorageEndpoints(): Promise<StorageEndpoint[]> {

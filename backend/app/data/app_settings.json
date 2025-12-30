@@ -53,7 +53,7 @@
     }
   },
   "manager": {
-    "allow_manager_user_usage_stats": false
+    "allow_manager_user_usage_stats": true
   },
   "browser": {
     "allow_proxy_transfers": false,

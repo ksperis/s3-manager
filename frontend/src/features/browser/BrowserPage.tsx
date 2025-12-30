@@ -166,7 +166,7 @@ import type {
 } from "./browserTypes";
 
 export default function BrowserPage() {
-  const { accountIdForApi, hasS3AccountContext } = useS3AccountContext();
+  const { accountIdForApi, hasS3AccountContext, accounts, selectedS3AccountId } = useS3AccountContext();
   const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
   const [bucketName, setBucketName] = useState("");
   const [showBucketMenu, setShowBucketMenu] = useState(false);
@@ -313,6 +313,13 @@ export default function BrowserPage() {
   const operationIdsRef = useRef(new Set<string>());
   const bucketNameRef = useRef(bucketName);
   const prefixRef = useRef(prefix);
+  const selectedAccount = useMemo(() => {
+    if (selectedS3AccountId) {
+      return accounts.find((account) => account.id === selectedS3AccountId) ?? null;
+    }
+    return accounts.length === 1 ? accounts[0] : null;
+  }, [accounts, selectedS3AccountId]);
+  const stsEnabled = selectedAccount?.storage_endpoint_capabilities?.sts ?? true;
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   useEffect(() => {
@@ -363,7 +370,7 @@ export default function BrowserPage() {
   };
   const ensureStsCredentials = useCallback(
     async (force = false) => {
-      if (!hasS3AccountContext || !stsStatus?.available) {
+      if (!hasS3AccountContext || !stsEnabled || !stsStatus?.available) {
         setStsCredentials(null);
         setStsCredentialsError(null);
         return null;
@@ -392,9 +399,9 @@ export default function BrowserPage() {
       stsRefreshRef.current = request;
       return request;
     },
-    [accountIdForApi, hasS3AccountContext, stsStatus?.available]
+    [accountIdForApi, hasS3AccountContext, stsEnabled, stsStatus?.available]
   );
-  const stsReady = Boolean(stsStatus?.available && !stsCredentialsError);
+  const stsReady = Boolean(stsEnabled && stsStatus?.available && !stsCredentialsError);
   const presignObjectRequest = useCallback(
     async (targetBucket: string, payload: PresignRequest) => {
       if (stsReady) {
@@ -989,8 +996,10 @@ export default function BrowserPage() {
   }, [accountIdForApi, bucketName, hasS3AccountContext, uiOrigin]);
 
   useEffect(() => {
-    if (!hasS3AccountContext) {
+    if (!hasS3AccountContext || !stsEnabled) {
       setStsStatus(null);
+      setStsCredentials(null);
+      setStsCredentialsError(null);
       return;
     }
     let isMounted = true;
@@ -1006,16 +1015,16 @@ export default function BrowserPage() {
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, hasS3AccountContext]);
+  }, [accountIdForApi, hasS3AccountContext, stsEnabled]);
 
   useEffect(() => {
-    if (!hasS3AccountContext || !stsStatus?.available) {
+    if (!hasS3AccountContext || !stsEnabled || !stsStatus?.available) {
       setStsCredentials(null);
       setStsCredentialsError(null);
       return;
     }
     ensureStsCredentials(true);
-  }, [accountIdForApi, ensureStsCredentials, hasS3AccountContext, stsStatus?.available]);
+  }, [accountIdForApi, ensureStsCredentials, hasS3AccountContext, stsEnabled, stsStatus?.available]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {

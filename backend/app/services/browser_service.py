@@ -45,6 +45,7 @@ from app.models.browser import (
 )
 from app.services.s3_client import _delete_objects, get_s3_client
 from app.services.sts_service import get_session_token
+from app.services.storage_endpoints_service import normalize_capabilities
 from app.utils.s3_endpoint import resolve_s3_endpoint
 
 logger = logging.getLogger(__name__)
@@ -120,11 +121,20 @@ def _record_sts_failure(cache_key: str) -> None:
 
 
 class BrowserService:
+    def _sts_enabled(self, account: S3Account) -> bool:
+        endpoint = getattr(account, "storage_endpoint", None)
+        if not endpoint:
+            return True
+        capabilities = normalize_capabilities(getattr(endpoint, "capabilities", None))
+        return capabilities.get("sts", True)
+
     def _resolve_s3_credentials(self, account: S3Account) -> tuple[str, str, Optional[str]]:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise RuntimeError("S3 credentials missing for this account")
         session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        if not self._sts_enabled(account):
+            return access_key, secret_key, session_token
         sts_credentials = self._get_sts_credentials(account, access_key, secret_key, session_token)
         if sts_credentials:
             return sts_credentials.access_key_id, sts_credentials.secret_access_key, sts_credentials.session_token
@@ -146,6 +156,8 @@ class BrowserService:
         secret_key: str,
         session_token: Optional[str],
     ) -> Optional[CachedStsCredentials]:
+        if not self._sts_enabled(account):
+            return None
         endpoint = settings.sts_endpoint or _resolve_endpoint(account)
         cache_key = _sts_cache_key(access_key, endpoint)
         cached = _get_cached_sts_credentials(cache_key)
@@ -326,6 +338,8 @@ class BrowserService:
         return self.get_bucket_cors_status(bucket_name, account, origin=origin)
 
     def check_sts(self, account: S3Account) -> StsStatus:
+        if not self._sts_enabled(account):
+            return StsStatus(available=False, error="STS is disabled for this endpoint")
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             return StsStatus(available=False, error="S3 credentials missing for this account")
@@ -359,6 +373,8 @@ class BrowserService:
         return StsStatus(available=True)
 
     def get_sts_credentials(self, account: S3Account) -> BrowserStsCredentials:
+        if not self._sts_enabled(account):
+            raise RuntimeError("STS is disabled for this endpoint")
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise RuntimeError("S3 credentials missing for this account")

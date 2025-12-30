@@ -309,12 +309,22 @@ export default function BucketDetailPage() {
   const [objectLockError, setObjectLockError] = useState<string | null>(null);
   const [savingObjectLock, setSavingObjectLock] = useState(false);
   const [objectLockConfig, setObjectLockConfig] = useState<BucketObjectLockConfiguration | null>(null);
-  const selectedS3Account = useMemo(
-    () => accounts.find((account) => account.id === selectedS3AccountId),
-    [accounts, selectedS3AccountId]
+  const selectedS3Account = useMemo(() => {
+    if (selectedS3AccountId) {
+      return accounts.find((account) => account.id === selectedS3AccountId) ?? null;
+    }
+    if (!requiresS3AccountSelection && accounts.length > 0) {
+      return accounts[0];
+    }
+    return null;
+  }, [accounts, requiresS3AccountSelection, selectedS3AccountId]);
+  const staticWebsiteEnabled = useMemo(
+    () => selectedS3Account?.storage_endpoint_capabilities?.static_website ?? true,
+    [selectedS3Account]
   );
   const accountId = accountIdForApi ?? null;
   const hasAccountContext = !requiresS3AccountSelection || accountId !== null;
+  const staticWebsiteBlocked = !staticWebsiteEnabled;
   const exampleS3AccountId = selectedS3Account?.rgw_account_id || "RGW00000000000000001";
   const notificationExample = `{
   "TopicConfigurations": [
@@ -603,8 +613,10 @@ export default function BucketDetailPage() {
   }, [accountId, bucketName, hasAccountContext]);
 
   const loadWebsite = useCallback(async () => {
-    if (!bucketName || !hasAccountContext) {
+    if (!bucketName || !hasAccountContext || !staticWebsiteEnabled) {
       applyWebsiteState(null);
+      setWebsiteError(null);
+      setWebsiteStatus(null);
       return;
     }
     setWebsiteLoading(true);
@@ -619,7 +631,7 @@ export default function BucketDetailPage() {
     } finally {
       setWebsiteLoading(false);
     }
-  }, [accountId, applyWebsiteState, bucketName, hasAccountContext]);
+  }, [accountId, applyWebsiteState, bucketName, hasAccountContext, staticWebsiteEnabled]);
 
   const loadBucketAcl = useCallback(async () => {
     if (!bucketName || !hasAccountContext) {
@@ -943,15 +955,22 @@ export default function BucketDetailPage() {
           : "Not set";
     const corsTone: PropertySummary["tone"] = corsLoading || corsError ? "unknown" : corsConfigured ? "active" : "inactive";
 
-    const websiteState = websiteLoading
-      ? "Loading..."
-      : websiteError
-        ? "Unavailable"
+    const websiteState = !staticWebsiteEnabled
+      ? "Unavailable"
+      : websiteLoading
+        ? "Loading..."
+        : websiteError
+          ? "Unavailable"
+          : websiteConfigured
+            ? "Enabled"
+            : "Disabled";
+    const websiteTone: PropertySummary["tone"] = !staticWebsiteEnabled
+      ? "unknown"
+      : websiteLoading || websiteError
+        ? "unknown"
         : websiteConfigured
-          ? "Enabled"
-          : "Disabled";
-    const websiteTone: PropertySummary["tone"] =
-      websiteLoading || websiteError ? "unknown" : websiteConfigured ? "active" : "inactive";
+          ? "active"
+          : "inactive";
 
     const publicAccessState = propsLoading
       ? "Loading..."
@@ -994,6 +1013,7 @@ export default function BucketDetailPage() {
     publicAccessBlockEnabled,
     publicAccessBlockPartial,
     versioningIsEnabled,
+    staticWebsiteEnabled,
     websiteConfigured,
     websiteError,
     websiteLoading,
@@ -1256,7 +1276,7 @@ export default function BucketDetailPage() {
   };
 
   const saveWebsite = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasAccountContext || !staticWebsiteEnabled) return;
     setWebsiteError(null);
     setWebsiteStatus(null);
 
@@ -1322,7 +1342,7 @@ export default function BucketDetailPage() {
   };
 
   const clearWebsite = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasAccountContext || !staticWebsiteEnabled) return;
     const confirmDelete = window.confirm("Delete the static website configuration?");
     if (!confirmDelete) return;
     setClearingWebsite(true);
@@ -2340,7 +2360,7 @@ export default function BucketDetailPage() {
                         </>
                       )}
                     </div>
-                    <div className={`${bucketCardClass} space-y-3`}>
+                    <div className={`${bucketCardClass} space-y-3 ${staticWebsiteBlocked ? "opacity-60" : ""}`}>
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Static website</p>
@@ -2353,14 +2373,14 @@ export default function BucketDetailPage() {
                             type="button"
                             onClick={loadWebsite}
                             className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                            disabled={websiteLoading}
+                            disabled={websiteLoading || staticWebsiteBlocked}
                           >
                             {websiteLoading ? "Loading..." : "Refresh"}
                           </button>
                           <button
                             type="button"
                             onClick={saveWebsite}
-                            disabled={savingWebsite || websiteLoading}
+                            disabled={savingWebsite || websiteLoading || staticWebsiteBlocked}
                             className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                           >
                             {savingWebsite ? "Saving..." : "Save"}
@@ -2368,13 +2388,18 @@ export default function BucketDetailPage() {
                           <button
                             type="button"
                             onClick={clearWebsite}
-                            disabled={clearingWebsite}
+                            disabled={clearingWebsite || staticWebsiteBlocked}
                             className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                           >
                             {clearingWebsite ? "Deleting..." : "Delete"}
                           </button>
                         </div>
                       </div>
+                      {staticWebsiteBlocked && (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+                          Static website is disabled for this endpoint. Enable it in the Ceph endpoint configuration.
+                        </div>
+                      )}
                       {websiteError && (
                         <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                           {websiteError}
@@ -2395,7 +2420,7 @@ export default function BucketDetailPage() {
                               setWebsiteStatus(null);
                               setWebsiteError(null);
                             }}
-                            disabled={websiteLoading || savingWebsite || clearingWebsite}
+                            disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                             className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
                           />
                           <div>
@@ -2414,7 +2439,7 @@ export default function BucketDetailPage() {
                               setWebsiteStatus(null);
                               setWebsiteError(null);
                             }}
-                            disabled={websiteLoading || savingWebsite || clearingWebsite}
+                            disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                             className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
                           />
                           <div>
@@ -2439,7 +2464,7 @@ export default function BucketDetailPage() {
                                 }}
                                 className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 placeholder="index.html"
-                                disabled={websiteLoading || savingWebsite || clearingWebsite}
+                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                               />
                             </label>
                             <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
@@ -2453,7 +2478,7 @@ export default function BucketDetailPage() {
                                 }}
                                 className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 placeholder="error.html"
-                                disabled={websiteLoading || savingWebsite || clearingWebsite}
+                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                               />
                             </label>
                           </div>
@@ -2471,7 +2496,7 @@ export default function BucketDetailPage() {
                               className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                               placeholder="[]"
                               spellCheck={false}
-                              disabled={websiteLoading || savingWebsite || clearingWebsite}
+                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                             />
                             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
                               <button
@@ -2511,7 +2536,7 @@ export default function BucketDetailPage() {
                               }}
                               className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                               placeholder="www.example.com"
-                              disabled={websiteLoading || savingWebsite || clearingWebsite}
+                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                             />
                           </label>
                           <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
@@ -2525,7 +2550,7 @@ export default function BucketDetailPage() {
                               }}
                               className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                               placeholder="https"
-                              disabled={websiteLoading || savingWebsite || clearingWebsite}
+                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                             />
                           </label>
                           <p className="md:col-span-2 text-[11px] text-slate-500 dark:text-slate-400">

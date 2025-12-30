@@ -148,6 +148,9 @@ export type AdminSummary = {
   total_admins: number;
   total_portal_users?: number;
   total_s3_users: number;
+  total_endpoints: number;
+  total_ceph_endpoints: number;
+  total_other_endpoints: number;
 };
 
 export async function fetchAdminSummary(): Promise<AdminSummary> {

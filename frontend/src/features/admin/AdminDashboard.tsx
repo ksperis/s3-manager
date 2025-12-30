@@ -37,6 +37,12 @@ export default function AdminDashboard() {
             },
             { label: "Accounts", value: summary.total_accounts, to: "/admin/s3-accounts" },
             { label: "S3 users", value: summary.total_s3_users ?? 0, to: "/admin/s3-users" },
+            {
+              label: "Endpoints",
+              value: summary.total_endpoints ?? 0,
+              hint: `Ceph: ${summary.total_ceph_endpoints ?? 0} | Other: ${summary.total_other_endpoints ?? 0}`,
+              to: "/admin/storage-endpoints",
+            },
           ]
         : [],
     [summary]
