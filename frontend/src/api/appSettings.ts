@@ -38,6 +38,7 @@ export type ManagerSettings = {
 };
 
 export type BrowserSettings = {
+  allow_proxy_transfers: boolean;
   direct_upload_parallelism: number;
   proxy_upload_parallelism: number;
   direct_download_parallelism: number;

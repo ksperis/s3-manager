@@ -32,6 +32,7 @@ from app.models.browser import (
     PresignedUrl,
     BucketCorsStatus,
     StsStatus,
+    BrowserStsCredentials,
 )
 from app.models.browser import BrowserBucket
 from app.services.audit_service import AuditService
@@ -150,6 +151,18 @@ def get_sts_status(
     _: User = Depends(get_current_account_admin),
 ) -> StsStatus:
     return service.check_sts(account)
+
+
+@router.get("/sts/credentials", response_model=BrowserStsCredentials)
+def get_sts_credentials(
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    _: User = Depends(get_current_account_admin),
+) -> BrowserStsCredentials:
+    try:
+        return service.get_sts_credentials(account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.get("/buckets/{bucket_name}/versions", response_model=ListObjectVersionsResponse)
@@ -436,6 +449,8 @@ def proxy_upload(
 ) -> ProxyUploadResponse:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    if not load_app_settings().browser.allow_proxy_transfers:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Proxy transfers are disabled")
     try:
         service.proxy_upload(bucket_name, account, key, file.file, file.content_type)
         audit_service.record_action(
@@ -463,6 +478,8 @@ def proxy_download(
 ):
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    if not load_app_settings().browser.allow_proxy_transfers:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Proxy transfers are disabled")
     try:
         resp = service.proxy_download(bucket_name, account, key)
         body = resp.get("Body")

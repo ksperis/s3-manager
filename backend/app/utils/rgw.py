@@ -16,6 +16,17 @@ def is_rgw_account_id(identifier: Optional[str]) -> bool:
     return bool(_ACCOUNT_ID_PATTERN.match(value))
 
 
+def normalize_rgw_identifier(identifier: Optional[str]) -> Optional[str]:
+    if identifier is None:
+        return None
+    value = str(identifier).strip()
+    if not value:
+        return None
+    if is_rgw_account_id(value):
+        return value.upper()
+    return value.lower()
+
+
 def resolve_account_scope(identifier: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
     """
     Split an RGW identifier into either (account_id, tenant).
@@ -47,8 +58,8 @@ def resolve_admin_uid(account_id: Optional[str], user_uid: Optional[str]) -> Opt
         normalized = user_uid.strip()
         return normalized or None
     if account_id:
-        normalized = account_id.strip()
+        normalized = normalize_rgw_identifier(account_id)
         if not normalized:
             return None
-        return f"{normalized.lower()}-admin"
+        return f"{normalized}-admin"
     return None

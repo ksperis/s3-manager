@@ -19,7 +19,7 @@ from app.core.security import get_password_hash
 from app.db_models import UserRole
 import random
 from typing import Optional, Any
-from app.utils.rgw import extract_bucket_list, resolve_admin_uid
+from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve_admin_uid
 from app.utils.usage_stats import extract_usage_stats
 
 
@@ -137,7 +137,10 @@ class S3AccountsService:
         value = str(identifier or "").strip()
         if not value:
             raise ValueError("Missing account identifier for RGW root user")
-        return f"{value.lower()}-admin"
+        normalized = normalize_rgw_identifier(value)
+        if not normalized:
+            raise ValueError("Missing account identifier for RGW root user")
+        return f"{normalized}-admin"
 
     def _root_display_name(self, account_name: Optional[str], account_identifier: str) -> str:
         base = (account_name or account_identifier or "").strip()

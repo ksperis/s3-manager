@@ -1294,6 +1294,7 @@ export default function BucketDetailPage() {
         title={bucketName ?? "Bucket"}
         description={bucketError || "Bucket overview, objects, properties, permissions, metrics."}
         breadcrumbs={breadcrumbs}
+        actions={[{ label: "← Back to buckets", to: "/manager/buckets", variant: "ghost" }]}
       />
 
       {loadingBucket && (

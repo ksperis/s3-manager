@@ -1,7 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import logging
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from threading import Lock
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -39,31 +41,139 @@ from app.models.browser import (
     PresignRequest,
     PresignedUrl,
     StsStatus,
+    BrowserStsCredentials,
 )
 from app.services.s3_client import _delete_objects, get_s3_client
-from app.services.sts_service import get_sts_client
+from app.services.sts_service import get_session_token
 from app.utils.s3_endpoint import resolve_s3_endpoint
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+STS_SESSION_DURATION_SECONDS = 3600
+STS_CACHE_TTL_BUFFER = timedelta(minutes=5)
+STS_FAILURE_TTL = timedelta(seconds=60)
+
+
+@dataclass(frozen=True)
+class CachedStsCredentials:
+    access_key_id: str
+    secret_access_key: str
+    session_token: str
+    expiration: datetime
+
+
+@dataclass
+class StsCacheEntry:
+    credentials: Optional[CachedStsCredentials] = None
+    failed_until: Optional[datetime] = None
+
+
+_STS_CACHE: dict[str, StsCacheEntry] = {}
+_STS_CACHE_LOCK = Lock()
 
 
 def _resolve_endpoint(account: S3Account) -> str:
     return resolve_s3_endpoint(account) or settings.s3_endpoint
 
 
+def _sts_cache_key(access_key: str, endpoint: str) -> str:
+    return f"{endpoint}::{access_key}"
+
+
+def _normalize_expiration(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _get_cached_sts_credentials(cache_key: str) -> Optional[CachedStsCredentials]:
+    now = datetime.now(tz=timezone.utc)
+    with _STS_CACHE_LOCK:
+        entry = _STS_CACHE.get(cache_key)
+        if not entry:
+            return None
+        if entry.credentials:
+            expiration = _normalize_expiration(entry.credentials.expiration)
+            if expiration - STS_CACHE_TTL_BUFFER > now:
+                return entry.credentials
+            entry.credentials = None
+        if entry.failed_until and entry.failed_until > now:
+            return None
+        if entry.failed_until and entry.failed_until <= now:
+            entry.failed_until = None
+    return None
+
+
+def _store_sts_credentials(cache_key: str, credentials: CachedStsCredentials) -> None:
+    with _STS_CACHE_LOCK:
+        _STS_CACHE[cache_key] = StsCacheEntry(credentials=credentials, failed_until=None)
+
+
+def _record_sts_failure(cache_key: str) -> None:
+    now = datetime.now(tz=timezone.utc)
+    with _STS_CACHE_LOCK:
+        entry = _STS_CACHE.get(cache_key) or StsCacheEntry()
+        entry.credentials = None
+        entry.failed_until = now + STS_FAILURE_TTL
+        _STS_CACHE[cache_key] = entry
+
+
 class BrowserService:
-    def _client(self, account: S3Account):
+    def _resolve_s3_credentials(self, account: S3Account) -> tuple[str, str, Optional[str]]:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise RuntimeError("S3 credentials missing for this account")
         session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        sts_credentials = self._get_sts_credentials(account, access_key, secret_key, session_token)
+        if sts_credentials:
+            return sts_credentials.access_key_id, sts_credentials.secret_access_key, sts_credentials.session_token
+        return access_key, secret_key, session_token
+
+    def _client(self, account: S3Account):
+        access_key, secret_key, session_token = self._resolve_s3_credentials(account)
         return get_s3_client(
             access_key,
             secret_key,
             endpoint=_resolve_endpoint(account),
             session_token=session_token,
         )
+
+    def _get_sts_credentials(
+        self,
+        account: S3Account,
+        access_key: str,
+        secret_key: str,
+        session_token: Optional[str],
+    ) -> Optional[CachedStsCredentials]:
+        endpoint = settings.sts_endpoint or _resolve_endpoint(account)
+        cache_key = _sts_cache_key(access_key, endpoint)
+        cached = _get_cached_sts_credentials(cache_key)
+        if cached:
+            return cached
+        try:
+            session_name = f"browser-{account.id or access_key[:8]}"
+            access, secret, token, expiration = get_session_token(
+                session_name,
+                STS_SESSION_DURATION_SECONDS,
+                access_key,
+                secret_key,
+                endpoint=endpoint,
+                session_token=session_token,
+            )
+        except RuntimeError as exc:
+            _record_sts_failure(cache_key)
+            logger.info("STS session token unavailable for account %s: %s", account.id or access_key, exc)
+            return None
+        normalized_expiration = _normalize_expiration(expiration)
+        credentials = CachedStsCredentials(
+            access_key_id=access,
+            secret_access_key=secret,
+            session_token=token,
+            expiration=normalized_expiration,
+        )
+        _store_sts_credentials(cache_key, credentials)
+        return credentials
 
     def _clean_etag(self, etag: Optional[str]) -> Optional[str]:
         if not etag:
@@ -221,12 +331,79 @@ class BrowserService:
             return StsStatus(available=False, error="S3 credentials missing for this account")
         session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
         endpoint = settings.sts_endpoint or _resolve_endpoint(account)
-        client = get_sts_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
-        try:
-            client.get_caller_identity()
+        cache_key = _sts_cache_key(access_key, endpoint)
+        cached = _get_cached_sts_credentials(cache_key)
+        if cached:
             return StsStatus(available=True)
-        except (ClientError, BotoCoreError) as exc:
+        try:
+            session_name = f"browser-{account.id or access_key[:8]}"
+            access, secret, token, expiration = get_session_token(
+                session_name,
+                STS_SESSION_DURATION_SECONDS,
+                access_key,
+                secret_key,
+                endpoint=endpoint,
+                session_token=session_token,
+            )
+        except RuntimeError as exc:
+            _record_sts_failure(cache_key)
             return StsStatus(available=False, error=str(exc))
+        normalized_expiration = _normalize_expiration(expiration)
+        credentials = CachedStsCredentials(
+            access_key_id=access,
+            secret_access_key=secret,
+            session_token=token,
+            expiration=normalized_expiration,
+        )
+        _store_sts_credentials(cache_key, credentials)
+        return StsStatus(available=True)
+
+    def get_sts_credentials(self, account: S3Account) -> BrowserStsCredentials:
+        access_key, secret_key = account.effective_rgw_credentials()
+        if not access_key or not secret_key:
+            raise RuntimeError("S3 credentials missing for this account")
+        session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        endpoint = settings.sts_endpoint or _resolve_endpoint(account)
+        cache_key = _sts_cache_key(access_key, endpoint)
+        cached = _get_cached_sts_credentials(cache_key)
+        if cached:
+            return BrowserStsCredentials(
+                access_key_id=cached.access_key_id,
+                secret_access_key=cached.secret_access_key,
+                session_token=cached.session_token,
+                expiration=_normalize_expiration(cached.expiration),
+                endpoint=_resolve_endpoint(account),
+                region=settings.s3_region,
+            )
+        try:
+            session_name = f"browser-{account.id or access_key[:8]}"
+            access, secret, token, expiration = get_session_token(
+                session_name,
+                STS_SESSION_DURATION_SECONDS,
+                access_key,
+                secret_key,
+                endpoint=endpoint,
+                session_token=session_token,
+            )
+        except RuntimeError as exc:
+            _record_sts_failure(cache_key)
+            raise RuntimeError(f"Unable to request STS credentials: {exc}") from exc
+        normalized_expiration = _normalize_expiration(expiration)
+        credentials = CachedStsCredentials(
+            access_key_id=access,
+            secret_access_key=secret,
+            session_token=token,
+            expiration=normalized_expiration,
+        )
+        _store_sts_credentials(cache_key, credentials)
+        return BrowserStsCredentials(
+            access_key_id=access,
+            secret_access_key=secret,
+            session_token=token,
+            expiration=normalized_expiration,
+            endpoint=_resolve_endpoint(account),
+            region=settings.s3_region,
+        )
 
     def proxy_upload(self, bucket_name: str, account: S3Account, key: str, file_obj, content_type: Optional[str]) -> None:
         client = self._client(account)
