@@ -284,6 +284,8 @@ class StorageEndpointsService:
         region = settings.s3_region
         admin_access = settings.rgw_admin_access_key or settings.s3_access_key
         admin_secret = settings.rgw_admin_secret_key or settings.s3_secret_key
+        supervision_access = settings.supervision_access_key
+        supervision_secret = settings.supervision_secret_key
         provider = (
             StorageProvider.CEPH if admin_access and admin_secret else StorageProvider.OTHER
         )
@@ -326,6 +328,12 @@ class StorageEndpointsService:
             if existing.admin_secret_key != admin_secret:
                 existing.admin_secret_key = admin_secret
                 updated = True
+            if existing.supervision_access_key != supervision_access:
+                existing.supervision_access_key = supervision_access
+                updated = True
+            if existing.supervision_secret_key != supervision_secret:
+                existing.supervision_secret_key = supervision_secret
+                updated = True
             if normalize_capabilities(existing.capabilities) != capabilities:
                 existing.capabilities = capabilities
                 updated = True
@@ -349,8 +357,8 @@ class StorageEndpointsService:
             provider=provider.value,
             admin_access_key=admin_access,
             admin_secret_key=admin_secret,
-            supervision_access_key=None,
-            supervision_secret_key=None,
+            supervision_access_key=supervision_access,
+            supervision_secret_key=supervision_secret,
             capabilities=capabilities,
             is_default=True,
             is_editable=False,

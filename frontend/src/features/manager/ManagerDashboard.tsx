@@ -36,6 +36,7 @@ export default function ManagerDashboard() {
     hasS3AccountContext,
     accountIdForApi,
     accessMode,
+    managerStatsEnabled,
   } = useS3AccountContext();
   const capabilities = getCapabilities();
   const isS3User = selectedS3AccountType === "s3_user";
@@ -44,7 +45,7 @@ export default function ManagerDashboard() {
     [accounts, selectedS3AccountId]
   );
   const hasContext = hasS3AccountContext;
-  const metricsAllowed = !isS3User && capabilities?.can_view_traffic !== false;
+  const metricsAllowed = !isS3User && (managerStatsEnabled ?? capabilities?.can_view_traffic !== false);
   const { stats, loading, error } = useManagerStats(
     metricsAllowed ? accountIdForApi : null,
     metricsAllowed && hasContext,
@@ -67,7 +68,7 @@ export default function ManagerDashboard() {
         description={
           metricsAllowed
             ? error || "S3Account-scoped S3 + IAM controls (real-time stats)."
-            : "Usage insights limited: connect with account root keys for traffic analytics."
+            : "Usage insights limited: connect with account root keys or ask an admin to enable Allow stats for all users."
         }
         breadcrumbs={[{ label: "Manager" }, { label: "Dashboard" }]}
       />

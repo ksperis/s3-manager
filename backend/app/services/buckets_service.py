@@ -23,7 +23,12 @@ from app.models.bucket import (
     BucketWebsiteRedirectAllRequestsTo,
     LifecycleRule,
 )
-from app.utils.rgw import extract_bucket_list, resolve_account_scope, resolve_admin_uid
+from app.utils.rgw import (
+    extract_bucket_list,
+    resolve_account_scope,
+    resolve_admin_uid,
+    get_supervision_credentials,
+)
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
@@ -36,20 +41,17 @@ class BucketsService:
 
     def _rgw_admin_for_account(self, account: S3Account):
         endpoint = getattr(account, "storage_endpoint", None)
-        if endpoint:
-            if not endpoint.admin_access_key or not endpoint.admin_secret_key:
-                raise RuntimeError("RGW admin credentials are not configured for this endpoint")
-            try:
-                return get_rgw_admin_client(
-                    access_key=endpoint.admin_access_key,
-                    secret_key=endpoint.admin_secret_key,
-                    endpoint=endpoint.admin_endpoint or endpoint.endpoint_url,
-                    region=endpoint.region,
-                )
-            except RGWAdminError as exc:
-                raise RuntimeError(f"Unable to initialize RGW admin client: {exc}") from exc
+        creds = get_supervision_credentials(account)
+        if not creds or not endpoint:
+            raise RuntimeError("Supervision credentials are not configured for this endpoint")
+        access_key, secret_key = creds
         try:
-            return get_rgw_admin_client()
+            return get_rgw_admin_client(
+                access_key=access_key,
+                secret_key=secret_key,
+                endpoint=endpoint.admin_endpoint or endpoint.endpoint_url,
+                region=endpoint.region,
+            )
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to initialize RGW admin client: {exc}") from exc
 
