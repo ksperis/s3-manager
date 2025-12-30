@@ -246,6 +246,21 @@ def get_bucket_acl(
         raise RuntimeError(f"Unable to fetch ACL for bucket '{bucket_name}': {exc}") from exc
 
 
+def put_bucket_acl(
+    bucket_name: str,
+    acl: str,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
+) -> None:
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    try:
+        client.put_bucket_acl(Bucket=bucket_name, ACL=acl)
+    except (BotoCoreError, ClientError) as exc:
+        raise RuntimeError(f"Unable to update ACL for bucket '{bucket_name}': {exc}") from exc
+    logger.debug("Updated ACL for bucket %s", bucket_name)
+
+
 def put_bucket_tags(
     bucket_name: str,
     tags: list[dict],
@@ -452,6 +467,63 @@ def delete_bucket_cors(
     except BotoCoreError as exc:
         raise RuntimeError(f"Unable to delete bucket CORS for '{bucket_name}': {exc}") from exc
     logger.debug("Deleted CORS for bucket %s", bucket_name)
+
+
+def get_bucket_website(
+    bucket_name: str,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
+) -> Optional[dict]:
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    try:
+        resp = client.get_bucket_website(Bucket=bucket_name)
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
+        if code.lower() in {"nosuchwebsiteconfiguration", "nosuchbucket"}:
+            return None
+        raise RuntimeError(f"Unable to fetch bucket website for '{bucket_name}': {exc}") from exc
+    except BotoCoreError as exc:
+        raise RuntimeError(f"Unable to fetch bucket website for '{bucket_name}': {exc}") from exc
+    config: dict = {}
+    for key in ("IndexDocument", "ErrorDocument", "RedirectAllRequestsTo", "RoutingRules"):
+        if resp.get(key) is not None:
+            config[key] = resp.get(key)
+    return config or None
+
+
+def put_bucket_website(
+    bucket_name: str,
+    configuration: dict,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
+) -> None:
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    try:
+        client.put_bucket_website(Bucket=bucket_name, WebsiteConfiguration=configuration)
+    except (BotoCoreError, ClientError) as exc:
+        raise RuntimeError(f"Unable to set bucket website for '{bucket_name}': {exc}") from exc
+    logger.debug("Updated bucket website for bucket %s", bucket_name)
+
+
+def delete_bucket_website(
+    bucket_name: str,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
+) -> None:
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    try:
+        client.delete_bucket_website(Bucket=bucket_name)
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
+        if code.lower() in {"nosuchwebsiteconfiguration", "nosuchbucket"}:
+            return
+        raise RuntimeError(f"Unable to delete bucket website for '{bucket_name}': {exc}") from exc
+    except BotoCoreError as exc:
+        raise RuntimeError(f"Unable to delete bucket website for '{bucket_name}': {exc}") from exc
+    logger.debug("Deleted bucket website for bucket %s", bucket_name)
 
 
 def get_bucket_policy(

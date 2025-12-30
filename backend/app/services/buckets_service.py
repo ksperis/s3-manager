@@ -11,6 +11,7 @@ from app.models.bucket import (
     BucketAcl,
     BucketAclGrant,
     BucketAclGrantee,
+    BucketAclUpdate,
     BucketLifecycleConfig,
     BucketNotificationConfiguration,
     BucketObjectLock,
@@ -18,6 +19,8 @@ from app.models.bucket import (
     BucketProperties,
     BucketPublicAccessBlock,
     BucketQuotaUpdate,
+    BucketWebsiteConfiguration,
+    BucketWebsiteRedirectAllRequestsTo,
     LifecycleRule,
 )
 from app.utils.rgw import extract_bucket_list, resolve_account_scope, resolve_admin_uid
@@ -428,6 +431,93 @@ class BucketsService:
             endpoint=endpoint,
         )
 
+    def get_bucket_website(self, name: str, account: S3Account) -> BucketWebsiteConfiguration:
+        access_key, secret_key = self._account_credentials(account)
+        endpoint = self._endpoint(account)
+        config = s3_client.get_bucket_website(
+            name,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=endpoint,
+        )
+        if not config:
+            return BucketWebsiteConfiguration()
+        index_document = None
+        error_document = None
+        redirect = None
+        index_raw = config.get("IndexDocument")
+        if isinstance(index_raw, dict):
+            index_document = index_raw.get("Suffix")
+        error_raw = config.get("ErrorDocument")
+        if isinstance(error_raw, dict):
+            error_document = error_raw.get("Key")
+        redirect_raw = config.get("RedirectAllRequestsTo")
+        if isinstance(redirect_raw, dict):
+            host_name = redirect_raw.get("HostName")
+            if host_name:
+                redirect = BucketWebsiteRedirectAllRequestsTo(
+                    host_name=host_name,
+                    protocol=redirect_raw.get("Protocol"),
+                )
+        routing_rules = config.get("RoutingRules") or []
+        if not isinstance(routing_rules, list):
+            routing_rules = []
+        return BucketWebsiteConfiguration(
+            index_document=index_document,
+            error_document=error_document,
+            redirect_all_requests_to=redirect,
+            routing_rules=routing_rules,
+        )
+
+    def set_bucket_website(
+        self,
+        name: str,
+        account: S3Account,
+        payload: BucketWebsiteConfiguration,
+    ) -> BucketWebsiteConfiguration:
+        access_key, secret_key = self._account_credentials(account)
+        endpoint = self._endpoint(account)
+        config: dict = {}
+        if payload.redirect_all_requests_to:
+            host_name = payload.redirect_all_requests_to.host_name.strip()
+            if not host_name:
+                raise ValueError("Redirect hostname is required.")
+            redirect = {"HostName": host_name}
+            protocol = payload.redirect_all_requests_to.protocol
+            if protocol:
+                redirect["Protocol"] = protocol
+            config["RedirectAllRequestsTo"] = redirect
+        else:
+            index_document = (payload.index_document or "").strip()
+            if not index_document:
+                raise ValueError("Index document is required when redirect is not configured.")
+            config["IndexDocument"] = {"Suffix": index_document}
+            error_document = (payload.error_document or "").strip()
+            if error_document:
+                config["ErrorDocument"] = {"Key": error_document}
+            if payload.routing_rules:
+                config["RoutingRules"] = payload.routing_rules
+        if not config:
+            raise ValueError("Website configuration is empty.")
+        s3_client.put_bucket_website(
+            name,
+            configuration=config,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=endpoint,
+        )
+        return self.get_bucket_website(name, account)
+
+    def delete_bucket_website(self, name: str, account: S3Account) -> None:
+        access_key, secret_key = self._account_credentials(account)
+        endpoint = self._endpoint(account)
+        s3_client.delete_bucket_website(
+            name,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=endpoint,
+        )
+
     def get_bucket_acl(self, name: str, account: S3Account) -> BucketAcl:
         access_key, secret_key = self._account_credentials(account)
         endpoint = self._endpoint(account)
@@ -452,6 +542,18 @@ class BucketsService:
                 )
             )
         return BucketAcl(owner=owner_name, grants=grants)
+
+    def set_bucket_acl(self, name: str, account: S3Account, payload: BucketAclUpdate) -> BucketAcl:
+        access_key, secret_key = self._account_credentials(account)
+        endpoint = self._endpoint(account)
+        s3_client.put_bucket_acl(
+            name,
+            acl=payload.acl,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=endpoint,
+        )
+        return self.get_bucket_acl(name, account)
 
     def get_object_lock(self, name: str, account: S3Account) -> BucketObjectLock:
         access_key, secret_key = self._account_credentials(account)

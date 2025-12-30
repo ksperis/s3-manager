@@ -6,6 +6,7 @@ from app.db_models import S3Account, User
 from app.models.bucket import (
     Bucket,
     BucketAcl,
+    BucketAclUpdate,
     BucketCreate,
     BucketCorsUpdate,
     BucketLifecycleConfig,
@@ -19,6 +20,7 @@ from app.models.bucket import (
     BucketVersioningUpdate,
     BucketQuotaUpdate,
     BucketTagsUpdate,
+    BucketWebsiteConfiguration,
 )
 from app.services.audit_service import AuditService
 from app.services.buckets_service import BucketsService, get_buckets_service
@@ -146,6 +148,31 @@ def get_acl(
 ) -> BucketAcl:
     try:
         return service.get_bucket_acl(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/{bucket_name}/acl", response_model=BucketAcl)
+def put_acl(
+    bucket_name: str,
+    payload: BucketAclUpdate,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketAcl:
+    try:
+        result = service.set_bucket_acl(bucket_name, account, payload)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="update_bucket_acl",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"acl": payload.acl},
+        )
+        return result
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -409,6 +436,68 @@ def delete_notifications(
             user=current_user,
             scope="manager",
             action="delete_bucket_notifications",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
+def get_website(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: dict = Depends(get_current_account_admin),
+) -> BucketWebsiteConfiguration:
+    try:
+        return service.get_bucket_website(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
+def put_website(
+    bucket_name: str,
+    payload: BucketWebsiteConfiguration,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketWebsiteConfiguration:
+    try:
+        result = service.set_bucket_website(bucket_name, account, payload)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="update_bucket_website",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata=payload.model_dump(exclude_none=True),
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/{bucket_name}/website", status_code=status.HTTP_204_NO_CONTENT)
+def delete_website(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    try:
+        service.delete_bucket_website(bucket_name, account)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="delete_bucket_website",
             entity_type="bucket",
             entity_id=bucket_name,
             account=account,
