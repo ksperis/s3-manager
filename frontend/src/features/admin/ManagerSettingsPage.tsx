@@ -71,9 +71,9 @@ export default function ManagerSettingsPage() {
           <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Manager stats for portal_user</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Allow stats for all users</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Allows a non-admin user to view bucket stats and usage from /manager.
+                  Allows every non-admin profile to view bucket stats and usage from /manager.
                 </p>
               </div>
               <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">

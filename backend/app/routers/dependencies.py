@@ -19,6 +19,7 @@ from app.services.portal_service import get_portal_service
 from app.services.audit_service import AuditService, get_audit_service as build_audit_service
 from app.services.session_service import SessionService
 from app.services.storage_endpoints_service import get_storage_endpoints_service
+from app.utils.rgw import has_supervision_credentials
 from app.utils.s3_endpoint import normalize_s3_endpoint
 
 settings = get_settings()
@@ -484,6 +485,8 @@ def require_usage_capable_manager(
     actor: ManagerActor = Depends(get_current_actor),
 ) -> ManagerActor:
     caps: Optional[AccountCapabilities] = getattr(account, "_manager_capabilities", None)  # type: ignore[attr-defined]
+    if not has_supervision_credentials(account):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are not configured for this account")
     if isinstance(actor, ManagerSessionPrincipal) and not actor.capabilities.can_view_traffic:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
     if caps and not caps.can_manage_buckets:

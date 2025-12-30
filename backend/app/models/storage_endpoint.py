@@ -18,6 +18,7 @@ class StorageEndpointBase(BaseModel):
     admin_secret_key: Optional[str] = None
     supervision_access_key: Optional[str] = None
     supervision_secret_key: Optional[str] = None
+    capabilities: Optional[dict[str, bool]] = None
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
     @classmethod
@@ -41,6 +42,7 @@ class StorageEndpointUpdate(BaseModel):
     admin_secret_key: Optional[str] = None
     supervision_access_key: Optional[str] = None
     supervision_secret_key: Optional[str] = None
+    capabilities: Optional[dict[str, bool]] = None
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
     @classmethod
@@ -61,6 +63,7 @@ class StorageEndpoint(StorageEndpointBase):
     updated_at: datetime
     has_admin_secret: bool = False
     has_supervision_secret: bool = False
+    capabilities: dict[str, bool] = Field(default_factory=dict)
 
     admin_secret_key: Optional[str] = Field(default=None, exclude=True)
     supervision_secret_key: Optional[str] = Field(default=None, exclude=True)

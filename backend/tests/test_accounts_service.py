@@ -112,7 +112,7 @@ def test_import_account_uses_user_api_when_account_user_missing(db_session):
     assert db_account is not None
     assert db_account.rgw_access_key == "IMPORTED"
     assert db_account.rgw_secret_key == "SECRET"
-    assert created[0].root_user_email == "rgw12345678901234567-admin"
+    assert created[0].root_user_email == "RGW12345678901234567-admin"
 
 
 class FakeRGWAdminImportCreatesRoot:
@@ -163,8 +163,8 @@ def test_import_account_creates_root_user_when_missing(db_session):
     assert db_account is not None
     assert db_account.rgw_access_key == "NEWROOT"
     assert db_account.rgw_secret_key == "NEWSECRET"
-    assert svc.rgw_admin.created_users == [("rgw98765432109876543-admin", account_id)]
-    assert created[0].root_user_email == "rgw98765432109876543-admin"
+    assert svc.rgw_admin.created_users == [("RGW98765432109876543-admin", account_id)]
+    assert created[0].root_user_email == "RGW98765432109876543-admin"
 
 
 def test_import_account_with_provided_keys(db_session):
@@ -254,7 +254,7 @@ def test_delete_account_calls_rgw_when_flag_true(db_session):
     svc.delete_account(account.id, delete_rgw=True)
 
     assert svc.rgw_admin.deleted == ["RGW00000000000000002"]
-    assert svc.rgw_admin.deleted_users == [("rgw00000000000000002-admin", None)]
+    assert svc.rgw_admin.deleted_users == [("RGW00000000000000002-admin", None)]
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
 
 
@@ -274,7 +274,7 @@ def test_unlink_account_deletes_root_and_interface_links(db_session):
     svc.unlink_account(account.id)
 
     assert svc.rgw_admin.deleted == []
-    assert svc.rgw_admin.deleted_users == [("rgw00000000000000003-admin", None)]
+    assert svc.rgw_admin.deleted_users == [("RGW00000000000000003-admin", None)]
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
     assert db_session.query(UserS3Account).filter(UserS3Account.account_id == account.id).first() is None
 

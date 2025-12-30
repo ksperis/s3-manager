@@ -22,6 +22,7 @@ type S3AccountContextType = {
   accessMode: ManagerAccessMode | null;
   setAccessMode: (mode: ManagerAccessMode) => void;
   canSwitchAccess: boolean;
+  managerStatsEnabled: boolean | null;
 };
 
 const S3AccountContext = createContext<S3AccountContextType>({
@@ -38,6 +39,7 @@ const S3AccountContext = createContext<S3AccountContextType>({
   accessMode: null,
   setAccessMode: () => {},
   canSwitchAccess: false,
+  managerStatsEnabled: null,
 });
 
 type SessionInfo = {
@@ -77,6 +79,7 @@ export function S3AccountProvider({ children }: { children: ReactNode }) {
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
   const [accessMode, setAccessModeState] = useState<ManagerAccessMode | null>(null);
   const [canSwitchAccess, setCanSwitchAccess] = useState(false);
+  const [managerStatsEnabled, setManagerStatsEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -151,15 +154,18 @@ export function S3AccountProvider({ children }: { children: ReactNode }) {
     if (!hasS3AccountContext) {
       setIamIdentity(null);
       setCanSwitchAccess(false);
+      setManagerStatsEnabled(null);
       return;
     }
     let isMounted = true;
+    setManagerStatsEnabled(null);
     fetchManagerContext(accountIdForApi)
       .then((data) => {
         if (!isMounted) return;
         setIamIdentity(data.iam_identity ?? null);
         setCanSwitchAccess(Boolean(data.can_switch_access));
         setAccessModeState(data.access_mode);
+        setManagerStatsEnabled(Boolean(data.manager_stats_enabled));
         if (selectedS3AccountId && (data.access_mode === "admin" || data.access_mode === "portal")) {
           localStorage.setItem(`managerAccessMode:${selectedS3AccountId}`, data.access_mode);
         }
@@ -168,6 +174,7 @@ export function S3AccountProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
         setIamIdentity(null);
         setCanSwitchAccess(false);
+        setManagerStatsEnabled(null);
       });
     return () => {
       isMounted = false;
@@ -190,6 +197,7 @@ export function S3AccountProvider({ children }: { children: ReactNode }) {
         accessMode,
         setAccessMode,
         canSwitchAccess,
+        managerStatsEnabled,
       }}
     >
       {children}

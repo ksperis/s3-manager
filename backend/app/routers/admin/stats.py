@@ -5,17 +5,15 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.core.database import get_db
 from app.db_models import StorageEndpoint, StorageProvider
 from app.routers.dependencies import get_current_super_admin
 from app.services.admin_metrics_service import AdminMetricsService
-from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
+from app.services.rgw_admin import RGWAdminClient
 from app.services.traffic_service import TrafficWindow
+from app.utils.rgw import get_supervision_rgw_client
 
 router = APIRouter(prefix="/admin/stats", tags=["admin-stats"])
-settings = get_settings()
-
 
 def _resolve_endpoint(db: Session, endpoint_id: Optional[int]) -> StorageEndpoint:
     if endpoint_id is not None:
@@ -45,23 +43,16 @@ def _resolve_endpoint(db: Session, endpoint_id: Optional[int]) -> StorageEndpoin
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cet endpoint n'est pas de type Ceph")
     if not endpoint.endpoint_url:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="L'URL de l'endpoint est manquante.")
-    if not endpoint.admin_access_key or not endpoint.admin_secret_key:
+    if not endpoint.supervision_access_key or not endpoint.supervision_secret_key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Les identifiants admin de l'endpoint ne sont pas configurés.",
+            detail="Les identifiants de supervision de l'endpoint ne sont pas configurés.",
         )
     return endpoint
 
 
 def _build_rgw_client(endpoint: StorageEndpoint) -> RGWAdminClient:
-    admin_endpoint = endpoint.admin_endpoint or endpoint.endpoint_url
-    region = endpoint.region or settings.s3_region
-    return get_rgw_admin_client(
-        access_key=endpoint.admin_access_key,
-        secret_key=endpoint.admin_secret_key,
-        endpoint=admin_endpoint,
-        region=region,
-    )
+    return get_supervision_rgw_client(endpoint)
 
 
 @router.get("/summary")

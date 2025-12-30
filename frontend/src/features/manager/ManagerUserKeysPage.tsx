@@ -11,6 +11,7 @@ import { useS3AccountContext } from "./S3AccountContext";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import { tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -233,7 +234,7 @@ export default function ManagerUserKeysPage() {
                   <td className="px-6 py-4 text-right">
                     <button
                       onClick={() => handleDeleteKey(k.access_key_id)}
-                      className="text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
+                      className={tableDeleteActionClasses}
                       disabled={busy === k.access_key_id}
                     >
                       {busy === k.access_key_id ? "Deleting..." : "Delete"}

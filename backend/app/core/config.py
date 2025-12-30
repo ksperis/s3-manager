@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     rgw_admin_endpoint: Optional[str] = Field(None, description="Admin ops endpoint (defaults to s3_endpoint)")
     rgw_admin_access_key: Optional[str] = Field(None, description="Admin ops access key (defaults to s3_access_key)")
     rgw_admin_secret_key: Optional[str] = Field(None, description="Admin ops secret key (defaults to s3_secret_key)")
+    supervision_access_key: Optional[str] = Field(None, description="Access key dedicated to supervision usage stats")
+    supervision_secret_key: Optional[str] = Field(None, description="Secret key dedicated to supervision usage stats")
 
     # Default super-admin seed
     super_admin_email: str = Field("admin@example.com", description="Default super-admin login")

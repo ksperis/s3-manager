@@ -8,7 +8,7 @@ from typing import Dict, Iterable, Optional, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db_models import S3Account, S3User, User, UserRole
+from app.db_models import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import (
     TrafficWindow,
@@ -58,12 +58,27 @@ class AdminMetricsService:
         if endpoint_id is not None:
             s3_user_query = s3_user_query.filter(S3User.storage_endpoint_id == endpoint_id)
         total_s3_users = s3_user_query.scalar() or 0
+        total_ceph_endpoints = (
+            db.query(func.count(StorageEndpoint.id))
+            .filter(StorageEndpoint.provider == StorageProvider.CEPH.value)
+            .scalar()
+            or 0
+        )
+        total_other_endpoints = (
+            db.query(func.count(StorageEndpoint.id))
+            .filter(StorageEndpoint.provider != StorageProvider.CEPH.value)
+            .scalar()
+            or 0
+        )
         return {
             "total_accounts": total_accounts,
             "total_users": total_managers,
             "total_admins": total_admins,
             "total_portal_users": total_managers,
             "total_s3_users": total_s3_users,
+            "total_endpoints": total_ceph_endpoints + total_other_endpoints,
+            "total_ceph_endpoints": total_ceph_endpoints,
+            "total_other_endpoints": total_other_endpoints,
         }
 
     def storage(self) -> dict:

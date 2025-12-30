@@ -236,3 +236,12 @@ class BucketCorsStatus(BaseModel):
 class StsStatus(BaseModel):
     available: bool
     error: Optional[str] = None
+
+
+class BrowserStsCredentials(BaseModel):
+    access_key_id: str
+    secret_access_key: str
+    session_token: str
+    expiration: datetime
+    endpoint: str
+    region: str

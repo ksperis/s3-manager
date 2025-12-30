@@ -35,10 +35,11 @@ export default function ManagerMetricsPage() {
     hasS3AccountContext,
     accountIdForApi,
     accessMode,
+    managerStatsEnabled,
   } = useS3AccountContext();
   const capabilities = getCapabilities();
   const isS3User = selectedS3AccountType === "s3_user";
-  const metricsAllowed = !isS3User && capabilities?.can_view_traffic !== false;
+  const metricsAllowed = !isS3User && (managerStatsEnabled ?? capabilities?.can_view_traffic !== false);
   const { stats, loading, error } = useManagerStats(
     metricsAllowed ? accountIdForApi : null,
     metricsAllowed && hasS3AccountContext,
@@ -55,7 +56,7 @@ export default function ManagerMetricsPage() {
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
           {isS3User
             ? "Select an S3 Account (tenant) to access traffic and storage breakdowns."
-            : "Connect with account root keys to access traffic analytics and bucket usage rankings."}
+            : "Connect with account root keys or ask an admin to enable Allow stats for all users to access traffic analytics and bucket usage rankings."}
         </div>
       </div>
     );
@@ -113,7 +114,7 @@ export default function ManagerMetricsPage() {
             />
           </div>
 
-          <TrafficAnalytics accountId={accountIdForApi} enabled={hasContext} />
+          <TrafficAnalytics accountId={accountIdForApi} enabled={metricsAllowed && hasContext} />
         </>
       )}
     </div>

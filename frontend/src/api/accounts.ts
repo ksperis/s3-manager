@@ -33,6 +33,7 @@ export type S3Account = {
   storage_endpoint_id?: number | null;
   storage_endpoint_name?: string | null;
   storage_endpoint_url?: string | null;
+  storage_endpoint_capabilities?: Record<string, boolean> | null;
 };
 
 export type S3AccountSummary = {
@@ -45,6 +46,7 @@ export type S3AccountSummary = {
   storage_endpoint_id?: number | null;
   storage_endpoint_name?: string | null;
   storage_endpoint_url?: string | null;
+  storage_endpoint_capabilities?: Record<string, boolean> | null;
 };
 
 export type PaginatedS3AccountsResponse = PaginatedResponse<S3Account>;

@@ -14,12 +14,12 @@ from app.models.s3_account import (
     S3AccountUpdate,
 )
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
-from app.services.storage_endpoints_service import StorageEndpointsService
+from app.services.storage_endpoints_service import StorageEndpointsService, normalize_capabilities
 from app.core.security import get_password_hash
 from app.db_models import UserRole
 import random
 from typing import Optional, Any
-from app.utils.rgw import extract_bucket_list, resolve_admin_uid
+from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve_admin_uid
 from app.utils.usage_stats import extract_usage_stats
 
 
@@ -43,6 +43,11 @@ class S3AccountsService:
             self.rgw_admin = get_rgw_admin_client()
         self._topics_cache: dict[str, tuple[Optional[int], Optional[list[str]]]] = {}
         self._topics_global_cache: Optional[dict[str, list[str]]] = None
+
+    def _endpoint_capabilities(self, endpoint: Optional[StorageEndpoint]) -> Optional[dict[str, bool]]:
+        if not endpoint:
+            return None
+        return normalize_capabilities(endpoint.capabilities)
 
     def _resolve_storage_endpoint(self, storage_endpoint_id: Optional[int], require_ceph: bool = False) -> StorageEndpoint:
         if storage_endpoint_id:
@@ -137,7 +142,10 @@ class S3AccountsService:
         value = str(identifier or "").strip()
         if not value:
             raise ValueError("Missing account identifier for RGW root user")
-        return f"{value.lower()}-admin"
+        normalized = normalize_rgw_identifier(value)
+        if not normalized:
+            raise ValueError("Missing account identifier for RGW root user")
+        return f"{normalized}-admin"
 
     def _root_display_name(self, account_name: Optional[str], account_identifier: str) -> str:
         base = (account_name or account_identifier or "").strip()
@@ -384,6 +392,7 @@ class S3AccountsService:
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                    storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
                 )
             )
         return results
@@ -412,6 +421,7 @@ class S3AccountsService:
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                    storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
                 )
             )
         summaries.sort(key=lambda entry: entry.name.lower())
@@ -479,6 +489,7 @@ class S3AccountsService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
         )
 
     def _import_account_with_keys(self, item: S3AccountImport, endpoint: StorageEndpoint) -> Optional[S3AccountSchema]:
@@ -524,6 +535,7 @@ class S3AccountsService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
         )
 
     def import_accounts(self, imports: list[S3AccountImport]) -> list[S3AccountSchema]:
@@ -623,6 +635,7 @@ class S3AccountsService:
                     user_links=[],
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
+                    storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
                 )
             )
         self.db.commit()
@@ -705,6 +718,7 @@ class S3AccountsService:
             user_links=[],
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
+            storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
         )
 
     def update_account(self, account_id: int, payload: S3AccountUpdate) -> S3AccountSchema:
@@ -826,6 +840,7 @@ class S3AccountsService:
             user_links=user_links,
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
+            storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
         )
 
     def delete_account(self, account_id: int, delete_rgw: bool = False) -> None:

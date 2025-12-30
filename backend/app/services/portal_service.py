@@ -16,9 +16,9 @@ from app.models.iam import AccessKey as ModelAccessKey, IAMUser
 from app.models.portal import PortalAccessKey, PortalIAMUser, PortalState, PortalUsage
 from app.services.app_settings_service import load_app_settings
 from app.services import s3_client
-from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.rgw_iam import RGWIAMService, get_iam_service
-from app.utils.rgw import extract_bucket_list, resolve_admin_uid
+from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
@@ -152,7 +152,7 @@ class PortalService:
             raise RuntimeError("S3Account is missing root credentials")
         return access_key, secret_key
 
-    def _admin_for_account(self, account: S3Account) -> RGWAdminClient:
+    def _supervision_admin_for_account(self, account: S3Account) -> RGWAdminClient:
         endpoint = getattr(account, "storage_endpoint", None)
         if endpoint is None and account.storage_endpoint_id:
             endpoint = (
@@ -160,22 +160,18 @@ class PortalService:
                 .filter(StorageEndpoint.id == account.storage_endpoint_id)
                 .first()
             )
-        if endpoint:
-            if not endpoint.admin_access_key or not endpoint.admin_secret_key:
-                raise RuntimeError("RGW admin credentials are not configured for this endpoint")
-            return get_rgw_admin_client(
-                access_key=endpoint.admin_access_key,
-                secret_key=endpoint.admin_secret_key,
-                endpoint=endpoint.admin_endpoint or endpoint.endpoint_url,
-                region=endpoint.region,
-            )
-        return get_rgw_admin_client()
+        if not endpoint:
+            raise RuntimeError("Endpoint de supervision manquant pour ce compte")
+        try:
+            return get_supervision_rgw_client(endpoint)
+        except ValueError as exc:
+            raise RuntimeError("Les identifiants de supervision de l'endpoint sont manquants") from exc
 
     def _admin_bucket_list(self, account: S3Account, admin: Optional[RGWAdminClient] = None) -> list[dict]:
         uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
         if not uid:
             return []
-        rgw_admin = admin or self._admin_for_account(account)
+        rgw_admin = admin or self._supervision_admin_for_account(account)
         payload = rgw_admin.get_all_buckets(uid=uid, with_stats=True)
         return extract_bucket_list(payload)
 
@@ -381,7 +377,7 @@ class PortalService:
         if not account.rgw_account_id and not account.rgw_user_uid:
             return None, None, None
         try:
-            rgw_admin = self._admin_for_account(account)
+            rgw_admin = self._supervision_admin_for_account(account)
             buckets = self._admin_bucket_list(account, admin=rgw_admin)
         except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
             logger.warning("Unable to list buckets for portal usage %s: %s", account.rgw_account_id or account.id, exc)
@@ -401,7 +397,7 @@ class PortalService:
 
     def _account_usage_summary(self, account: S3Account) -> tuple[Optional[int], Optional[int]]:
         try:
-            rgw_admin = self._admin_for_account(account)
+            rgw_admin = self._supervision_admin_for_account(account)
         except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
             logger.warning("Unable to initialize RGW admin client for portal summary: %s", exc)
             return None, None
@@ -728,7 +724,7 @@ class PortalService:
             if bucket_name not in allowed:
                 raise RuntimeError("Accès bucket non autorisé.")
         try:
-            rgw_admin = self._admin_for_account(account)
+            rgw_admin = self._supervision_admin_for_account(account)
         except RGWAdminError as exc:  # pragma: no cover - defensive path
             logger.warning("Unable to initialize RGW admin client for bucket stats: %s", exc)
             raise RuntimeError("Impossible d'initialiser le client RGW.") from exc

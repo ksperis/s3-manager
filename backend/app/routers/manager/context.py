@@ -10,7 +10,8 @@ from app.core.database import get_db
 from app.db_models import AccountIAMUser, AccountRole, User, UserS3Account
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_account_context, get_current_actor
-from app.utils.rgw import resolve_admin_uid
+from app.services.app_settings_service import load_app_settings
+from app.utils.rgw import has_supervision_credentials, resolve_admin_uid
 
 router = APIRouter(prefix="/manager", tags=["manager-context"])
 
@@ -19,6 +20,25 @@ class ManagerContext(BaseModel):
     access_mode: str
     iam_identity: Optional[str] = None
     can_switch_access: bool = False
+    manager_stats_enabled: bool = False
+
+
+def _manager_stats_enabled(account, actor) -> bool:
+    if not has_supervision_credentials(account):
+        return False
+    if getattr(account, "s3_user_id", None) is not None:
+        return False
+    caps = getattr(account, "_manager_capabilities", None)
+    if not caps or not caps.can_manage_buckets:
+        return False
+    if isinstance(actor, ManagerSessionPrincipal):
+        return bool(actor.capabilities.can_view_traffic)
+    if isinstance(actor, User):
+        if getattr(caps, "using_root_key", False):
+            return True
+        settings = load_app_settings()
+        return bool(settings.manager.allow_manager_user_usage_stats)
+    return False
 
 
 @router.get("/context", response_model=ManagerContext)
@@ -71,4 +91,5 @@ def get_manager_context(
         access_mode=access_mode,
         iam_identity=iam_identity,
         can_switch_access=can_switch_access,
+        manager_stats_enabled=_manager_stats_enabled(account, actor),
     )

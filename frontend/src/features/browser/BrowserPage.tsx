@@ -15,6 +15,9 @@ import {
   BucketCorsStatus,
   ObjectMetadata,
   ObjectTag,
+  PresignPartRequest,
+  PresignRequest,
+  StsCredentials,
   StsStatus,
   copyObject,
   createFolder,
@@ -22,6 +25,7 @@ import {
   fetchObjectMetadata,
   getBucketCorsStatus,
   ensureBucketCors,
+  getStsCredentials,
   getObjectTags,
   getStsStatus,
   initiateMultipartUpload,
@@ -49,6 +53,7 @@ import BrowserOperationsModal from "./BrowserOperationsModal";
 import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
 import BrowserPreviewModal from "./BrowserPreviewModal";
 import ObjectAdvancedModal from "./ObjectAdvancedModal";
+import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import {
   BucketIcon,
   ChevronDownIcon,
@@ -161,7 +166,7 @@ import type {
 } from "./browserTypes";
 
 export default function BrowserPage() {
-  const { accountIdForApi, hasS3AccountContext } = useS3AccountContext();
+  const { accountIdForApi, hasS3AccountContext, accounts, selectedS3AccountId } = useS3AccountContext();
   const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
   const [bucketName, setBucketName] = useState("");
   const [showBucketMenu, setShowBucketMenu] = useState(false);
@@ -198,6 +203,8 @@ export default function BrowserPage() {
   const [browserSettings, setBrowserSettings] = useState<BrowserSettings | null>(null);
   const [corsStatus, setCorsStatus] = useState<BucketCorsStatus | null>(null);
   const [stsStatus, setStsStatus] = useState<StsStatus | null>(null);
+  const [stsCredentials, setStsCredentials] = useState<StsCredentials | null>(null);
+  const [stsCredentialsError, setStsCredentialsError] = useState<string | null>(null);
   const [useProxyTransfers, setUseProxyTransfers] = useState(false);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [corsFixing, setCorsFixing] = useState(false);
@@ -223,6 +230,8 @@ export default function BrowserPage() {
   const activeUploadsRef = useRef(0);
   const uploadControllersRef = useRef(new Map<string, AbortController>());
   const downloadControllersRef = useRef(new Map<string, AbortController>());
+  const stsCredentialsRef = useRef<StsCredentials | null>(null);
+  const stsRefreshRef = useRef<Promise<StsCredentials | null> | null>(null);
   const [showActiveOperations, setShowActiveOperations] = useState(true);
   const [showQueuedOperations, setShowQueuedOperations] = useState(true);
   const [showCompletedOperations, setShowCompletedOperations] = useState(false);
@@ -304,6 +313,13 @@ export default function BrowserPage() {
   const operationIdsRef = useRef(new Set<string>());
   const bucketNameRef = useRef(bucketName);
   const prefixRef = useRef(prefix);
+  const selectedAccount = useMemo(() => {
+    if (selectedS3AccountId) {
+      return accounts.find((account) => account.id === selectedS3AccountId) ?? null;
+    }
+    return accounts.length === 1 ? accounts[0] : null;
+  }, [accounts, selectedS3AccountId]);
+  const stsEnabled = selectedAccount?.storage_endpoint_capabilities?.sts ?? true;
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   useEffect(() => {
@@ -334,6 +350,9 @@ export default function BrowserPage() {
   useEffect(() => {
     downloadParallelismRef.current = downloadParallelism;
   }, [downloadParallelism]);
+  useEffect(() => {
+    stsCredentialsRef.current = stsCredentials;
+  }, [stsCredentials]);
   const otherOperationsParallelism = useMemo(() => {
     const value = browserSettings?.other_operations_parallelism ?? DEFAULT_OTHER_OPERATIONS_PARALLELISM;
     return clampParallelism(value, DEFAULT_OTHER_OPERATIONS_PARALLELISM);
@@ -342,6 +361,93 @@ export default function BrowserPage() {
   useEffect(() => {
     otherOperationsParallelismRef.current = otherOperationsParallelism;
   }, [otherOperationsParallelism]);
+  const proxyAllowed = browserSettings?.allow_proxy_transfers ?? false;
+  const isStsCredentialsExpiring = (value: StsCredentials | null) => {
+    if (!value?.expiration) return true;
+    const expiresAt = new Date(value.expiration).getTime();
+    if (Number.isNaN(expiresAt)) return true;
+    return expiresAt - Date.now() <= 2 * 60 * 1000;
+  };
+  const ensureStsCredentials = useCallback(
+    async (force = false) => {
+      if (!hasS3AccountContext || !stsEnabled || !stsStatus?.available) {
+        setStsCredentials(null);
+        setStsCredentialsError(null);
+        return null;
+      }
+      const current = stsCredentialsRef.current;
+      if (!force && current && !isStsCredentialsExpiring(current)) {
+        return current;
+      }
+      if (stsRefreshRef.current) {
+        return stsRefreshRef.current;
+      }
+      const request = getStsCredentials(accountIdForApi)
+        .then((creds) => {
+          setStsCredentials(creds);
+          setStsCredentialsError(null);
+          return creds;
+        })
+        .catch(() => {
+          setStsCredentials(null);
+          setStsCredentialsError("Unable to load STS credentials.");
+          return null;
+        })
+        .finally(() => {
+          stsRefreshRef.current = null;
+        });
+      stsRefreshRef.current = request;
+      return request;
+    },
+    [accountIdForApi, hasS3AccountContext, stsEnabled, stsStatus?.available]
+  );
+  const stsReady = Boolean(stsEnabled && stsStatus?.available && !stsCredentialsError);
+  const presignObjectRequest = useCallback(
+    async (targetBucket: string, payload: PresignRequest) => {
+      if (stsReady) {
+        const credentials = await ensureStsCredentials();
+        if (credentials) {
+          try {
+            return await presignObjectWithSts(credentials, targetBucket, payload);
+          } catch (err) {
+            const refreshed = await ensureStsCredentials(true);
+            if (refreshed) {
+              try {
+                return await presignObjectWithSts(refreshed, targetBucket, payload);
+              } catch {
+                // ignore and fall back to backend presign
+              }
+            }
+          }
+        }
+      }
+      return presignObject(accountIdForApi, targetBucket, payload);
+    },
+    [accountIdForApi, ensureStsCredentials, stsReady]
+  );
+  const presignPartRequest = useCallback(
+    async (targetBucket: string, uploadId: string, payload: PresignPartRequest) => {
+      if (stsReady) {
+        const credentials = await ensureStsCredentials();
+        if (credentials) {
+          try {
+            return await presignPartWithSts(credentials, targetBucket, uploadId, payload);
+          } catch (err) {
+            const refreshed = await ensureStsCredentials(true);
+            if (refreshed) {
+              try {
+                return await presignPartWithSts(refreshed, targetBucket, uploadId, payload);
+              } catch {
+                // ignore and fall back to backend presign
+              }
+            }
+          }
+        }
+      }
+      return presignPart(accountIdForApi, targetBucket, uploadId, payload);
+    },
+    [accountIdForApi, ensureStsCredentials, stsReady]
+  );
   const warnings = useMemo(() => {
     const items: string[] = [];
     if (warningMessage) {
@@ -349,6 +455,9 @@ export default function BrowserPage() {
     }
     if (corsFixError) {
       items.push(corsFixError);
+    }
+    if (stsCredentialsError) {
+      items.push(stsCredentialsError);
     }
     const corsDisabled = Boolean(corsStatus && !corsStatus.enabled);
     const stsDisabled = Boolean(stsStatus && !stsStatus.available);
@@ -375,11 +484,22 @@ export default function BrowserPage() {
       }
       return items;
     }
-    if (corsDisabled) {
+    if (corsDisabled && !useProxyTransfers) {
       items.push(corsStatus?.error ?? "Bucket CORS is not enabled.");
     }
+    if (!proxyAllowed && corsDisabled && !useProxyTransfers) {
+      items.push("Proxy transfers are disabled in settings.");
+    }
     return items;
-  }, [corsFixError, corsStatus, stsStatus, useProxyTransfers, warningMessage]);
+  }, [
+    corsFixError,
+    corsStatus,
+    proxyAllowed,
+    stsCredentialsError,
+    stsStatus,
+    useProxyTransfers,
+    warningMessage,
+  ]);
 
   useEffect(() => {
     if (!folderInputRef.current) return;
@@ -864,13 +984,11 @@ export default function BrowserPage() {
       .then((status) => {
         if (!isMounted) return;
         setCorsStatus(status);
-        setUseProxyTransfers(!status.enabled);
         setCorsFixError(null);
       })
       .catch(() => {
         if (!isMounted) return;
         setCorsStatus({ enabled: false, rules: [], error: "Unable to check bucket CORS." });
-        setUseProxyTransfers(true);
       });
     return () => {
       isMounted = false;
@@ -878,8 +996,10 @@ export default function BrowserPage() {
   }, [accountIdForApi, bucketName, hasS3AccountContext, uiOrigin]);
 
   useEffect(() => {
-    if (!hasS3AccountContext) {
+    if (!hasS3AccountContext || !stsEnabled) {
       setStsStatus(null);
+      setStsCredentials(null);
+      setStsCredentialsError(null);
       return;
     }
     let isMounted = true;
@@ -895,7 +1015,32 @@ export default function BrowserPage() {
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, hasS3AccountContext]);
+  }, [accountIdForApi, hasS3AccountContext, stsEnabled]);
+
+  useEffect(() => {
+    if (!hasS3AccountContext || !stsEnabled || !stsStatus?.available) {
+      setStsCredentials(null);
+      setStsCredentialsError(null);
+      return;
+    }
+    ensureStsCredentials(true);
+  }, [accountIdForApi, ensureStsCredentials, hasS3AccountContext, stsEnabled, stsStatus?.available]);
+
+  useEffect(() => {
+    if (!bucketName || !hasS3AccountContext) {
+      setUseProxyTransfers(false);
+      return;
+    }
+    if (!proxyAllowed) {
+      setUseProxyTransfers(false);
+      return;
+    }
+    if (corsStatus) {
+      setUseProxyTransfers(!corsStatus.enabled);
+      return;
+    }
+    setUseProxyTransfers(false);
+  }, [bucketName, corsStatus, hasS3AccountContext, proxyAllowed]);
 
   const items = useMemo(() => {
     const folderItems = prefixes.map((prefixKey) => {
@@ -1316,7 +1461,7 @@ export default function BrowserPage() {
 
       const [contentType, presign] = await Promise.all([
         contentTypePromise,
-        presignObject(accountIdForApi, bucketName, {
+        presignObjectRequest(bucketName, {
           key: previewItem.key,
           operation: "get_object",
           expires_in: 900,
@@ -1346,6 +1491,7 @@ export default function BrowserPage() {
     bucketName,
     clearPreviewObjectUrl,
     hasS3AccountContext,
+    presignObjectRequest,
     previewItem,
     useProxyTransfers,
   ]);
@@ -1689,7 +1835,6 @@ export default function BrowserPage() {
     try {
       const status = await ensureBucketCors(accountIdForApi, bucketName, uiOrigin);
       setCorsStatus(status);
-      setUseProxyTransfers(!status.enabled);
       if (status.enabled) {
         setStatusMessage("CORS rules updated for this bucket.");
       } else {
@@ -1961,7 +2106,7 @@ export default function BrowserPage() {
       await proxyUpload(accountId, bucket, key, file, onProgress, controller?.signal);
       return;
     }
-    const presign = await presignObject(accountId, bucket, {
+    const presign = await presignObjectRequest(bucket, {
       key,
       operation: "put_object",
       content_type: file.type || undefined,
@@ -2011,7 +2156,7 @@ export default function BrowserPage() {
         throw new Error("Missing multipart upload ID.");
       }
       const blob = file.slice(part.start, part.end);
-      const presignedPart = await presignPart(accountId, bucket, uploadId, {
+      const presignedPart = await presignPartRequest(bucket, uploadId, {
         key,
         part_number: part.partNumber,
         expires_in: 1800,
@@ -2190,7 +2335,7 @@ export default function BrowserPage() {
     if (useProxyTransfers) {
       return proxyDownload(accountIdForApi, bucketName, key, signal);
     }
-    const presign = await presignObject(accountIdForApi, bucketName, {
+    const presign = await presignObjectRequest(bucketName, {
       key,
       operation: "get_object",
       expires_in: 900,
@@ -2699,7 +2844,7 @@ export default function BrowserPage() {
           link.remove();
           window.URL.revokeObjectURL(url);
         } else {
-          const presign = await presignObject(accountIdForApi, bucketName, {
+          const presign = await presignObjectRequest(bucketName, {
             key: item.key,
             operation: "get_object",
             expires_in: 900,
@@ -3284,7 +3429,7 @@ export default function BrowserPage() {
   const handleCopyUrl = async (item: BrowserItem | null) => {
     if (!bucketName || !hasS3AccountContext || !item || item.type !== "file") return;
     try {
-      const presign = await presignObject(accountIdForApi, bucketName, {
+      const presign = await presignObjectRequest(bucketName, {
         key: item.key,
         operation: "get_object",
         expires_in: 900,

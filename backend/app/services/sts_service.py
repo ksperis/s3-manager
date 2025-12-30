@@ -67,8 +67,9 @@ def get_session_token(
     access_key: str,
     secret_key: str,
     endpoint: Optional[str] = None,
+    session_token: Optional[str] = None,
 ) -> Tuple[str, str, str, datetime]:
-    client = get_sts_client(access_key, secret_key, endpoint=endpoint)
+    client = get_sts_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
     try:
         resp = client.get_session_token(DurationSeconds=duration_seconds)
         creds = resp.get("Credentials") or {}

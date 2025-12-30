@@ -27,6 +27,7 @@ export type ListBrowserObjectsResponse = {
 };
 
 export type BrowserSettings = {
+  allow_proxy_transfers: boolean;
   direct_upload_parallelism: number;
   proxy_upload_parallelism: number;
   direct_download_parallelism: number;
@@ -243,6 +244,15 @@ export type StsStatus = {
   error?: string | null;
 };
 
+export type StsCredentials = {
+  access_key_id: string;
+  secret_access_key: string;
+  session_token: string;
+  expiration: string;
+  endpoint: string;
+  region: string;
+};
+
 export async function listBrowserBuckets(accountId: S3AccountSelector): Promise<BrowserBucket[]> {
   const { data } = await client.get<BrowserBucket[]>("/manager/browser/buckets", {
     params: withS3AccountParam(undefined, accountId),
@@ -309,6 +319,13 @@ export async function ensureBucketCors(
 
 export async function getStsStatus(accountId: S3AccountSelector): Promise<StsStatus> {
   const { data } = await client.get<StsStatus>("/manager/browser/sts", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function getStsCredentials(accountId: S3AccountSelector): Promise<StsCredentials> {
+  const { data } = await client.get<StsCredentials>("/manager/browser/sts/credentials", {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;

@@ -68,6 +68,18 @@ export type BucketPublicAccessBlock = {
   restrict_public_buckets?: boolean | null;
 };
 
+export type BucketWebsiteRedirectAllRequestsTo = {
+  host_name: string;
+  protocol?: string | null;
+};
+
+export type BucketWebsiteConfiguration = {
+  index_document?: string | null;
+  error_document?: string | null;
+  redirect_all_requests_to?: BucketWebsiteRedirectAllRequestsTo | null;
+  routing_rules?: Record<string, unknown>[];
+};
+
 export type BucketAclGrantee = {
   type: string;
   id?: string | null;
@@ -105,6 +117,15 @@ export async function getBucketAcl(accountId: S3AccountSelector, bucketName: str
   const { data } = await client.get<BucketAcl>(`/manager/buckets/${encodeURIComponent(bucketName)}/acl`, {
     params: withS3AccountParam(undefined, accountId),
   });
+  return data;
+}
+
+export async function updateBucketAcl(accountId: S3AccountSelector, bucketName: string, acl: string): Promise<BucketAcl> {
+  const { data } = await client.put<BucketAcl>(
+    `/manager/buckets/${encodeURIComponent(bucketName)}/acl`,
+    { acl },
+    { params: withS3AccountParam(undefined, accountId) }
+  );
   return data;
 }
 
@@ -246,6 +267,33 @@ export async function putBucketNotifications(
 
 export async function deleteBucketNotifications(accountId: S3AccountSelector, bucketName: string): Promise<void> {
   await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/notifications`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
+}
+
+export async function getBucketWebsite(accountId: S3AccountSelector, bucketName: string): Promise<BucketWebsiteConfiguration> {
+  const { data } = await client.get<BucketWebsiteConfiguration>(
+    `/manager/buckets/${encodeURIComponent(bucketName)}/website`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function putBucketWebsite(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: BucketWebsiteConfiguration
+): Promise<BucketWebsiteConfiguration> {
+  const { data } = await client.put<BucketWebsiteConfiguration>(
+    `/manager/buckets/${encodeURIComponent(bucketName)}/website`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function deleteBucketWebsite(accountId: S3AccountSelector, bucketName: string): Promise<void> {
+  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/website`, {
     params: withS3AccountParam(undefined, accountId),
   });
 }

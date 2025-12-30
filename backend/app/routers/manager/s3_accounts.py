@@ -10,6 +10,7 @@ from app.db_models import S3Account, S3User, User, UserS3Account, UserS3User, Us
 from app.models.s3_account import S3Account as S3AccountSchema
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_current_account_admin
+from app.services.storage_endpoints_service import normalize_capabilities
 
 router = APIRouter(prefix="/manager/accounts", tags=["manager-accounts"])
 
@@ -31,6 +32,7 @@ def list_manager_accounts(
                 user.account_name or user.account_id or "RGW account"
             )
             account_db_id = account.id if account else None
+            endpoint = account.storage_endpoint if account else None
             accounts.append(
                 S3AccountSchema(
                     id=str(account_db_id or user.account_id or "0"),
@@ -38,6 +40,10 @@ def list_manager_accounts(
                     rgw_account_id=user.account_id,
                     quota_max_size_gb=account.quota_max_size_gb if account else None,
                     quota_max_objects=account.quota_max_objects if account else None,
+                    storage_endpoint_id=endpoint.id if endpoint else None,
+                    storage_endpoint_name=endpoint.name if endpoint else None,
+                    storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                    storage_endpoint_capabilities=normalize_capabilities(endpoint.capabilities) if endpoint else None,
                 )
             )
         return accounts
@@ -67,6 +73,7 @@ def list_manager_accounts(
 
     results: list[S3AccountSchema] = []
     for acc in accounts:
+        endpoint = acc.storage_endpoint
         root_link = (
             db.query(UserS3Account)
             .filter(
@@ -86,9 +93,14 @@ def list_manager_accounts(
                 quota_max_objects=acc.quota_max_objects,
                 root_user_email=root_link[0] if root_link else None,
                 root_user_id=root_link[1] if root_link else None,
+                storage_endpoint_id=endpoint.id if endpoint else None,
+                storage_endpoint_name=endpoint.name if endpoint else None,
+                storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                storage_endpoint_capabilities=normalize_capabilities(endpoint.capabilities) if endpoint else None,
             )
         )
     for s3_user in s3_users:
+        endpoint = s3_user.storage_endpoint
         results.append(
             S3AccountSchema(
                 id=f"s3u-{s3_user.id}",
@@ -96,6 +108,10 @@ def list_manager_accounts(
                 rgw_account_id=None,
                 rgw_user_uid=s3_user.rgw_user_uid,
                 email=s3_user.email,
+                storage_endpoint_id=endpoint.id if endpoint else None,
+                storage_endpoint_name=endpoint.name if endpoint else None,
+                storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                storage_endpoint_capabilities=normalize_capabilities(endpoint.capabilities) if endpoint else None,
             )
         )
     return results

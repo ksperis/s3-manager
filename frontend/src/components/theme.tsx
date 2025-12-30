@@ -5,6 +5,7 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 
 type Theme = "light" | "dark";
+type ThemeSource = "system" | "user";
 
 type ThemeContextValue = {
   theme: Theme;
@@ -15,16 +16,20 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const STORAGE_KEY = "theme";
 
-function getPreferredTheme(): Theme {
-  if (typeof window === "undefined") return "light";
+function getPreferredTheme(): { theme: Theme; source: ThemeSource } {
+  if (typeof window === "undefined") return { theme: "light", source: "system" };
   const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-  if (stored === "light" || stored === "dark") return stored;
+  if (stored === "light" || stored === "dark") {
+    return { theme: stored, source: "user" };
+  }
   const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-  return prefersDark ? "dark" : "light";
+  return { theme: prefersDark ? "dark" : "light", source: "system" };
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(getPreferredTheme);
+  const preferred = useMemo(() => getPreferredTheme(), []);
+  const [theme, setThemeState] = useState<Theme>(preferred.theme);
+  const [themeSource, setThemeSource] = useState<ThemeSource>(preferred.source);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -34,11 +39,39 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } else {
       root.classList.remove("dark");
     }
-    localStorage.setItem(STORAGE_KEY, theme);
-  }, [theme]);
+    if (themeSource === "user") {
+      localStorage.setItem(STORAGE_KEY, theme);
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [theme, themeSource]);
 
-  const setTheme = (next: Theme) => setThemeState(next);
-  const toggle = () => setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (themeSource !== "system") return;
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!media) return;
+    const handleChange = (event?: MediaQueryListEvent) => {
+      const prefersDark = event?.matches ?? media.matches;
+      setThemeState(prefersDark ? "dark" : "light");
+    };
+    handleChange();
+    if (media.addEventListener) {
+      media.addEventListener("change", handleChange);
+      return () => media.removeEventListener("change", handleChange);
+    }
+    media.addListener(handleChange);
+    return () => media.removeListener(handleChange);
+  }, [themeSource]);
+
+  const setTheme = (next: Theme) => {
+    setThemeSource("user");
+    setThemeState(next);
+  };
+  const toggle = () => {
+    setThemeSource("user");
+    setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
+  };
 
   const value = useMemo(() => ({ theme, setTheme, toggle }), [theme]);
 

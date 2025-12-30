@@ -15,14 +15,17 @@ import {
   BucketPolicy,
   BucketProperties,
   BucketPublicAccessBlock,
+  BucketWebsiteConfiguration,
   deleteBucketCors,
   deleteBucketNotifications,
   deleteBucketPolicyApi,
+  deleteBucketWebsite,
   deleteBucketLifecycle,
   getBucketCors,
   getBucketNotifications,
   getBucketPolicy,
   getBucketProperties,
+  getBucketWebsite,
   getBucketAcl,
   getBucketLifecycle,
   getBucketPublicAccessBlock,
@@ -30,8 +33,10 @@ import {
   putBucketCors,
   putBucketNotifications,
   putBucketPolicy,
+  putBucketWebsite,
   putBucketLifecycle,
   setBucketVersioning,
+  updateBucketAcl,
   updateBucketQuota,
   updateBucketObjectLock,
   updateBucketPublicAccessBlock,
@@ -77,6 +82,22 @@ function formatBytes(value?: number | null) {
   }
   const decimals = size >= 10 || idx === 0 ? 0 : 1;
   return `${size.toFixed(decimals)} ${units[idx]}`;
+}
+
+function inferBucketAclPreset(acl: BucketAcl | null): string {
+  if (!acl || !acl.grants || acl.grants.length === 0) return "private";
+  const allUsersUri = "http://acs.amazonaws.com/groups/global/AllUsers";
+  const authUsersUri = "http://acs.amazonaws.com/groups/global/AuthenticatedUsers";
+  const allUsersPerms = new Set(
+    acl.grants.filter((grant) => grant.grantee?.uri === allUsersUri).map((grant) => grant.permission)
+  );
+  const authUsersPerms = new Set(
+    acl.grants.filter((grant) => grant.grantee?.uri === authUsersUri).map((grant) => grant.permission)
+  );
+  if (allUsersPerms.has("READ") && allUsersPerms.has("WRITE")) return "public-read-write";
+  if (allUsersPerms.has("READ")) return "public-read";
+  if (authUsersPerms.has("READ")) return "authenticated-read";
+  return "custom";
 }
 
 type Row =
@@ -161,6 +182,17 @@ const isPublicAccessFullyEnabled = (config?: BucketPublicAccessBlock | null) =>
 
 const defaultNotificationTemplate = '{\n  "TopicConfigurations": []\n}';
 
+const bucketAclOptions = [
+  { value: "private", label: "Private (bucket owner full control)" },
+  { value: "public-read", label: "Public read" },
+  { value: "public-read-write", label: "Public read/write" },
+  { value: "authenticated-read", label: "Authenticated users read" },
+  { value: "bucket-owner-read", label: "Bucket owner read" },
+  { value: "bucket-owner-full-control", label: "Bucket owner full control" },
+  { value: "log-delivery-write", label: "Log delivery write" },
+  { value: "custom", label: "Custom canned ACL" },
+];
+
 function randomLifecycleId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     try {
@@ -206,9 +238,26 @@ export default function BucketDetailPage() {
   const [savingNotifications, setSavingNotifications] = useState(false);
   const [clearingNotifications, setClearingNotifications] = useState(false);
   const [showNotificationExample, setShowNotificationExample] = useState(false);
+  const [websiteConfig, setWebsiteConfig] = useState<BucketWebsiteConfiguration | null>(null);
+  const [websiteMode, setWebsiteMode] = useState<"hosting" | "redirect">("hosting");
+  const [websiteIndexDocument, setWebsiteIndexDocument] = useState("");
+  const [websiteErrorDocument, setWebsiteErrorDocument] = useState("");
+  const [websiteRedirectHost, setWebsiteRedirectHost] = useState("");
+  const [websiteRedirectProtocol, setWebsiteRedirectProtocol] = useState("");
+  const [websiteRoutingRules, setWebsiteRoutingRules] = useState("[]");
+  const [websiteError, setWebsiteError] = useState<string | null>(null);
+  const [websiteStatus, setWebsiteStatus] = useState<string | null>(null);
+  const [websiteLoading, setWebsiteLoading] = useState(false);
+  const [savingWebsite, setSavingWebsite] = useState(false);
+  const [clearingWebsite, setClearingWebsite] = useState(false);
+  const [showWebsiteRulesExample, setShowWebsiteRulesExample] = useState(false);
   const [bucketAcl, setBucketAcl] = useState<BucketAcl | null>(null);
   const [bucketAclError, setBucketAclError] = useState<string | null>(null);
   const [bucketAclLoading, setBucketAclLoading] = useState(false);
+  const [bucketAclStatus, setBucketAclStatus] = useState<string | null>(null);
+  const [bucketAclPreset, setBucketAclPreset] = useState("private");
+  const [bucketAclCustom, setBucketAclCustom] = useState("");
+  const [savingBucketAcl, setSavingBucketAcl] = useState(false);
   const [lifecycle, setLifecycle] = useState<BucketLifecycleConfig>({ rules: [] });
   const [lifecycleText, setLifecycleText] = useState("[]");
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
@@ -260,12 +309,22 @@ export default function BucketDetailPage() {
   const [objectLockError, setObjectLockError] = useState<string | null>(null);
   const [savingObjectLock, setSavingObjectLock] = useState(false);
   const [objectLockConfig, setObjectLockConfig] = useState<BucketObjectLockConfiguration | null>(null);
-  const selectedS3Account = useMemo(
-    () => accounts.find((account) => account.id === selectedS3AccountId),
-    [accounts, selectedS3AccountId]
+  const selectedS3Account = useMemo(() => {
+    if (selectedS3AccountId) {
+      return accounts.find((account) => account.id === selectedS3AccountId) ?? null;
+    }
+    if (!requiresS3AccountSelection && accounts.length > 0) {
+      return accounts[0];
+    }
+    return null;
+  }, [accounts, requiresS3AccountSelection, selectedS3AccountId]);
+  const staticWebsiteEnabled = useMemo(
+    () => selectedS3Account?.storage_endpoint_capabilities?.static_website ?? true,
+    [selectedS3Account]
   );
   const accountId = accountIdForApi ?? null;
   const hasAccountContext = !requiresS3AccountSelection || accountId !== null;
+  const staticWebsiteBlocked = !staticWebsiteEnabled;
   const exampleS3AccountId = selectedS3Account?.rgw_account_id || "RGW00000000000000001";
   const notificationExample = `{
   "TopicConfigurations": [
@@ -330,6 +389,35 @@ export default function BucketDetailPage() {
     setObjectLockDays(config.days != null ? String(config.days) : "");
     setObjectLockYears(config.years != null ? String(config.years) : "");
     setObjectLockConfig(config);
+  }, []);
+
+  const applyWebsiteState = useCallback((config?: BucketWebsiteConfiguration | null) => {
+    if (!config) {
+      setWebsiteConfig(null);
+      setWebsiteMode("hosting");
+      setWebsiteIndexDocument("");
+      setWebsiteErrorDocument("");
+      setWebsiteRedirectHost("");
+      setWebsiteRedirectProtocol("");
+      setWebsiteRoutingRules("[]");
+      return;
+    }
+    setWebsiteConfig(config);
+    const redirect = config.redirect_all_requests_to ?? null;
+    const redirectHost = redirect?.host_name ?? "";
+    if (redirectHost) {
+      setWebsiteMode("redirect");
+      setWebsiteRedirectHost(redirectHost);
+      setWebsiteRedirectProtocol(redirect?.protocol ?? "");
+    } else {
+      setWebsiteMode("hosting");
+      setWebsiteRedirectHost("");
+      setWebsiteRedirectProtocol("");
+    }
+    setWebsiteIndexDocument(config.index_document ?? "");
+    setWebsiteErrorDocument(config.error_document ?? "");
+    const rules = Array.isArray(config.routing_rules) ? config.routing_rules : [];
+    setWebsiteRoutingRules(rules.length > 0 ? JSON.stringify(rules, null, 2) : "[]");
   }, []);
 
   const emptySimpleLifecycleRule = useCallback(
@@ -524,6 +612,27 @@ export default function BucketDetailPage() {
     }
   }, [accountId, bucketName, hasAccountContext]);
 
+  const loadWebsite = useCallback(async () => {
+    if (!bucketName || !hasAccountContext || !staticWebsiteEnabled) {
+      applyWebsiteState(null);
+      setWebsiteError(null);
+      setWebsiteStatus(null);
+      return;
+    }
+    setWebsiteLoading(true);
+    setWebsiteError(null);
+    setWebsiteStatus(null);
+    try {
+      const data = await getBucketWebsite(accountId, bucketName);
+      applyWebsiteState(data);
+    } catch (err) {
+      applyWebsiteState(null);
+      setWebsiteError("Unable to load bucket website configuration.");
+    } finally {
+      setWebsiteLoading(false);
+    }
+  }, [accountId, applyWebsiteState, bucketName, hasAccountContext, staticWebsiteEnabled]);
+
   const loadBucketAcl = useCallback(async () => {
     if (!bucketName || !hasAccountContext) {
       setBucketAcl(null);
@@ -531,9 +640,13 @@ export default function BucketDetailPage() {
     }
     setBucketAclLoading(true);
     setBucketAclError(null);
+    setBucketAclStatus(null);
     try {
       const data = await getBucketAcl(accountId, bucketName);
       setBucketAcl(data);
+      const inferred = inferBucketAclPreset(data);
+      setBucketAclPreset(inferred);
+      setBucketAclCustom("");
     } catch (err) {
       setBucketAcl(null);
       setBucketAclError("Unable to load bucket ACL.");
@@ -592,6 +705,10 @@ export default function BucketDetailPage() {
   useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
+
+  useEffect(() => {
+    loadWebsite();
+  }, [loadWebsite]);
 
   const updateSimpleLifecycleRule = (index: number, patch: Partial<SimpleLifecycleRule>) => {
     setSimpleLifecycleRules((prev) => prev.map((rule, idx) => (idx === index ? { ...rule, ...patch } : rule)));
@@ -764,6 +881,12 @@ export default function BucketDetailPage() {
   );
   const policyConfigured = Boolean(policy?.policy && Object.keys(policy.policy).length > 0);
   const corsConfigured = Boolean(cors?.rules && cors.rules.length > 0);
+  const websiteRoutingRulesList = Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : [];
+  const websiteConfigured = Boolean(
+    (websiteConfig?.redirect_all_requests_to?.host_name ?? "").trim() ||
+      (websiteConfig?.index_document ?? "").trim() ||
+      websiteRoutingRulesList.length > 0
+  );
   const publicAccessBlockConfig = properties?.public_access_block;
   const publicAccessBlockEnabled = isPublicAccessFullyEnabled(publicAccessBlockConfig);
   const publicAccessBlockPartial =
@@ -832,6 +955,23 @@ export default function BucketDetailPage() {
           : "Not set";
     const corsTone: PropertySummary["tone"] = corsLoading || corsError ? "unknown" : corsConfigured ? "active" : "inactive";
 
+    const websiteState = !staticWebsiteEnabled
+      ? "Unavailable"
+      : websiteLoading
+        ? "Loading..."
+        : websiteError
+          ? "Unavailable"
+          : websiteConfigured
+            ? "Enabled"
+            : "Disabled";
+    const websiteTone: PropertySummary["tone"] = !staticWebsiteEnabled
+      ? "unknown"
+      : websiteLoading || websiteError
+        ? "unknown"
+        : websiteConfigured
+          ? "active"
+          : "inactive";
+
     const publicAccessState = propsLoading
       ? "Loading..."
       : propsError
@@ -849,6 +989,7 @@ export default function BucketDetailPage() {
       { label: "Object Lock", state: objectLockState, tone: objectLockTone },
       { label: "Block public access", state: publicAccessState, tone: publicAccessTone },
       { label: "Lifecycle rules", state: lifecycleState, tone: lifecycleTone },
+      { label: "Static website", state: websiteState, tone: websiteTone },
       { label: "Quota", state: quotaState, tone: quotaTone },
       { label: "Bucket policy", state: policyState, tone: policyTone },
       { label: "CORS", state: corsState, tone: corsTone },
@@ -872,6 +1013,10 @@ export default function BucketDetailPage() {
     publicAccessBlockEnabled,
     publicAccessBlockPartial,
     versioningIsEnabled,
+    staticWebsiteEnabled,
+    websiteConfigured,
+    websiteError,
+    websiteLoading,
   ]);
 
   const breadcrumbs = [{ label: "Manager" }, { label: "Buckets", to: "/manager/buckets" }, { label: bucketName ?? "" }];
@@ -1101,6 +1246,119 @@ export default function BucketDetailPage() {
     }
   };
 
+  const saveBucketAcl = async () => {
+    if (!bucketName || !hasAccountContext) return;
+    const aclValue = bucketAclPreset === "custom" ? bucketAclCustom.trim() : bucketAclPreset;
+    if (!aclValue) {
+      setBucketAclError("ACL value is required.");
+      return;
+    }
+    setSavingBucketAcl(true);
+    setBucketAclError(null);
+    setBucketAclStatus(null);
+    try {
+      const updated = await updateBucketAcl(accountId, bucketName, aclValue);
+      setBucketAcl(updated);
+      setBucketAclStatus("Bucket ACL updated.");
+      const inferred = inferBucketAclPreset(updated);
+      setBucketAclPreset(inferred);
+      if (inferred !== "custom") {
+        setBucketAclCustom("");
+      }
+    } catch (err) {
+      const message =
+        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
+        "Unable to update bucket ACL.";
+      setBucketAclError(message);
+    } finally {
+      setSavingBucketAcl(false);
+    }
+  };
+
+  const saveWebsite = async () => {
+    if (!bucketName || !hasAccountContext || !staticWebsiteEnabled) return;
+    setWebsiteError(null);
+    setWebsiteStatus(null);
+
+    const mode = websiteMode;
+    const indexDocument = websiteIndexDocument.trim();
+    const errorDocument = websiteErrorDocument.trim();
+    const redirectHost = websiteRedirectHost.trim();
+    const redirectProtocol = websiteRedirectProtocol.trim();
+
+    if (mode === "redirect" && !redirectHost) {
+      setWebsiteError("Redirect hostname is required.");
+      return;
+    }
+    if (mode === "hosting" && !indexDocument) {
+      setWebsiteError("Index document is required.");
+      return;
+    }
+
+    let routingRules: Record<string, unknown>[] = [];
+    if (mode === "hosting") {
+      if (websiteRoutingRules.trim()) {
+        try {
+          const parsed = JSON.parse(websiteRoutingRules);
+          if (!Array.isArray(parsed)) {
+            setWebsiteError("Routing rules must be a JSON array.");
+            return;
+          }
+          routingRules = parsed as Record<string, unknown>[];
+        } catch (err) {
+          setWebsiteError("Routing rules must be valid JSON.");
+          return;
+        }
+      }
+    }
+
+    setSavingWebsite(true);
+    try {
+      const payload: BucketWebsiteConfiguration = {
+        index_document: mode === "hosting" ? indexDocument : null,
+        error_document: mode === "hosting" ? (errorDocument || null) : null,
+        redirect_all_requests_to:
+          mode === "redirect"
+            ? {
+                host_name: redirectHost,
+                protocol: redirectProtocol || undefined,
+              }
+            : null,
+        routing_rules: mode === "hosting" ? routingRules : [],
+      };
+      const saved = await putBucketWebsite(accountId, bucketName, payload);
+      applyWebsiteState(saved);
+      setWebsiteStatus("Website configuration updated.");
+    } catch (err) {
+      const message = axios.isAxiosError(err)
+        ? ((err.response?.data as { detail?: string })?.detail || err.message || "Unable to update website configuration.")
+        : err instanceof Error
+          ? err.message
+          : "Unable to update website configuration.";
+      setWebsiteError(message);
+    } finally {
+      setSavingWebsite(false);
+    }
+  };
+
+  const clearWebsite = async () => {
+    if (!bucketName || !hasAccountContext || !staticWebsiteEnabled) return;
+    const confirmDelete = window.confirm("Delete the static website configuration?");
+    if (!confirmDelete) return;
+    setClearingWebsite(true);
+    setWebsiteError(null);
+    setWebsiteStatus(null);
+    try {
+      await deleteBucketWebsite(accountId, bucketName);
+      applyWebsiteState(null);
+      setWebsiteStatus("Website configuration cleared.");
+    } catch (err) {
+      setWebsiteError("Unable to delete website configuration.");
+    } finally {
+      setClearingWebsite(false);
+    }
+  };
+
   const removePolicy = async () => {
     if (!bucketName || !hasAccountContext) return;
     const confirmDelete = window.confirm("Delete the bucket policy?");
@@ -1294,6 +1552,7 @@ export default function BucketDetailPage() {
         title={bucketName ?? "Bucket"}
         description={bucketError || "Bucket overview, objects, properties, permissions, metrics."}
         breadcrumbs={breadcrumbs}
+        actions={[{ label: "← Back to buckets", to: "/manager/buckets", variant: "ghost" }]}
       />
 
       {loadingBucket && (
@@ -1586,6 +1845,7 @@ export default function BucketDetailPage() {
                     onClick={() => {
                       loadProperties();
                       loadLifecycle();
+                      loadWebsite();
                     }}
                     className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                   >
@@ -2100,6 +2360,205 @@ export default function BucketDetailPage() {
                         </>
                       )}
                     </div>
+                    <div className={`${bucketCardClass} space-y-3 ${staticWebsiteBlocked ? "opacity-60" : ""}`}>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Static website</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Host a static website from this bucket or redirect all requests.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={loadWebsite}
+                            className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            disabled={websiteLoading || staticWebsiteBlocked}
+                          >
+                            {websiteLoading ? "Loading..." : "Refresh"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={saveWebsite}
+                            disabled={savingWebsite || websiteLoading || staticWebsiteBlocked}
+                            className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                          >
+                            {savingWebsite ? "Saving..." : "Save"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={clearWebsite}
+                            disabled={clearingWebsite || staticWebsiteBlocked}
+                            className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                          >
+                            {clearingWebsite ? "Deleting..." : "Delete"}
+                          </button>
+                        </div>
+                      </div>
+                      {staticWebsiteBlocked && (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+                          Static website is disabled for this endpoint. Enable it in the Ceph endpoint configuration.
+                        </div>
+                      )}
+                      {websiteError && (
+                        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                          {websiteError}
+                        </div>
+                      )}
+                      {websiteStatus && (
+                        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                          {websiteStatus}
+                        </div>
+                      )}
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                          <input
+                            type="radio"
+                            checked={websiteMode === "hosting"}
+                            onChange={() => {
+                              setWebsiteMode("hosting");
+                              setWebsiteStatus(null);
+                              setWebsiteError(null);
+                            }}
+                            disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                            className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
+                          />
+                          <div>
+                            <p className="font-semibold text-slate-900 dark:text-slate-100">Host a website</p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              Serve index and error documents from this bucket.
+                            </p>
+                          </div>
+                        </label>
+                        <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                          <input
+                            type="radio"
+                            checked={websiteMode === "redirect"}
+                            onChange={() => {
+                              setWebsiteMode("redirect");
+                              setWebsiteStatus(null);
+                              setWebsiteError(null);
+                            }}
+                            disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                            className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
+                          />
+                          <div>
+                            <p className="font-semibold text-slate-900 dark:text-slate-100">Redirect all requests</p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              Point every request to another host or domain.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                      {websiteMode === "hosting" ? (
+                        <div className="space-y-3">
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                              Index document
+                              <input
+                                type="text"
+                                value={websiteIndexDocument}
+                                onChange={(e) => {
+                                  setWebsiteIndexDocument(e.target.value);
+                                  setWebsiteStatus(null);
+                                }}
+                                className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                placeholder="index.html"
+                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                              Error document (optional)
+                              <input
+                                type="text"
+                                value={websiteErrorDocument}
+                                onChange={(e) => {
+                                  setWebsiteErrorDocument(e.target.value);
+                                  setWebsiteStatus(null);
+                                }}
+                                className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                placeholder="error.html"
+                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                              />
+                            </label>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                              Routing rules (JSON array)
+                            </label>
+                            <textarea
+                              value={websiteRoutingRules}
+                              onChange={(e) => {
+                                setWebsiteRoutingRules(e.target.value);
+                                setWebsiteStatus(null);
+                              }}
+                              rows={6}
+                              className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              placeholder="[]"
+                              spellCheck={false}
+                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                            />
+                            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                              <button
+                                type="button"
+                                onClick={() => setShowWebsiteRulesExample((prev) => !prev)}
+                                className="text-[11px] font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
+                              >
+                                {showWebsiteRulesExample ? "Hide example" : "Show example"}
+                              </button>
+                              {showWebsiteRulesExample && (
+                                <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 text-[11px] text-slate-100">
+{`[
+  {
+    "Condition": { "KeyPrefixEquals": "docs/" },
+    "Redirect": { "ReplaceKeyPrefixWith": "documents/" }
+  },
+  {
+    "Condition": { "HttpErrorCodeReturnedEquals": "404" },
+    "Redirect": { "ReplaceKeyWith": "error.html" }
+  }
+]`}
+                                </pre>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                            Redirect hostname
+                            <input
+                              type="text"
+                              value={websiteRedirectHost}
+                              onChange={(e) => {
+                                setWebsiteRedirectHost(e.target.value);
+                                setWebsiteStatus(null);
+                              }}
+                              className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              placeholder="www.example.com"
+                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                            Protocol (optional)
+                            <input
+                              type="text"
+                              value={websiteRedirectProtocol}
+                              onChange={(e) => {
+                                setWebsiteRedirectProtocol(e.target.value);
+                                setWebsiteStatus(null);
+                              }}
+                              className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              placeholder="https"
+                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                            />
+                          </label>
+                          <p className="md:col-span-2 text-[11px] text-slate-500 dark:text-slate-400">
+                            All requests will redirect to the host above. Index and routing rules are ignored.
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -2174,23 +2633,78 @@ export default function BucketDetailPage() {
                     <div>
                       <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Access control list</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Grants returned by the bucket ACL. Read-only display.
+                        Configure a canned ACL and review resulting grants.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={loadBucketAcl}
-                      className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                      disabled={bucketAclLoading}
-                    >
-                      {bucketAclLoading ? "Loading..." : "Refresh"}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={loadBucketAcl}
+                        className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        disabled={bucketAclLoading}
+                      >
+                        {bucketAclLoading ? "Loading..." : "Refresh"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveBucketAcl}
+                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        disabled={savingBucketAcl || bucketAclLoading}
+                      >
+                        {savingBucketAcl ? "Saving..." : "Save ACL"}
+                      </button>
+                    </div>
                   </div>
                   {bucketAclError && (
                     <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {bucketAclError}
                     </div>
                   )}
+                  {bucketAclStatus && (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                      {bucketAclStatus}
+                    </div>
+                  )}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                      Canned ACL
+                      <select
+                        value={bucketAclPreset}
+                        onChange={(e) => {
+                          setBucketAclPreset(e.target.value);
+                          setBucketAclStatus(null);
+                          setBucketAclError(null);
+                        }}
+                        className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        disabled={bucketAclLoading || savingBucketAcl}
+                      >
+                        {bucketAclOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {bucketAclPreset === "custom" && (
+                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                        Custom ACL
+                        <input
+                          type="text"
+                          value={bucketAclCustom}
+                          onChange={(e) => {
+                            setBucketAclCustom(e.target.value);
+                            setBucketAclStatus(null);
+                          }}
+                          className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          placeholder="e.g. private"
+                          disabled={bucketAclLoading || savingBucketAcl}
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Saving a canned ACL replaces the current ACL grants.
+                  </p>
                   {bucketAclLoading ? (
                     <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
                       Loading ACL...
@@ -2385,75 +2899,6 @@ export default function BucketDetailPage() {
             label: "Advanced",
             content: (
               <div className="space-y-3">
-                <div className={`${bucketCardClass} opacity-50 pointer-events-none`}>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Quota</p>
-                    {!isAdmin && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        Restricted
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Allowed bucket size and object count.</p>
-                  <form className={`mt-2 space-y-2 ${!isAdmin ? "pointer-events-none" : ""}`} onSubmit={handleUpdateQuota}>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
-                        Size (GB)
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.1"
-                          value={quotaSizeGb}
-                          onChange={(e) => setQuotaSizeGb(e.target.value)}
-                          className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                          placeholder="e.g. 100"
-                          disabled={!isAdmin}
-                        />
-                      </label>
-                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
-                        Object count
-                        <input
-                          type="number"
-                          min={0}
-                          step="1"
-                          value={quotaObjects}
-                          onChange={(e) => setQuotaObjects(e.target.value)}
-                          className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                          placeholder="e.g. 1000000"
-                          disabled={!isAdmin}
-                        />
-                      </label>
-                    </div>
-                    {quotaStatus && (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                        {quotaStatus}
-                      </div>
-                    )}
-                    {quotaError && (
-                      <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                        {quotaError}
-                      </div>
-                    )}
-                    <div className="flex justify-end">
-                      <button
-                        type="submit"
-                        disabled={updatingQuota || !isAdmin}
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                        title={!isAdmin ? "Admins only" : undefined}
-                      >
-                        {updatingQuota ? "Updating..." : "Save"}
-                      </button>
-                    </div>
-                  </form>
-                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                    Leave empty to remove the quota. {isAdmin ? "" : "(Read-only for this role.)"}
-                  </p>
-                </div>
-                <InfoCard
-                  title="Replication / multisite"
-                  description="Set up inter-cluster replication."
-                  disabled
-                />
                 <div className={`${bucketCardClass} space-y-3`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -2591,6 +3036,83 @@ export default function BucketDetailPage() {
                     Select an account and a bucket to view detailed metrics.
                   </div>
                 )}
+              </div>
+            ),
+          },
+          {
+            id: "ceph",
+            label: "Ceph",
+            content: (
+              <div className="space-y-3">
+                <div className={`${bucketCardClass} opacity-50 pointer-events-none`}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Quota</p>
+                    {!isAdmin && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        Restricted
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Allowed bucket size and object count.</p>
+                  <form className={`mt-2 space-y-2 ${!isAdmin ? "pointer-events-none" : ""}`} onSubmit={handleUpdateQuota}>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                        Size (GB)
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.1"
+                          value={quotaSizeGb}
+                          onChange={(e) => setQuotaSizeGb(e.target.value)}
+                          className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          placeholder="e.g. 100"
+                          disabled={!isAdmin}
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                        Object count
+                        <input
+                          type="number"
+                          min={0}
+                          step="1"
+                          value={quotaObjects}
+                          onChange={(e) => setQuotaObjects(e.target.value)}
+                          className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          placeholder="e.g. 1000000"
+                          disabled={!isAdmin}
+                        />
+                      </label>
+                    </div>
+                    {quotaStatus && (
+                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                        {quotaStatus}
+                      </div>
+                    )}
+                    {quotaError && (
+                      <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                        {quotaError}
+                      </div>
+                    )}
+                    <div className="flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={updatingQuota || !isAdmin}
+                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        title={!isAdmin ? "Admins only" : undefined}
+                      >
+                        {updatingQuota ? "Updating..." : "Save"}
+                      </button>
+                    </div>
+                  </form>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Leave empty to remove the quota. {isAdmin ? "" : "(Read-only for this role.)"}
+                  </p>
+                </div>
+                <InfoCard
+                  title="Replication / multisite"
+                  description="Set up inter-cluster replication."
+                  disabled
+                />
               </div>
             ),
           },

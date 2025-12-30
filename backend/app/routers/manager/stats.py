@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,6 +14,16 @@ from app.services.traffic_service import TrafficService, TrafficWindow
 from app.utils.s3_endpoint import resolve_s3_endpoint
 
 router = APIRouter(prefix="/manager/stats", tags=["manager-stats"])
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_list(operation: str, func):
+    try:
+        return func()
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning("Unable to fetch IAM %s stats: %s", operation, exc)
+        return []
 
 
 @router.get("/overview")
@@ -30,22 +41,19 @@ def account_stats(
         raise HTTPException(status_code=502, detail=f"Unable to fetch buckets: {exc}") from exc
 
     caps = getattr(account, "_manager_capabilities", None)
-    users = []
-    groups = []
-    roles = []
-    policies = []
+    users: list = []
+    groups: list = []
+    roles: list = []
+    policies: list = []
     if not caps or caps.can_manage_iam:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise HTTPException(status_code=400, detail="S3Account root keys missing")
         iam = get_iam_service(access_key, secret_key, endpoint=resolve_s3_endpoint(account))
-        try:
-            users = iam.list_users()
-            groups = iam.list_groups()
-            roles = iam.list_roles()
-            policies = iam.list_policies()
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Unable to fetch IAM stats: {exc}") from exc
+        users = _safe_list("users", iam.list_users)
+        groups = _safe_list("groups", iam.list_groups)
+        roles = _safe_list("roles", iam.list_roles)
+        policies = _safe_list("policies", iam.list_policies)
 
     total_bytes = sum((bucket.used_bytes or 0) for bucket in buckets if bucket.used_bytes is not None)
     total_objects = sum((bucket.object_count or 0) for bucket in buckets if bucket.object_count is not None)

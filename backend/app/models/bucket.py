@@ -115,6 +115,10 @@ class BucketAcl(BaseModel):
     grants: List[BucketAclGrant] = Field(default_factory=list)
 
 
+class BucketAclUpdate(BaseModel):
+    acl: str
+
+
 class BucketQuotaUpdate(BaseModel):
     max_size_gb: Optional[int] = None
     max_objects: Optional[int] = None
@@ -126,3 +130,15 @@ class BucketCorsUpdate(BaseModel):
 
 class BucketNotificationConfiguration(BaseModel):
     configuration: dict = Field(default_factory=dict)
+
+
+class BucketWebsiteRedirectAllRequestsTo(BaseModel):
+    host_name: str
+    protocol: Optional[str] = None
+
+
+class BucketWebsiteConfiguration(BaseModel):
+    index_document: Optional[str] = None
+    error_document: Optional[str] = None
+    redirect_all_requests_to: Optional[BucketWebsiteRedirectAllRequestsTo] = None
+    routing_rules: List[dict] = Field(default_factory=list)

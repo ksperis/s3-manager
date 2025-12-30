@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.db_models import S3Account
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
-from app.utils.rgw import resolve_admin_uid
+from app.utils.rgw import get_supervision_credentials, resolve_admin_uid
 
 logger = logging.getLogger(__name__)
 
@@ -297,20 +297,17 @@ class TrafficService:
 
     def _admin_for_account(self, account: S3Account) -> RGWAdminClient:
         endpoint = getattr(account, "storage_endpoint", None)
-        if endpoint:
-            if not endpoint.admin_access_key or not endpoint.admin_secret_key:
-                raise ValueError("RGW admin credentials are not configured for this endpoint")
-            try:
-                return get_rgw_admin_client(
-                    access_key=endpoint.admin_access_key,
-                    secret_key=endpoint.admin_secret_key,
-                    endpoint=endpoint.admin_endpoint or endpoint.endpoint_url,
-                    region=endpoint.region,
-                )
-            except RGWAdminError as exc:
-                raise ValueError(str(exc)) from exc
+        creds = get_supervision_credentials(account)
+        if not creds or not endpoint:
+            raise ValueError("Supervision credentials are not configured for this endpoint")
+        access_key, secret_key = creds
         try:
-            return get_rgw_admin_client()
+            return get_rgw_admin_client(
+                access_key=access_key,
+                secret_key=secret_key,
+                endpoint=endpoint.admin_endpoint or endpoint.endpoint_url,
+                region=endpoint.region,
+            )
         except RGWAdminError as exc:
             raise ValueError(str(exc)) from exc
 

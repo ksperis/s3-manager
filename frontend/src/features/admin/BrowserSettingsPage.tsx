@@ -42,6 +42,12 @@ export default function BrowserSettingsPage() {
     );
   };
 
+  const handleToggleChange = (checked: boolean) => {
+    setSettings((prev) =>
+      prev ? { ...prev, browser: { ...prev.browser, allow_proxy_transfers: checked } } : prev
+    );
+  };
+
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!settings) return;
@@ -100,6 +106,27 @@ export default function BrowserSettingsPage() {
         )}
         {settings && (
           <div className="grid gap-4">
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Proxy transfers</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Allow the backend to proxy uploads/downloads when direct browser-to-S3 transfers are unavailable.
+                </p>
+              </div>
+              <div className="mt-4 flex items-center justify-between rounded-lg border border-slate-200 px-3 py-3 text-sm text-slate-700 dark:border-slate-800 dark:text-slate-200">
+                <span>Enable proxy mode</span>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={settings.browser.allow_proxy_transfers}
+                    onChange={(e) => handleToggleChange(e.target.checked)}
+                  />
+                  <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
+                  <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
+                </label>
+              </div>
+            </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Upload parallelism</p>

@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import json
 import logging
 from typing import Optional
 from urllib.parse import urlparse
@@ -17,6 +18,33 @@ from app.models.storage_endpoint import (
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+DEFAULT_ENDPOINT_CAPABILITIES: dict[str, bool] = {
+    "sts": True,
+    "static_website": True,
+}
+
+
+def normalize_capabilities(value: Optional[object]) -> dict[str, bool]:
+    if value is None:
+        data: dict[str, object] = {}
+    elif isinstance(value, dict):
+        data = value
+    elif isinstance(value, str):
+        try:
+            raw = json.loads(value)
+        except json.JSONDecodeError:
+            raw = {}
+        data = raw if isinstance(raw, dict) else {}
+    else:
+        data = {}
+    normalized: dict[str, bool] = {}
+    for key, raw_value in data.items():
+        if isinstance(raw_value, bool):
+            normalized[str(key)] = raw_value
+    for key, default in DEFAULT_ENDPOINT_CAPABILITIES.items():
+        normalized.setdefault(key, default)
+    return normalized
 
 
 class StorageEndpointsService:
@@ -59,6 +87,7 @@ class StorageEndpointsService:
             provider=self._normalize_provider(endpoint.provider),
             admin_access_key=endpoint.admin_access_key,
             supervision_access_key=endpoint.supervision_access_key,
+            capabilities=normalize_capabilities(endpoint.capabilities),
             is_default=bool(endpoint.is_default),
             is_editable=bool(endpoint.is_editable),
             created_at=endpoint.created_at,
@@ -120,6 +149,7 @@ class StorageEndpointsService:
         admin_secret = self._clean_optional(payload.admin_secret_key)
         supervision_access = self._clean_optional(payload.supervision_access_key)
         supervision_secret = self._clean_optional(payload.supervision_secret_key)
+        capabilities = normalize_capabilities(payload.capabilities)
 
         if not endpoint_url:
             raise ValueError("L'URL de l'endpoint est requise.")
@@ -143,6 +173,7 @@ class StorageEndpointsService:
             admin_secret_key=admin_secret,
             supervision_access_key=supervision_access,
             supervision_secret_key=supervision_secret,
+            capabilities=capabilities,
             is_default=False,
             is_editable=True,
         )
@@ -187,6 +218,8 @@ class StorageEndpointsService:
             if payload.supervision_secret_key is not None
             else endpoint.supervision_secret_key
         )
+        capabilities_input = payload.capabilities if payload.capabilities is not None else endpoint.capabilities
+        capabilities = normalize_capabilities(capabilities_input)
 
         if not endpoint_url:
             raise ValueError("L'URL de l'endpoint est requise.")
@@ -211,6 +244,7 @@ class StorageEndpointsService:
         endpoint.admin_secret_key = admin_secret
         endpoint.supervision_access_key = supervision_access
         endpoint.supervision_secret_key = supervision_secret
+        endpoint.capabilities = capabilities
         self.db.add(endpoint)
         self.db.commit()
         self.db.refresh(endpoint)
@@ -250,9 +284,12 @@ class StorageEndpointsService:
         region = settings.s3_region
         admin_access = settings.rgw_admin_access_key or settings.s3_access_key
         admin_secret = settings.rgw_admin_secret_key or settings.s3_secret_key
+        supervision_access = settings.supervision_access_key
+        supervision_secret = settings.supervision_secret_key
         provider = (
             StorageProvider.CEPH if admin_access and admin_secret else StorageProvider.OTHER
         )
+        capabilities = normalize_capabilities(None)
 
         existing = (
             self.db.query(StorageEndpoint)
@@ -291,6 +328,15 @@ class StorageEndpointsService:
             if existing.admin_secret_key != admin_secret:
                 existing.admin_secret_key = admin_secret
                 updated = True
+            if existing.supervision_access_key != supervision_access:
+                existing.supervision_access_key = supervision_access
+                updated = True
+            if existing.supervision_secret_key != supervision_secret:
+                existing.supervision_secret_key = supervision_secret
+                updated = True
+            if normalize_capabilities(existing.capabilities) != capabilities:
+                existing.capabilities = capabilities
+                updated = True
             if not existing.is_default:
                 existing.is_default = True
                 updated = True
@@ -311,8 +357,9 @@ class StorageEndpointsService:
             provider=provider.value,
             admin_access_key=admin_access,
             admin_secret_key=admin_secret,
-            supervision_access_key=None,
-            supervision_secret_key=None,
+            supervision_access_key=supervision_access,
+            supervision_secret_key=supervision_secret,
+            capabilities=capabilities,
             is_default=True,
             is_editable=False,
         )

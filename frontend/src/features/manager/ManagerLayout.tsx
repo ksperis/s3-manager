@@ -50,6 +50,7 @@ function ManagerShell() {
     accessMode,
     setAccessMode,
     canSwitchAccess,
+    managerStatsEnabled,
   } = useS3AccountContext();
   const navigate = useNavigate();
   const selected = accounts.find((a) => a.id === selectedS3AccountId);
@@ -64,7 +65,7 @@ function ManagerShell() {
   const isS3User = selectedS3AccountType === "s3_user";
   const canManageBuckets = capabilities.can_manage_buckets !== false;
   const canManageIam = !isS3User && capabilities.can_manage_iam !== false;
-  const canViewTraffic = !isS3User && capabilities.can_view_traffic !== false;
+  const canViewTraffic = !isS3User && (managerStatsEnabled ?? capabilities.can_view_traffic !== false);
   const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
   const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
   const baseControlClasses =

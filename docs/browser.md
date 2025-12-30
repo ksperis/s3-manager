@@ -1,6 +1,6 @@
 # S3 browser (/browser)
 
-The `/browser` page talks only to standard S3 APIs; no RGW admin APIs are used. The backend signs requests and returns presigned URLs so uploads/downloads flow directly between the browser and S3.
+The `/browser` page talks only to standard S3 APIs; no RGW admin APIs are used. The browser prefers STS session credentials when available, and otherwise falls back to bucket CORS-based presigned URLs or the backend proxy for transfers.
 
 ## Backend surface
 
@@ -13,6 +13,7 @@ The `/browser` page talks only to standard S3 APIs; no RGW admin APIs are used. 
 - `GET/PUT /api/manager/browser/buckets/{bucket}/object-tags` — `GetObjectTagging` / `PutObjectTagging` / `DeleteObjectTagging`
 - `POST /api/manager/browser/buckets/{bucket}/presign` — presigned GET/PUT/DELETE/POST policies for direct browser calls
 - `GET /api/manager/browser/sts` — STS availability check (GetCallerIdentity)
+- `GET /api/manager/browser/sts/credentials` — STS temporary credentials (GetSessionToken) for browser presigning
 - `POST /api/manager/browser/buckets/{bucket}/copy` — `CopyObject` (used for move/metadata updates)
 - `POST /api/manager/browser/buckets/{bucket}/delete` — `DeleteObjects` (version aware)
 - `POST /api/manager/browser/buckets/{bucket}/folders` — `PutObject` (empty marker)
