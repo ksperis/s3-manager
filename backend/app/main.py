@@ -2,8 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 import logging
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler as fastapi_http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import get_settings
 from app.core.database import engine, SessionLocal
@@ -136,3 +138,17 @@ app.include_router(
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_manager_enabled)],
 )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def log_http_exceptions(request: Request, exc: StarletteHTTPException):
+    if exc.status_code >= 500:
+        logger.error(
+            "Request %s %s responded with %s: %s",
+            request.method,
+            request.url.path,
+            exc.status_code,
+            exc.detail,
+            exc_info=exc.__cause__ or exc,
+        )
+    return await fastapi_http_exception_handler(request, exc)

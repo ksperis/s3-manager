@@ -212,7 +212,7 @@ export default function AdminMetricsPage() {
   const missingTraffic = selectedEndpointId != null && !traffic && !trafficLoading && !trafficError;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 text-xs leading-relaxed">
       <PageHeader
         title="Metrics"
         description={pageError || "Centralized view of platform storage and traffic."}
@@ -265,7 +265,7 @@ export default function AdminMetricsPage() {
         <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary">Storage snapshot</p>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">Aggregated stats across known S3 accounts.</p>
           </div>
           {storage?.generated_at && (
@@ -318,7 +318,7 @@ export default function AdminMetricsPage() {
       <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <header className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Accounts & users</h3>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Accounts & users</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400">Account scan with graphical breakdown.</p>
         </header>
         <div className="grid gap-6 xl:grid-cols-2">
@@ -373,7 +373,7 @@ function SnapshotCard({ label, value, hint, loading }: SnapshotCardProps) {
   return (
     <div className="rounded-xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/70">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{loading ? "…" : value}</p>
+      <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{loading ? "…" : value}</p>
       {hint && <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
     </div>
   );
@@ -402,7 +402,7 @@ function TrafficOverview({ traffic, timeline, window, onWindowChange, loading, e
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-primary">RGW traffic</p>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Bandwidth & requests</h3>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Bandwidth & requests</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Reading RGW logs ({WINDOW_OPTIONS.find((o) => o.value === window)?.helper}) for the selected window.
           </p>
@@ -412,7 +412,7 @@ function TrafficOverview({ traffic, timeline, window, onWindowChange, loading, e
             <button
               key={option.value}
               type="button"
-              className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
+              className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
                 option.value === window
                   ? "bg-primary text-white shadow-sm"
                   : "text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
