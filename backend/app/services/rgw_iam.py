@@ -13,13 +13,14 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
-def get_iam_client(access_key: str, secret_key: str, endpoint: Optional[str] = None):
+def get_iam_client(access_key: str, secret_key: str, endpoint: Optional[str] = None, region: Optional[str] = None):
     return boto3.client(
         "iam",
         endpoint_url=endpoint or settings.s3_endpoint,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         config=Config(signature_version="s3v4"),
+        region_name=region or settings.s3_region,
     )
 
 
