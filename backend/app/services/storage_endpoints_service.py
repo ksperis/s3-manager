@@ -266,15 +266,9 @@ class StorageEndpointsService:
         self.db.commit()
 
     def _env_endpoint_name(self) -> str:
-        base = settings.app_name or "s3-manager"
-        candidate = f"{base} (env)"
+        candidate = "Default"
         if not self.db.query(StorageEndpoint).filter(StorageEndpoint.name == candidate).first():
             return candidate
-        parsed = urlparse(settings.s3_endpoint)
-        host = parsed.hostname or parsed.netloc or "endpoint"
-        fallback = f"{base} ({host})"
-        if not self.db.query(StorageEndpoint).filter(StorageEndpoint.name == fallback).first():
-            return fallback
         suffix = self.db.query(StorageEndpoint).count() + 1
         return f"{candidate}-{suffix}"
 
