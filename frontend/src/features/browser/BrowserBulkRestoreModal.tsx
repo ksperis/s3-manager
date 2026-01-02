@@ -34,7 +34,7 @@ export default function BrowserBulkRestoreModal({
 }: BrowserBulkRestoreModalProps) {
   return (
     <Modal title="Restore to date" onClose={onClose} maxWidthClass="max-w-2xl">
-      <div className="space-y-4 text-xs text-slate-600 dark:text-slate-300">
+      <div className="space-y-4 ui-caption text-slate-600 dark:text-slate-300">
         <div className="space-y-1">
           <p className="font-semibold text-slate-800 dark:text-slate-100">Targets</p>
           <p>
@@ -49,14 +49,14 @@ export default function BrowserBulkRestoreModal({
           <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkRestoreSummary}</p>
         )}
         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-          <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Target date</label>
+          <label className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Target date</label>
           <input
             type="datetime-local"
             className={`${formInputClasses} mt-2`}
             value={bulkRestoreDate}
             onChange={(event) => setBulkRestoreDate(event.target.value)}
           />
-          <label className="mt-3 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+          <label className="mt-3 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
             <input
               type="checkbox"
               checked={bulkRestoreDeleteMissing}
@@ -66,7 +66,7 @@ export default function BrowserBulkRestoreModal({
             Delete objects not present at the selected date
           </label>
         </div>
-        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+        <p className="ui-caption text-slate-500 dark:text-slate-400">
           Restores the latest version at or before the selected date. Objects with a delete marker at that date are
           skipped unless deletion is enabled.
         </p>

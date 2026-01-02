@@ -10,7 +10,7 @@ type TableEmptyStateProps = {
 export default function TableEmptyState({ colSpan = 1, message = "No data available." }: TableEmptyStateProps) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+      <td colSpan={colSpan} className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">
         {message}
       </td>
     </tr>

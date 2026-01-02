@@ -41,7 +41,7 @@ const buildDefaultForm = (): BucketForm => ({
 
 function QuotaBar({ usedBytes, quotaBytes }: { usedBytes?: number | null; quotaBytes?: number | null }) {
   if (!quotaBytes || quotaBytes <= 0) {
-    return <span className="text-sm text-slate-500 dark:text-slate-400">-</span>;
+    return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
   }
   const used = usedBytes ?? 0;
   const ratio = Math.min(100, Math.round((used / quotaBytes) * 100));
@@ -52,14 +52,14 @@ function QuotaBar({ usedBytes, quotaBytes }: { usedBytes?: number | null; quotaB
       <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
         <div className="h-full bg-primary-500" style={{ width: `${ratio}%` }} />
       </div>
-      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{ratio}%</span>
+      <span className="ui-caption font-semibold text-slate-600 dark:text-slate-300">{ratio}%</span>
     </div>
   );
 }
 
 function QuotaObjectsBar({ usedObjects, quotaObjects }: { usedObjects?: number | null; quotaObjects?: number | null }) {
   if (!quotaObjects || quotaObjects <= 0) {
-    return <span className="text-sm text-slate-500 dark:text-slate-400">-</span>;
+    return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
   }
   const used = usedObjects ?? 0;
   const ratio = Math.min(100, Math.round((used / quotaObjects) * 100));
@@ -68,7 +68,7 @@ function QuotaObjectsBar({ usedObjects, quotaObjects }: { usedObjects?: number |
       <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
         <div className="h-full bg-primary-500" style={{ width: `${ratio}%` }} />
       </div>
-      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{ratio}%</span>
+      <span className="ui-caption font-semibold text-slate-600 dark:text-slate-300">{ratio}%</span>
     </div>
   );
 }
@@ -319,19 +319,19 @@ export default function BucketsPage() {
         <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Buckets</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Paginated list (account root keys).</p>
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Buckets</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">Paginated list (account root keys).</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <span className="text-xs text-slate-500 dark:text-slate-400">{filteredBuckets.length} bucket(s)</span>
+              <span className="ui-caption text-slate-500 dark:text-slate-400">{filteredBuckets.length} bucket(s)</span>
               <div className="flex items-center gap-2 sm:justify-end">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
+                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
                 <input
                   type="text"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Search by name"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
                 />
               </div>
             </div>
@@ -366,24 +366,24 @@ export default function BucketsPage() {
                 !error &&
                 filteredBuckets.map((bucket) => (
                   <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className="manager-table-cell px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
                       <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className="hover:text-primary-700 dark:hover:text-primary-200">
                         {bucket.name}
                       </Link>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {formatBytes(bucket.used_bytes)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       <QuotaBar usedBytes={bucket.used_bytes} quotaBytes={bucket.quota_max_size_bytes ?? null} />
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {formatNumber(bucket.object_count)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       <QuotaObjectsBar usedObjects={bucket.object_count} quotaObjects={bucket.quota_max_objects ?? null} />
                     </td>
-                    <td className="manager-table-cell px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                    <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {bucket.creation_date ? new Date(bucket.creation_date).toLocaleDateString() : "-"}
                     </td>
                     <td className="px-6 py-4 text-right">
@@ -415,9 +415,9 @@ export default function BucketsPage() {
           <form className="space-y-4" onSubmit={handleCreate}>
             <div className="flex items-center gap-3">
               {stepTitles.map((title, index) => (
-                <div key={title} className="flex items-center gap-2 text-sm">
+                <div key={title} className="flex items-center gap-2 ui-body">
                   <div
-                    className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold ${
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border ui-caption font-semibold ${
                       index === wizardStep
                         ? "border-primary bg-primary-100/70 text-primary-800 dark:border-primary-500 dark:bg-primary-500/20 dark:text-primary-100"
                         : "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
@@ -436,56 +436,56 @@ export default function BucketsPage() {
             {wizardStep === 0 && (
               <div className="space-y-4">
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Bucket name</label>
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Bucket name</label>
                   <input
                     value={bucketForm.name}
                     onChange={(e) => {
                       const value = e.target.value;
                       setBucketForm((prev) => ({ ...prev, name: value }));
                     }}
-                    className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     placeholder="ex: backups-prod"
                     required
                   />
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     DNS compatible, lowercase, numbers, and hyphens. The selected account will be used.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 opacity-60">
-                  <label className="text-sm font-medium text-slate-500 dark:text-slate-400">Location / zone</label>
+                  <label className="ui-body font-medium text-slate-500 dark:text-slate-400">Location / zone</label>
                   <input
                     value={bucketForm.location}
                     readOnly
                     disabled
-                    className="rounded-md border border-dashed border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className="rounded-md border border-dashed border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     placeholder="ex: default-placement"
                   />
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Ce placement est fixe pour cet environnement RGW.</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">Ce placement est fixe pour cet environnement RGW.</p>
                 </div>
               </div>
             )}
 
             {wizardStep === 1 && (
               <div className="space-y-4">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 opacity-60 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-500 opacity-60 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
                   <div className="flex items-center justify-between">
                     <span>
                       Server-side encryption
-                      <span className="block text-xs text-slate-500 dark:text-slate-400">AES256, aws:kms, KMS key...</span>
+                      <span className="block ui-caption text-slate-500 dark:text-slate-400">AES256, aws:kms, KMS key...</span>
                     </span>
                     <input
                       value={bucketForm.encryption}
                       readOnly
                       disabled
-                      className="ml-3 w-40 rounded-md border border-dashed border-slate-300 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-900"
+                      className="ml-3 w-40 rounded-md border border-dashed border-slate-300 px-2 py-1 ui-caption dark:border-slate-600 dark:bg-slate-900"
                       placeholder="ex: AES256"
                     />
                   </div>
                 </div>
-                <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-100">
+                <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-100">
                   <span>
                     Versioning
-                    <span className="block text-xs text-slate-500 dark:text-slate-400">Enables version retention.</span>
+                    <span className="block ui-caption text-slate-500 dark:text-slate-400">Enables version retention.</span>
                   </span>
                   <input
                     type="checkbox"
@@ -498,7 +498,7 @@ export default function BucketsPage() {
             )}
 
             <div className="flex items-center justify-between">
-              <div className="text-xs text-slate-500 dark:text-slate-400">
+              <div className="ui-caption text-slate-500 dark:text-slate-400">
                 S3Account: {accountLabel}
               </div>
               <div className="flex items-center gap-3">
@@ -509,7 +509,7 @@ export default function BucketsPage() {
                       event.preventDefault();
                       setWizardStep((prev) => Math.max(prev - 1, 0));
                     }}
-                    className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                    className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                   >
                     Previous
                   </button>
@@ -521,7 +521,7 @@ export default function BucketsPage() {
                       event.preventDefault();
                       setWizardStep((prev) => Math.min(prev + 1, stepTitles.length - 1));
                     }}
-                    className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600"
+                    className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600"
                   >
                     Continue
                   </button>
@@ -529,7 +529,7 @@ export default function BucketsPage() {
                   <button
                     type="submit"
                     disabled={creating}
-                    className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                    className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                   >
                     {creating ? "Creating..." : "Create bucket"}
                   </button>

@@ -39,10 +39,10 @@ export default function BrowserPreviewModal({
       <div className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
-            <p className="break-all text-sm font-semibold text-slate-800 dark:text-slate-100">
+            <p className="break-all ui-body font-semibold text-slate-800 dark:text-slate-100">
               {previewItem.key}
             </p>
-            <div className="flex flex-wrap gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap gap-3 ui-caption text-slate-500 dark:text-slate-400">
               <span>{previewItem.size}</span>
               <span>{previewItem.modified}</span>
               <span>{previewLabelForItem(previewItem)}</span>
@@ -71,10 +71,10 @@ export default function BrowserPreviewModal({
         </div>
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/40">
           {previewLoading && (
-            <div className="text-sm text-slate-500 dark:text-slate-300">Loading preview...</div>
+            <div className="ui-body text-slate-500 dark:text-slate-300">Loading preview...</div>
           )}
           {previewError && (
-            <div className="text-sm font-semibold text-rose-600 dark:text-rose-200">{previewError}</div>
+            <div className="ui-body font-semibold text-rose-600 dark:text-rose-200">{previewError}</div>
           )}
           {!previewLoading && !previewError && previewUrl && previewKind === "image" && (
             <img
@@ -104,7 +104,7 @@ export default function BrowserPreviewModal({
               />
             )}
           {!previewLoading && !previewError && (!previewUrl || previewKind === "generic") && (
-            <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
               Preview not available for this file type.
             </div>
           )}

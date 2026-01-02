@@ -154,7 +154,7 @@ export default function LoginPage() {
   };
 
   const tabClasses = (value: "password" | "keys") =>
-    `rounded-full px-4 py-2 text-sm font-semibold transition ${
+    `rounded-full px-4 py-2 ui-body font-semibold transition ${
       mode === value
         ? "bg-white text-slate-900 shadow-sm"
         : "text-slate-500 hover:text-slate-800"
@@ -167,9 +167,9 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900">
       <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-xl">
-        <h1 className="mb-4 text-2xl font-semibold text-slate-800">Sign in</h1>
-        <p className="mb-6 text-sm text-slate-500">s3-manager admin portal</p>
-        <div className="mb-6 flex rounded-full bg-slate-100 p-1 text-sm font-semibold text-slate-600">
+        <h1 className="mb-4 ui-title font-semibold text-slate-800">Sign in</h1>
+        <p className="mb-6 ui-body text-slate-500">s3-manager admin portal</p>
+        <div className="mb-6 flex rounded-full bg-slate-100 p-1 ui-body font-semibold text-slate-600">
           <button type="button" className={tabClasses("password")} onClick={() => handleModeChange("password")}>
             Email & password
           </button>
@@ -181,7 +181,7 @@ export default function LoginPage() {
         {mode === "password" ? (
           <form onSubmit={handlePasswordLogin} className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-slate-700">Email</label>
+              <label className="ui-body font-medium text-slate-700">Email</label>
               <input
                 type="email"
                 value={email}
@@ -192,7 +192,7 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700">Password</label>
+              <label className="ui-body font-medium text-slate-700">Password</label>
               <input
                 type="password"
                 value={password}
@@ -202,7 +202,7 @@ export default function LoginPage() {
                 required
               />
             </div>
-            {error && <p className="text-sm text-rose-600">{error}</p>}
+            {error && <p className="ui-body text-rose-600">{error}</p>}
             <button
               type="submit"
               disabled={loading}
@@ -214,7 +214,7 @@ export default function LoginPage() {
         ) : (
           <form onSubmit={handleKeyLogin} className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-slate-700">Access key</label>
+              <label className="ui-body font-medium text-slate-700">Access key</label>
               <input
                 type="text"
                 value={accessKey}
@@ -225,7 +225,7 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700">Secret key</label>
+              <label className="ui-body font-medium text-slate-700">Secret key</label>
               <input
                 type="password"
                 value={secretKey}
@@ -239,12 +239,12 @@ export default function LoginPage() {
               <div className="space-y-3">
                 {allowEndpointList && (
                   <div>
-                    <label className="text-sm font-medium text-slate-700">Endpoint</label>
+                    <label className="ui-body font-medium text-slate-700">Endpoint</label>
                     <select
                       value={selectedEndpoint}
                       onChange={(e) => setSelectedEndpoint(e.target.value)}
                       disabled={endpointLoading}
-                      className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
+                      className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
                     >
                       {endpointLoading && <option value="">Loading endpoints...</option>}
                       {!endpointLoading && <option value="">Default endpoint</option>}
@@ -256,29 +256,29 @@ export default function LoginPage() {
                         ))}
                     </select>
                     {!endpointLoading && endpointOptions.length === 0 && (
-                      <p className="mt-1 text-xs text-slate-500">No endpoint configured. Default will be used.</p>
+                      <p className="mt-1 ui-caption text-slate-500">No endpoint configured. Default will be used.</p>
                     )}
                   </div>
                 )}
                 {allowCustomEndpoint && (
                   <div>
-                    <label className="text-sm font-medium text-slate-700">Custom endpoint URL (optional)</label>
+                    <label className="ui-body font-medium text-slate-700">Custom endpoint URL (optional)</label>
                     <input
                       type="url"
                       value={customEndpoint}
                       onChange={(e) => setCustomEndpoint(e.target.value)}
-                      className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                       placeholder="https://s3.example.com"
                     />
                     {allowEndpointList && (
-                      <p className="mt-1 text-xs text-slate-500">Custom endpoint overrides the selection above.</p>
+                      <p className="mt-1 ui-caption text-slate-500">Custom endpoint overrides the selection above.</p>
                     )}
                   </div>
                 )}
-                {endpointError && <p className="text-xs text-rose-600">{endpointError}</p>}
+                {endpointError && <p className="ui-caption text-rose-600">{endpointError}</p>}
               </div>
             )}
-            {error && <p className="text-sm text-rose-600">{error}</p>}
+            {error && <p className="ui-body text-rose-600">{error}</p>}
             <button
               type="submit"
               disabled={loading}
@@ -291,7 +291,7 @@ export default function LoginPage() {
 
         {oidcProviders.length > 0 && (
           <div className="mt-6 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <div className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-400">
               <div className="h-px flex-1 bg-slate-200" />
               <span>Ou</span>
               <div className="h-px flex-1 bg-slate-200" />
@@ -302,12 +302,12 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => startOidcFlow(provider.id)}
                 disabled={Boolean(oidcLoading)}
-                className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 ui-body font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:opacity-50"
               >
                 {oidcLoading === provider.id ? "Redirection..." : `Continuer avec ${provider.display_name}`}
               </button>
             ))}
-            {oidcError && <p className="text-sm text-rose-600">{oidcError}</p>}
+            {oidcError && <p className="ui-body text-rose-600">{oidcError}</p>}
           </div>
         )}
       </div>

@@ -97,15 +97,15 @@ export default function UsageBreakdown({
   return (
     <section className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <header className="space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Breakdown</p>
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-        {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>}
+        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Breakdown</p>
+        <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+        {subtitle && <p className="ui-caption text-slate-500 dark:text-slate-400">{subtitle}</p>}
       </header>
 
       {loading && <SkeletonPie />}
 
       {!loading && !hasData && (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center ui-caption text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
           {emptyMessage}
         </div>
       )}
@@ -159,11 +159,11 @@ export default function UsageBreakdown({
                 ).nodes}
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Total</p>
-                <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Total</p>
+                <p className="ui-subtitle font-semibold text-slate-900 dark:text-white">
                   {formatValue(total)}{" "}
                   {totalSuffix && (
-                    <span className="text-[10px] font-semibold uppercase text-slate-400">{totalSuffix}</span>
+                    <span className="ui-caption font-semibold uppercase text-slate-400">{totalSuffix}</span>
                   )}
                 </p>
               </div>
@@ -177,20 +177,20 @@ export default function UsageBreakdown({
               {visible.map((item, index) => (
                 <div
                   key={item.id}
-                  className="flex min-h-0 items-center justify-between rounded-xl border border-slate-100 px-2.5 py-1.5 text-[11px] dark:border-slate-800"
+                  className="flex min-h-0 items-center justify-between rounded-xl border border-slate-100 px-2.5 py-1.5 ui-caption dark:border-slate-800"
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: palette[index % palette.length] }} />
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-slate-900 dark:text-white">{item.label}</p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
                         {total > 0 ? ((valueFor(item) / total) * 100).toFixed(1) : 0}%
                       </p>
                     </div>
                   </div>
                   <div className="min-w-[92px] text-right">
                     <p className="truncate font-semibold text-slate-900 dark:text-slate-100">{formatValue(valueFor(item))}</p>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
                       {metric === "objects"
                         ? formatBytes(item.usedBytes ?? 0)
                         : `${formatCompactNumber(item.objectCount ?? 0)} objects`}

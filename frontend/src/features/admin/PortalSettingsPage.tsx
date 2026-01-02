@@ -264,19 +264,19 @@ export default function PortalSettingsPage() {
       />
       <form className="space-y-4" onSubmit={handleSave}>
         {error && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
             {error}
           </div>
         )}
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Show portal key</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Show portal key</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Allows displaying and retrieving the active portal key in the user dashboard.
               </p>
             </div>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={Boolean(settings?.portal.allow_portal_key)}
@@ -291,12 +291,12 @@ export default function PortalSettingsPage() {
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Bucket creation by portal_user</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Bucket creation by portal_user</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Allows a portal_user to create a bucket from the portal (uses the account admin keys).
               </p>
             </div>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={Boolean(settings?.portal.allow_portal_user_bucket_create)}
@@ -310,18 +310,18 @@ export default function PortalSettingsPage() {
         </div>
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div>
-            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Portal bucket defaults</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Portal bucket defaults</p>
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
               Defaults applied when a bucket is created from the portal.
             </p>
           </div>
           <div className="mt-4 space-y-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Versioning</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Enable bucket versioning by default.</p>
+                <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Versioning</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">Enable bucket versioning by default.</p>
               </div>
-              <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
                 <input
                   type="checkbox"
                   checked={Boolean(settings?.portal.bucket_defaults.versioning)}
@@ -334,12 +334,12 @@ export default function PortalSettingsPage() {
             </div>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Lifecycle baseline</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Lifecycle baseline</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
                   Remove obsolete delete markers and non-current versions after 90 days.
                 </p>
               </div>
-              <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
                 <input
                   type="checkbox"
                   checked={Boolean(settings?.portal.bucket_defaults.enable_lifecycle)}
@@ -352,12 +352,12 @@ export default function PortalSettingsPage() {
             </div>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Portal CORS</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Portal CORS</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
                   Apply a CORS rule to allow the portal UI to access the bucket.
                 </p>
               </div>
-              <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
                 <input
                   type="checkbox"
                   checked={Boolean(settings?.portal.bucket_defaults.enable_cors)}
@@ -369,14 +369,14 @@ export default function PortalSettingsPage() {
               </label>
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">CORS allowed origins</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">CORS allowed origins</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
                 One URL per line. These origins are added to the portal bucket CORS rule.
               </p>
               <textarea
                 value={corsOriginsText}
                 onChange={(e) => handleBucketCorsOrigins(e.target.value)}
-                className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 rows={4}
                 placeholder="https://s3-manager.example.com"
                 disabled={!settings || !settings.portal.bucket_defaults.enable_cors}
@@ -387,12 +387,12 @@ export default function PortalSettingsPage() {
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Portal manager IAM group policy</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Portal manager IAM group policy</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Actions granted to the portal-manager IAM group.
               </p>
             </div>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={managerPolicyAdvanced}
@@ -409,17 +409,17 @@ export default function PortalSettingsPage() {
                 <textarea
                   value={managerPolicyText}
                   onChange={(e) => handleManagerPolicyText(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                   rows={8}
                   disabled={!settings}
                 />
-                {managerPolicyError && <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">{managerPolicyError}</p>}
+                {managerPolicyError && <p className="mt-1 ui-caption text-rose-600 dark:text-rose-300">{managerPolicyError}</p>}
               </>
             ) : (
               <textarea
                 value={(settings?.portal.iam_group_manager_policy.actions || []).join("\n")}
                 onChange={(e) => handleManagerActionsChange(e.target.value)}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 rows={6}
                 placeholder="iam:*"
                 disabled={!settings}
@@ -430,12 +430,12 @@ export default function PortalSettingsPage() {
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Portal user IAM group policy</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Portal user IAM group policy</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Actions granted to the portal-user IAM group.
               </p>
             </div>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={userPolicyAdvanced}
@@ -452,17 +452,17 @@ export default function PortalSettingsPage() {
                 <textarea
                   value={userPolicyText}
                   onChange={(e) => handleUserPolicyText(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                   rows={8}
                   disabled={!settings}
                 />
-                {userPolicyError && <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">{userPolicyError}</p>}
+                {userPolicyError && <p className="mt-1 ui-caption text-rose-600 dark:text-rose-300">{userPolicyError}</p>}
               </>
             ) : (
               <textarea
                 value={(settings?.portal.iam_group_user_policy.actions || []).join("\n")}
                 onChange={(e) => handleUserActionsChange(e.target.value)}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 rows={4}
                 placeholder="s3:ListAllMyBuckets"
                 disabled={!settings}
@@ -473,12 +473,12 @@ export default function PortalSettingsPage() {
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Bucket access policy</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Bucket access policy</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Actions added when granting a portal user access to a bucket.
               </p>
             </div>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
               <input
                 type="checkbox"
                 checked={bucketPolicyAdvanced}
@@ -495,20 +495,20 @@ export default function PortalSettingsPage() {
                 <textarea
                   value={bucketPolicyText}
                   onChange={(e) => handleBucketPolicyText(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                   rows={9}
                   disabled={!settings}
                 />
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                   The PortalUserBuckets statement receives bucket resources automatically.
                 </p>
-                {bucketPolicyError && <p className="mt-1 text-xs text-rose-600 dark:text-rose-300">{bucketPolicyError}</p>}
+                {bucketPolicyError && <p className="mt-1 ui-caption text-rose-600 dark:text-rose-300">{bucketPolicyError}</p>}
               </>
             ) : (
               <textarea
                 value={(settings?.portal.bucket_access_policy.actions || []).join("\n")}
                 onChange={(e) => handleBucketActionsChange(e.target.value)}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 rows={8}
                 placeholder="s3:GetObject"
                 disabled={!settings}
@@ -520,11 +520,11 @@ export default function PortalSettingsPage() {
           <button
             type="submit"
             disabled={!settings || saving || hasPolicyError}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
           >
             {saving ? "Saving..." : "Save"}
           </button>
-          {savedMessage && <span className="text-xs text-emerald-600 dark:text-emerald-300">{savedMessage}</span>}
+          {savedMessage && <span className="ui-caption text-emerald-600 dark:text-emerald-300">{savedMessage}</span>}
         </div>
       </form>
     </div>

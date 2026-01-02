@@ -70,11 +70,11 @@ export default function OidcCallbackPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900">
       <div className="w-full max-w-md rounded-xl bg-white p-8 text-center shadow-xl">
-        <h1 className="mb-2 text-2xl font-semibold text-slate-800">Signing you in</h1>
-        {processing && <p className="text-sm text-slate-500">Please wait…</p>}
+        <h1 className="mb-2 ui-title font-semibold text-slate-800">Signing you in</h1>
+        {processing && <p className="ui-body text-slate-500">Please wait…</p>}
         {error && (
           <>
-            <p className="text-sm text-rose-600">{error}</p>
+            <p className="ui-body text-rose-600">{error}</p>
             <button
               type="button"
               className="mt-6 w-full rounded-md bg-primary px-4 py-2 text-white shadow-sm transition hover:bg-sky-500"

@@ -74,13 +74,13 @@ export default function ManagerDashboard() {
       />
 
       {requiresS3AccountSelection && !selected && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
           Select an account to view metrics.
         </div>
       )}
 
       {isS3User && (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
           Autonomous S3 users have limited insights. IAM widgets and traffic analytics are disabled for this profile.
         </div>
       )}

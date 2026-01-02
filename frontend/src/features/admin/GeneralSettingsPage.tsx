@@ -67,17 +67,17 @@ export default function GeneralSettingsPage() {
       />
       <form className="space-y-4" onSubmit={handleSave}>
         {error && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
             {error}
           </div>
         )}
         {savedMessage && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
             {savedMessage}
           </div>
         )}
         {!settings && !error && (
-          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
             Loading settings...
           </div>
         )}
@@ -86,12 +86,12 @@ export default function GeneralSettingsPage() {
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Manager feature</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Manager feature</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Enables the /manager environment for account administrators.
                   </p>
                 </div>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
                   <input
                     type="checkbox"
                     checked={Boolean(settings.general.manager_enabled)}
@@ -105,12 +105,12 @@ export default function GeneralSettingsPage() {
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Browser feature</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Browser feature</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Enables the /browser environment for object navigation.
                   </p>
                 </div>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
                   <input
                     type="checkbox"
                     checked={Boolean(settings.general.browser_enabled)}
@@ -124,12 +124,12 @@ export default function GeneralSettingsPage() {
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Portal feature</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Portal feature</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Enables the /portal environment for end users.
                   </p>
                 </div>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
                   <input
                     type="checkbox"
                     checked={Boolean(settings.general.portal_enabled)}
@@ -143,12 +143,12 @@ export default function GeneralSettingsPage() {
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Access-key endpoint list</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access-key endpoint list</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Allow the access-key login screen to display the configured endpoints.
                   </p>
                 </div>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
                   <input
                     type="checkbox"
                     checked={Boolean(settings.general.allow_login_endpoint_list)}
@@ -162,12 +162,12 @@ export default function GeneralSettingsPage() {
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Custom login endpoint</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Custom login endpoint</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Allow access-key users to enter a custom endpoint URL on the login screen.
                   </p>
                 </div>
-                <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
                   <input
                     type="checkbox"
                     checked={Boolean(settings.general.allow_login_custom_endpoint)}
@@ -184,7 +184,7 @@ export default function GeneralSettingsPage() {
           <button
             type="submit"
             disabled={!settings || saving}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+            className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
           >
             {saving ? "Saving..." : "Save changes"}
           </button>

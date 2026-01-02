@@ -350,13 +350,13 @@ export default function S3UsersPage() {
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Users</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Users</p>
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
               {totalUsers} entr{totalUsers === 1 ? "y" : "ies"} · search matches all records
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Filter
             </span>
             <input
@@ -364,7 +364,7 @@ export default function S3UsersPage() {
               value={filter}
               onChange={(e) => handleFilterChange(e.target.value)}
               placeholder="Search by name, UID, or email"
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64"
             />
           </div>
         </div>
@@ -373,7 +373,7 @@ export default function S3UsersPage() {
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
                 {["Name", "UID", "Storage", "Email", "UI Users", "Actions"].map((label) => (
-                  <th key={label} className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <th key={label} className="px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     {label}
                   </th>
                 ))}
@@ -382,7 +382,7 @@ export default function S3UsersPage() {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={6} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
                     Loading users...
                   </td>
                 </tr>
@@ -400,25 +400,25 @@ export default function S3UsersPage() {
                   const deleteBusy = deleteBusyId === user.id;
                   return (
                     <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                      <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">{user.name}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{user.rgw_user_uid}</td>
-                      <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">
+                      <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{user.name}</td>
+                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{user.rgw_user_uid}</td>
+                      <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
                         <span title={user.storage_endpoint_url || undefined}>
                           {user.storage_endpoint_name || "—"}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{user.email ?? "-"}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{user.email ?? "-"}</td>
+                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                         {user.user_ids && user.user_ids.length > 0 ? (
                           <div className="flex flex-wrap gap-2">
                             {user.user_ids.map((id) => (
-                              <span key={id} className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                              <span key={id} className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                                 {portalUsers.find((u) => u.id === id)?.email ?? `User #${id}`}
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-400">None</span>
+                          <span className="ui-caption text-slate-400">None</span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -460,33 +460,33 @@ export default function S3UsersPage() {
       {showCreateModal && (
         <Modal title="Create user" onClose={() => setShowCreateModal(false)}>
           {createError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {createError}
             </div>
           )}
           <form onSubmit={submitCreate} className="space-y-3">
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Display name *</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Display name *</label>
               <input
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={createForm.name}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
                 required
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">UID (optional)</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">UID (optional)</label>
               <input
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={createForm.uid}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, uid: e.target.value }))}
                 placeholder="user-123"
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
               <select
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={createForm.storage_endpoint_id}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, storage_endpoint_id: e.target.value }))}
                 disabled={loadingEndpoints || cephEndpoints.length === 0}
@@ -503,10 +503,10 @@ export default function S3UsersPage() {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Email</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Email</label>
               <input
                 type="email"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={createForm.email}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))}
                 placeholder="user@example.com"
@@ -516,14 +516,14 @@ export default function S3UsersPage() {
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={creating}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
               >
                 {creating ? "Creating..." : "Create user"}
               </button>
@@ -534,28 +534,28 @@ export default function S3UsersPage() {
 
       {showImportModal && (
         <Modal title="Import users" onClose={() => setShowImportModal(false)}>
-          <p className="mb-3 text-sm text-slate-500">Enter RGW user IDs, one per line. The platform will fetch or generate keys.</p>
+          <p className="mb-3 ui-body text-slate-500">Enter RGW user IDs, one per line. The platform will fetch or generate keys.</p>
           {importError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {importError}
             </div>
           )}
           {importMessage && (
-            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200">
+            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200">
               {importMessage}
             </div>
           )}
           <textarea
-            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             rows={6}
             placeholder="user-alpha"
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
           />
           <div className="mt-3 flex flex-col gap-1">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
+            <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
             <select
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               value={importEndpointId}
               onChange={(e) => setImportEndpointId(e.target.value)}
               disabled={loadingEndpoints || cephEndpoints.length === 0}
@@ -575,7 +575,7 @@ export default function S3UsersPage() {
             <button
               type="button"
               onClick={() => setShowImportModal(false)}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+              className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -583,7 +583,7 @@ export default function S3UsersPage() {
               type="button"
               disabled={importBusy || !importText.trim() || !importEndpointId}
               onClick={submitImport}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+              className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
             >
               {importBusy ? "Importing..." : "Import"}
             </button>
@@ -594,32 +594,32 @@ export default function S3UsersPage() {
       {editingUser && (
         <Modal title={`Edit ${editingUser.name}`} onClose={() => setEditingUser(null)}>
           {editError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {editError}
             </div>
           )}
           <form onSubmit={submitEdit} className="space-y-4">
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Display name</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Display name</label>
               <input
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={editForm.name}
                 onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Email</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Email</label>
               <input
                 type="email"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={editForm.email}
                 onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
               <select
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={editForm.storage_endpoint_id}
                 onChange={(e) => setEditForm((prev) => ({ ...prev, storage_endpoint_id: e.target.value }))}
                 disabled={loadingEndpoints || cephEndpoints.length === 0}
@@ -637,15 +637,15 @@ export default function S3UsersPage() {
             </div>
             <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{editForm.user_ids.length} selected</span>
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
+                <span className="ui-caption text-slate-500 dark:text-slate-400">{editForm.user_ids.length} selected</span>
               </div>
               {editForm.user_ids.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">No linked users yet. Add one below.</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">No linked users yet. Add one below.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {editForm.user_ids.map((id) => (
-                    <span key={id} className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                    <span key={id} className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100">
                       {portalUserOptions.find((opt) => opt.id === id)?.label ?? `User #${id}`}
                       <button
                         type="button"
@@ -661,24 +661,24 @@ export default function S3UsersPage() {
               <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Add a UI user</label>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">(filter by email)</span>
+                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add a UI user</label>
+                    <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
                   </div>
                   <input
                     type="text"
                     value={portalUserSearch}
                     onChange={(e) => setPortalUserSearch(e.target.value)}
                     placeholder="Search..."
-                    className="w-44 rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
                   {availablePortalUsers.length === 0 && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400">No results.</p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
                   )}
                   {visiblePortalUsers.map((option) => (
                     <div key={option.id} className="flex items-center justify-between rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60">
-                      <span className="text-sm text-slate-700 dark:text-slate-200">{option.label}</span>
+                      <span className="ui-body text-slate-700 dark:text-slate-200">{option.label}</span>
                       <button
                         type="button"
                         onClick={() =>
@@ -694,7 +694,7 @@ export default function S3UsersPage() {
                     </div>
                   ))}
                   {availablePortalUsers.length > MAX_LINK_OPTIONS && (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
                       Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
                     </p>
                   )}
@@ -705,14 +705,14 @@ export default function S3UsersPage() {
               <button
                 type="button"
                 onClick={() => setEditingUser(null)}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={editBusy}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
               >
                 {editBusy ? "Saving..." : "Save changes"}
               </button>
@@ -723,11 +723,11 @@ export default function S3UsersPage() {
 
       {userToDelete && (
         <Modal title={`Delete ${userToDelete.name}`} onClose={closeDeleteModal}>
-          <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+          <div className="space-y-3 ui-body text-slate-600 dark:text-slate-300">
             <p>
               This removes the standalone RGW user from the UI. You can also delete the underlying RGW user to revoke all access keys and data associated with it.
             </p>
-            <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+            <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-body dark:border-slate-700">
               <input
                 type="checkbox"
                 className="mt-1"
@@ -737,11 +737,11 @@ export default function S3UsersPage() {
               />
               <span>
                 Also delete RGW user{" "}
-                <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">{userToDelete.rgw_user_uid}</code>
+                <code className="rounded bg-slate-100 px-1 py-0.5 ui-caption dark:bg-slate-800">{userToDelete.rgw_user_uid}</code>
               </span>
             </label>
             {deleteModalError && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
                 {deleteModalError}
               </div>
             )}
@@ -751,7 +751,7 @@ export default function S3UsersPage() {
               type="button"
               onClick={closeDeleteModal}
               disabled={deleteModalBusy}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+              className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -759,7 +759,7 @@ export default function S3UsersPage() {
               type="button"
               onClick={confirmDeleteUser}
               disabled={deleteModalBusy}
-              className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+              className="rounded-md bg-rose-600 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
             >
               {deleteModalBusy ? "Deleting..." : "Delete user"}
             </button>
@@ -770,15 +770,15 @@ export default function S3UsersPage() {
       {userToUnlink && (
         <Modal title={`Unlink ${userToUnlink.name}`} onClose={closeUserUnlinkModal}>
           {unlinkError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {unlinkError}
             </div>
           )}
-          <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+          <div className="space-y-3 ui-body text-slate-600 dark:text-slate-300">
             <p>
               This removes the UI-managed user entry and deletes the access key used by this console. The underlying RGW user and any of its data are left untouched.
             </p>
-            <ul className="list-disc space-y-1 pl-5 text-xs text-slate-500 dark:text-slate-400">
+            <ul className="list-disc space-y-1 pl-5 ui-caption text-slate-500 dark:text-slate-400">
               <li>Linked UI users will lose access to this standalone user.</li>
               <li>The RGW user credentials outside this interface remain valid.</li>
             </ul>
@@ -787,7 +787,7 @@ export default function S3UsersPage() {
             <button
               type="button"
               onClick={closeUserUnlinkModal}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+              className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -795,7 +795,7 @@ export default function S3UsersPage() {
               type="button"
               onClick={confirmUnlinkUser}
               disabled={unlinkModalBusy}
-              className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:opacity-60"
+              className="rounded-md bg-amber-500 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:opacity-60"
             >
               {unlinkModalBusy ? "Unlinking..." : "Unlink user"}
             </button>

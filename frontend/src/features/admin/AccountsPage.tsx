@@ -544,43 +544,43 @@ export default function S3AccountsPage() {
 
       {isSuperAdmin && showCreateModal && (
         <Modal title="Create an account" onClose={() => setShowCreateModal(false)}>
-          <p className="mb-3 text-sm text-slate-500">
+          <p className="mb-3 ui-body text-slate-500">
             Super-admin only. Provision an RGW account (server-side generated <code>account_id</code>) with optional quotas.
           </p>
           {actionError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {actionError}
             </div>
           )}
           {actionMessage && (
-            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200">
+            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200">
               {actionMessage}
             </div>
           )}
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">S3Account name *</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">S3Account name *</label>
               <input
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 required
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Email contact</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Email contact</label>
               <input
                 type="email"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                 placeholder="contact@example.com"
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Storage endpoint (Ceph) *</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Storage endpoint (Ceph) *</label>
               <select
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={form.storage_endpoint_id}
                 onChange={(e) => setForm((f) => ({ ...f, storage_endpoint_id: e.target.value }))}
                 required
@@ -597,22 +597,22 @@ export default function S3AccountsPage() {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Capacity quota (GB)</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Capacity quota (GB)</label>
               <input
                 type="number"
                 min="0"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={form.quota_max_size_gb}
                 onChange={(e) => setForm((f) => ({ ...f, quota_max_size_gb: e.target.value }))}
                 placeholder="e.g. 500"
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Object quota (count)</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Object quota (count)</label>
               <input
                 type="number"
                 min="0"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={form.quota_max_objects}
                 onChange={(e) => setForm((f) => ({ ...f, quota_max_objects: e.target.value }))}
                 placeholder="e.g. 1000000"
@@ -622,14 +622,14 @@ export default function S3AccountsPage() {
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={creating}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
               >
                 {creating ? "Creating..." : "Create account"}
               </button>
@@ -640,22 +640,22 @@ export default function S3AccountsPage() {
 
       {isSuperAdmin && accountToUnlink && (
         <Modal title={`Unlink ${accountToUnlink.name}`} onClose={closeUnlinkModal}>
-          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+          <p className="mb-3 ui-body text-slate-500 dark:text-slate-400">
             This removes the account from the admin interface and detaches assigned UI users while keeping the RGW tenant and its data.
             The root user{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">
+            <code className="rounded bg-slate-100 px-1 py-0.5 ui-caption dark:bg-slate-800">
               {(accountToUnlink.rgw_account_id ?? accountToUnlink.id) + "-admin"}
             </code>{" "}
             will be deleted to revoke its access keys.
           </p>
           {actionError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {actionError}
             </div>
           )}
-          <div className="mb-4 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+          <div className="mb-4 rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
             RGW tenant preserved:{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">
+            <code className="rounded bg-slate-100 px-1 py-0.5 ui-caption dark:bg-slate-800">
               {accountToUnlink.rgw_account_id ?? accountToUnlink.id}
             </code>
           </div>
@@ -663,7 +663,7 @@ export default function S3AccountsPage() {
             <button
               type="button"
               onClick={closeUnlinkModal}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+              className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -671,7 +671,7 @@ export default function S3AccountsPage() {
               type="button"
               onClick={confirmUnlinkS3Account}
               disabled={accountUnlinkModalBusy}
-              className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:opacity-60"
+              className="rounded-md bg-amber-500 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:opacity-60"
             >
               {accountUnlinkModalBusy ? "Unlinking..." : "Unlink account"}
             </button>
@@ -682,24 +682,24 @@ export default function S3AccountsPage() {
 
       {isSuperAdmin && accountToDelete && (
         <Modal title={`Delete ${accountToDelete.name}`} onClose={closeDeleteModal}>
-          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+          <p className="mb-3 ui-body text-slate-500 dark:text-slate-400">
             Removing this account deletes the UI entry. Optionally delete the backing RGW tenant if it no longer contains resources.
           </p>
           {actionError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {actionError}
             </div>
           )}
           {deleteModalHasResources && (
-            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
+            <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
               This RGW tenant still has attached resources. Remove buckets and RGW users (excluding the admin user) before deleting it from RGW.
-              <div className="mt-1 text-xs font-semibold">
+              <div className="mt-1 ui-caption font-semibold">
                 Buckets: {accountToDelete.bucket_count ?? "unknown"} · RGW users (excl. admin):{" "}
                 {accountToDelete.rgw_user_count ?? "unknown"} · RGW topics:{" "}
                 {accountToDelete.rgw_topic_count ?? "unknown"}
               </div>
               {accountToDelete.rgw_user_uids && accountToDelete.rgw_user_uids.length > 0 && (
-                <div className="mt-2 rounded-lg border border-amber-200/40 bg-white/60 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/40 dark:text-amber-50">
+                <div className="mt-2 rounded-lg border border-amber-200/40 bg-white/60 px-3 py-2 ui-caption text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/40 dark:text-amber-50">
                   <p className="font-semibold">RGW users to remove:</p>
                   <ul className="mt-1 max-h-32 space-y-1 overflow-y-auto">
                     {accountToDelete.rgw_user_uids.map((uid) => (
@@ -711,7 +711,7 @@ export default function S3AccountsPage() {
                 </div>
               )}
               {accountToDelete.rgw_topics && accountToDelete.rgw_topics.length > 0 && (
-                <div className="mt-2 rounded-lg border border-amber-200/40 bg-white/60 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/40 dark:text-amber-50">
+                <div className="mt-2 rounded-lg border border-amber-200/40 bg-white/60 px-3 py-2 ui-caption text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/40 dark:text-amber-50">
                   <p className="font-semibold">Notification topics to remove:</p>
                   <ul className="mt-1 max-h-32 space-y-1 overflow-y-auto">
                     {accountToDelete.rgw_topics.map((topic) => (
@@ -725,7 +725,7 @@ export default function S3AccountsPage() {
             </div>
           )}
           <label
-            className={`mb-4 flex items-start gap-3 rounded-lg border px-3 py-2 text-sm ${
+            className={`mb-4 flex items-start gap-3 rounded-lg border px-3 py-2 ui-body ${
               deleteModalHasResources
                 ? "border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
                 : "border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-100"
@@ -740,7 +740,7 @@ export default function S3AccountsPage() {
             />
             <span>
               Also delete RGW tenant{" "}
-              <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">
+              <code className="rounded bg-slate-100 px-1 py-0.5 ui-caption dark:bg-slate-800">
                 {accountToDelete.rgw_account_id ?? accountToDelete.id}
               </code>
             </span>
@@ -749,7 +749,7 @@ export default function S3AccountsPage() {
             <button
               type="button"
               onClick={closeDeleteModal}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+              className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -757,7 +757,7 @@ export default function S3AccountsPage() {
               type="button"
               onClick={confirmDeleteS3Account}
               disabled={deleteModalBusy}
-              className="rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
+              className="rounded-md bg-rose-600 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-60"
             >
               {deleteModalBusy ? "Deleting..." : "Delete account"}
             </button>
@@ -775,7 +775,7 @@ export default function S3AccountsPage() {
                 setImportError(null);
                 setImportMessage(null);
               }}
-              className={`rounded-md border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+              className={`rounded-md border px-3 py-1 ui-caption font-semibold uppercase tracking-wide ${
                 importMode === "tenant"
                   ? "border-primary bg-primary/10 text-primary-700 dark:border-primary/60 dark:text-primary-100"
                   : "border-slate-200 text-slate-600 hover:border-primary hover:text-primary-700 dark:border-slate-700 dark:text-slate-300"
@@ -790,7 +790,7 @@ export default function S3AccountsPage() {
                 setImportError(null);
                 setImportMessage(null);
               }}
-              className={`rounded-md border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+              className={`rounded-md border px-3 py-1 ui-caption font-semibold uppercase tracking-wide ${
                 importMode === "keys"
                   ? "border-primary bg-primary/10 text-primary-700 dark:border-primary/60 dark:text-primary-100"
                   : "border-slate-200 text-slate-600 hover:border-primary hover:text-primary-700 dark:border-slate-700 dark:text-slate-300"
@@ -799,34 +799,34 @@ export default function S3AccountsPage() {
               Access keys
             </button>
           </div>
-          <p className="mb-3 text-sm text-slate-500">
+          <p className="mb-3 ui-body text-slate-500">
             {importMode === "tenant"
               ? "Enter RGW tenant IDs (RGWXXXXXXXXXXXXXXX) one per line. The platform will ensure a root user exists and retrieve keys."
               : "Use this mode when the Ceph admin API is unavailable but you already have the account credentials. Tenant ID remains optional."}
           </p>
           {importError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {importError}
             </div>
           )}
           {importMessage && (
-            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200">
+            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200">
               {importMessage}
             </div>
           )}
           {importMode === "tenant" ? (
             <>
               <textarea
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 rows={6}
                 placeholder="RGW00000000000000001"
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
               />
-              <label className="mt-3 flex flex-col gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+              <label className="mt-3 flex flex-col gap-1 ui-body font-medium text-slate-700 dark:text-slate-200">
                 Ceph endpoint
                 <select
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   value={importTenantEndpointId}
                   onChange={(e) => setImportTenantEndpointId(e.target.value)}
                   disabled={cephEndpoints.length === 0}
@@ -846,9 +846,9 @@ export default function S3AccountsPage() {
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Account name *</label>
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Account name *</label>
                 <input
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   value={importKeysForm.name}
                   onChange={(e) => setImportKeysForm((prev) => ({ ...prev, name: e.target.value }))}
                   placeholder="Customer account name"
@@ -856,47 +856,47 @@ export default function S3AccountsPage() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">RGW tenant ID (optional)</label>
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">RGW tenant ID (optional)</label>
                 <input
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   value={importKeysForm.rgw_account_id}
                   onChange={(e) => setImportKeysForm((prev) => ({ ...prev, rgw_account_id: e.target.value }))}
                   placeholder="RGW00000000000000001"
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Contact email</label>
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Contact email</label>
                 <input
                   type="email"
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   value={importKeysForm.email}
                   onChange={(e) => setImportKeysForm((prev) => ({ ...prev, email: e.target.value }))}
                   placeholder="owner@example.com"
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Access key *</label>
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Access key *</label>
                 <input
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   value={importKeysForm.access_key}
                   onChange={(e) => setImportKeysForm((prev) => ({ ...prev, access_key: e.target.value }))}
                   placeholder="AKIA..."
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Secret key *</label>
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Secret key *</label>
                 <input
                   type="password"
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   value={importKeysForm.secret_key}
                   onChange={(e) => setImportKeysForm((prev) => ({ ...prev, secret_key: e.target.value }))}
                   placeholder="••••••••"
                 />
               </div>
               <div className="flex flex-col gap-1 md:col-span-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Storage endpoint</label>
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Storage endpoint</label>
                 <select
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   value={importKeysEndpointId}
                   onChange={(e) => setImportKeysEndpointId(e.target.value)}
                   disabled={storageEndpoints.length === 0}
@@ -918,7 +918,7 @@ export default function S3AccountsPage() {
             <button
               type="button"
               onClick={() => setShowImportModal(false)}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+              className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -1002,7 +1002,7 @@ export default function S3AccountsPage() {
                   setImportBusy(false);
                 }
               }}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+              className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
             >
               {importBusy ? "Importing..." : "Import"}
             </button>
@@ -1013,11 +1013,11 @@ export default function S3AccountsPage() {
       {isSuperAdmin && editingS3Account && (
         <Modal title={`Edit ${editingS3Account.name}`} onClose={() => setEditingS3Account(null)}>
           {actionError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {actionError}
             </div>
           )}
-          <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
+          <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
             Storage endpoint:{" "}
             <span title={editingS3Account.storage_endpoint_url || undefined}>
               {editingS3Account.storage_endpoint_name ?? "—"}
@@ -1043,22 +1043,22 @@ export default function S3AccountsPage() {
             <form onSubmit={submitEditS3Account} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Max quota (GB)</label>
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Max quota (GB)</label>
                   <input
                     type="number"
                     min={0}
-                    className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     value={editForm.quota_max_size_gb}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
                     placeholder="Leave empty to disable"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Object quota</label>
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Object quota</label>
                   <input
                     type="number"
                     min={0}
-                    className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     value={editForm.quota_max_objects}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
                     placeholder="Leave empty to disable"
@@ -1067,24 +1067,24 @@ export default function S3AccountsPage() {
               </div>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
+                  <span className="ui-caption text-slate-500 dark:text-slate-400">
                     {assignedUsers.length} selected{loadingUsers ? " · loading..." : ""}
                   </span>
                 </div>
                 {assignedUsers.length === 0 && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">No linked users yet. Add one below.</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">No linked users yet. Add one below.</p>
                 )}
                 {assignedUsers.length > 0 && (
                   <div className="flex flex-col gap-2">
                     {assignedUsers.map((u) => (
                       <div
                         key={u.id}
-                        className="flex flex-wrap items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                        className="flex flex-wrap items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                       >
                         {u.label}
                         <select
-                          className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                          className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                           value={u.role}
                           onChange={(e) =>
                             setEditForm((prev) => ({
@@ -1101,7 +1101,7 @@ export default function S3AccountsPage() {
                           <option value="portal_manager">Portal manager</option>
                           <option value="portal_none">No portal access</option>
                         </select>
-                        <label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                        <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
                           <input
                             type="checkbox"
                             checked={accountAdminFor(u.id)}
@@ -1136,27 +1136,27 @@ export default function S3AccountsPage() {
                 <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Add a UI user</label>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">(filter by email)</span>
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add a UI user</label>
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
                     </div>
                     <input
                       type="text"
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
                       placeholder="Search..."
-                      className="w-44 rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     />
                   </div>
                   <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
                     {availableUsers.length === 0 && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400">No results.</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
                     )}
                     {visibleAvailableUsers.map((u) => (
                       <div key={u.id} className="flex items-center justify-between rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60">
-                        <span className="text-sm text-slate-700 dark:text-slate-200">{u.label}</span>
+                        <span className="ui-body text-slate-700 dark:text-slate-200">{u.label}</span>
                         <div className="flex items-center gap-2">
                           <select
-                            className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                            className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                             value={userRoleChoice[u.id] ?? "portal_none"}
                             onChange={(e) => {
                               const nextRole = e.target.value as AccountUserLink["account_role"];
@@ -1174,7 +1174,7 @@ export default function S3AccountsPage() {
                             <option value="portal_manager">Portal manager</option>
                             <option value="portal_none">No portal access</option>
                           </select>
-                          <label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                          <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
                             <input
                               type="checkbox"
                               checked={Boolean(userAdminChoice[u.id] ?? false)}
@@ -1213,7 +1213,7 @@ export default function S3AccountsPage() {
                       </div>
                     ))}
                     {availableUsers.length > MAX_LINK_OPTIONS && (
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
                         Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
                       </p>
                     )}
@@ -1224,13 +1224,13 @@ export default function S3AccountsPage() {
                 <button
                   type="button"
                   onClick={() => setEditingS3Account(null)}
-                  className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                  className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                  className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
                 >
                   Save
                 </button>
@@ -1245,27 +1245,27 @@ export default function S3AccountsPage() {
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">S3Accounts</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">RGW tenants, quotas, and root users.</p>
+                <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">S3Accounts</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">RGW tenants, quotas, and root users.</p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <span className="text-xs text-slate-500 dark:text-slate-400">
+                <span className="ui-caption text-slate-500 dark:text-slate-400">
                   {totalAccounts} account{totalAccounts === 1 ? "" : "s"}
                 </span>
                 <div className="flex items-center gap-2 sm:justify-end">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
+                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
                   <input
                     type="text"
                     value={filter}
                     onChange={(e) => handleFilterChange(e.target.value)}
                     placeholder="Search by name or RGW ID"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
                   />
                 </div>
               </div>
             </div>
             {error && !loading && (
-              <span className="rounded-md bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 dark:bg-rose-900/40 dark:text-rose-100">
+              <span className="rounded-md bg-rose-50 px-3 py-1 ui-caption font-semibold text-rose-700 dark:bg-rose-900/40 dark:text-rose-100">
                 {error}
               </span>
             )}
@@ -1279,14 +1279,14 @@ export default function S3AccountsPage() {
                 <th
                   key={col.label}
                   onClick={col.field ? () => toggleSort(col.field) : undefined}
-                  className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
+                  className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
                     col.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : col.align === "right" ? "text-right" : ""
                   }`}
                 >
                   <div className={`flex items-center ${col.align === "right" ? "justify-end" : "gap-1"}`}>
                     <span>{col.label}</span>
                     {col.field && sort.field === col.field && (
-                      <span className="text-[10px]">{sort.direction === "asc" ? "▲" : "▼"}</span>
+                      <span className="ui-caption">{sort.direction === "asc" ? "▲" : "▼"}</span>
                     )}
                   </div>
                 </th>
@@ -1296,21 +1296,21 @@ export default function S3AccountsPage() {
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {loading && (
                 <tr>
-                  <td colSpan={columns.length} className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={columns.length} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
                     Loading accounts...
                   </td>
                 </tr>
               )}
               {error && !loading && (
                 <tr>
-                  <td colSpan={columns.length} className="px-6 py-4 text-sm text-rose-600 dark:text-rose-200">
+                  <td colSpan={columns.length} className="px-6 py-4 ui-body text-rose-600 dark:text-rose-200">
                     {error}
                   </td>
                 </tr>
               )}
               {!loading && !error && accounts.length === 0 && (
                 <tr>
-                  <td colSpan={columns.length} className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={columns.length} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
                     No accounts yet.
                   </td>
                 </tr>
@@ -1324,7 +1324,7 @@ export default function S3AccountsPage() {
                   const accountUserLinks = resolveAccountUserLinks(account);
                   return (
                     <tr key={account.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
                     <div className="flex flex-wrap items-center gap-2">
                       {isSuperAdmin ? (
                         <button
@@ -1340,15 +1340,15 @@ export default function S3AccountsPage() {
                       {renderS3AccountTypeBadge(account)}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">
+                  <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
                     {account.rgw_account_id ?? account.id}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">
+                  <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
                     <span title={account.storage_endpoint_url || undefined}>
                       {account.storage_endpoint_name || "—"}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                     {accountUserLinks.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {accountUserLinks.map((link) => {
@@ -1363,16 +1363,16 @@ export default function S3AccountsPage() {
                           return (
                             <span
                               key={`${account.id}-${link.user_id}-${role}-${isAccountAdmin ? "admin" : "user"}`}
-                              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                             >
                               <span>{userLabelById.get(link.user_id) ?? `User #${link.user_id}`}</span>
                               {showPortalBadge && (
-                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
+                                <span className={`rounded-full px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide ${tone}`}>
                                   {roleLabel}
                                 </span>
                               )}
                               {isAccountAdmin && (
-                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                                   Admin
                                 </span>
                               )}
@@ -1381,7 +1381,7 @@ export default function S3AccountsPage() {
                         })}
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-500 dark:text-slate-400">None</span>
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">None</span>
                     )}
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -1406,7 +1406,7 @@ export default function S3AccountsPage() {
                         </button>
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-500 dark:text-slate-400">-</span>
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>
                     )}
                   </td>
                 </tr>

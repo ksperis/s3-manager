@@ -11,16 +11,16 @@ import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountC
 function AccountSelector() {
   const { accounts, selectedAccountId, setSelectedAccountId, selectedAccount, loading, error } = usePortalAccountContext();
   const selectClasses =
-    "appearance-none w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
+    "appearance-none w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
   const pillClasses =
-    "w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
+    "w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
 
   if (loading) {
     return <div className={pillClasses}>Chargement…</div>;
   }
 
   if (error) {
-    return <div className="text-sm font-semibold text-rose-600">{error}</div>;
+    return <div className="ui-body font-semibold text-rose-600">{error}</div>;
   }
 
   if (accounts.length <= 1) {
@@ -42,7 +42,7 @@ function AccountSelector() {
           </option>
         ))}
       </select>
-      <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[10px] text-slate-500 dark:text-slate-300">▼</div>
+      <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center ui-caption text-slate-500 dark:text-slate-300">▼</div>
     </div>
   );
 }
@@ -63,7 +63,7 @@ function PortalShell() {
       hideHeader
       topbarContent={
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Account</span>
+          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Account</span>
           <AccountSelector />
         </div>
       }

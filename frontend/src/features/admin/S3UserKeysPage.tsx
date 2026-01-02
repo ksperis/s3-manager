@@ -212,26 +212,26 @@ export default function S3UserKeysPage() {
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
       {createdKey && createdKey.secret_access_key && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-semibold">Key created for {pageTitle}</p>
-              <p className="text-xs text-amber-700 dark:text-amber-200">The secret is shown only once.</p>
+              <p className="ui-caption text-amber-700 dark:text-amber-200">The secret is shown only once.</p>
             </div>
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+            <span className="rounded-full bg-amber-100 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
               Copy these values now
             </span>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-amber-600">Access key</div>
-              <div className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono text-xs text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
+              <div className="ui-caption uppercase tracking-wide text-amber-600">Access key</div>
+              <div className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
                 {createdKey.access_key_id}
               </div>
             </div>
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-amber-600">Secret key</div>
-              <div className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono text-xs text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
+              <div className="ui-caption uppercase tracking-wide text-amber-600">Secret key</div>
+              <div className="rounded border border-amber-200 bg-white/80 px-3 py-2 font-mono ui-caption text-slate-800 dark:border-amber-800 dark:bg-amber-50/10 dark:text-amber-100">
                 {createdKey.secret_access_key}
               </div>
             </div>
@@ -243,11 +243,11 @@ export default function S3UserKeysPage() {
         <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Access key</th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Created on</th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Usage</th>
-              <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
+              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Access key</th>
+              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th>
+              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Created on</th>
+              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Usage</th>
+              <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -259,18 +259,18 @@ export default function S3UserKeysPage() {
                   key={k.access_key_id}
                   className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isKeyActive(k) ? "" : "bg-slate-50/70 dark:bg-slate-800/40"}`}
                 >
-                  <td className="px-6 py-4 font-mono text-sm text-slate-800 dark:text-slate-100">{k.access_key_id}</td>
-                  <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-200">
+                  <td className="px-6 py-4 font-mono ui-body text-slate-800 dark:text-slate-100">{k.access_key_id}</td>
+                  <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
                     {isKeyActive(k) ? k.status ?? "Active" : k.status ?? "Disabled"}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{formatDate(k.created_at)}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(k.created_at)}</td>
+                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                     {k.is_ui_managed ? (
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                         Interface key
                       </span>
                     ) : (
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Custom</span>
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">Custom</span>
                     )}
                   </td>
                   <td className="px-6 py-4 text-right">

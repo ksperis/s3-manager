@@ -63,7 +63,7 @@ function ProviderBadge({ provider }: { provider: StorageProvider }) {
   const isCeph = provider === "ceph";
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ui-caption font-semibold ${
         isCeph
           ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100"
           : "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100"
@@ -76,7 +76,7 @@ function ProviderBadge({ provider }: { provider: StorageProvider }) {
 
 function LockBadge({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-sm dark:bg-slate-800 dark:text-slate-200">
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm dark:bg-slate-800 dark:text-slate-200">
       🔒 {label}
     </span>
   );
@@ -260,26 +260,26 @@ export default function StorageEndpointsPage() {
     return (
     <div
       key={endpoint.id}
-      className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/70 text-sm"
+      className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/70 ui-body"
     >
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">{endpoint.name}</h3>
+              <h3 className="ui-section font-semibold text-slate-900 dark:text-white">{endpoint.name}</h3>
               <ProviderBadge provider={endpoint.provider} />
               {endpoint.is_default && <LockBadge label="Default (env)" />}
               {!endpoint.is_editable && !endpoint.is_default && <LockBadge label="Protected" />}
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
               <span className="font-semibold text-slate-700 dark:text-slate-100">Endpoint:</span>
-              <code className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+              <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
                 {endpoint.endpoint_url}
               </code>
             </div>
             {endpoint.admin_endpoint && endpoint.admin_endpoint !== endpoint.endpoint_url && (
-              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+              <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
                 <span className="font-semibold text-slate-700 dark:text-slate-100">Admin endpoint:</span>
-                <code className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
                   {endpoint.admin_endpoint}
                 </code>
               </div>
@@ -289,14 +289,14 @@ export default function StorageEndpointsPage() {
             {endpoint.is_editable && !endpoint.is_default ? (
               <>
                 <button
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
                   onClick={() => startEdit(endpoint)}
                   type="button"
                 >
                   Edit
                 </button>
                 <button
-                  className="rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700"
+                  className="rounded-lg bg-rose-600 px-3 py-1.5 ui-body font-semibold text-white shadow-sm transition hover:bg-rose-700"
                   onClick={() => {
                     setDeleteTarget(endpoint);
                     setDeleteError(null);
@@ -307,35 +307,35 @@ export default function StorageEndpointsPage() {
                 </button>
               </>
             ) : (
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                 Read-only
               </span>
             )}
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
-            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Region</p>
+          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Region</p>
             <p className="font-semibold">{endpoint.region || "Default"}</p>
           </div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
-            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Admin key</p>
+          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Admin key</p>
             {endpoint.provider === "ceph" ? (
               <p className="font-semibold">
                 {endpoint.admin_access_key ? endpoint.admin_access_key : "Not configured"}
-                {endpoint.has_admin_secret && <span className="ml-2 text-xs text-emerald-500">(secret stored)</span>}
+                {endpoint.has_admin_secret && <span className="ml-2 ui-caption text-emerald-500">(secret stored)</span>}
               </p>
             ) : (
               <p className="font-semibold text-slate-500">Not required</p>
             )}
           </div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
-            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Supervision</p>
+          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Supervision</p>
             {showSupervision ? (
               <p className="font-semibold">
                 {endpoint.supervision_access_key || "—"}
                 {endpoint.has_supervision_secret && (
-                  <span className="ml-2 text-xs text-emerald-500">(secret stored)</span>
+                  <span className="ml-2 ui-caption text-emerald-500">(secret stored)</span>
                 )}
               </p>
             ) : (
@@ -343,11 +343,11 @@ export default function StorageEndpointsPage() {
             )}
           </div>
           {endpoint.provider === "ceph" && (
-            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
-              <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Capabilities</p>
-              <div className="mt-1 flex flex-wrap gap-2 text-xs font-semibold">
+            <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+              <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Capabilities</p>
+              <div className="mt-1 flex flex-wrap gap-2 ui-caption font-semibold">
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
                     stsEnabled
                       ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
                       : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
@@ -356,7 +356,7 @@ export default function StorageEndpointsPage() {
                   STS {stsEnabled ? "on" : "off"}
                 </span>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
                     staticWebsiteEnabled
                       ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
                       : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
@@ -373,7 +373,7 @@ export default function StorageEndpointsPage() {
   };
 
   return (
-    <div className="space-y-4 text-xs leading-relaxed">
+    <div className="space-y-4 ui-caption leading-relaxed">
       <PageHeader
         title="Storage endpoints"
         description="Manage the S3/Ceph endpoints used by the console."
@@ -381,7 +381,7 @@ export default function StorageEndpointsPage() {
         actions={[{ label: "New endpoint", onClick: startCreate }]}
         inlineContent={
           defaultEndpoint ? (
-            <span className="text-sm font-semibold text-slate-500 dark:text-slate-300">
+            <span className="ui-body font-semibold text-slate-500 dark:text-slate-300">
               Default endpoint: {defaultEndpoint.name}
             </span>
           ) : null
@@ -389,21 +389,21 @@ export default function StorageEndpointsPage() {
       />
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-100">
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-100">
           {error}
         </div>
       )}
       {actionMessage && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-50">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 ui-body text-emerald-800 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-50">
           {actionMessage}
         </div>
       )}
       {loading ? (
-        <div className="rounded-2xl border border-slate-200 bg-white/70 px-5 py-6 text-sm text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
+        <div className="rounded-2xl border border-slate-200 bg-white/70 px-5 py-6 ui-body text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
           Loading endpoints...
         </div>
       ) : endpoints.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-6 py-8 text-center text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-6 py-8 text-center ui-body text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
           No endpoints configured yet.
         </div>
       ) : (
@@ -414,25 +414,25 @@ export default function StorageEndpointsPage() {
         <Modal title={editingId ? "Edit endpoint" : "New endpoint"} onClose={onCloseForm}>
           <form onSubmit={handleSubmit} className="space-y-4">
             {formError && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/30 dark:text-rose-100">
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/30 dark:text-rose-100">
                 {formError}
               </div>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
+              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                 Storage name
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   required
                 />
               </label>
               <div className="space-y-2">
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-100">Type</span>
+                <span className="ui-body font-semibold text-slate-700 dark:text-slate-100">Type</span>
                 <div className="flex gap-3">
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
                     <input
                       type="radio"
                       name="provider"
@@ -442,7 +442,7 @@ export default function StorageEndpointsPage() {
                     />
                     <span>Ceph</span>
                   </label>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100">
                     <input
                       type="radio"
                       name="provider"
@@ -466,48 +466,48 @@ export default function StorageEndpointsPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
+              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                 Endpoint S3
                 <input
                   type="text"
                   value={form.endpoint_url}
                   onChange={(e) => setForm((prev) => ({ ...prev, endpoint_url: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   placeholder="https://s3.example.com"
                   required
                 />
               </label>
-              <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
+              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                 Admin endpoint (optional)
                 <input
                   type="text"
                   value={form.admin_endpoint}
                   onChange={(e) => setForm((prev) => ({ ...prev, admin_endpoint: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   placeholder="http://rgw-admin.local"
                 />
               </label>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
+              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                 Region (optional)
                 <input
                   type="text"
                   value={form.region}
                   onChange={(e) => setForm((prev) => ({ ...prev, region: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   placeholder="us-east-1"
                 />
               </label>
               {cephMode && (
-                <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
+                <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                   Access key admin
                   <input
                     type="text"
                     value={form.admin_access_key}
                     onChange={(e) => setForm((prev) => ({ ...prev, admin_access_key: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                     placeholder="AKIA..."
                     required={!editingId}
                   />
@@ -518,44 +518,44 @@ export default function StorageEndpointsPage() {
             {cephMode && (
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
-                    Admin secret key {editingId ? <span className="text-xs font-normal text-slate-500">(leave blank to keep)</span> : null}
+                  <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                    Admin secret key {editingId ? <span className="ui-caption font-normal text-slate-500">(leave blank to keep)</span> : null}
                     <input
                       type="password"
                       value={form.admin_secret_key}
                       onChange={(e) => setForm((prev) => ({ ...prev, admin_secret_key: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                       placeholder="••••••"
                       required={!editingId}
                     />
                   </label>
-                  <div className="space-y-1 text-sm font-semibold text-slate-700 dark:text-slate-100">
+                  <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                     Supervision (optional)
                     <div className="grid gap-3">
                       <input
                         type="text"
                         value={form.supervision_access_key}
                         onChange={(e) => setForm((prev) => ({ ...prev, supervision_access_key: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="Access key supervision"
                       />
                       <input
                         type="password"
                         value={form.supervision_secret_key}
                         onChange={(e) => setForm((prev) => ({ ...prev, supervision_secret_key: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="Secret key supervision"
                       />
                     </div>
-                    <p className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                    <p className="ui-caption font-normal text-slate-500 dark:text-slate-400">
                       Use these keys for read-only monitoring actions.
                     </p>
                   </div>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Capabilities</p>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Capabilities</p>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                       STS enabled
                       <input
                         type="checkbox"
@@ -564,7 +564,7 @@ export default function StorageEndpointsPage() {
                         className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                       />
                     </label>
-                    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                       Static website enabled
                       <input
                         type="checkbox"
@@ -574,7 +574,7 @@ export default function StorageEndpointsPage() {
                       />
                     </label>
                   </div>
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
                     Disable a capability if the endpoint does not expose it.
                   </p>
                 </div>
@@ -585,14 +585,14 @@ export default function StorageEndpointsPage() {
               <button
                 type="button"
                 onClick={onCloseForm}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                className="rounded-lg border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? "Saving..." : editingId ? "Update" : "Create"}
               </button>
@@ -605,17 +605,17 @@ export default function StorageEndpointsPage() {
         <Modal title="Delete endpoint" onClose={() => setDeleteTarget(null)}>
           <div className="space-y-4">
             {deleteError && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/30 dark:text-rose-100">
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/30 dark:text-rose-100">
                 {deleteError}
               </div>
             )}
-            <p className="text-sm text-slate-700 dark:text-slate-100">
+            <p className="ui-body text-slate-700 dark:text-slate-100">
               Are you sure you want to delete <strong>{deleteTarget.name}</strong>? This action cannot be undone.
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                className="rounded-lg border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
                 type="button"
               >
                 Cancel
@@ -623,7 +623,7 @@ export default function StorageEndpointsPage() {
               <button
                 onClick={handleDelete}
                 disabled={deleteBusy}
-                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-70"
+                className="rounded-lg bg-rose-600 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-70"
                 type="button"
               >
                 {deleteBusy ? "Deleting..." : "Delete"}

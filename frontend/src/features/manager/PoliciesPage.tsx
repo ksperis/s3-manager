@@ -137,16 +137,16 @@ export default function PoliciesPage() {
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
           <div>
-            <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Policies</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">List of IAM policies for the selected account.</p>
+            <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Policies</p>
+            <p className="ui-caption text-slate-500 dark:text-slate-400">List of IAM policies for the selected account.</p>
           </div>
         </div>
         <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Version</th>
+              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Name</th>
+              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
+              <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Version</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -155,11 +155,11 @@ export default function PoliciesPage() {
             {!loading &&
               policies.map((p) => (
                 <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                  <td className="manager-table-cell px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
                     <span>{p.name}</span>
                   </td>
-                  <td className="manager-table-cell px-6 py-4 text-xs text-slate-600 dark:text-slate-300">{p.arn}</td>
-                  <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{p.default_version_id ?? "-"}</td>
+                  <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">{p.arn}</td>
+                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{p.default_version_id ?? "-"}</td>
                 </tr>
               ))}
           </tbody>
@@ -170,25 +170,25 @@ export default function PoliciesPage() {
         <Modal title="Create policy" onClose={closeAdvancedModal}>
           <form className="space-y-4" onSubmit={handleAdvancedCreate}>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Policy name</label>
+              <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Policy name</label>
               <input
                 type="text"
                 value={advancedName}
                 onChange={(e) => setAdvancedName(e.target.value)}
                 placeholder="Policy name"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 required
               />
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Policy document (JSON)</label>
+              <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Policy document (JSON)</label>
               <textarea
                 value={documentText}
                 onChange={(e) => setDocumentText(e.target.value)}
-                className="min-h-[200px] rounded-md border border-slate-200 px-3 py-2 text-sm font-mono focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="min-h-[200px] rounded-md border border-slate-200 px-3 py-2 ui-body font-mono focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 spellCheck={false}
               />
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Provide a valid IAM policy JSON document. You can start from the default template and customize statements.
               </p>
             </div>
@@ -196,14 +196,14 @@ export default function PoliciesPage() {
               <button
                 type="button"
                 onClick={closeAdvancedModal}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={needsS3AccountSelection || creating}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {creating ? "Creating..." : "Create policy"}
               </button>

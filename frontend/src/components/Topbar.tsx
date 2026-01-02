@@ -31,8 +31,8 @@ export default function Topbar({
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2 sm:px-6">
         <div className="flex items-center">
           <div className="leading-tight">
-            <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">{projectName ?? "S3 Manager"}</div>
-            {section && <div className="text-[11px] text-slate-500 dark:text-slate-400">{section}</div>}
+            <div className="ui-body font-semibold text-slate-900 dark:text-slate-50">{projectName ?? "S3 Manager"}</div>
+            {section && <div className="ui-caption text-slate-500 dark:text-slate-400">{section}</div>}
           </div>
         </div>
 
@@ -46,14 +46,14 @@ export default function Topbar({
         <div className="ml-auto flex items-center gap-3">
           <EnvironmentSwitcher />
           <ThemeToggle />
-          <div className="flex items-center gap-2 rounded-full border border-slate-200/80 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-primary/60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+          <div className="flex items-center gap-2 rounded-full border border-slate-200/80 bg-white px-2.5 py-1 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary/60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
             <span className="hidden md:inline">
               {userEmail ?? "Session"}
             </span>
             <button
               type="button"
               onClick={onLogout}
-              className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-primary-700 transition hover:bg-primary-50 hover:text-primary-800 dark:text-primary-200 dark:hover:bg-primary-900/40"
+              className="rounded-md px-2 py-0.5 ui-caption font-semibold text-primary-700 transition hover:bg-primary-50 hover:text-primary-800 dark:text-primary-200 dark:hover:bg-primary-900/40"
             >
               Log out
             </button>

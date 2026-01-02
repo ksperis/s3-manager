@@ -158,11 +158,11 @@ export default function ManagerUserPoliciesPage() {
   };
 
   if (!userName) {
-    return <div className="text-sm text-slate-600">User not specified.</div>;
+    return <div className="ui-body text-slate-600">User not specified.</div>;
   }
 
   if (needsS3AccountSelection) {
-    return <div className="text-sm text-slate-600">Select an account before managing users.</div>;
+    return <div className="ui-body text-slate-600">Select an account before managing users.</div>;
   }
 
   const options = available.map((p) => ({ value: p.arn, label: p.name }));
@@ -211,15 +211,15 @@ export default function ManagerUserPoliciesPage() {
 
         <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Attached policies</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Attach/detach managed policies for this user.</p>
+            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Attached policies</p>
+            <p className="ui-caption text-slate-500 dark:text-slate-400">Attach/detach managed policies for this user.</p>
           </div>
           <div className="space-y-3 px-4 py-3">
             <form onSubmit={handleAttach} className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <select
                 value={selectedArn}
                 onChange={(e) => setSelectedArn(e.target.value)}
-                className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               >
                 <option value="">Select a policy to attach</option>
                 {options.map((opt) => (
@@ -231,20 +231,20 @@ export default function ManagerUserPoliciesPage() {
               <button
                 type="submit"
                 disabled={busy !== null || !selectedArn}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
               >
                 {busy === "attach" ? "Attaching..." : "Attach"}
               </button>
             </form>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Policies must be created first in the Policies tab.</p>
+            <p className="ui-caption text-slate-500 dark:text-slate-400">Policies must be created first in the Policies tab.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
               <thead className="bg-slate-50 dark:bg-slate-900/50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Policy</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
+                  <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Policy</th>
+                  <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">ARN</th>
+                  <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -253,12 +253,12 @@ export default function ManagerUserPoliciesPage() {
                 {!loading &&
                   attached.map((p) => (
                     <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="manager-table-cell px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">{p.name}</td>
-                      <td className="manager-table-cell px-6 py-4 text-xs text-slate-600 dark:text-slate-300">{p.arn}</td>
+                      <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{p.name}</td>
+                      <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">{p.arn}</td>
                       <td className="px-6 py-4 text-right">
                         <button
                           onClick={() => handleDetach(p.arn)}
-                          className="text-xs font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
+                          className="ui-caption font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-60 dark:text-rose-200 dark:hover:text-rose-100"
                           disabled={busy === p.arn}
                         >
                           {busy === p.arn ? "Detaching..." : "Detach"}

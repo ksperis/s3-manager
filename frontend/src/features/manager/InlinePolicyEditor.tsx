@@ -156,8 +156,8 @@ export default function InlinePolicyEditor({
     <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <div>
-          <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Inline policies</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Inline policies</p>
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
             Create or update inline policies directly on this {entityLabel}.
           </p>
         </div>
@@ -165,7 +165,7 @@ export default function InlinePolicyEditor({
           type="button"
           onClick={refresh}
           disabled={disabled || loading}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100"
+          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100"
         >
           {loading ? "Refreshing..." : "Refresh"}
         </button>
@@ -173,34 +173,34 @@ export default function InlinePolicyEditor({
 
       <form className="space-y-4 p-4" onSubmit={handleSave}>
         {disabled && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
             {disabledReason ?? "Select an account before editing inline policies."}
           </div>
         )}
         {error && (
-          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-100">
+          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-caption text-rose-700 dark:border-rose-800/50 dark:bg-rose-950/40 dark:text-rose-100">
             {error}
           </div>
         )}
         {message && (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-caption text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
             {message}
           </div>
         )}
 
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Existing</span>
-            {loading && <span className="text-xs text-slate-500 dark:text-slate-400">Loading inline policies...</span>}
+            <span className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Existing</span>
+            {loading && <span className="ui-caption text-slate-500 dark:text-slate-400">Loading inline policies...</span>}
             {!loading && policies.length === 0 && (
-              <span className="text-xs text-slate-500 dark:text-slate-400">None yet</span>
+              <span className="ui-caption text-slate-500 dark:text-slate-400">None yet</span>
             )}
             {policies.map((p) => (
               <button
                 key={p.name}
                 type="button"
                 onClick={() => handleSelectExisting(p.name)}
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ui-caption font-semibold transition ${
                   p.name === selectedName
                     ? "border-primary bg-primary/10 text-primary dark:border-primary-400 dark:text-primary-100"
                     : "border-slate-200 text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
@@ -212,29 +212,29 @@ export default function InlinePolicyEditor({
             ))}
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Inline policy name</label>
+            <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Inline policy name</label>
             <input
               type="text"
               value={selectedName}
               onChange={(e) => setSelectedName(e.target.value)}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               disabled={disabled}
             />
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Inline policy document (JSON)</label>
+            <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Inline policy document (JSON)</label>
             <textarea
               value={policyText}
               onChange={(e) => setPolicyText(e.target.value)}
-              className="min-h-[220px] rounded-md border border-slate-200 px-3 py-2 text-sm font-mono focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="min-h-[220px] rounded-md border border-slate-200 px-3 py-2 ui-body font-mono focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               spellCheck={false}
               disabled={disabled}
             />
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
               <button
                 type="button"
                 onClick={handleReset}
-                className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                 disabled={disabled}
               >
                 Reset template
@@ -250,7 +250,7 @@ export default function InlinePolicyEditor({
               type="button"
               onClick={handleDelete}
               disabled={disabled || deleting}
-              className="rounded-md border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-700 dark:text-rose-200 dark:hover:bg-rose-900/30"
+              className="rounded-md border border-rose-200 px-4 py-2 ui-body font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-700 dark:text-rose-200 dark:hover:bg-rose-900/30"
             >
               {deleting ? "Deleting..." : "Delete inline policy"}
             </button>
@@ -258,7 +258,7 @@ export default function InlinePolicyEditor({
           <button
             type="submit"
             disabled={disabled || saving}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
           >
             {saving ? "Saving..." : "Save inline policy"}
           </button>

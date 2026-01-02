@@ -54,11 +54,11 @@ type MetadataDraft = {
 };
 
 const inputClasses =
-  "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
+  "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
 const buttonPrimaryClasses =
-  "inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60";
+  "inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60";
 const buttonGhostClasses =
-  "inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-semibold text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200";
+  "inline-flex items-center justify-center rounded-md px-2 py-1 ui-caption font-semibold text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200";
 
 const storageClassOptions = [
   { value: "STANDARD", label: "STANDARD" },
@@ -458,7 +458,7 @@ export default function ObjectAdvancedModal({
       content: (
         <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <span>Content type</span>
               <input
                 className={inputClasses}
@@ -467,7 +467,7 @@ export default function ObjectAdvancedModal({
                 placeholder="application/octet-stream"
               />
             </label>
-            <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <span>Cache control</span>
               <input
                 className={inputClasses}
@@ -476,7 +476,7 @@ export default function ObjectAdvancedModal({
                 placeholder="max-age=3600"
               />
             </label>
-            <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <span>Content disposition</span>
               <input
                 className={inputClasses}
@@ -485,7 +485,7 @@ export default function ObjectAdvancedModal({
                 placeholder="inline"
               />
             </label>
-            <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <span>Content encoding</span>
               <input
                 className={inputClasses}
@@ -494,7 +494,7 @@ export default function ObjectAdvancedModal({
                 placeholder="gzip"
               />
             </label>
-            <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <span>Content language</span>
               <input
                 className={inputClasses}
@@ -503,7 +503,7 @@ export default function ObjectAdvancedModal({
                 placeholder="en"
               />
             </label>
-            <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <span>Expires</span>
               <input
                 type="datetime-local"
@@ -514,9 +514,9 @@ export default function ObjectAdvancedModal({
             </label>
           </div>
 
-          <div className="space-y-2 rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-3 text-xs dark:border-slate-700 dark:bg-slate-900/40">
+          <div className="space-y-2 rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-3 ui-caption dark:border-slate-700 dark:bg-slate-900/40">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Custom metadata</p>
+              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Custom metadata</p>
               <button
                 type="button"
                 className={buttonGhostClasses}
@@ -526,7 +526,7 @@ export default function ObjectAdvancedModal({
               </button>
             </div>
             {metadataItems.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">No custom metadata defined.</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">No custom metadata defined.</p>
             ) : (
               <div className="space-y-2">
                 {metadataItems.map((item, idx) => (
@@ -583,7 +583,7 @@ export default function ObjectAdvancedModal({
       content: (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tags</p>
+            <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Tags</p>
             <button
               type="button"
               className={buttonGhostClasses}
@@ -593,7 +593,7 @@ export default function ObjectAdvancedModal({
             </button>
           </div>
           {tagsDraft.length === 0 ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">No tags defined.</p>
+            <p className="ui-caption text-slate-500 dark:text-slate-400">No tags defined.</p>
           ) : (
             <div className="space-y-2">
               {tagsDraft.map((tag, idx) => (
@@ -642,7 +642,7 @@ export default function ObjectAdvancedModal({
       label: "Storage class",
       content: (
         <div className="space-y-3">
-          <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+          <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
             <span>Storage class</span>
             <select
               className={inputClasses}
@@ -657,7 +657,7 @@ export default function ObjectAdvancedModal({
               ))}
             </select>
           </label>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
             Changing storage class triggers a copy of the object with the new storage tier.
           </p>
           <div className="flex items-center justify-end">
@@ -678,7 +678,7 @@ export default function ObjectAdvancedModal({
       label: "ACL",
       content: (
         <div className="space-y-3">
-          <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+          <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
             <span>Canned ACL</span>
             <select className={inputClasses} value={aclValue} onChange={(event) => setAclValue(event.target.value)}>
               {aclOptions.map((opt) => (
@@ -688,7 +688,7 @@ export default function ObjectAdvancedModal({
               ))}
             </select>
           </label>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
             Updating the ACL overrides any custom grants currently applied.
           </p>
           <div className="flex items-center justify-end">
@@ -704,12 +704,12 @@ export default function ObjectAdvancedModal({
       label: "Object lock",
       content: (
         <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-3 text-xs dark:border-slate-700 dark:bg-slate-900/40">
+          <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-3 ui-caption dark:border-slate-700 dark:bg-slate-900/40">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Legal hold</p>
-              {legalHoldLoading && <span className="text-xs text-slate-500 dark:text-slate-400">Loading...</span>}
+              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Legal hold</p>
+              {legalHoldLoading && <span className="ui-caption text-slate-500 dark:text-slate-400">Loading...</span>}
             </div>
-            {legalHoldError && <p className="mt-2 text-xs text-rose-600 dark:text-rose-200">{legalHoldError}</p>}
+            {legalHoldError && <p className="mt-2 ui-caption text-rose-600 dark:text-rose-200">{legalHoldError}</p>}
             <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
               <select
                 className={inputClasses}
@@ -730,14 +730,14 @@ export default function ObjectAdvancedModal({
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-3 text-xs dark:border-slate-700 dark:bg-slate-900/40">
+          <div className="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-3 ui-caption dark:border-slate-700 dark:bg-slate-900/40">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Retention</p>
-              {retentionLoading && <span className="text-xs text-slate-500 dark:text-slate-400">Loading...</span>}
+              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Retention</p>
+              {retentionLoading && <span className="ui-caption text-slate-500 dark:text-slate-400">Loading...</span>}
             </div>
-            {retentionError && <p className="mt-2 text-xs text-rose-600 dark:text-rose-200">{retentionError}</p>}
+            {retentionError && <p className="mt-2 ui-caption text-rose-600 dark:text-rose-200">{retentionError}</p>}
             <div className="mt-2 grid gap-2 md:grid-cols-2">
-              <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+              <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                 <span>Mode</span>
                 <select
                   className={inputClasses}
@@ -749,7 +749,7 @@ export default function ObjectAdvancedModal({
                   <option value="COMPLIANCE">COMPLIANCE</option>
                 </select>
               </label>
-              <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+              <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
                 <span>Retain until</span>
                 <input
                   type="datetime-local"
@@ -759,7 +759,7 @@ export default function ObjectAdvancedModal({
                 />
               </label>
             </div>
-            <label className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <label className="mt-2 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
               <input
                 type="checkbox"
                 checked={retentionBypass}
@@ -786,11 +786,11 @@ export default function ObjectAdvancedModal({
       label: "Restore",
       content: (
         <div className="space-y-3">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
             Restore archived objects (GLACIER, DEEP_ARCHIVE) for a limited duration.
           </p>
           <div className="grid gap-2 md:grid-cols-2">
-            <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <span>Days</span>
               <input
                 type="number"
@@ -800,7 +800,7 @@ export default function ObjectAdvancedModal({
                 onChange={(event) => setRestoreDays(event.target.value)}
               />
             </label>
-            <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
               <span>Tier</span>
               <select
                 className={inputClasses}
@@ -826,10 +826,10 @@ export default function ObjectAdvancedModal({
       label: "Signed URL",
       content: (
         <div className="space-y-3">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
             Generate a temporary signed URL for this object (valid for up to 12 hours).
           </p>
-          <label className="space-y-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+          <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
             <span>Expires at</span>
             <input
               type="datetime-local"
@@ -838,7 +838,7 @@ export default function ObjectAdvancedModal({
               onChange={(event) => setPresignExpires(event.target.value)}
             />
           </label>
-          {presignError && <p className="text-xs font-semibold text-rose-600 dark:text-rose-200">{presignError}</p>}
+          {presignError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{presignError}</p>}
           <div className="flex items-center justify-end">
             <button
               type="button"
@@ -850,9 +850,9 @@ export default function ObjectAdvancedModal({
             </button>
           </div>
           {presignUrl && (
-            <div className="space-y-2 rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-3 text-xs dark:border-slate-700 dark:bg-slate-900/40">
+            <div className="space-y-2 rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-3 ui-caption dark:border-slate-700 dark:bg-slate-900/40">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <span className="ui-caption font-semibold text-slate-600 dark:text-slate-300">
                   {presignMethod || "GET"}
                 </span>
                 <button type="button" className={buttonGhostClasses} onClick={handleCopyPresign}>
@@ -867,8 +867,8 @@ export default function ObjectAdvancedModal({
               />
               {presignFields && Object.keys(presignFields).length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Fields</p>
-                  <pre className="overflow-auto rounded-md bg-slate-900/90 p-2 text-[11px] text-slate-100">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Fields</p>
+                  <pre className="overflow-auto rounded-md bg-slate-900/90 p-2 ui-caption text-slate-100">
                     {JSON.stringify(presignFields, null, 2)}
                   </pre>
                 </div>
@@ -883,11 +883,11 @@ export default function ObjectAdvancedModal({
   return (
     <Modal title={`Advanced operations · ${item.name}`} onClose={onClose} maxWidthClass="max-w-4xl">
       <div className="space-y-4">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
           <span className="font-semibold text-slate-700 dark:text-slate-100">{bucketName}</span> / {item.key}
         </div>
         {actionMessage && (
-          <div className={`rounded-lg border px-3 py-2 text-xs font-semibold ${statusClassName}`}>{actionMessage}</div>
+          <div className={`rounded-lg border px-3 py-2 ui-caption font-semibold ${statusClassName}`}>{actionMessage}</div>
         )}
         <PageTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
       </div>

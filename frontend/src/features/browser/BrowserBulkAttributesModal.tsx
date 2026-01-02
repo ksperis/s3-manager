@@ -96,7 +96,7 @@ export default function BrowserBulkAttributesModal({
 }: BrowserBulkAttributesModalProps) {
   return (
     <Modal title="Bulk attributes" onClose={onClose} maxWidthClass="max-w-3xl">
-      <div className="space-y-4 text-xs text-slate-600 dark:text-slate-300">
+      <div className="space-y-4 ui-caption text-slate-600 dark:text-slate-300">
         <div className="space-y-1">
           <p className="font-semibold text-slate-800 dark:text-slate-100">Targets</p>
           <p>
@@ -173,7 +173,7 @@ export default function BrowserBulkAttributesModal({
                   }
                 />
                 <div className="space-y-1">
-                  <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                  <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">
                     Custom metadata (key=value per line)
                   </p>
                   <textarea
@@ -304,7 +304,7 @@ export default function BrowserBulkAttributesModal({
                   value={bulkRetentionDate}
                   onChange={(event) => setBulkRetentionDate(event.target.value)}
                 />
-                <label className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <label className="flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
                   <input
                     type="checkbox"
                     checked={bulkRetentionBypass}

@@ -53,7 +53,7 @@ export default function ManagerMetricsPage() {
         title="Metrics"
         breadcrumbs={[{ label: "Manager" }, { label: "Overview" }, { label: "Metrics" }]}
       />
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
           {isS3User
             ? "Select an S3 Account (tenant) to access traffic and storage breakdowns."
             : "Connect with account root keys or ask an admin to enable Allow stats for all users to access traffic analytics and bucket usage rankings."}
@@ -78,7 +78,7 @@ export default function ManagerMetricsPage() {
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
       {requiresS3AccountSelection && !selected && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
           Select an account to view metrics.
         </div>
       )}

@@ -137,14 +137,25 @@ export default function UsersPage() {
     if (value === "ui_none" || value === "none") return "No access";
     return role || "-";
   };
-  const getS3UserLabels = useCallback(
+  const renderS3UserChips = useCallback(
     (user: User) => {
-      if (user.s3_user_details && user.s3_user_details.length > 0) {
-        return user.s3_user_details.map((entry) => entry.name || `User #${entry.id}`).join(", ");
-      }
-      return (user.s3_users ?? [])
-        .map((id) => s3UserLabelById.get(Number(id)) ?? `User #${id}`)
-        .join(", ");
+      const labels =
+        user.s3_user_details && user.s3_user_details.length > 0
+          ? user.s3_user_details.map((entry) => entry.name || `User #${entry.id}`)
+          : (user.s3_users ?? []).map((id) => s3UserLabelById.get(Number(id)) ?? `User #${id}`);
+      if (labels.length === 0) return null;
+      return (
+        <div className="flex flex-wrap gap-2">
+          {labels.map((label, index) => (
+            <span
+              key={`${label}-${index}`}
+              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      );
     },
     [s3UserLabelById]
   );
@@ -184,16 +195,16 @@ export default function UsersPage() {
           return (
             <span
               key={`${id}-${role}`}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
             >
               <span>{label}</span>
               {showPortalBadge && (
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
+                <span className={`rounded-full px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide ${tone}`}>
                   {displayRole}
                 </span>
               )}
               {isAccountAdmin && (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                   Admin
                 </span>
               )}
@@ -208,38 +219,37 @@ export default function UsersPage() {
     const hasAccounts = Boolean(user.accounts && user.accounts.length > 0);
     const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
     if (!hasAccounts && !hasS3Users) {
-      return <span className="text-xs text-slate-500 dark:text-slate-400">-</span>;
+      return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
     }
     const accountChips = renderAccountChips(user);
+    const s3UserChips = renderS3UserChips(user);
     if (hasAccounts && hasS3Users) {
       return (
         <div className="space-y-1">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
               Accounts
             </div>
-            <div className="text-xs text-slate-600 dark:text-slate-300">{accountChips ?? "-"}</div>
+            <div className="ui-caption text-slate-600 dark:text-slate-300">{accountChips ?? "-"}</div>
           </div>
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
               Users
             </div>
-            <div className="text-xs text-slate-600 dark:text-slate-300">
-              {getS3UserLabels(user) || "-"}
-            </div>
+            <div className="ui-caption text-slate-600 dark:text-slate-300">{s3UserChips ?? "-"}</div>
           </div>
         </div>
       );
     }
     const isAccountsOnly = hasAccounts;
     const label = isAccountsOnly ? "Accounts" : "Users";
-    const value = isAccountsOnly ? accountChips : getS3UserLabels(user) || "-";
+    const value = isAccountsOnly ? accountChips : s3UserChips || "-";
     return (
       <div>
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+        <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
           {label}
         </div>
-        <div className="text-xs text-slate-600 dark:text-slate-300">{value}</div>
+        <div className="ui-caption text-slate-600 dark:text-slate-300">{value}</div>
       </div>
     );
   };
@@ -565,12 +575,12 @@ export default function UsersPage() {
         actions={[{ label: "Create user", onClick: () => setShowCreateModal(true) }]}
       />
       {actionError && (
-        <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/60 dark:text-rose-100">
+        <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/60 dark:text-rose-100">
           {actionError}
         </div>
       )}
       {actionMessage && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
           {actionMessage}
         </div>
       )}
@@ -587,21 +597,21 @@ export default function UsersPage() {
           }}
         >
           {actionError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/60 dark:text-rose-100">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/60 dark:text-rose-100">
               {actionError}
             </div>
           )}
           {actionMessage && (
-            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
               {actionMessage}
             </div>
           )}
           <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700">Email *</label>
+              <label className="ui-body font-medium text-slate-700">Email *</label>
               <input
                 type="email"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                 placeholder="jane.doe@example.com"
@@ -609,10 +619,10 @@ export default function UsersPage() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700">Password *</label>
+              <label className="ui-body font-medium text-slate-700">Password *</label>
               <input
                 type="password"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 value={form.password}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                 placeholder="•••••••"
@@ -620,9 +630,9 @@ export default function UsersPage() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700">Role</label>
+              <label className="ui-body font-medium text-slate-700">Role</label>
               <select
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 value={form.role}
                 onChange={(e) => {
                   const value = e.target.value;
@@ -643,7 +653,7 @@ export default function UsersPage() {
             </div>
             {form.role === "ui_admin" && (
               <div className="md:col-span-2 rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-700">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className="flex items-center gap-2 ui-body font-medium text-slate-700 dark:text-slate-200">
                   <input
                     type="checkbox"
                     className="rounded border-slate-300 text-primary focus:ring-primary"
@@ -657,16 +667,16 @@ export default function UsersPage() {
                   />
                   Override default RGW admin key
                 </label>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                   Leave unchecked to use the shared admin key from configuration.
                 </p>
                 {createUseCustomKeys && (
                   <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="flex flex-col gap-1">
-                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Access key *</label>
+                      <label className="ui-caption font-semibold text-slate-600 dark:text-slate-300">Access key *</label>
                       <input
                         type="text"
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                         value={form.rgw_access_key ?? ""}
                         autoComplete="off"
                         onChange={(e) => setForm((f) => ({ ...f, rgw_access_key: e.target.value }))}
@@ -674,10 +684,10 @@ export default function UsersPage() {
                       />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Secret key *</label>
+                      <label className="ui-caption font-semibold text-slate-600 dark:text-slate-300">Secret key *</label>
                       <input
                         type="password"
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                         value={form.rgw_secret_key ?? ""}
                         autoComplete="new-password"
                         onChange={(e) => setForm((f) => ({ ...f, rgw_secret_key: e.target.value }))}
@@ -691,19 +701,19 @@ export default function UsersPage() {
             <div className="md:col-span-2 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-slate-700">Linked accounts</label>
-                  <span className="text-xs text-slate-500">Optional</span>
+                  <label className="ui-body font-medium text-slate-700">Linked accounts</label>
+                  <span className="ui-caption text-slate-500">Optional</span>
                 </div>
                 <input
                   type="text"
                   value={createS3AccountSearch}
                   onChange={(e) => setCreateS3AccountSearch(e.target.value)}
                   placeholder="Filter by name..."
-                  className="w-48 rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="w-48 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
               </div>
               {createSelectedS3Accounts.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">No account selected.</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">No account selected.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {createSelectedS3Accounts.map((entry) => {
@@ -712,12 +722,12 @@ export default function UsersPage() {
                     return (
                       <div
                         key={entry.id}
-                        className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100"
+                        className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100"
                       >
-                        <span className="text-sm">{label}</span>
+                        <span className="ui-body">{label}</span>
                         <div className="flex items-center gap-2">
                           <select
-                            className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                            className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                             value={entry.role}
                             onChange={(e) =>
                               setCreateSelectedS3Accounts((prev) =>
@@ -731,7 +741,7 @@ export default function UsersPage() {
                             <option value="portal_manager">Portal manager</option>
                             <option value="portal_none">Portal none</option>
                           </select>
-                          <label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                          <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
                             <input
                               type="checkbox"
                               checked={Boolean(entry.account_admin)}
@@ -761,17 +771,17 @@ export default function UsersPage() {
               )}
               <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-200 px-2 py-2 dark:border-slate-700 dark:bg-slate-900/50">
                 {availableCreateS3Accounts.length === 0 && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">No accounts available.</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">No accounts available.</p>
                 )}
                 {visibleCreateS3Accounts.map((opt) => (
                   <div
                     key={opt.id}
                     className="flex items-center justify-between rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60"
                   >
-                    <span className="text-sm text-slate-700 dark:text-slate-200">{opt.label}</span>
+                    <span className="ui-body text-slate-700 dark:text-slate-200">{opt.label}</span>
                     <div className="flex items-center gap-2">
                       <select
-                        className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                        className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                         value={createAccountRoleChoice[Number(opt.id)] ?? "portal_none"}
                         onChange={(e) =>
                           setCreateAccountRoleChoice((prev) => ({
@@ -784,7 +794,7 @@ export default function UsersPage() {
                         <option value="portal_manager">Portal manager</option>
                         <option value="portal_none">Portal none</option>
                       </select>
-                      <label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                      <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
                         <input
                           type="checkbox"
                           checked={Boolean(createAccountAdminChoice[Number(opt.id)])}
@@ -813,7 +823,7 @@ export default function UsersPage() {
                   </div>
                 ))}
                 {availableCreateS3Accounts.length > MAX_VISIBLE_OPTIONS && (
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
                   </p>
                 )}
@@ -822,25 +832,25 @@ export default function UsersPage() {
             <div className="md:col-span-2 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-slate-700">Linked users</label>
-                  <span className="text-xs text-slate-500">Optional</span>
+                  <label className="ui-body font-medium text-slate-700">Linked users</label>
+                  <span className="ui-caption text-slate-500">Optional</span>
                 </div>
                 <input
                   type="text"
                   value={createS3Search}
                   onChange={(e) => setCreateS3Search(e.target.value)}
                   placeholder="Filter by name..."
-                  className="w-48 rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="w-48 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
               </div>
               {createSelectedS3Users.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">No user selected.</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">No user selected.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {createSelectedS3Users.map((id) => (
                     <span
                       key={id}
-                      className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                      className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                     >
                       {s3UserLabelById.get(id) ?? `User #${id}`}
                       <button
@@ -856,14 +866,14 @@ export default function UsersPage() {
               )}
               <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-200 px-2 py-2 dark:border-slate-700 dark:bg-slate-900/50">
                 {availableCreateS3Users.length === 0 && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">No users available.</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">No users available.</p>
                 )}
                 {visibleCreateS3Users.map((opt) => (
                   <div
                     key={opt.id}
                     className="flex items-center justify-between rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60"
                   >
-                    <span className="text-sm text-slate-700 dark:text-slate-200">{opt.label}</span>
+                    <span className="ui-body text-slate-700 dark:text-slate-200">{opt.label}</span>
                     <button
                       type="button"
                       onClick={() => setCreateSelectedS3Users((prev) => [...prev, opt.id])}
@@ -874,7 +884,7 @@ export default function UsersPage() {
                   </div>
                 ))}
                 {availableCreateS3Users.length > MAX_VISIBLE_OPTIONS && (
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
                   </p>
                 )}
@@ -892,13 +902,13 @@ export default function UsersPage() {
                   setCreateSelectedS3Users([]);
                   setCreateS3Search("");
                 }}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
               >
                 Create
               </button>
@@ -911,27 +921,27 @@ export default function UsersPage() {
         <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">UI Users</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Interface user management.</p>
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">UI Users</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">Interface user management.</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <span className="text-xs text-slate-500 dark:text-slate-400">
+                <span className="ui-caption text-slate-500 dark:text-slate-400">
                   {totalUsers} user{totalUsers === 1 ? "" : "s"}
                 </span>
               <div className="flex items-center gap-2 sm:justify-end">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
+                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
                   <input
                     type="text"
                     value={filter}
                     onChange={(e) => handleFilterChange(e.target.value)}
                 placeholder="Search by email, role, account, or user"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
                 />
               </div>
             </div>
           </div>
           {error && !loading && (
-            <div className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 dark:bg-rose-900/40 dark:text-rose-100">
+            <div className="mt-3 rounded-md bg-rose-50 px-3 py-2 ui-caption font-semibold text-rose-700 dark:bg-rose-900/40 dark:text-rose-100">
               {error}
             </div>
           )}
@@ -950,14 +960,14 @@ export default function UsersPage() {
                   <th
                     key={col.label}
                     onClick={col.field ? () => toggleSort(col.field) : undefined}
-                    className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
+                    className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
                       col.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : "text-right"
                     }`}
                   >
                     <div className={`flex items-center ${col.label === "Actions" ? "justify-end" : "gap-1"}`}>
                       <span>{col.label}</span>
                       {col.field && sort.field === col.field && (
-                        <span className="text-[10px]">{sort.direction === "asc" ? "▲" : "▼"}</span>
+                        <span className="ui-caption">{sort.direction === "asc" ? "▲" : "▼"}</span>
                       )}
                     </div>
                   </th>
@@ -967,21 +977,21 @@ export default function UsersPage() {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {loading && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={4} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
                     Loading...
                   </td>
                 </tr>
               )}
               {error && !loading && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 text-sm text-rose-600 dark:text-rose-200">
+                  <td colSpan={4} className="px-6 py-4 ui-body text-rose-600 dark:text-rose-200">
                     {error}
                   </td>
                 </tr>
               )}
               {!loading && !error && totalUsers === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={4} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
                     No users.
                   </td>
                 </tr>
@@ -990,7 +1000,7 @@ export default function UsersPage() {
                 !error &&
                 users.map((user) => (
                   <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                    <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
                       <div className="flex flex-col gap-1">
                         <button
                           type="button"
@@ -1010,11 +1020,11 @@ export default function UsersPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{displayUiRole(user.role)}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{displayUiRole(user.role)}</td>
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {formatLastLogin(user.last_login_at)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {renderAssociationSummary(user)}
                     </td>
                     <td className="px-6 py-4">
@@ -1060,41 +1070,41 @@ export default function UsersPage() {
             setEditForm({});
           }}
         >
-          <p className="text-sm text-slate-500 mb-3">{editingUser.email}</p>
+          <p className="ui-body text-slate-500 mb-3">{editingUser.email}</p>
           {actionError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/60 dark:text-rose-100">
+            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/60 dark:text-rose-100">
               {actionError}
             </div>
           )}
           {actionMessage && (
-            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
               {actionMessage}
             </div>
           )}
           <form onSubmit={submitEdit} className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700">Email</label>
+              <label className="ui-body font-medium text-slate-700">Email</label>
               <input
                 type="email"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 value={editForm.email ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700">New password</label>
+              <label className="ui-body font-medium text-slate-700">New password</label>
               <input
                 type="password"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 value={editForm.password ?? ""}
                 onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
                 placeholder="Leave blank to keep current"
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-700">Role</label>
+              <label className="ui-body font-medium text-slate-700">Role</label>
               <select
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 value={editRoleValue}
                 onChange={(e) => {
                   const value = e.target.value;
@@ -1115,7 +1125,7 @@ export default function UsersPage() {
             </div>
             {editRoleValue === "ui_admin" && (
               <div className="md:col-span-2 rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-700">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className="flex items-center gap-2 ui-body font-medium text-slate-700 dark:text-slate-200">
                   <input
                     type="checkbox"
                     className="rounded border-slate-300 text-primary focus:ring-primary"
@@ -1130,16 +1140,16 @@ export default function UsersPage() {
                   />
                   Override default RGW admin key
                 </label>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                   Existing secrets are not shown; provide a new pair to replace them.
                 </p>
                 {editUseCustomKeys && (
                   <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="flex flex-col gap-1">
-                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Access key</label>
+                      <label className="ui-caption font-semibold text-slate-600 dark:text-slate-300">Access key</label>
                       <input
                         type="text"
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                         value={editForm.rgw_access_key ?? ""}
                         autoComplete="off"
                         onChange={(e) => setEditForm((f) => ({ ...f, rgw_access_key: e.target.value }))}
@@ -1147,10 +1157,10 @@ export default function UsersPage() {
                       />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Secret key</label>
+                      <label className="ui-caption font-semibold text-slate-600 dark:text-slate-300">Secret key</label>
                       <input
                         type="password"
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                         value={editForm.rgw_secret_key ?? ""}
                         autoComplete="new-password"
                         onChange={(e) => setEditForm((f) => ({ ...f, rgw_secret_key: e.target.value }))}
@@ -1160,7 +1170,7 @@ export default function UsersPage() {
                   </div>
                 )}
                 {!editUseCustomKeys && editingUser?.has_rgw_credentials && (
-                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
                     A custom key is currently configured. Unchecking keeps using the shared key instead.
                   </p>
                 )}
@@ -1169,14 +1179,14 @@ export default function UsersPage() {
             <div className="md:col-span-2 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-slate-700">Linked Accounts</label>
-                  <span className="text-xs text-slate-500">
+                  <label className="ui-body font-medium text-slate-700">Linked Accounts</label>
+                  <span className="ui-caption text-slate-500">
                     {editSelectedS3Accounts.length} linked
                   </span>
                 </div>
               </div>
               {editSelectedS3Accounts.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">No account linked yet.</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">No account linked yet.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {editSelectedS3Accounts.map((entry) => {
@@ -1198,16 +1208,16 @@ export default function UsersPage() {
                     return (
                       <span
                         key={entry.id}
-                        className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                        className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                       >
-                        <span className="text-sm">{label}</span>
+                        <span className="ui-body">{label}</span>
                         {showPortalBadge && (
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tone}`}>
+                          <span className={`rounded-full px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide ${tone}`}>
                             {roleLabel}
                           </span>
                         )}
                         <select
-                          className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                          className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                           value={entry.role}
                           onChange={(e) =>
                             setEditSelectedS3Accounts((prev) =>
@@ -1221,7 +1231,7 @@ export default function UsersPage() {
                           <option value="portal_manager">Portal manager</option>
                           <option value="portal_none">Portal none</option>
                         </select>
-                        <label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                        <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
                           <input
                             type="checkbox"
                             checked={Boolean(entry.account_admin)}
@@ -1251,30 +1261,30 @@ export default function UsersPage() {
               <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-slate-700">Add an account</label>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">(filter by name)</span>
+                    <label className="ui-body font-medium text-slate-700">Add an account</label>
+                    <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by name)</span>
                   </div>
                   <input
                     type="text"
                     value={editS3AccountSearch}
                     onChange={(e) => setEditS3AccountSearch(e.target.value)}
                     placeholder="Search..."
-                    className="w-44 rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
                   {availableEditS3Accounts.length === 0 && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400">No results.</p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
                   )}
                   {visibleEditS3Accounts.map((opt) => (
                     <div
                       key={opt.id}
                       className="flex items-center justify-between rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60"
                     >
-                      <span className="text-sm text-slate-700 dark:text-slate-200">{opt.label}</span>
+                      <span className="ui-body text-slate-700 dark:text-slate-200">{opt.label}</span>
                       <div className="flex items-center gap-2">
                         <select
-                          className="rounded-full border border-slate-200 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                          className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                           value={editAccountRoleChoice[Number(opt.id)] ?? "portal_none"}
                           onChange={(e) =>
                             setEditAccountRoleChoice((prev) => ({
@@ -1287,7 +1297,7 @@ export default function UsersPage() {
                           <option value="portal_manager">Portal manager</option>
                           <option value="portal_none">Portal none</option>
                         </select>
-                        <label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                        <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
                           <input
                             type="checkbox"
                             checked={Boolean(editAccountAdminChoice[Number(opt.id)])}
@@ -1316,7 +1326,7 @@ export default function UsersPage() {
                     </div>
                   ))}
                   {availableEditS3Accounts.length > MAX_VISIBLE_OPTIONS && (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
                       Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
                     </p>
                   )}
@@ -1326,25 +1336,25 @@ export default function UsersPage() {
             <div className="md:col-span-2 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-slate-700">Linked users</label>
-                  <span className="text-xs text-slate-500">Optional</span>
+                  <label className="ui-body font-medium text-slate-700">Linked users</label>
+                  <span className="ui-caption text-slate-500">Optional</span>
                 </div>
                 <input
                   type="text"
                   value={editS3Search}
                   onChange={(e) => setEditS3Search(e.target.value)}
                   placeholder="Filter by name..."
-                  className="w-48 rounded-md border border-slate-200 px-2 py-1 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="w-48 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
               </div>
               {editSelectedS3Users.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">No user selected.</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">No user selected.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {editSelectedS3Users.map((id) => (
                     <span
                       key={id}
-                      className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                      className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
                     >
                       {s3UserLabelById.get(id) ?? `User #${id}`}
                       <button
@@ -1360,14 +1370,14 @@ export default function UsersPage() {
               )}
               <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-200 px-2 py-2 dark:border-slate-700 dark:bg-slate-900/50">
                 {availableEditS3Users.length === 0 && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">No users available.</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">No users available.</p>
                 )}
                 {visibleEditS3Users.map((opt) => (
                   <div
                     key={opt.id}
                     className="flex items-center justify-between rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60"
                   >
-                    <span className="text-sm text-slate-700 dark:text-slate-200">{opt.label}</span>
+                    <span className="ui-body text-slate-700 dark:text-slate-200">{opt.label}</span>
                     <button
                       type="button"
                       onClick={() => setEditSelectedS3Users((prev) => [...prev, opt.id])}
@@ -1378,7 +1388,7 @@ export default function UsersPage() {
                   </div>
                 ))}
                 {availableEditS3Users.length > MAX_VISIBLE_OPTIONS && (
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
                   </p>
                 )}
@@ -1395,14 +1405,14 @@ export default function UsersPage() {
                   setEditUseCustomKeys(false);
                   setEditForm({});
                 }}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={busyId === editingUser.id}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
               >
                 {busyId === editingUser.id ? "Saving..." : "Save"}
               </button>

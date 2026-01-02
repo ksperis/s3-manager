@@ -1556,12 +1556,12 @@ export default function BucketDetailPage() {
       />
 
       {loadingBucket && (
-        <div className="rounded-md bg-slate-100 px-4 py-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+        <div className="rounded-md bg-slate-100 px-4 py-3 ui-body text-slate-600 dark:bg-slate-800 dark:text-slate-200">
           Loading bucket...
         </div>
       )}
       {bucketError && (
-        <div className="rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:bg-rose-900/40 dark:text-rose-100">
+        <div className="rounded-md bg-rose-50 px-4 py-3 ui-body text-rose-700 dark:bg-rose-900/40 dark:text-rose-100">
           {bucketError}
         </div>
       )}
@@ -1576,11 +1576,11 @@ export default function BucketDetailPage() {
             content: (
               <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <header className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">Overview</p>
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Overview</p>
+                  <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
                     {bucketName ? `Bucket ${bucketName}` : "Bucket overview"}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     High-level usage and which advanced properties are currently active.
                   </p>
                 </header>
@@ -1608,22 +1608,22 @@ export default function BucketDetailPage() {
                 <div className="rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Bucket properties</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Summary of enabled features.</p>
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Bucket properties</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">Summary of enabled features.</p>
                     </div>
                     {(propsLoading || lifecycleLoading) && (
-                      <span className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-200">Updating…</span>
+                      <span className="ui-caption font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-200">Updating…</span>
                     )}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {propertySummary.map((item) => (
                       <span
                         key={item.label}
-                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${propertyToneChipClasses[item.tone]}`}
+                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 ui-caption font-semibold ${propertyToneChipClasses[item.tone]}`}
                       >
                         <span className={`h-2 w-2 rounded-full ${propertyToneDotClasses[item.tone]}`} />
                         <span>{item.label}</span>
-                        <span className="text-[10px] uppercase tracking-wide">{item.state}</span>
+                        <span className="ui-caption uppercase tracking-wide">{item.state}</span>
                       </span>
                     ))}
                   </div>
@@ -1638,10 +1638,10 @@ export default function BucketDetailPage() {
               <SplitView
                 left={
                   <div className="p-3 space-y-2">
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Prefixes</p>
+                    <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Prefixes</p>
                     <div className="space-y-1">
                       <button
-                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
+                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left ui-body ${
                           currentPrefix === ""
                             ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
                             : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
@@ -1652,11 +1652,11 @@ export default function BucketDetailPage() {
                       </button>
                       {parentPrefix !== "" && (
                         <button
-                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
+                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left ui-body text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                           onClick={() => setCurrentPrefix(parentPrefix)}
                         >
                           <span>⬆️ Up</span>
-                          <span className="text-xs text-slate-500 dark:text-slate-400">{parentPrefix || "/"}</span>
+                          <span className="ui-caption text-slate-500 dark:text-slate-400">{parentPrefix || "/"}</span>
                         </button>
                       )}
                       {prefixes.map((prefix) => {
@@ -1665,7 +1665,7 @@ export default function BucketDetailPage() {
                         return (
                           <button
                             key={prefix}
-                            className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm ${
+                            className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left ui-body ${
                               isActive
                                 ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
                                 : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
@@ -1683,8 +1683,8 @@ export default function BucketDetailPage() {
                   <div className="space-y-3 p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div className="space-y-1">
-                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Path</p>
-                        <div className="text-xs text-slate-500 dark:text-slate-300">
+                        <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Path</p>
+                        <div className="ui-caption text-slate-500 dark:text-slate-300">
                           {bucketName}/{currentPrefix || "(root)"}
                         </div>
                       </div>
@@ -1692,7 +1692,7 @@ export default function BucketDetailPage() {
                         <button
                           type="button"
                           onClick={() => loadObjects(currentPrefix)}
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          className="rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
                           Refresh
                         </button>
@@ -1700,21 +1700,21 @@ export default function BucketDetailPage() {
                           type="button"
                           disabled={selectedKeys.length !== 1}
                           onClick={handleDownload}
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          className="rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
                           Download
                         </button>
                         <button
                           type="button"
                           onClick={() => setShowUpload(true)}
-                          className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-600"
+                          className="rounded-lg bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600"
                         >
                           Upload
                         </button>
                         <button
                           type="button"
                           onClick={handleNewFolder}
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          className="rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
                           New folder
                         </button>
@@ -1722,7 +1722,7 @@ export default function BucketDetailPage() {
                           type="button"
                           disabled={selectedKeys.length === 0}
                           onClick={handleDelete}
-                          className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-700 dark:hover:text-rose-100"
+                          className="rounded-lg border border-rose-200 px-3 py-2 ui-body font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-700 dark:hover:text-rose-100"
                         >
                           Delete
                         </button>
@@ -1730,18 +1730,18 @@ export default function BucketDetailPage() {
                     </div>
 
                     {actionMessage && (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
                         {actionMessage}
                       </div>
                     )}
                     {objectsError && (
-                      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                         {objectsError}
                       </div>
                     )}
 
                     <div className="rounded-xl border border-slate-200 dark:border-slate-800">
-                      <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+                      <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
                         <thead className="bg-slate-50 dark:bg-slate-900/50">
                           <tr>
                             <th className="px-4 py-2 text-left">
@@ -1754,16 +1754,16 @@ export default function BucketDetailPage() {
                                 className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                               />
                             </th>
-                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               Name
                             </th>
-                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               Size
                             </th>
-                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               Last modified
                             </th>
-                            <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               Storage class
                             </th>
                           </tr>
@@ -1771,14 +1771,14 @@ export default function BucketDetailPage() {
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                           {objectsLoading && (
                             <tr>
-                              <td colSpan={5} className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
+                              <td colSpan={5} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
                                 Loading objects...
                               </td>
                             </tr>
                           )}
                           {!objectsLoading && rowData.length === 0 && (
                             <tr>
-                              <td colSpan={5} className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
+                              <td colSpan={5} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
                                 No objects in this prefix.
                               </td>
                             </tr>
@@ -1837,8 +1837,8 @@ export default function BucketDetailPage() {
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">RGW status</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Versioning, Object Lock, lifecycle.</p>
+                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">RGW status</p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">Versioning, Object Lock, lifecycle.</p>
                   </div>
                   <button
                     type="button"
@@ -1847,18 +1847,18 @@ export default function BucketDetailPage() {
                       loadLifecycle();
                       loadWebsite();
                     }}
-                    className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                    className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                   >
                     Refresh
                   </button>
                 </div>
                 {propsLoading && (
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
                     Loading properties...
                   </div>
                 )}
                 {propsError && (
-                  <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                  <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                     {propsError}
                   </div>
                 )}
@@ -1868,17 +1868,17 @@ export default function BucketDetailPage() {
                       <div className={bucketCardClass}>
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Versioning</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Status returned by RGW.</p>
+                            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Versioning</p>
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">Status returned by RGW.</p>
                           </div>
                           <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${featureStateChipClasses[versioningChipState]}`}
+                            className={`rounded-full px-3 py-1 ui-caption font-semibold ${featureStateChipClasses[versioningChipState]}`}
                           >
                             {versioningStatusLabel}
                           </span>
                         </div>
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">
                             Keeps object history for restores and is required for Object Lock.
                           </p>
                           <button
@@ -1888,7 +1888,7 @@ export default function BucketDetailPage() {
                             title={
                               versioningIsEnabled && objectLockActive ? "Disable Object Lock to change versioning." : undefined
                             }
-                            className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                           >
                             {updatingVersioning
                               ? "Updating..."
@@ -1898,7 +1898,7 @@ export default function BucketDetailPage() {
                           </button>
                         </div>
                         {versioningIsEnabled && objectLockActive && (
-                          <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                          <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
                             Versioning cannot be disabled while Object Lock is enabled.
                           </p>
                         )}
@@ -1906,30 +1906,30 @@ export default function BucketDetailPage() {
                       <div className={bucketCardClass}>
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Object Lock</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Object Lock</p>
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">
                               WORM / default retention (bucket created with the Object Lock option).
                             </p>
                           </div>
                           <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${featureStateChipClasses[objectLockChipState]}`}
+                            className={`rounded-full px-3 py-1 ui-caption font-semibold ${featureStateChipClasses[objectLockChipState]}`}
                           >
                             {objectLockStatusLabel}
                           </span>
                         </div>
                         <div className="mt-3 space-y-2">
                           {objectLockError && (
-                            <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                            <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                               {objectLockError}
                             </div>
                           )}
                           {objectLockStatus && (
-                            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 ui-caption font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
                               {objectLockStatus}
                             </div>
                           )}
                           <form className="space-y-2" onSubmit={handleSaveObjectLock}>
-                            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                            <label className="flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
                               <input
                                 type="checkbox"
                                 checked={objectLockEnabled ?? false}
@@ -1943,29 +1943,29 @@ export default function BucketDetailPage() {
                               Enable Object Lock
                             </label>
                             {objectLockPersistentlyEnabled && (
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              <p className="ui-caption text-slate-500 dark:text-slate-400">
                                 Object Lock cannot be disabled once it has been enabled on the bucket. Update only the default retention below.
                               </p>
                             )}
                             {objectLockActive && (
-                              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
                                 Warning: while Object Lock is enabled, objects cannot be deleted until the specified retention period ends. Review mode and retention before saving changes.
                               </div>
                             )}
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                              <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                              <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                                 Mode
                                 <select
                                   value={objectLockMode}
                                   onChange={(e) => setObjectLockMode(e.target.value)}
-                                  className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 >
                                   <option value="">(none)</option>
                                   <option value="GOVERNANCE">Governance</option>
                                   <option value="COMPLIANCE">Compliance</option>
                                 </select>
                               </label>
-                              <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                              <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                                 Retention (days)
                                 <input
                                   type="number"
@@ -1973,11 +1973,11 @@ export default function BucketDetailPage() {
                                   step="1"
                                   value={objectLockDays}
                                   onChange={(e) => setObjectLockDays(e.target.value)}
-                                  className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                   placeholder="e.g. 30"
                                 />
                               </label>
-                              <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                              <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                                 Retention (years)
                                 <input
                                   type="number"
@@ -1985,13 +1985,13 @@ export default function BucketDetailPage() {
                                   step="1"
                                   value={objectLockYears}
                                   onChange={(e) => setObjectLockYears(e.target.value)}
-                                  className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                   placeholder="e.g. 1"
                                 />
                               </label>
                             </div>
                             {objectLockConfig?.mode && (objectLockConfig.days != null || objectLockConfig.years != null) && (
-                              <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                              <p className="ui-caption text-slate-600 dark:text-slate-300">
                                 Current retention: {objectLockConfig.mode}
                                 {objectLockConfig.days != null ? ` · ${objectLockConfig.days} day(s)` : ""}
                                 {objectLockConfig.years != null ? ` · ${objectLockConfig.years} year(s)` : ""}
@@ -2001,7 +2001,7 @@ export default function BucketDetailPage() {
                               <button
                                 type="button"
                                 onClick={() => applyObjectLockState(objectLockConfig)}
-                                className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                                className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                                 disabled={propsLoading || savingObjectLock}
                               >
                                 Reset
@@ -2009,14 +2009,14 @@ export default function BucketDetailPage() {
                               <button
                                 type="submit"
                                 disabled={savingObjectLock || propsLoading}
-                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                               >
                                 {savingObjectLock ? "Updating..." : "Save"}
                               </button>
                             </div>
                           </form>
                         </div>
-                        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                           Choose a mode plus days or years. Leave it empty to remove the default retention (Object Lock must already be enabled on the bucket).
                         </p>
                       </div>
@@ -2024,58 +2024,58 @@ export default function BucketDetailPage() {
                     <div className={bucketCardClass}>
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Lifecycle rules</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Lifecycle rules</p>
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">
                             S3-side expiration/clean-up (JSON first, simple editor to add a rule).
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500 dark:text-slate-400">{(lifecycle.rules ?? []).length} rule(s)</span>
+                          <span className="ui-caption text-slate-500 dark:text-slate-400">{(lifecycle.rules ?? []).length} rule(s)</span>
                           <button
                             type="button"
                             onClick={() => setShowLifecycleEditor((prev) => !prev)}
-                            className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                           >
                             {showLifecycleEditor ? "Hide editor" : "Show editor"}
                           </button>
                         </div>
                       </div>
                       {lifecycleLoading && (
-                        <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                        <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
                           Loading lifecycle rules...
                         </div>
                       )}
                       {lifecycleError && (
-                        <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                        <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                           {lifecycleError}
                         </div>
                       )}
                       {lifecycleStatus && (
-                        <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                        <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
                           {lifecycleStatus}
                         </div>
                       )}
                       <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/40">
                         {(lifecycle.rules?.length ?? 0) === 0 ? (
-                          <p className="text-xs text-slate-600 dark:text-slate-300">No rules configured on this bucket.</p>
+                          <p className="ui-caption text-slate-600 dark:text-slate-300">No rules configured on this bucket.</p>
                         ) : (
                           <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+                            <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
                               <thead className="bg-slate-100 dark:bg-slate-900/60">
                                 <tr>
-                                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     ID
                                   </th>
-                                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     Status
                                   </th>
-                                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     Filter
                                   </th>
-                                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     Actions
                                   </th>
-                                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                     Manage
                                   </th>
                                 </tr>
@@ -2106,7 +2106,7 @@ export default function BucketDetailPage() {
                                         <button
                                           type="button"
                                           onClick={() => toggleRuleStatusAt(idx)}
-                                          className={`flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold ${
+                                          className={`flex items-center gap-2 rounded-full px-3 py-1 ui-caption font-semibold ${
                                             (rule as any).Status === "Disabled"
                                               ? "border border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-200"
                                               : "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
@@ -2123,7 +2123,7 @@ export default function BucketDetailPage() {
                                           <button
                                             type="button"
                                             onClick={() => deleteRuleAt(idx)}
-                                            className="rounded border border-rose-200 px-2 py-1 text-[11px] font-semibold text-rose-700 hover:border-rose-300 hover:text-rose-800 dark:border-rose-900/40 dark:text-rose-100"
+                                            className="rounded border border-rose-200 px-2 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-300 hover:text-rose-800 dark:border-rose-900/40 dark:text-rose-100"
                                             disabled={savingLifecycle || lifecycleLoading}
                                           >
                                             Delete
@@ -2142,7 +2142,7 @@ export default function BucketDetailPage() {
                       {showLifecycleEditor && (
                         <>
                           <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <div className="flex overflow-hidden rounded-lg border border-slate-200 text-xs font-semibold dark:border-slate-700">
+                            <div className="flex overflow-hidden rounded-lg border border-slate-200 ui-caption font-semibold dark:border-slate-700">
                               <button
                                 type="button"
                                 onClick={() => setLifecycleMode("json")}
@@ -2162,19 +2162,19 @@ export default function BucketDetailPage() {
                           {lifecycleMode === "simple" ? (
                             <div className="mt-3 space-y-3">
                               {simpleLifecycleWarning && (
-                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
+                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
                                   {simpleLifecycleWarning}
                                 </div>
                               )}
-                              <p className="text-xs text-slate-600 dark:text-slate-300">
+                              <p className="ui-caption text-slate-600 dark:text-slate-300">
                                 Quickly add one of the preconfigured rules below (appended to the existing configuration).
                               </p>
                               <div className="space-y-3">
                                 <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-100">
+                                  <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">
                                     Rule 1: noncurrent 90d + multipart 30d + delete markers (explicit)
                                   </p>
-                                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                  <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                                     Cleans noncurrent versions after 90d, removes incomplete multipart uploads after 30d, and deletes expired delete markers.
                                   </p>
                                   <div className="mt-2 flex justify-end">
@@ -2189,7 +2189,7 @@ export default function BucketDetailPage() {
                                           Expiration: { ExpiredObjectDeleteMarker: true },
                                         })
                                       }
-                                      className="text-[11px] font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
+                                      className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
                                       disabled={savingLifecycle || lifecycleLoading}
                                     >
                                       Add
@@ -2198,8 +2198,8 @@ export default function BucketDetailPage() {
                                 </div>
 
                                 <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-100">Rule 2: current/noncurrent transitions</p>
-                                  <div className="mt-2 flex flex-wrap items-end gap-3 text-xs">
+                                  <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Rule 2: current/noncurrent transitions</p>
+                                  <div className="mt-2 flex flex-wrap items-end gap-3 ui-caption">
                                     <label className="flex flex-col gap-1">
                                       Current versions expiration (days)
                                       <input
@@ -2207,7 +2207,7 @@ export default function BucketDetailPage() {
                                         min={0}
                                         value={transitionCurrentDays}
                                         onChange={(e) => setTransitionCurrentDays(e.target.value)}
-                                        className="w-28 rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className="w-28 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                       />
                                     </label>
                                     <label className="flex flex-col gap-1">
@@ -2217,7 +2217,7 @@ export default function BucketDetailPage() {
                                         min={0}
                                         value={transitionNoncurrentDays}
                                         onChange={(e) => setTransitionNoncurrentDays(e.target.value)}
-                                        className="w-28 rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className="w-28 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                       />
                                     </label>
                                     <label className="flex flex-col gap-1">
@@ -2226,7 +2226,7 @@ export default function BucketDetailPage() {
                                         type="text"
                                         value={transitionStorageClass}
                                         onChange={(e) => setTransitionStorageClass(e.target.value)}
-                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                         placeholder="GLACIER"
                                       />
                                     </label>
@@ -2236,7 +2236,7 @@ export default function BucketDetailPage() {
                                         type="text"
                                         value={transitionPrefix}
                                         onChange={(e) => setTransitionPrefix(e.target.value)}
-                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                         placeholder="logs/"
                                       />
                                     </label>
@@ -2259,7 +2259,7 @@ export default function BucketDetailPage() {
                                           ],
                                         })
                                       }
-                                      className="text-[11px] font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
+                                      className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
                                       disabled={savingLifecycle || lifecycleLoading}
                                     >
                                       Add
@@ -2268,8 +2268,8 @@ export default function BucketDetailPage() {
                                 </div>
 
                                 <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-100">Rule 3: current/noncurrent expiration</p>
-                                  <div className="mt-2 flex flex-wrap items-end gap-3 text-xs">
+                                  <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Rule 3: current/noncurrent expiration</p>
+                                  <div className="mt-2 flex flex-wrap items-end gap-3 ui-caption">
                                     <label className="flex flex-col gap-1">
                                       Current versions expiration (days)
                                       <input
@@ -2277,7 +2277,7 @@ export default function BucketDetailPage() {
                                         min={0}
                                         value={expireCurrentDays}
                                         onChange={(e) => setExpireCurrentDays(e.target.value)}
-                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                       />
                                     </label>
                                     <label className="flex flex-col gap-1">
@@ -2287,7 +2287,7 @@ export default function BucketDetailPage() {
                                         min={0}
                                         value={expireNoncurrentDays}
                                         onChange={(e) => setExpireNoncurrentDays(e.target.value)}
-                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                       />
                                     </label>
                                     <label className="flex flex-col gap-1">
@@ -2296,7 +2296,7 @@ export default function BucketDetailPage() {
                                         type="text"
                                         value={expirePrefix}
                                         onChange={(e) => setExpirePrefix(e.target.value)}
-                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        className="w-32 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                         placeholder="archive/"
                                       />
                                     </label>
@@ -2312,7 +2312,7 @@ export default function BucketDetailPage() {
                                           NoncurrentVersionExpiration: { NoncurrentDays: Number(expireNoncurrentDays) || 0 },
                                         })
                                       }
-                                      className="text-[11px] font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
+                                      className="ui-caption font-semibold text-primary hover:text-primary-600 disabled:opacity-60"
                                       disabled={savingLifecycle || lifecycleLoading}
                                     >
                                       Add
@@ -2320,20 +2320,20 @@ export default function BucketDetailPage() {
                                   </div>
                                 </div>
                               </div>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              <p className="ui-caption text-slate-500 dark:text-slate-400">
                                 Use JSON mode to customize or edit rules.
                               </p>
                             </div>
                           ) : (
                             <div className="mt-3 space-y-2">
-                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                              <p className="ui-caption text-slate-500 dark:text-slate-400">
                                 Paste a JSON array that matches the S3 API (<code>Rules</code>). Existing rules are listed above.
                               </p>
                               <textarea
                                 value={lifecycleText}
                                 onChange={(e) => setLifecycleText(e.target.value)}
                                 rows={10}
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                               />
                             </div>
                           )}
@@ -2343,7 +2343,7 @@ export default function BucketDetailPage() {
                                 type="button"
                                 onClick={loadLifecycle}
                                 disabled={lifecycleLoading || savingLifecycle}
-                                className="rounded-md border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                                className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                               >
                                 Reload
                               </button>
@@ -2351,7 +2351,7 @@ export default function BucketDetailPage() {
                                 type="button"
                                 onClick={saveLifecycle}
                                 disabled={savingLifecycle || lifecycleLoading}
-                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                               >
                                 {savingLifecycle ? "Saving..." : "Save"}
                               </button>
@@ -2363,8 +2363,8 @@ export default function BucketDetailPage() {
                     <div className={`${bucketCardClass} space-y-3 ${staticWebsiteBlocked ? "opacity-60" : ""}`}>
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Static website</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Static website</p>
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">
                             Host a static website from this bucket or redirect all requests.
                           </p>
                         </div>
@@ -2372,7 +2372,7 @@ export default function BucketDetailPage() {
                           <button
                             type="button"
                             onClick={loadWebsite}
-                            className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                             disabled={websiteLoading || staticWebsiteBlocked}
                           >
                             {websiteLoading ? "Loading..." : "Refresh"}
@@ -2381,7 +2381,7 @@ export default function BucketDetailPage() {
                             type="button"
                             onClick={saveWebsite}
                             disabled={savingWebsite || websiteLoading || staticWebsiteBlocked}
-                            className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                            className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                           >
                             {savingWebsite ? "Saving..." : "Save"}
                           </button>
@@ -2389,29 +2389,29 @@ export default function BucketDetailPage() {
                             type="button"
                             onClick={clearWebsite}
                             disabled={clearingWebsite || staticWebsiteBlocked}
-                            className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                            className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                           >
                             {clearingWebsite ? "Deleting..." : "Delete"}
                           </button>
                         </div>
                       </div>
                       {staticWebsiteBlocked && (
-                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
                           Static website is disabled for this endpoint. Enable it in the Ceph endpoint configuration.
                         </div>
                       )}
                       {websiteError && (
-                        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                           {websiteError}
                         </div>
                       )}
                       {websiteStatus && (
-                        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
                           {websiteStatus}
                         </div>
                       )}
                       <div className="grid gap-3 md:grid-cols-2">
-                        <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                        <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
                           <input
                             type="radio"
                             checked={websiteMode === "hosting"}
@@ -2425,12 +2425,12 @@ export default function BucketDetailPage() {
                           />
                           <div>
                             <p className="font-semibold text-slate-900 dark:text-slate-100">Host a website</p>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">
                               Serve index and error documents from this bucket.
                             </p>
                           </div>
                         </label>
-                        <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                        <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
                           <input
                             type="radio"
                             checked={websiteMode === "redirect"}
@@ -2444,7 +2444,7 @@ export default function BucketDetailPage() {
                           />
                           <div>
                             <p className="font-semibold text-slate-900 dark:text-slate-100">Redirect all requests</p>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">
                               Point every request to another host or domain.
                             </p>
                           </div>
@@ -2453,7 +2453,7 @@ export default function BucketDetailPage() {
                       {websiteMode === "hosting" ? (
                         <div className="space-y-3">
                           <div className="grid gap-3 md:grid-cols-2">
-                            <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                               Index document
                               <input
                                 type="text"
@@ -2462,12 +2462,12 @@ export default function BucketDetailPage() {
                                   setWebsiteIndexDocument(e.target.value);
                                   setWebsiteStatus(null);
                                 }}
-                                className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 placeholder="index.html"
                                 disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                               />
                             </label>
-                            <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                               Error document (optional)
                               <input
                                 type="text"
@@ -2476,14 +2476,14 @@ export default function BucketDetailPage() {
                                   setWebsiteErrorDocument(e.target.value);
                                   setWebsiteStatus(null);
                                 }}
-                                className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 placeholder="error.html"
                                 disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                               />
                             </label>
                           </div>
                           <div className="space-y-2">
-                            <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                            <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">
                               Routing rules (JSON array)
                             </label>
                             <textarea
@@ -2493,21 +2493,21 @@ export default function BucketDetailPage() {
                                 setWebsiteStatus(null);
                               }}
                               rows={6}
-                              className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                               placeholder="[]"
                               spellCheck={false}
                               disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                             />
-                            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
                               <button
                                 type="button"
                                 onClick={() => setShowWebsiteRulesExample((prev) => !prev)}
-                                className="text-[11px] font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
+                                className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
                               >
                                 {showWebsiteRulesExample ? "Hide example" : "Show example"}
                               </button>
                               {showWebsiteRulesExample && (
-                                <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 text-[11px] text-slate-100">
+                                <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
 {`[
   {
     "Condition": { "KeyPrefixEquals": "docs/" },
@@ -2525,7 +2525,7 @@ export default function BucketDetailPage() {
                         </div>
                       ) : (
                         <div className="grid gap-3 md:grid-cols-2">
-                          <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                             Redirect hostname
                             <input
                               type="text"
@@ -2534,12 +2534,12 @@ export default function BucketDetailPage() {
                                 setWebsiteRedirectHost(e.target.value);
                                 setWebsiteStatus(null);
                               }}
-                              className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                               placeholder="www.example.com"
                               disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                             />
                           </label>
-                          <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                             Protocol (optional)
                             <input
                               type="text"
@@ -2548,12 +2548,12 @@ export default function BucketDetailPage() {
                                 setWebsiteRedirectProtocol(e.target.value);
                                 setWebsiteStatus(null);
                               }}
-                              className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                               placeholder="https"
                               disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                             />
                           </label>
-                          <p className="md:col-span-2 text-[11px] text-slate-500 dark:text-slate-400">
+                          <p className="md:col-span-2 ui-caption text-slate-500 dark:text-slate-400">
                             All requests will redirect to the host above. Index and routing rules are ignored.
                           </p>
                         </div>
@@ -2572,14 +2572,14 @@ export default function BucketDetailPage() {
                 <div className={`space-y-3 ${bucketCardClass}`}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Block public access</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Block public access</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
                         Manage the four S3 public access block flags. Configure each option below.
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       {publicAccessStatus && (
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-200">
+                        <span className="ui-caption font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-200">
                           {publicAccessStatus}
                         </span>
                       )}
@@ -2587,7 +2587,7 @@ export default function BucketDetailPage() {
                         type="button"
                         onClick={loadPublicAccessBlock}
                         disabled={publicAccessLoading || savingPublicAccess}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                       >
                         {publicAccessLoading ? "Loading..." : "Refresh"}
                       </button>
@@ -2595,14 +2595,14 @@ export default function BucketDetailPage() {
                         type="button"
                         onClick={savePublicAccessBlock}
                         disabled={publicAccessLoading || savingPublicAccess}
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingPublicAccess ? "Saving..." : "Save"}
                       </button>
                     </div>
                   </div>
                   {publicAccessError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {publicAccessError}
                     </div>
                   )}
@@ -2610,11 +2610,11 @@ export default function BucketDetailPage() {
                     {publicAccessOptions.map((option) => (
                       <label
                         key={option.key}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:border-primary dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-100"
+                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-body text-slate-700 hover:border-primary dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-100"
                       >
                         <div>
                           <p className="font-semibold text-slate-900 dark:text-slate-50">{option.label}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{option.description}</p>
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">{option.description}</p>
                         </div>
                         <input
                           type="checkbox"
@@ -2631,8 +2631,8 @@ export default function BucketDetailPage() {
                 <div className={`space-y-3 ${bucketCardClass}`}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Access control list</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Access control list</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
                         Configure a canned ACL and review resulting grants.
                       </p>
                     </div>
@@ -2640,7 +2640,7 @@ export default function BucketDetailPage() {
                       <button
                         type="button"
                         onClick={loadBucketAcl}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         disabled={bucketAclLoading}
                       >
                         {bucketAclLoading ? "Loading..." : "Refresh"}
@@ -2648,7 +2648,7 @@ export default function BucketDetailPage() {
                       <button
                         type="button"
                         onClick={saveBucketAcl}
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         disabled={savingBucketAcl || bucketAclLoading}
                       >
                         {savingBucketAcl ? "Saving..." : "Save ACL"}
@@ -2656,17 +2656,17 @@ export default function BucketDetailPage() {
                     </div>
                   </div>
                   {bucketAclError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {bucketAclError}
                     </div>
                   )}
                   {bucketAclStatus && (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
                       {bucketAclStatus}
                     </div>
                   )}
                   <div className="grid gap-3 md:grid-cols-2">
-                    <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                    <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                       Canned ACL
                       <select
                         value={bucketAclPreset}
@@ -2675,7 +2675,7 @@ export default function BucketDetailPage() {
                           setBucketAclStatus(null);
                           setBucketAclError(null);
                         }}
-                        className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         disabled={bucketAclLoading || savingBucketAcl}
                       >
                         {bucketAclOptions.map((option) => (
@@ -2686,7 +2686,7 @@ export default function BucketDetailPage() {
                       </select>
                     </label>
                     {bucketAclPreset === "custom" && (
-                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                         Custom ACL
                         <input
                           type="text"
@@ -2695,29 +2695,29 @@ export default function BucketDetailPage() {
                             setBucketAclCustom(e.target.value);
                             setBucketAclStatus(null);
                           }}
-                          className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           placeholder="e.g. private"
                           disabled={bucketAclLoading || savingBucketAcl}
                         />
                       </label>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Saving a canned ACL replaces the current ACL grants.
                   </p>
                   {bucketAclLoading ? (
-                    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
                       Loading ACL...
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
                         Owner: <span className="font-semibold text-slate-700 dark:text-slate-200">{bucketAcl?.owner ?? "Unknown"}</span>
                       </p>
                       {(bucketAcl?.grants?.length ?? 0) > 0 ? (
                         <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
-                            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
+                          <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
+                            <thead className="bg-slate-50 ui-caption uppercase tracking-wide text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
                               <tr>
                                 <th className="px-3 py-2 text-left">Grantee</th>
                                 <th className="px-3 py-2 text-left">Type</th>
@@ -2735,8 +2735,8 @@ export default function BucketDetailPage() {
                                 return (
                                   <tr key={`${grantee.type}-${grantee.id ?? grantee.uri ?? index}`}>
                                     <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{label}</td>
-                                    <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{grantee.type}</td>
-                                    <td className="px-3 py-2 text-sm font-semibold text-slate-800 dark:text-slate-100">{grant.permission}</td>
+                                    <td className="px-3 py-2 ui-caption text-slate-500 dark:text-slate-400">{grantee.type}</td>
+                                    <td className="px-3 py-2 ui-body font-semibold text-slate-800 dark:text-slate-100">{grant.permission}</td>
                                   </tr>
                                 );
                               })}
@@ -2744,7 +2744,7 @@ export default function BucketDetailPage() {
                           </table>
                         </div>
                       ) : (
-                        <p className="text-sm text-slate-600 dark:text-slate-300">No explicit ACL grants on this bucket.</p>
+                        <p className="ui-body text-slate-600 dark:text-slate-300">No explicit ACL grants on this bucket.</p>
                       )}
                     </div>
                   )}
@@ -2753,8 +2753,8 @@ export default function BucketDetailPage() {
                 <div className={`space-y-4 ${bucketCardClass}`}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Bucket policy</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">IAM-like JSON applied directly on the bucket.</p>
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Bucket policy</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">IAM-like JSON applied directly on the bucket.</p>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -2763,7 +2763,7 @@ export default function BucketDetailPage() {
                           loadPolicy();
                           loadCors();
                         }}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         disabled={policyLoading}
                       >
                         {policyLoading ? "Loading..." : "Refresh"}
@@ -2772,7 +2772,7 @@ export default function BucketDetailPage() {
                         type="button"
                         onClick={savePolicy}
                         disabled={savingPolicy || policyLoading}
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingPolicy ? "Saving..." : "Save policy"}
                       </button>
@@ -2780,34 +2780,34 @@ export default function BucketDetailPage() {
                         type="button"
                         onClick={removePolicy}
                         disabled={deletingPolicy}
-                        className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                        className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
                         {deletingPolicy ? "Deleting..." : "Delete policy"}
                       </button>
                     </div>
                   </div>
                   {policyError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {policyError}
                     </div>
                   )}
                   <textarea
                     value={policyText}
                     onChange={(e) => setPolicyText(e.target.value)}
-                    className="h-72 w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className="h-72 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     placeholder='{"Version":"2012-10-17","Statement":[...]}'
                     spellCheck={false}
                   />
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
                     <button
                       type="button"
                       onClick={() => setShowPolicyExample((prev) => !prev)}
-                      className="text-[11px] font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
+                      className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
                     >
                       {showPolicyExample ? "Hide example" : "Show example"}
                     </button>
                     {showPolicyExample && (
-                      <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 text-[11px] text-slate-100">
+                      <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
 {`{
   "Version": "2012-10-17",
   "Statement": [
@@ -2827,14 +2827,14 @@ export default function BucketDetailPage() {
                 <div className={`space-y-3 ${bucketCardClass}`}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">CORS</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">CORS rules in AWS format (CORSRules).</p>
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">CORS</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">CORS rules in AWS format (CORSRules).</p>
                     </div>
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={loadCors}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         disabled={corsLoading}
                       >
                         {corsLoading ? "Loading..." : "Refresh"}
@@ -2843,7 +2843,7 @@ export default function BucketDetailPage() {
                         type="button"
                         onClick={saveCors}
                         disabled={savingCors || corsLoading}
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingCors ? "Saving..." : "Save CORS"}
                       </button>
@@ -2851,34 +2851,34 @@ export default function BucketDetailPage() {
                         type="button"
                         onClick={removeCors}
                         disabled={deletingCors}
-                        className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                        className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
                         {deletingCors ? "Deleting..." : "Delete CORS"}
                       </button>
                     </div>
                   </div>
                   {corsError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {corsError}
                     </div>
                   )}
                   <textarea
                     value={corsText}
                     onChange={(e) => setCorsText(e.target.value)}
-                    className="h-56 w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className="h-56 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     placeholder='[{"AllowedMethods":["GET"],"AllowedOrigins":["*"]}]'
                     spellCheck={false}
                   />
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
                     <button
                       type="button"
                       onClick={() => setShowCorsExample((prev) => !prev)}
-                      className="text-[11px] font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
+                      className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
                     >
                       {showCorsExample ? "Hide example" : "Show example"}
                     </button>
                     {showCorsExample && (
-                      <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 text-[11px] text-slate-100">
+                      <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
 {`[
   {
     "AllowedMethods": ["GET", "PUT"],
@@ -2902,16 +2902,16 @@ export default function BucketDetailPage() {
                 <div className={`${bucketCardClass} space-y-3`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Notifications / SNS topics</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        JSON payload forwarded to <code className="font-mono text-[11px]">put_bucket_notification_configuration</code>.
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Notifications / SNS topics</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        JSON payload forwarded to <code className="font-mono ui-caption">put_bucket_notification_configuration</code>.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={loadNotifications}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         disabled={notificationsLoading}
                       >
                         {notificationsLoading ? "Loading..." : "Refresh"}
@@ -2920,7 +2920,7 @@ export default function BucketDetailPage() {
                         type="button"
                         onClick={saveNotifications}
                         disabled={savingNotifications || notificationsLoading}
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingNotifications ? "Saving..." : "Save notifications"}
                       </button>
@@ -2928,19 +2928,19 @@ export default function BucketDetailPage() {
                         type="button"
                         onClick={clearNotifications}
                         disabled={clearingNotifications}
-                        className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                        className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
                         {clearingNotifications ? "Clearing..." : "Clear"}
                       </button>
                     </div>
                   </div>
                   {notificationsError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {notificationsError}
                     </div>
                   )}
                   {notificationsStatus && (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
                       {notificationsStatus}
                     </div>
                   )}
@@ -2952,16 +2952,16 @@ export default function BucketDetailPage() {
                         setNotificationsStatus(null);
                       }
                     }}
-                    className="h-64 w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    className="h-64 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     placeholder={defaultNotificationTemplate}
                     spellCheck={false}
                   />
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() => setShowNotificationExample((prev) => !prev)}
-                        className="text-[11px] font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
+                        className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
                       >
                         {showNotificationExample ? "Hide example" : "Show example"}
                       </button>
@@ -2971,23 +2971,23 @@ export default function BucketDetailPage() {
                           setNotificationText(notificationExample);
                           setNotificationsStatus(null);
                         }}
-                        className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100"
+                        className="rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100"
                       >
                         Use example
                       </button>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">
                         Need a topic? Create it in the Topics section.
                       </span>
                     </div>
                     {showNotificationExample && (
-                      <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 text-[11px] text-slate-100">
+                      <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
                         {notificationExample}
                       </pre>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Only topic-based notifications are supported. Each entry should include{" "}
-                    <code className="font-mono text-[11px]">TopicArn</code>, <code className="font-mono text-[11px]">Events</code>, and
+                    <code className="font-mono ui-caption">TopicArn</code>, <code className="font-mono ui-caption">Events</code>, and
                     an optional filter.
                   </p>
                 </div>
@@ -3001,9 +3001,9 @@ export default function BucketDetailPage() {
               <div className="space-y-4">
                 <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                   <header className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">RGW Stats</p>
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Current Usage and Quota</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-primary">RGW Stats</p>
+                    <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Current Usage and Quota</h3>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
                       Live usage, quotas, and traffic sourced from RGW logs.
                     </p>
                   </header>
@@ -3032,7 +3032,7 @@ export default function BucketDetailPage() {
                 {hasAccountContext && bucketName ? (
                   <TrafficAnalytics accountId={accountIdForApi} bucketName={bucketName} enabled={hasAccountContext} />
                 ) : (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
                     Select an account and a bucket to view detailed metrics.
                   </div>
                 )}
@@ -3046,17 +3046,17 @@ export default function BucketDetailPage() {
               <div className="space-y-3">
                 <div className={`${bucketCardClass} opacity-50 pointer-events-none`}>
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Quota</p>
+                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Quota</p>
                     {!isAdmin && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                         Restricted
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Allowed bucket size and object count.</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">Allowed bucket size and object count.</p>
                   <form className={`mt-2 space-y-2 ${!isAdmin ? "pointer-events-none" : ""}`} onSubmit={handleUpdateQuota}>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                         Size (GB)
                         <input
                           type="number"
@@ -3064,12 +3064,12 @@ export default function BucketDetailPage() {
                           step="0.1"
                           value={quotaSizeGb}
                           onChange={(e) => setQuotaSizeGb(e.target.value)}
-                          className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           placeholder="e.g. 100"
                           disabled={!isAdmin}
                         />
                       </label>
-                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+                      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                         Object count
                         <input
                           type="number"
@@ -3077,19 +3077,19 @@ export default function BucketDetailPage() {
                           step="1"
                           value={quotaObjects}
                           onChange={(e) => setQuotaObjects(e.target.value)}
-                          className="rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           placeholder="e.g. 1000000"
                           disabled={!isAdmin}
                         />
                       </label>
                     </div>
                     {quotaStatus && (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 ui-caption font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
                         {quotaStatus}
                       </div>
                     )}
                     {quotaError && (
-                      <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                      <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                         {quotaError}
                       </div>
                     )}
@@ -3097,14 +3097,14 @@ export default function BucketDetailPage() {
                       <button
                         type="submit"
                         disabled={updatingQuota || !isAdmin}
-                        className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         title={!isAdmin ? "Admins only" : undefined}
                       >
                         {updatingQuota ? "Updating..." : "Save"}
                       </button>
                     </div>
                   </form>
-                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                     Leave empty to remove the quota. {isAdmin ? "" : "(Read-only for this role.)"}
                   </p>
                 </div>
@@ -3123,21 +3123,21 @@ export default function BucketDetailPage() {
         <Modal title="Upload object" onClose={() => setShowUpload(false)}>
           <form className="space-y-4" onSubmit={handleUpload}>
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Destination</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Destination</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
                 {bucketName}/{currentPrefix || "(root)"}
               </p>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-200">File</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">File</label>
               <input
                 type="file"
                 onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </div>
             {uploadError && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                 {uploadError}
               </div>
             )}
@@ -3145,14 +3145,14 @@ export default function BucketDetailPage() {
               <button
                 type="button"
                 onClick={() => setShowUpload(false)}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={uploading}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {uploading ? "Uploading..." : "Upload"}
               </button>
@@ -3168,14 +3168,14 @@ function InfoCard({ title, description, badge, disabled }: { title: string; desc
   return (
     <div className={`${bucketCardClass} ${disabled ? "opacity-50 pointer-events-none" : ""}`}>
       <div className="flex items-center gap-2">
-        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</p>
+        <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{title}</p>
         {badge && (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
             {badge}
           </span>
         )}
       </div>
-      <p className="text-sm text-slate-600 dark:text-slate-300">{description}</p>
+      <p className="ui-body text-slate-600 dark:text-slate-300">{description}</p>
     </div>
   );
 }

@@ -26,9 +26,9 @@ export default function StatCards({ stats, columns = 3 }: StatCardsProps) {
       {stats.map((item) => {
         const content = (
           <>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{item.label}</p>
-            <p className="mt-1.5 text-xl font-semibold text-slate-900 dark:text-white">{item.value}</p>
-            {item.hint && <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{item.hint}</p>}
+            <p className="ui-caption font-medium text-slate-500 dark:text-slate-400">{item.label}</p>
+            <p className="mt-1.5 ui-title font-semibold text-slate-900 dark:text-white">{item.value}</p>
+            {item.hint && <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">{item.hint}</p>}
           </>
         );
 

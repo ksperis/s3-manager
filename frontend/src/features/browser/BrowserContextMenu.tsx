@@ -78,7 +78,7 @@ export default function BrowserContextMenu({
     <div
       ref={contextMenuRef}
       role="menu"
-      className="fixed z-50 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      className="fixed z-50 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
       style={{ left: contextMenu.x, top: contextMenu.y }}
     >
       {contextMenu.kind === "path" && (

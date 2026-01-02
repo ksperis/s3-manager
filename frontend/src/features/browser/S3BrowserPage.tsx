@@ -610,7 +610,7 @@ export default function S3BrowserPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               onClick={handleNewFolder}
               disabled={!bucket}
             >
@@ -618,7 +618,7 @@ export default function S3BrowserPage() {
             </button>
             <button
               type="button"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               onClick={() => fileInputRef.current?.click()}
               disabled={!bucket}
             >
@@ -626,7 +626,7 @@ export default function S3BrowserPage() {
             </button>
             <button
               type="button"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               onClick={handleDownload}
               disabled={!bucket || selected.length === 0}
             >
@@ -634,7 +634,7 @@ export default function S3BrowserPage() {
             </button>
             <button
               type="button"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               onClick={() => handleCopyOrMove("copy")}
               disabled={!bucket || selected.length === 0}
             >
@@ -642,7 +642,7 @@ export default function S3BrowserPage() {
             </button>
             <button
               type="button"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               onClick={() => handleCopyOrMove("move")}
               disabled={!bucket || selected.length === 0}
             >
@@ -650,7 +650,7 @@ export default function S3BrowserPage() {
             </button>
             <button
               type="button"
-              className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700 shadow-sm transition hover:border-rose-400 hover:text-rose-800 dark:border-rose-900 dark:bg-rose-950/20 dark:text-rose-100"
+              className="rounded-lg border border-rose-200 bg-white px-3 py-2 ui-body font-semibold text-rose-700 shadow-sm transition hover:border-rose-400 hover:text-rose-800 dark:border-rose-900 dark:bg-rose-950/20 dark:text-rose-100"
               onClick={handleDelete}
               disabled={!bucket || selected.length === 0}
             >
@@ -662,9 +662,9 @@ export default function S3BrowserPage() {
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-slate-600 dark:text-slate-200">Bucket</span>
+          <span className="ui-body font-semibold text-slate-600 dark:text-slate-200">Bucket</span>
           <select
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             value={bucket ?? ""}
             onChange={(e) => setBucket(e.target.value || null)}
             disabled={loadingBuckets || !hasS3AccountContext}
@@ -676,11 +676,11 @@ export default function S3BrowserPage() {
               </option>
             ))}
           </select>
-          {bucketError && <span className="text-sm text-rose-600 dark:text-rose-300">{bucketError}</span>}
+          {bucketError && <span className="ui-body text-rose-600 dark:text-rose-300">{bucketError}</span>}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-slate-600 dark:text-slate-200">Prefix</span>
-          <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="ui-body font-semibold text-slate-600 dark:text-slate-200">Prefix</span>
+          <div className="flex flex-wrap items-center gap-2 ui-body">
             {breadcrumbs.map((crumb, idx) => (
               <div key={crumb.prefixValue} className="flex items-center gap-2">
                 {idx > 0 && <span className="text-slate-400">/</span>}
@@ -699,7 +699,7 @@ export default function S3BrowserPage() {
             ))}
           </div>
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+        <label className="flex cursor-pointer items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
           <input
             type="checkbox"
             checked={showVersions}
@@ -710,7 +710,7 @@ export default function S3BrowserPage() {
         </label>
         <button
           type="button"
-          className="ml-auto rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className="ml-auto rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           onClick={() => {
             loadObjects({ prefixOverride: prefix, append: false });
             if (showVersions) loadVersions({ append: false, keyMarker: null, versionIdMarker: null });
@@ -728,8 +728,8 @@ export default function S3BrowserPage() {
       >
         <div className="flex items-center justify-between gap-4">
           <div>
-            <div className="text-sm font-semibold text-slate-700 dark:text-slate-100">Drag & drop files to upload</div>
-            <div className="text-xs text-slate-500 dark:text-slate-300">
+            <div className="ui-body font-semibold text-slate-700 dark:text-slate-100">Drag & drop files to upload</div>
+            <div className="ui-caption text-slate-500 dark:text-slate-300">
               Files are uploaded directly to S3 with signed PUT/Multipart URLs.
             </div>
           </div>
@@ -743,7 +743,7 @@ export default function S3BrowserPage() {
             />
             <button
               type="button"
-              className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
+              className="rounded-lg bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary/90"
               onClick={() => fileInputRef.current?.click()}
               disabled={!bucket}
             >
@@ -756,22 +756,22 @@ export default function S3BrowserPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 ui-body font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
               <div>
                 Objects {prefix ? `· ${prefix}` : ""}
-                {objectsError && <span className="ml-2 text-xs font-normal text-rose-500">{objectsError}</span>}
+                {objectsError && <span className="ml-2 ui-caption font-normal text-rose-500">{objectsError}</span>}
               </div>
-              {objectsLoading && <span className="text-xs text-slate-500">Loading...</span>}
+              {objectsLoading && <span className="ui-caption text-slate-500">Loading...</span>}
             </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {currentRows.length === 0 && !objectsLoading && (
-                <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-300">No objects in this prefix.</div>
+                <div className="px-4 py-6 ui-body text-slate-500 dark:text-slate-300">No objects in this prefix.</div>
               )}
               {currentRows.map((row) =>
                 row.type === "prefix" ? (
                   <div
                     key={row.key}
-                    className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm transition hover:bg-primary/5 dark:hover:bg-primary/10"
+                    className="flex cursor-pointer items-center gap-3 px-4 py-3 ui-body transition hover:bg-primary/5 dark:hover:bg-primary/10"
                     onClick={() => {
                       setPrefix(row.key);
                       setNextToken(null);
@@ -790,7 +790,7 @@ export default function S3BrowserPage() {
                 ) : (
                   <div
                     key={row.key}
-                    className="flex items-center gap-3 px-4 py-3 text-sm transition hover:bg-primary/5 dark:hover:bg-primary/10"
+                    className="flex items-center gap-3 px-4 py-3 ui-body transition hover:bg-primary/5 dark:hover:bg-primary/10"
                   >
                     <input
                       type="checkbox"
@@ -805,7 +805,7 @@ export default function S3BrowserPage() {
                       >
                         {row.name}
                       </div>
-                      <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-300">
+                      <div className="flex flex-wrap gap-3 ui-caption text-slate-500 dark:text-slate-300">
                         <span>{formatBytes(row.object.size)}</span>
                         {row.object.last_modified && <span>{new Date(row.object.last_modified).toLocaleString()}</span>}
                         {row.object.storage_class && <span>{row.object.storage_class}</span>}
@@ -820,7 +820,7 @@ export default function S3BrowserPage() {
               <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900/70">
                 <button
                   type="button"
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   onClick={() => loadObjects({ append: true, token: nextToken })}
                 >
                   Load more
@@ -831,17 +831,17 @@ export default function S3BrowserPage() {
 
           {showVersions && (
             <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 ui-body font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
                 <div>Versions</div>
-                {versionsLoading && <span className="text-xs text-slate-500">Loading...</span>}
+                {versionsLoading && <span className="ui-caption text-slate-500">Loading...</span>}
               </div>
-              {versionsError && <div className="px-4 py-2 text-sm text-rose-500">{versionsError}</div>}
+              {versionsError && <div className="px-4 py-2 ui-body text-rose-500">{versionsError}</div>}
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {versionRows.length === 0 && !versionsLoading && (
-                  <div className="px-4 py-4 text-sm text-slate-500 dark:text-slate-300">No versions found.</div>
+                  <div className="px-4 py-4 ui-body text-slate-500 dark:text-slate-300">No versions found.</div>
                 )}
                 {versionRows.map((ver) => (
-                  <div key={`${ver.key}-${ver.version_id}-${ver.is_delete_marker}`} className="flex items-center gap-3 px-4 py-3 text-sm">
+                  <div key={`${ver.key}-${ver.version_id}-${ver.is_delete_marker}`} className="flex items-center gap-3 px-4 py-3 ui-body">
                     <input
                       type="checkbox"
                       checked={selected.some((s) => s.key === ver.key && (s.version_id || null) === (ver.version_id || null))}
@@ -852,17 +852,17 @@ export default function S3BrowserPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate font-semibold text-slate-800 dark:text-slate-100">{ver.key}</span>
                         {ver.is_delete_marker && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
                             delete marker
                           </span>
                         )}
                         {ver.is_latest && (
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 ui-caption font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
                             latest
                           </span>
                         )}
                       </div>
-                      <div className="flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-300">
+                      <div className="flex flex-wrap gap-3 ui-caption text-slate-500 dark:text-slate-300">
                         {ver.version_id && <span>v: {ver.version_id}</span>}
                         {ver.last_modified && <span>{new Date(ver.last_modified).toLocaleString()}</span>}
                         {ver.size != null && <span>{formatBytes(ver.size)}</span>}
@@ -872,7 +872,7 @@ export default function S3BrowserPage() {
                     {!ver.is_delete_marker && (
                       <button
                         type="button"
-                        className="rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100"
+                        className="rounded border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100"
                         onClick={() => handleRestoreVersion(ver)}
                       >
                         Restore
@@ -885,7 +885,7 @@ export default function S3BrowserPage() {
                 <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900/70">
                   <button
                     type="button"
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                     onClick={() => loadVersions({ append: true })}
                   >
                     Load more versions
@@ -898,18 +898,18 @@ export default function S3BrowserPage() {
 
         <div className="space-y-4">
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
+            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 ui-body font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
               Inspector
             </div>
-            {!inspectedKey && <div className="px-4 py-4 text-sm text-slate-500 dark:text-slate-300">Select an object to view metadata.</div>}
+            {!inspectedKey && <div className="px-4 py-4 ui-body text-slate-500 dark:text-slate-300">Select an object to view metadata.</div>}
             {inspectedKey && (
-              <div className="space-y-3 px-4 py-4 text-sm">
+              <div className="space-y-3 px-4 py-4 ui-body">
                 <div className="font-semibold text-slate-800 dark:text-slate-100">{inspectedKey}</div>
-                {metaLoading && <div className="text-xs text-slate-500">Loading metadata...</div>}
-                {metaError && <div className="text-xs text-rose-500">{metaError}</div>}
+                {metaLoading && <div className="ui-caption text-slate-500">Loading metadata...</div>}
+                {metaError && <div className="ui-caption text-rose-500">{metaError}</div>}
                 {metadata && (
                   <>
-                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-200">
+                    <div className="grid grid-cols-2 gap-2 ui-caption text-slate-600 dark:text-slate-200">
                       <span className="font-semibold">Size</span>
                       <span>{formatBytes(metadata.size)}</span>
                       <span className="font-semibold">Last modified</span>
@@ -929,7 +929,7 @@ export default function S3BrowserPage() {
                     </div>
 
                     <div className="pt-2">
-                      <div className="mb-1 text-xs font-semibold text-slate-700 dark:text-slate-100">Metadata (x-amz-meta-*)</div>
+                      <div className="mb-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">Metadata (x-amz-meta-*)</div>
                       <div className="space-y-2">
                         {customMetadata.map((item, idx) => (
                           <div key={`${item.key}-${idx}`} className="flex gap-2">
@@ -940,7 +940,7 @@ export default function S3BrowserPage() {
                                 setCustomMetadata((prev) => prev.map((m, i) => (i === idx ? { ...m, key: e.target.value } : m)))
                               }
                               placeholder="key"
-                              className="w-1/3 rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                              className="w-1/3 rounded border border-slate-300 px-2 py-1 ui-caption dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                             />
                             <input
                               type="text"
@@ -949,11 +949,11 @@ export default function S3BrowserPage() {
                                 setCustomMetadata((prev) => prev.map((m, i) => (i === idx ? { ...m, value: e.target.value } : m)))
                               }
                               placeholder="value"
-                              className="w-2/3 rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                              className="w-2/3 rounded border border-slate-300 px-2 py-1 ui-caption dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                             />
                             <button
                               type="button"
-                              className="rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:border-rose-300 hover:text-rose-500 dark:border-slate-700 dark:text-slate-200"
+                              className="rounded border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 transition hover:border-rose-300 hover:text-rose-500 dark:border-slate-700 dark:text-slate-200"
                               onClick={() => setCustomMetadata((prev) => prev.filter((_, i) => i !== idx))}
                             >
                               ✕
@@ -962,7 +962,7 @@ export default function S3BrowserPage() {
                         ))}
                         <button
                           type="button"
-                          className="text-xs font-semibold text-primary hover:underline"
+                          className="ui-caption font-semibold text-primary hover:underline"
                           onClick={() => setCustomMetadata((prev) => [...prev, { key: "", value: "" }])}
                         >
                           + Add metadata
@@ -971,7 +971,7 @@ export default function S3BrowserPage() {
                     </div>
 
                     <div className="pt-2">
-                      <div className="mb-1 text-xs font-semibold text-slate-700 dark:text-slate-100">Tags</div>
+                      <div className="mb-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">Tags</div>
                       <div className="space-y-2">
                         {objectTags.map((tag, idx) => (
                           <div key={`${tag.key}-${idx}`} className="flex gap-2">
@@ -982,7 +982,7 @@ export default function S3BrowserPage() {
                                 setObjectTags((prev) => prev.map((t, i) => (i === idx ? { ...t, key: e.target.value } : t)))
                               }
                               placeholder="key"
-                              className="w-1/3 rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                              className="w-1/3 rounded border border-slate-300 px-2 py-1 ui-caption dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                             />
                             <input
                               type="text"
@@ -991,11 +991,11 @@ export default function S3BrowserPage() {
                                 setObjectTags((prev) => prev.map((t, i) => (i === idx ? { ...t, value: e.target.value } : t)))
                               }
                               placeholder="value"
-                              className="w-2/3 rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                              className="w-2/3 rounded border border-slate-300 px-2 py-1 ui-caption dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                             />
                             <button
                               type="button"
-                              className="rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:border-rose-300 hover:text-rose-500 dark:border-slate-700 dark:text-slate-200"
+                              className="rounded border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 transition hover:border-rose-300 hover:text-rose-500 dark:border-slate-700 dark:text-slate-200"
                               onClick={() => setObjectTags((prev) => prev.filter((_, i) => i !== idx))}
                             >
                               ✕
@@ -1004,7 +1004,7 @@ export default function S3BrowserPage() {
                         ))}
                         <button
                           type="button"
-                          className="text-xs font-semibold text-primary hover:underline"
+                          className="ui-caption font-semibold text-primary hover:underline"
                           onClick={() => setObjectTags((prev) => [...prev, { key: "", value: "" }])}
                         >
                           + Add tag
@@ -1015,7 +1015,7 @@ export default function S3BrowserPage() {
                     <div className="pt-2">
                       <button
                         type="button"
-                        className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary/90"
+                        className="rounded-lg bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90"
                         onClick={handleSaveMetadata}
                       >
                         Save metadata & tags
@@ -1028,14 +1028,14 @@ export default function S3BrowserPage() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 ui-body font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
               <span>Upload queue</span>
-              <span className="text-xs font-normal text-slate-500 dark:text-slate-300">PUT / multipart direct to S3</span>
+              <span className="ui-caption font-normal text-slate-500 dark:text-slate-300">PUT / multipart direct to S3</span>
             </div>
-            {uploads.length === 0 && <div className="px-4 py-4 text-sm text-slate-500 dark:text-slate-300">No uploads queued.</div>}
+            {uploads.length === 0 && <div className="px-4 py-4 ui-body text-slate-500 dark:text-slate-300">No uploads queued.</div>}
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {uploads.map((u) => (
-                <div key={u.id} className="px-4 py-3 text-xs text-slate-700 dark:text-slate-200">
+                <div key={u.id} className="px-4 py-3 ui-caption text-slate-700 dark:text-slate-200">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0">
                       <div className="truncate font-semibold">{u.key}</div>
@@ -1043,7 +1043,7 @@ export default function S3BrowserPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span
-                        className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                        className={`rounded-full px-2 py-1 ui-caption font-semibold ${
                           u.status === "completed"
                             ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
                             : u.status === "error"
@@ -1058,7 +1058,7 @@ export default function S3BrowserPage() {
                       {(u.status === "uploading" || u.status === "pending") && (
                         <button
                           type="button"
-                          className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 transition hover:border-rose-300 hover:text-rose-500 dark:border-slate-700 dark:text-slate-200"
+                          className="rounded border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 transition hover:border-rose-300 hover:text-rose-500 dark:border-slate-700 dark:text-slate-200"
                           onClick={() => handleCancelUpload(u.id)}
                         >
                           Cancel
@@ -1072,38 +1072,38 @@ export default function S3BrowserPage() {
                       style={{ width: `${u.progress}%` }}
                     />
                   </div>
-                  {u.message && <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">{u.message}</div>}
+                  {u.message && <div className="mt-1 ui-caption text-slate-500 dark:text-slate-300">{u.message}</div>}
                 </div>
               ))}
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 ui-body font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
               <span>Ongoing multipart uploads</span>
               <button
                 type="button"
-                className="text-xs font-semibold text-primary hover:underline"
+                className="ui-caption font-semibold text-primary hover:underline"
                 onClick={() => loadRemoteMultipart()}
               >
                 Refresh
               </button>
             </div>
-            {remoteUploadsLoading && <div className="px-4 py-3 text-xs text-slate-500">Loading...</div>}
-            {remoteUploadsError && <div className="px-4 py-3 text-xs text-rose-500">{remoteUploadsError}</div>}
+            {remoteUploadsLoading && <div className="px-4 py-3 ui-caption text-slate-500">Loading...</div>}
+            {remoteUploadsError && <div className="px-4 py-3 ui-caption text-rose-500">{remoteUploadsError}</div>}
             {!remoteUploadsLoading && remoteUploads.length === 0 && (
-              <div className="px-4 py-3 text-sm text-slate-500 dark:text-slate-300">No in-flight uploads.</div>
+              <div className="px-4 py-3 ui-body text-slate-500 dark:text-slate-300">No in-flight uploads.</div>
             )}
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {remoteUploads.map((u) => (
-                <div key={`${u.key}-${u.upload_id}`} className="flex items-center justify-between px-4 py-3 text-xs text-slate-700 dark:text-slate-200">
+                <div key={`${u.key}-${u.upload_id}`} className="flex items-center justify-between px-4 py-3 ui-caption text-slate-700 dark:text-slate-200">
                   <div className="min-w-0">
                     <div className="truncate font-semibold">{u.key}</div>
                     <div className="text-slate-500">UploadId: {u.upload_id}</div>
                   </div>
                   <button
                     type="button"
-                    className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 transition hover:border-rose-300 hover:text-rose-500 dark:border-slate-700 dark:text-slate-200"
+                    className="rounded border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 transition hover:border-rose-300 hover:text-rose-500 dark:border-slate-700 dark:text-slate-200"
                     onClick={() => abortMultipartUpload(accountIdForApi, bucket!, u.upload_id, u.key).then(loadRemoteMultipart)}
                   >
                     Abort
@@ -1116,7 +1116,7 @@ export default function S3BrowserPage() {
       </div>
 
       {statusMessage && (
-        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 ui-body text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
           {statusMessage}
         </div>
       )}

@@ -345,7 +345,7 @@ export default function TopicsPage() {
           <button
             type="button"
             onClick={() => setActionMessage(null)}
-            className="text-xs font-semibold text-emerald-900 underline dark:text-emerald-100"
+            className="ui-caption font-semibold text-emerald-900 underline dark:text-emerald-100"
           >
             Dismiss
           </button>
@@ -357,18 +357,18 @@ export default function TopicsPage() {
       {!needsS3AccountSelection && (
         <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-            <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <div className="ui-body font-semibold text-slate-700 dark:text-slate-200">
               {accountLabel} · Topics
             </div>
           </div>
           {loading ? (
-            <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Loading topics…</div>
+            <div className="px-4 py-6 ui-body text-slate-500 dark:text-slate-400">Loading topics…</div>
           ) : topics.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">No topics found for this account.</div>
+            <div className="px-4 py-6 ui-body text-slate-500 dark:text-slate-400">No topics found for this account.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="manager-table min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
+              <table className="manager-table min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
+                <thead className="bg-slate-50 ui-caption uppercase tracking-wide text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
                   <tr>
                     <th className="px-4 py-2 text-left">Topic</th>
                     <th className="px-4 py-2 text-left">Subscriptions</th>
@@ -380,11 +380,11 @@ export default function TopicsPage() {
                     <tr key={topic.arn}>
                       <td className="manager-table-cell-wide px-4 py-3">
                         <div className="flex flex-col">
-                          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{topic.name}</span>
-                          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">{topic.arn}</span>
+                          <span className="ui-body font-semibold text-slate-900 dark:text-slate-100">{topic.name}</span>
+                          <span className="ui-caption font-mono text-slate-500 dark:text-slate-400">{topic.arn}</span>
                         </div>
                       </td>
-                      <td className="manager-table-cell px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
+                      <td className="manager-table-cell px-4 py-3 ui-caption text-slate-600 dark:text-slate-300">
                         <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
                         <div>Pending: {topic.subscriptions_pending ?? 0}</div>
                       </td>
@@ -426,17 +426,17 @@ export default function TopicsPage() {
         <Modal title="Create SNS topic" onClose={() => setShowCreateModal(false)}>
           <form className="space-y-4" onSubmit={handleCreateTopic}>
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-slate-700 dark:text-slate-100">Topic name</label>
+              <label className="ui-body font-semibold text-slate-700 dark:text-slate-100">Topic name</label>
               <input
                 type="text"
                 value={newTopicName}
                 onChange={(e) => setNewTopicName(e.target.value)}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 placeholder="events-topic"
               />
             </div>
             {createError && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                 {createError}
               </div>
             )}
@@ -444,14 +444,14 @@ export default function TopicsPage() {
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={creating}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {creating ? "Creating..." : "Create topic"}
               </button>
@@ -464,17 +464,17 @@ export default function TopicsPage() {
         <Modal title={`Topic attributes · ${attributesTopicName ?? ""}`} onClose={closeAttributesModal}>
           <div className="space-y-4">
             {attributesError && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                 {attributesError}
               </div>
             )}
             {attributesStatus && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
                 {attributesStatus}
               </div>
             )}
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-slate-700 dark:text-slate-100">Push endpoint URL</label>
+              <label className="ui-body font-semibold text-slate-700 dark:text-slate-100">Push endpoint URL</label>
               <input
                 type="text"
                 value={pushEndpointValue}
@@ -482,16 +482,16 @@ export default function TopicsPage() {
                   setAttributesStatus(null);
                   handlePushEndpointChange(e.target.value);
                 }}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 placeholder="https://example.com/webhook"
                 disabled={attributesLoading}
               />
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Provide the HTTPS endpoint that should receive SNS push notifications.
               </p>
             </div>
             <div className="space-y-1">
-              <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-100">
+              <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-100">
                 <input
                   type="checkbox"
                   className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
@@ -504,16 +504,16 @@ export default function TopicsPage() {
                 />
                 Verify SSL certificates
               </label>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Disable verification only when testing against endpoints that use self-signed certificates.
               </p>
             </div>
             {additionalAttributes.length > 0 && (
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Other attributes
                 </p>
-                <ul className="mt-2 space-y-1 font-mono text-[11px]">
+                <ul className="mt-2 space-y-1 font-mono ui-caption">
                   {additionalAttributes.map(([key, value]) => (
                     <li key={key}>
                       <span className="text-slate-500">{key}:</span> {formatAttributeValue(value)}
@@ -522,14 +522,14 @@ export default function TopicsPage() {
                 </ul>
               </div>
             )}
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
               Attributes that are not listed above are preserved when saving.
             </p>
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={closeAttributesModal}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Close
               </button>
@@ -537,7 +537,7 @@ export default function TopicsPage() {
                 type="button"
                 onClick={saveAttributes}
                 disabled={attributesSaving || attributesLoading}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {attributesSaving ? "Saving..." : "Save attributes"}
               </button>
@@ -550,12 +550,12 @@ export default function TopicsPage() {
         <Modal title={`Topic policy · ${policyTopicName ?? ""}`} onClose={closePolicyModal}>
           <div className="space-y-3">
             {policyError && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                 {policyError}
               </div>
             )}
             {policyStatus && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
                 {policyStatus}
               </div>
             )}
@@ -565,17 +565,17 @@ export default function TopicsPage() {
                 setPolicyText(e.target.value);
                 setPolicyStatus(null);
               }}
-              className="h-72 w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="h-72 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               placeholder={defaultPolicyTemplate}
               spellCheck={false}
               disabled={policyLoading}
             />
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowPolicyExample((prev) => !prev)}
-                  className="text-[11px] font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
+                  className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
                 >
                   {showPolicyExample ? "Hide example" : "Show example"}
                 </button>
@@ -604,13 +604,13 @@ export default function TopicsPage() {
                     setShowPolicyExample(true);
                     setPolicyStatus(null);
                   }}
-                  className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100"
+                  className="rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100"
                 >
                   Use example
                 </button>
               </div>
               {showPolicyExample && (
-                <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 text-[11px] text-slate-100">
+                <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
 {`{
   "Version": "2012-10-17",
   "Statement": [
@@ -635,7 +635,7 @@ export default function TopicsPage() {
               <button
                 type="button"
                 onClick={closePolicyModal}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Close
               </button>
@@ -643,7 +643,7 @@ export default function TopicsPage() {
                 type="button"
                 onClick={savePolicy}
                 disabled={policySaving || policyLoading}
-                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {policySaving ? "Saving..." : "Save policy"}
               </button>

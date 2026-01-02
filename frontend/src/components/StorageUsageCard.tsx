@@ -40,20 +40,20 @@ export default function StorageUsageCard({
   return (
     <section className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <header className="space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Storage Usage</p>
-        <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage Usage</p>
+        <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">
           {accountName ? `Storage usage for ${accountName}` : "S3Account storage usage"}
         </h3>
       </header>
 
       {metricsDisabled && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
           Usage metrics are not available for these credentials.
         </div>
       )}
 
       {!metricsDisabled && errorMessage && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
           {errorMessage}
         </div>
       )}
@@ -112,9 +112,9 @@ type BucketStatProps = {
 function BucketStatCard({ label, value, hint }: BucketStatProps) {
   return (
     <div className="rounded-lg border border-slate-200/80 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1.5 text-xl font-semibold text-slate-900 dark:text-white">{value}</p>
-      {hint && <p className="text-[11px] text-slate-500 dark:text-slate-400">{hint}</p>}
+      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1.5 ui-title font-semibold text-slate-900 dark:text-white">{value}</p>
+      {hint && <p className="ui-caption text-slate-500 dark:text-slate-400">{hint}</p>}
     </div>
   );
 }

@@ -157,8 +157,8 @@ export default function BrowserOperationsModal({
       <div className="space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Operations</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Operations</p>
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
               Uploads, downloads, deletions, copies, and queued files.
             </p>
           </div>
@@ -168,7 +168,7 @@ export default function BrowserOperationsModal({
           <button
             type="button"
             onClick={onToggleActive}
-            className={`${filterChipClasses} text-[10px] ${showActiveOperations ? filterChipActiveClasses : ""}`}
+            className={`${filterChipClasses} ui-caption ${showActiveOperations ? filterChipActiveClasses : ""}`}
           >
             Active
             <span className={countBadgeClasses}>{formatBadgeCount(activeOperationsCount)}</span>
@@ -176,7 +176,7 @@ export default function BrowserOperationsModal({
           <button
             type="button"
             onClick={onToggleQueued}
-            className={`${filterChipClasses} text-[10px] ${showQueuedOperations ? filterChipActiveClasses : ""}`}
+            className={`${filterChipClasses} ui-caption ${showQueuedOperations ? filterChipActiveClasses : ""}`}
           >
             Queue
             <span className={countBadgeClasses}>{formatBadgeCount(queuedOperationsCount)}</span>
@@ -184,7 +184,7 @@ export default function BrowserOperationsModal({
           <button
             type="button"
             onClick={onToggleCompleted}
-            className={`${filterChipClasses} text-[10px] ${showCompletedOperations ? filterChipActiveClasses : ""}`}
+            className={`${filterChipClasses} ui-caption ${showCompletedOperations ? filterChipActiveClasses : ""}`}
           >
             Completed
             <span className={countBadgeClasses}>{formatBadgeCount(completedOperationsCount)}</span>
@@ -194,7 +194,7 @@ export default function BrowserOperationsModal({
           <div className="flex h-full flex-col gap-2">
             <div className={operationsListAreaClasses}>
               {!hasVisibleOperations ? (
-                <div className="flex h-full items-center justify-center text-xs text-slate-500 dark:text-slate-400">
+                <div className="flex h-full items-center justify-center ui-caption text-slate-500 dark:text-slate-400">
                   No operations to show.
                 </div>
               ) : (
@@ -220,10 +220,10 @@ export default function BrowserOperationsModal({
                       <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
                               {group.op.path}
                             </p>
-                            <p className="text-[10px] text-slate-400">
+                            <p className="ui-caption text-slate-400">
                               {group.counts.downloading} active · {group.counts.queued} queued · {completedCount} completed ·{" "}
                               {group.op.progress}%
                             </p>
@@ -253,19 +253,19 @@ export default function BrowserOperationsModal({
                         {isGroupExpanded(group.op.id) && (
                           <div className="mt-2 space-y-1.5">
                             {group.items.length === 0 ? (
-                              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                              <div className="ui-caption text-slate-500 dark:text-slate-400">
                                 {group.op.completedAt ? "No files found." : "Preparing download list..."}
                               </div>
                             ) : (
                               <>
                                 {showActiveOperations &&
                                   activeItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                       <div className="min-w-0">
                                         <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                           {item.label}
                                         </p>
-                                        <p className="text-[10px] text-slate-400">
+                                        <p className="ui-caption text-slate-400">
                                           Downloading
                                           {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
                                         </p>
@@ -274,12 +274,12 @@ export default function BrowserOperationsModal({
                                   ))}
                                 {showQueuedOperations &&
                                   visibleQueuedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                       <div className="min-w-0">
                                         <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                           {item.label}
                                         </p>
-                                        <p className="text-[10px] text-slate-400">
+                                        <p className="ui-caption text-slate-400">
                                           Queued
                                           {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
                                         </p>
@@ -297,12 +297,12 @@ export default function BrowserOperationsModal({
                                 )}
                                 {showCompletedOperations &&
                                   visibleCompletedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                       <div className="min-w-0">
                                         <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                           {item.label}
                                         </p>
-                                        <p className="text-[10px] text-slate-400">
+                                        <p className="ui-caption text-slate-400">
                                           {item.status === "done" && "Done"}
                                           {item.status === "failed" && "Failed"}
                                           {item.status === "cancelled" && "Cancelled"}
@@ -348,10 +348,10 @@ export default function BrowserOperationsModal({
                       <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
                               {group.op.path}
                             </p>
-                            <p className="text-[10px] text-slate-400">
+                            <p className="ui-caption text-slate-400">
                               {group.counts.deleting} active · {group.counts.queued} queued · {completedCount} completed ·{" "}
                               {group.op.progress}%
                             </p>
@@ -370,30 +370,30 @@ export default function BrowserOperationsModal({
                         {isGroupExpanded(group.op.id) && (
                           <div className="mt-2 space-y-1.5">
                             {group.items.length === 0 ? (
-                              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                              <div className="ui-caption text-slate-500 dark:text-slate-400">
                                 {group.op.completedAt ? "No items to delete." : "Preparing delete list..."}
                               </div>
                             ) : (
                               <>
                                 {showActiveOperations &&
                                   activeItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                       <div className="min-w-0">
                                         <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                           {item.label}
                                         </p>
-                                        <p className="text-[10px] text-slate-400">Deleting</p>
+                                        <p className="ui-caption text-slate-400">Deleting</p>
                                       </div>
                                     </div>
                                   ))}
                                 {showQueuedOperations &&
                                   visibleQueuedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                       <div className="min-w-0">
                                         <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                           {item.label}
                                         </p>
-                                        <p className="text-[10px] text-slate-400">Queued</p>
+                                        <p className="ui-caption text-slate-400">Queued</p>
                                       </div>
                                     </div>
                                   ))}
@@ -408,12 +408,12 @@ export default function BrowserOperationsModal({
                                 )}
                                 {showCompletedOperations &&
                                   visibleCompletedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                       <div className="min-w-0">
                                         <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                           {item.label}
                                         </p>
-                                        <p className="text-[10px] text-slate-400">
+                                        <p className="ui-caption text-slate-400">
                                           {item.status === "done" && "Done"}
                                           {item.status === "failed" && "Failed"}
                                         </p>
@@ -455,10 +455,10 @@ export default function BrowserOperationsModal({
                       <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
                               {group.op.path}
                             </p>
-                            <p className="text-[10px] text-slate-400">
+                            <p className="ui-caption text-slate-400">
                               {group.counts.copying} active · {group.counts.queued} queued · {completedCount} completed ·{" "}
                               {group.op.progress}%
                             </p>
@@ -477,19 +477,19 @@ export default function BrowserOperationsModal({
                         {isGroupExpanded(group.op.id) && (
                           <div className="mt-2 space-y-1.5">
                             {group.items.length === 0 ? (
-                              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                              <div className="ui-caption text-slate-500 dark:text-slate-400">
                                 {group.op.completedAt ? "No items copied." : "Preparing copy list..."}
                               </div>
                             ) : (
                               <>
                                 {showActiveOperations &&
                                   activeItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                       <div className="min-w-0">
                                         <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                           {item.label}
                                         </p>
-                                        <p className="text-[10px] text-slate-400">
+                                        <p className="ui-caption text-slate-400">
                                           Copying
                                           {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
                                         </p>
@@ -498,12 +498,12 @@ export default function BrowserOperationsModal({
                                   ))}
                                 {showQueuedOperations &&
                                   visibleQueuedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                       <div className="min-w-0">
                                         <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                           {item.label}
                                         </p>
-                                        <p className="text-[10px] text-slate-400">
+                                        <p className="ui-caption text-slate-400">
                                           Queued
                                           {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
                                         </p>
@@ -521,12 +521,12 @@ export default function BrowserOperationsModal({
                                 )}
                                 {showCompletedOperations &&
                                   visibleCompletedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                       <div className="min-w-0">
                                         <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                           {item.label}
                                         </p>
-                                        <p className="text-[10px] text-slate-400">
+                                        <p className="ui-caption text-slate-400">
                                           {item.status === "done" && "Done"}
                                           {item.status === "failed" && "Failed"}
                                           {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
@@ -568,10 +568,10 @@ export default function BrowserOperationsModal({
                       <div key={group.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
                               {group.kind === "folder" ? `Upload folder ${group.label}` : `Upload ${group.label}`}
                             </p>
-                            <p className="text-[10px] text-slate-400">
+                            <p className="ui-caption text-slate-400">
                               {activeCount} active · {queuedCount} queued · {completedCount} completed · {group.progress}%
                             </p>
                           </div>
@@ -601,12 +601,12 @@ export default function BrowserOperationsModal({
                           <div className="mt-2 space-y-1.5">
                             {showActiveOperations &&
                               group.activeItems.map((op) => (
-                                <div key={op.id} className="flex items-center justify-between gap-3 text-xs">
+                                <div key={op.id} className="flex items-center justify-between gap-3 ui-caption">
                                   <div className="min-w-0">
                                     <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                       {op.itemLabel ?? op.path}
                                     </p>
-                                    <p className="text-[10px] text-slate-400">
+                                    <p className="ui-caption text-slate-400">
                                       Uploading · {op.progress > 0 ? `${op.progress}%` : "In progress"}
                                     </p>
                                   </div>
@@ -622,12 +622,12 @@ export default function BrowserOperationsModal({
                               ))}
                             {showQueuedOperations &&
                               visibleQueuedItems.map((item) => (
-                                <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                   <div className="min-w-0">
                                     <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                       {item.itemLabel || item.key}
                                     </p>
-                                    <p className="text-[10px] text-slate-400">
+                                    <p className="ui-caption text-slate-400">
                                       Queued · {formatBytes(item.file.size)}
                                     </p>
                                   </div>
@@ -651,12 +651,12 @@ export default function BrowserOperationsModal({
                             )}
                             {showCompletedOperations &&
                               visibleCompletedItems.map((item) => (
-                                <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
+                                <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
                                   <div className="min-w-0">
                                     <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
                                       {item.itemLabel ?? item.path}
                                     </p>
-                                    <p className="text-[10px] text-slate-400">
+                                    <p className="ui-caption text-slate-400">
                                       {completionLabel(item.completionStatus)}
                                       {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
                                     </p>
@@ -679,25 +679,25 @@ export default function BrowserOperationsModal({
                   })}
                   {visibleOtherOperations.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Other operations</p>
+                      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Other operations</p>
                       {visibleOtherOperations.map((op) => {
                         const isCompleted = Boolean(op.completedAt);
                         return (
                           <div
                             key={op.id}
-                            className="space-y-2 rounded-lg border border-slate-200 px-4 py-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                            className="space-y-2 rounded-lg border border-slate-200 px-4 py-3 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClasses(op.status)}`}>
+                              <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${statusClasses(op.status)}`}>
                                 {statusLabel(op.status)}
                               </span>
                               <div className="flex items-center gap-2">
                                 {isCompleted ? (
-                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${completionClasses(op.completionStatus)}`}>
+                                  <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${completionClasses(op.completionStatus)}`}>
                                     {completionLabel(op.completionStatus)}
                                   </span>
                                 ) : (
-                                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                                  <span className="ui-caption text-slate-500 dark:text-slate-400">
                                     {op.progress > 0 ? `${op.progress}%` : "In progress"}
                                   </span>
                                 )}
@@ -712,11 +712,11 @@ export default function BrowserOperationsModal({
                                 )}
                               </div>
                             </div>
-                            <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{op.path}</p>
+                            <p className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">{op.path}</p>
                             <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                               <div className="h-full bg-primary-500" style={{ width: `${op.progress}%` }} />
                             </div>
-                            <p className="text-[11px] text-slate-400">
+                            <p className="ui-caption text-slate-400">
                               {isCompleted ? `${completionLabel(op.completionStatus)}.` : `${op.label} in progress.`}
                             </p>
                           </div>
@@ -726,22 +726,22 @@ export default function BrowserOperationsModal({
                   )}
                   {showCompletedOperations && completedOperations.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Completed</p>
+                      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Completed</p>
                       {completedOperations.map((activity) => (
                         <div
                           key={activity.id}
-                          className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-4 py-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                          className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-4 py-3 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300"
                         >
                           <div className="min-w-0 space-y-1">
-                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 ui-caption font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
                               Completed
                             </span>
-                            <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">
+                            <p className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">
                               {activity.label}
                             </p>
-                            <p className="truncate text-[11px] text-slate-400">{activity.path}</p>
+                            <p className="truncate ui-caption text-slate-400">{activity.path}</p>
                           </div>
-                          <span className="shrink-0 text-[11px] text-slate-400">{activity.when}</span>
+                          <span className="shrink-0 ui-caption text-slate-400">{activity.when}</span>
                         </div>
                       ))}
                     </div>

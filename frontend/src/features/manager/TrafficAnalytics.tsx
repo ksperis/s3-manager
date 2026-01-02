@@ -151,12 +151,12 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
     <section className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">RGW traffic</p>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Traffic visualization</h3>
+          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">RGW traffic</p>
+          <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Traffic visualization</h3>
           {bucketName && (
-            <p className="text-[11px] font-semibold text-primary-700 dark:text-primary-200">Bucket: {bucketName}</p>
+            <p className="ui-caption font-semibold text-primary-700 dark:text-primary-200">Bucket: {bucketName}</p>
           )}
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
             Ingress/egress volume, request types, and busiest buckets.
           </p>
         </div>
@@ -165,7 +165,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
             <button
               key={option.value}
               type="button"
-              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+              className={`rounded-full px-2.5 py-1 ui-caption font-semibold transition ${
                 option.value === window
                   ? "bg-primary text-white shadow-sm"
                   : "text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -179,7 +179,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
       </header>
 
       {error && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
           {error}
         </div>
       )}
@@ -247,7 +247,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
                   <Tooltip formatter={(value) => formatBytes(Number(value))} />
                 </PieChart>
               </ResponsiveContainer>
-              <ul className="flex-1 space-y-2 text-sm">
+              <ul className="flex-1 space-y-2 ui-body">
                 {(traffic?.request_breakdown ?? []).map((entry) => (
                   <li key={entry.group} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-900/50">
                     <span className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
@@ -257,7 +257,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
                       />
                       {entry.group}
                     </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{formatCompactNumber(entry.ops)} ops</span>
+                    <span className="ui-caption text-slate-500 dark:text-slate-400">{formatCompactNumber(entry.ops)} ops</span>
                   </li>
                 ))}
               </ul>
@@ -286,9 +286,9 @@ type TotalCardProps = {
 function TrafficTotalCard({ label, value, hint, loading }: TotalCardProps) {
   return (
     <div className="rounded-lg border border-slate-200/80 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-1.5 text-xl font-semibold text-slate-900 dark:text-white">{loading ? "…" : value}</p>
-      {hint && <p className="text-[11px] text-slate-500 dark:text-slate-400">{hint}</p>}
+      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1.5 ui-title font-semibold text-slate-900 dark:text-white">{loading ? "…" : value}</p>
+      {hint && <p className="ui-caption text-slate-500 dark:text-slate-400">{hint}</p>}
     </div>
   );
 }
@@ -305,15 +305,15 @@ function ChartCard({ title, subtitle, loading, children, hasData }: ChartCardPro
   if (loading) {
     return (
       <div className="rounded-lg border border-slate-200/80 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+        <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{title}</p>
         <div className="mt-3 h-40 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
       </div>
     );
   }
   return (
     <div className="rounded-lg border border-slate-200/80 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">{title}</p>
-      {subtitle && <p className="text-[11px] text-slate-500 dark:text-slate-400">{subtitle}</p>}
+      <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+      {subtitle && <p className="ui-caption text-slate-500 dark:text-slate-400">{subtitle}</p>}
       {hasData ? <div className="mt-3">{children}</div> : <EmptyState />}
     </div>
   );
@@ -321,7 +321,7 @@ function ChartCard({ title, subtitle, loading, children, hasData }: ChartCardPro
 
 function EmptyState() {
   return (
-    <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+    <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center ui-caption text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
       No usable measurements yet for this time window.
     </div>
   );
@@ -361,16 +361,16 @@ function BucketRanking({ rankings, loading }: BucketRankingProps) {
       <ul className="space-y-3">
         {rankings.map((entry) => (
           <li key={entry.bucket} className="space-y-2 rounded-xl border border-slate-100 p-3 dark:border-slate-800">
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-between ui-body">
               <div>
                 <p className="font-semibold text-slate-700 dark:text-slate-200">{entry.bucket}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
                   {`${formatCompactNumber(entry.ops)} ops · success ${
                     entry.success_ratio != null ? formatPercentage(entry.success_ratio * 100) : "n/a"
                   }`}
                 </p>
               </div>
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{formatBytes(entry.bytes_total)}</p>
+              <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">{formatBytes(entry.bytes_total)}</p>
             </div>
             <div className="space-y-1">
               <BucketBar label="In" color="#0EA5E9" value={entry.bytes_in ?? 0} max={safeMaxComponent} />
@@ -415,12 +415,12 @@ function CategoryChart({ categories, loading }: CategoryChartProps) {
 function BucketBar({ label, color, value, max }: { label: string; color: string; value: number; max: number }) {
   const width = Math.max((value / max) * 100, value > 0 ? 2 : 0);
   return (
-    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+    <div className="flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
       <span className="w-8 text-right font-semibold text-slate-600 dark:text-slate-300">{label}</span>
       <div className="h-2 flex-1 rounded-full bg-slate-200 dark:bg-slate-800">
         <div className="h-2 rounded-full" style={{ width: `${width}%`, backgroundColor: color }} />
       </div>
-      <span className="w-20 text-right text-[11px] text-slate-500 dark:text-slate-400">{formatBytes(value)}</span>
+      <span className="w-20 text-right ui-caption text-slate-500 dark:text-slate-400">{formatBytes(value)}</span>
     </div>
   );
 }
@@ -487,10 +487,10 @@ function TrafficTooltip({ payload, label }: any) {
   }
   const date = tooltipFormatter.format(new Date(label));
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
       <p className="font-semibold">{date}</p>
       {payload.map((entry: any) => (
-        <p key={entry.name} className="text-xs">
+        <p key={entry.name} className="ui-caption">
           <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
           {entry.name}: {formatBytes(entry.value)}
         </p>

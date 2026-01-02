@@ -212,7 +212,7 @@ export default function AdminMetricsPage() {
   const missingTraffic = selectedEndpointId != null && !traffic && !trafficLoading && !trafficError;
 
   return (
-    <div className="space-y-4 text-xs leading-relaxed">
+    <div className="space-y-4 ui-caption leading-relaxed">
       <PageHeader
         title="Metrics"
         description={pageError || "Centralized view of platform storage and traffic."}
@@ -222,14 +222,14 @@ export default function AdminMetricsPage() {
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Ceph endpoint</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
+            <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Ceph endpoint</p>
+            <p className="ui-body text-slate-500 dark:text-slate-400">
               Choose the storage to analyze (Ceph endpoints only).
             </p>
           </div>
           <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
             <select
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body font-semibold text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               value={selectedEndpointId ?? ""}
               onChange={(event) => setSelectedEndpointId(event.target.value ? Number(event.target.value) : null)}
               disabled={endpointLoading || endpoints.length === 0}
@@ -245,7 +245,7 @@ export default function AdminMetricsPage() {
             </select>
             {selectedEndpoint && (
               <span
-                className="max-w-[320px] truncate text-xs text-slate-500 dark:text-slate-400"
+                className="max-w-[320px] truncate ui-caption text-slate-500 dark:text-slate-400"
                 title={selectedEndpoint.endpoint_url}
               >
                 {selectedEndpoint.endpoint_url}
@@ -256,7 +256,7 @@ export default function AdminMetricsPage() {
       </div>
 
       {pageError && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
           {pageError}
         </div>
       )}
@@ -264,12 +264,12 @@ export default function AdminMetricsPage() {
       <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
         <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Storage snapshot</p>
-            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Aggregated stats across known S3 accounts.</p>
+            <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage snapshot</p>
+            <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Stored volume & objects</h3>
+            <p className="ui-body text-slate-500 dark:text-slate-400">Aggregated stats across known S3 accounts.</p>
           </div>
           {storage?.generated_at && (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
               Updated:&nbsp;{new Date(storage.generated_at).toLocaleString()}
             </p>
           )}
@@ -317,9 +317,9 @@ export default function AdminMetricsPage() {
 
       <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <header className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Accounts & users</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Account scan with graphical breakdown.</p>
+          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
+          <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Accounts & users</h3>
+          <p className="ui-body text-slate-500 dark:text-slate-400">Account scan with graphical breakdown.</p>
         </header>
         <div className="grid gap-6 xl:grid-cols-2">
           <UsageBreakdown
@@ -372,9 +372,9 @@ type SnapshotCardProps = {
 function SnapshotCard({ label, value, hint, loading }: SnapshotCardProps) {
   return (
     <div className="rounded-xl border border-slate-200/80 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/70">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{loading ? "…" : value}</p>
-      {hint && <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
+      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-2 ui-subtitle font-semibold text-slate-900 dark:text-white">{loading ? "…" : value}</p>
+      {hint && <p className="ui-caption text-slate-500 dark:text-slate-400">{hint}</p>}
     </div>
   );
 }
@@ -401,9 +401,9 @@ function TrafficOverview({ traffic, timeline, window, onWindowChange, loading, e
     <section className="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">RGW traffic</p>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Bandwidth & requests</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">RGW traffic</p>
+          <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Bandwidth & requests</h3>
+          <p className="ui-body text-slate-500 dark:text-slate-400">
             Reading RGW logs ({WINDOW_OPTIONS.find((o) => o.value === window)?.helper}) for the selected window.
           </p>
         </div>
@@ -412,7 +412,7 @@ function TrafficOverview({ traffic, timeline, window, onWindowChange, loading, e
             <button
               key={option.value}
               type="button"
-              className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+              className={`rounded-full px-3 py-1 ui-caption font-semibold transition ${
                 option.value === window
                   ? "bg-primary text-white shadow-sm"
                   : "text-slate-600 hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -426,7 +426,7 @@ function TrafficOverview({ traffic, timeline, window, onWindowChange, loading, e
       </header>
 
       {error && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 ui-body text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
           {error}
         </div>
       )}
@@ -443,7 +443,7 @@ function TrafficOverview({ traffic, timeline, window, onWindowChange, loading, e
       </div>
 
       {showEmpty && !error && (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
           No traffic data available for this window.
         </div>
       )}
@@ -527,16 +527,16 @@ function ChartCard({ title, subtitle, children, loading, hasData }: ChartCardPro
   if (loading) {
     return (
       <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
-        {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>}
+        <p className="ui-body font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+        {subtitle && <p className="ui-caption text-slate-500 dark:text-slate-400">{subtitle}</p>}
         <div className="mt-4 h-48 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
       </div>
     );
   }
   return (
     <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
-      {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>}
+      <p className="ui-body font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+      {subtitle && <p className="ui-caption text-slate-500 dark:text-slate-400">{subtitle}</p>}
       {hasData ? <div className="mt-4">{children}</div> : <EmptyState />}
     </div>
   );
@@ -544,7 +544,7 @@ function ChartCard({ title, subtitle, children, loading, hasData }: ChartCardPro
 
 function EmptyState() {
   return (
-    <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+    <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
       No usable metrics for this period yet.
     </div>
   );
@@ -581,10 +581,10 @@ function BytesTooltip({ payload, label }: any) {
   const date = new Date(label);
   const formatted = Number.isNaN(date.getTime()) ? label : new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
       <p className="font-semibold">{formatted}</p>
       {payload.map((entry: any) => (
-        <p key={entry.name} className="text-xs">
+        <p key={entry.name} className="ui-caption">
           <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
           {entry.name}: {formatBytes(entry.value)}
         </p>
@@ -599,9 +599,9 @@ function OpsTooltip({ payload, label }: any) {
   const formatted = Number.isNaN(date.getTime()) ? label : new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
   const entry = payload[0];
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
       <p className="font-semibold">{formatted}</p>
-      <p className="text-xs">
+      <p className="ui-caption">
         <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
         {formatCompactNumber(entry.value)} ops
       </p>
@@ -620,7 +620,7 @@ function RankingCard({ title, items, loading, type = "bucket" }: RankingCardProp
   if (loading) {
     return (
       <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+        <p className="ui-body font-semibold text-slate-700 dark:text-slate-200">{title}</p>
         <div className="mt-3 space-y-2">
           {[1, 2, 3].map((key) => (
             <div key={key} className="h-10 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
@@ -632,30 +632,30 @@ function RankingCard({ title, items, loading, type = "bucket" }: RankingCardProp
   if (!items || items.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+        <p className="ui-body font-semibold text-slate-700 dark:text-slate-200">{title}</p>
         <EmptyState />
       </div>
     );
   }
   return (
     <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+      <p className="ui-body font-semibold text-slate-700 dark:text-slate-200">{title}</p>
       <ul className="mt-3 space-y-3">
         {items.map((entry) => (
           <li key={type === "bucket" ? (entry as TrafficBucketRanking).bucket : (entry as TrafficUserRanking).user} className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-between ui-body">
               <div>
                 <p className="font-semibold text-slate-700 dark:text-slate-200">
                   {type === "bucket" ? (entry as TrafficBucketRanking).bucket : (entry as TrafficUserRanking).user}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
                   {formatCompactNumber(entry.ops)} ops ·{" "}
                   {entry.success_ratio != null ? formatPercentage(entry.success_ratio * 100) : "n/a"} success
                 </p>
               </div>
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{formatBytes(entry.bytes_total)}</p>
+              <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">{formatBytes(entry.bytes_total)}</p>
             </div>
-            <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="mt-2 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
               <div className="flex items-center gap-1">
                 <span className="inline-block h-2 w-2 rounded-full bg-sky-500" />
                 In&nbsp;{formatBytes(entry.bytes_in)}
@@ -681,7 +681,7 @@ function RequestBreakdown({ items, loading }: RequestBreakdownProps) {
   if (loading) {
     return (
       <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Request breakdown</p>
+        <p className="ui-body font-semibold text-slate-700 dark:text-slate-200">Request breakdown</p>
         <div className="mt-3 space-y-2">
           {[1, 2, 3].map((key) => (
             <div key={key} className="h-8 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
@@ -693,22 +693,22 @@ function RequestBreakdown({ items, loading }: RequestBreakdownProps) {
   if (!items || items.length === 0) {
     return (
       <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Request breakdown</p>
+        <p className="ui-body font-semibold text-slate-700 dark:text-slate-200">Request breakdown</p>
         <EmptyState />
       </div>
     );
   }
   return (
     <div className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Request breakdown</p>
+      <p className="ui-body font-semibold text-slate-700 dark:text-slate-200">Request breakdown</p>
       <ul className="mt-3 space-y-2">
         {items.map((entry) => (
-          <li key={entry.group} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-900/50">
+          <li key={entry.group} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 ui-body dark:bg-slate-900/50">
             <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
               <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
               {entry.group}
             </div>
-            <div className="text-right text-xs text-slate-500 dark:text-slate-400">
+            <div className="text-right ui-caption text-slate-500 dark:text-slate-400">
               <p>{formatBytes(entry.bytes_in + entry.bytes_out)}</p>
               <p>{formatCompactNumber(entry.ops)} ops</p>
             </div>

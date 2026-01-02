@@ -40,7 +40,7 @@ function Badge({ label, tone = "slate" }: { label: string; tone?: "slate" | "sky
     emerald: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100",
     amber: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100",
   };
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${tones[tone]}`}>{label}</span>;
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${tones[tone]}`}>{label}</span>;
 }
 
 function CopyButton({ value, label, iconOnly = false }: { value: string; label: string; iconOnly?: boolean }) {
@@ -50,7 +50,7 @@ function CopyButton({ value, label, iconOnly = false }: { value: string; label: 
       navigator.clipboard.writeText(value).catch(() => {});
     }
   };
-  const sizeClass = iconOnly ? "h-7 w-7 text-xs" : "gap-1 px-3 py-1 text-[11px]";
+  const sizeClass = iconOnly ? "h-7 w-7 ui-caption" : "gap-1 px-3 py-1 ui-caption";
   return (
     <button
       type="button"
@@ -68,8 +68,8 @@ function CopyButton({ value, label, iconOnly = false }: { value: string; label: 
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-      <p className="text-base font-semibold">{title}</p>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>
+      <p className="ui-section font-semibold">{title}</p>
+      <p className="mt-1 ui-body text-slate-500 dark:text-slate-400">{description}</p>
     </div>
   );
 }
@@ -281,12 +281,12 @@ export default function PortalDashboard() {
       : size === "sm"
       ? "h-12 w-12"
       : "h-14 w-14";
-    const labelText = compact ? "text-[7px]" : size === "lg" ? "text-[10px]" : size === "sm" ? "text-[8px]" : "text-[9px]";
-    const valueText = compact ? "text-[9px]" : size === "lg" ? "text-[12px]" : "text-[11px]";
+    const labelText = compact ? "ui-caption" : size === "lg" ? "ui-caption" : size === "sm" ? "ui-caption" : "ui-caption";
+    const valueText = compact ? "ui-caption" : size === "lg" ? "ui-caption" : "ui-caption";
     const widthClass = size === "lg" ? "min-w-[180px]" : size === "sm" ? "min-w-[120px]" : "min-w-[150px]";
     const wrapperClasses = bare
-      ? "flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300"
-      : `flex items-center gap-2 rounded-xl border border-slate-200 bg-white text-xs shadow-sm dark:border-slate-700 dark:bg-slate-900/70 ${
+      ? "flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300"
+      : `flex items-center gap-2 rounded-xl border border-slate-200 bg-white ui-caption shadow-sm dark:border-slate-700 dark:bg-slate-900/70 ${
           size === "lg" ? "px-4 py-3" : "px-3 py-2"
         } ${widthClass}`;
     return (
@@ -304,17 +304,17 @@ export default function PortalDashboard() {
         </div>
         {!bare && (
           <div className="space-y-0.5">
-            <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-700 dark:text-slate-100">
+            <div className="flex items-center gap-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
               <span>{display}</span>
-              {unitHint ? <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{unitHint}</span> : null}
+              {unitHint ? <span className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">{unitHint}</span> : null}
             </div>
             {quotaDisplay ? (
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="ui-caption text-slate-500 dark:text-slate-400">
                 / {quotaDisplay}
                 {unitHint && unitHint !== "Sans quota" ? ` ${unitHint}` : ""}
               </div>
             ) : (
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Sans quota</div>
+              <div className="ui-caption text-slate-500 dark:text-slate-400">Sans quota</div>
             )}
           </div>
         )}
@@ -877,8 +877,8 @@ export default function PortalDashboard() {
         <div className="grid gap-6 rounded-[22px] bg-white/95 px-6 py-6 shadow-sm dark:bg-slate-900/90 lg:grid-cols-[1fr_1.4fr_1fr]">
           <div className="flex flex-col space-y-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Portail utilisateur</p>
-              <h1 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">
+              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Portail utilisateur</p>
+              <h1 className="mt-2 ui-title font-semibold text-slate-900 dark:text-white">
                 {selectedAccount?.name || "Compte S3"}
               </h1>
               {(trafficLoading || hasTrafficSparkline) && (
@@ -887,11 +887,11 @@ export default function PortalDashboard() {
                     <div className="h-16 rounded-2xl border border-white/60 bg-white/50 shadow-inner backdrop-blur-sm animate-pulse dark:border-slate-800/60 dark:bg-slate-900/50" />
                   ) : (
                     <div className="rounded-2xl border border-white/60 bg-white/40 px-3 py-2 shadow-inner ring-1 ring-white/50 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/40 dark:ring-slate-700/60">
-                      <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                      <div className="flex items-center justify-between ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                         <span>Traffic 24h</span>
-                        <span className="text-[11px] text-slate-800 dark:text-slate-100">{formatBytes(trafficTotal24h)}</span>
+                        <span className="ui-caption text-slate-800 dark:text-slate-100">{formatBytes(trafficTotal24h)}</span>
                       </div>
-                      <div className="text-[10px] font-semibold text-slate-500 text-right dark:text-slate-400">{trafficOps24h.toLocaleString()} req</div>
+                      <div className="ui-caption font-semibold text-slate-500 text-right dark:text-slate-400">{trafficOps24h.toLocaleString()} req</div>
                       <div className="mt-2 h-16">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={trafficSparkline}>
@@ -918,23 +918,23 @@ export default function PortalDashboard() {
                 </div>
               )}
               {state?.just_created && (
-                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 shadow-sm dark:bg-emerald-900/40 dark:text-emerald-100">
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 ui-caption font-semibold text-emerald-700 shadow-sm dark:bg-emerald-900/40 dark:text-emerald-100">
                   Nouvel utilisateur IAM créé et clé provisionnée
                 </div>
               )}
             </div>
           </div>
-          <div className="rounded-2xl border border-white/60 bg-white/80 px-4 py-4 text-sm text-slate-800 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
+          <div className="rounded-2xl border border-white/60 bg-white/80 px-4 py-4 ui-body text-slate-800 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Usage compte</div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Volumétrie & objets</p>
+                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Usage compte</div>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">Volumétrie & objets</p>
                   {accountUsageLoading && (
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500">Chargement…</p>
+                    <p className="ui-caption text-slate-400 dark:text-slate-500">Chargement…</p>
                   )}
                   {accountUsageError && (
-                    <p className="text-[11px] text-rose-600 dark:text-rose-300">{accountUsageError}</p>
+                    <p className="ui-caption text-rose-600 dark:text-rose-300">{accountUsageError}</p>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-3 xl:flex-nowrap">
@@ -962,26 +962,26 @@ export default function PortalDashboard() {
               </div>
                 <div className="grid grid-cols-2 gap-4 sm:gap-6">
                   <div>
-                    <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Utilisateurs</div>
-                    <div className="mt-1 text-2xl font-semibold">{portalUsersCount}</div>
+                    <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Utilisateurs</div>
+                    <div className="mt-1 ui-metric font-semibold">{portalUsersCount}</div>
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Buckets</div>
+                    <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Buckets</div>
                     <div className="mt-1 flex items-baseline gap-2">
-                      <span className="text-2xl font-semibold">{visibleBucketCount}</span>
-                      <span className="text-sm text-slate-500 dark:text-slate-400">/{totalBucketCount}</span>
+                      <span className="ui-metric font-semibold">{visibleBucketCount}</span>
+                      <span className="ui-body text-slate-500 dark:text-slate-400">/{totalBucketCount}</span>
                     </div>
                   </div>
               </div>
             </div>
           </div>
-          <div className="rounded-2xl border border-white/60 bg-white/80 px-4 py-3 text-sm text-slate-800 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
+          <div className="rounded-2xl border border-white/60 bg-white/80 px-4 py-3 ui-body text-slate-800 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
             <div className="space-y-4">
               <div>
-                <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Endpoint S3</div>
+                <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Endpoint S3</div>
                 <div className="mt-1 flex items-center gap-2">
                   <span
-                    className="block min-w-0 truncate font-mono text-[13px] text-slate-900 dark:text-slate-100"
+                    className="block min-w-0 truncate font-mono ui-caption text-slate-900 dark:text-slate-100"
                     title={state?.s3_endpoint || undefined}
                   >
                     {state?.s3_endpoint || "—"}
@@ -990,7 +990,7 @@ export default function PortalDashboard() {
                     <button
                       type="button"
                       onClick={() => navigator?.clipboard?.writeText?.(state.s3_endpoint ?? "").catch(() => {})}
-                      className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] text-primary opacity-30 transition hover:opacity-80 hover:bg-slate-200/70 hover:text-sky-600 dark:hover:bg-slate-800/60"
+                      className="flex h-6 w-6 items-center justify-center rounded-full ui-caption text-primary opacity-30 transition hover:opacity-80 hover:bg-slate-200/70 hover:text-sky-600 dark:hover:bg-slate-800/60"
                       aria-label="Copier l'endpoint S3"
                     >
                       <span aria-hidden>📋</span>
@@ -1000,25 +1000,25 @@ export default function PortalDashboard() {
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-3">
                 <div>
-                <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">User</div>
-                  <div className="mt-1 font-mono text-[13px] text-slate-900 dark:text-slate-100">{userEmail || "—"}</div>
+                <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">User</div>
+                  <div className="mt-1 font-mono ui-caption text-slate-900 dark:text-slate-100">{userEmail || "—"}</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Rôle</div>
+                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Rôle</div>
                   <div className="mt-1">
                     <Badge label={state?.account_role === "portal_manager" ? "Portal manager" : "Portal user"} tone={state?.account_role === "portal_manager" ? "emerald" : "sky"} />
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">IAM user</div>
-                  <div className="mt-1 font-mono text-[13px]">{state?.iam_user?.iam_username || "—"}</div>
+                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">IAM user</div>
+                  <div className="mt-1 font-mono ui-caption">{state?.iam_user?.iam_username || "—"}</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Clés IAM</div>
+                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Clés IAM</div>
                   <button
                     type="button"
                     onClick={() => setShowKeysModal(true)}
-                    className="mt-1 text-sm font-semibold text-slate-700 underline decoration-slate-300 decoration-2 underline-offset-4 transition hover:text-slate-900 dark:text-slate-100 dark:decoration-slate-600 dark:hover:text-white"
+                    className="mt-1 ui-body font-semibold text-slate-700 underline decoration-slate-300 decoration-2 underline-offset-4 transition hover:text-slate-900 dark:text-slate-100 dark:decoration-slate-600 dark:hover:text-white"
                   >
                     {state?.access_keys?.length ?? 0} clé(s)
                   </button>
@@ -1030,7 +1030,7 @@ export default function PortalDashboard() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-700 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100">
           {error}
         </div>
       )}
@@ -1047,7 +1047,7 @@ export default function PortalDashboard() {
               <div className="space-y-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="max-w-xl">
-                    <p className="text-sm text-slate-700 dark:text-slate-200">
+                    <p className="ui-body text-slate-700 dark:text-slate-200">
                       Clé portail et clés utilisateur IAM pour ce compte.
                     </p>
                   </div>
@@ -1079,20 +1079,20 @@ export default function PortalDashboard() {
                   </div>
                 </div>
                 {keyActionError && (
-                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
                     {keyActionError}
                   </div>
                 )}
                 {lastCreatedKey && (
-                  <div className="rounded-lg border border-amber-200/70 bg-amber-50/60 px-3 py-2 text-sm text-amber-800 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
-                    <p className="text-sm font-semibold">Nouvelle clé utilisateur</p>
-                    <p className="text-xs text-amber-700 dark:text-amber-200">Le secret est affiché une seule fois.</p>
+                  <div className="rounded-lg border border-amber-200/70 bg-amber-50/60 px-3 py-2 ui-body text-amber-800 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+                    <p className="ui-body font-semibold">Nouvelle clé utilisateur</p>
+                    <p className="ui-caption text-amber-700 dark:text-amber-200">Le secret est affiché une seule fois.</p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span aria-hidden title="Access key">🔑</span>
                           <span className="sr-only">Access key</span>
-                          <span className="font-mono text-xs text-slate-800 dark:text-amber-100">
+                          <span className="font-mono ui-caption text-slate-800 dark:text-amber-100">
                             {lastCreatedKey.accessKey}
                           </span>
                         </div>
@@ -1102,7 +1102,7 @@ export default function PortalDashboard() {
                         <div className="flex items-center gap-2">
                           <span aria-hidden title="Secret key">🔒</span>
                           <span className="sr-only">Secret key</span>
-                          <span className="font-mono text-xs text-slate-800 dark:text-amber-100">
+                          <span className="font-mono ui-caption text-slate-800 dark:text-amber-100">
                             {lastCreatedKey.secretKey}
                           </span>
                         </div>
@@ -1113,11 +1113,11 @@ export default function PortalDashboard() {
                 )}
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Clés IAM</p>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">{orderedAccessKeys.length} clé(s)</span>
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Clés IAM</p>
+                    <span className="ui-caption text-slate-400 dark:text-slate-500">{orderedAccessKeys.length} clé(s)</span>
                   </div>
                   {portalKeyError && (
-                    <div className="text-xs text-rose-600 dark:text-rose-300">{portalKeyError}</div>
+                    <div className="ui-caption text-rose-600 dark:text-rose-300">{portalKeyError}</div>
                   )}
                   {orderedAccessKeys.length ? (
                     <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
@@ -1135,17 +1135,17 @@ export default function PortalDashboard() {
                                     title={isActive ? "Active" : "Inactive"}
                                   />
                                   {k.is_portal && (
-                                    <span className="text-xs" aria-label="Clé portail" title="Clé portail">
+                                    <span className="ui-caption" aria-label="Clé portail" title="Clé portail">
                                       🛡️
                                     </span>
                                   )}
-                                  <span className="font-mono text-xs text-slate-700 dark:text-slate-200">{k.access_key_id}</span>
+                                  <span className="font-mono ui-caption text-slate-700 dark:text-slate-200">{k.access_key_id}</span>
                                 </div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                <div className="ui-caption text-slate-500 dark:text-slate-400">
                                   {k.created_at ? `Créée ${new Date(k.created_at).toLocaleString()}` : "Créée —"}
                                 </div>
                                 {showPortalDetails && portalKeyData && (
-                                  <div className="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                                  <div className="mt-2 space-y-1 ui-caption text-slate-600 dark:text-slate-300">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span aria-hidden title="Access key">🔑</span>
                                       <span className="font-mono text-slate-800 dark:text-slate-100">
@@ -1236,31 +1236,31 @@ export default function PortalDashboard() {
                       type="email"
                       value={newUserEmail}
                       onChange={(e) => setNewUserEmail(e.target.value)}
-                      className="w-64 rounded-full border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className="w-64 rounded-full border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       placeholder="email de l'utilisateur"
                     />
                     <button
                       type="submit"
                       disabled={!newUserEmail.trim()}
-                      className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                      className="rounded-full bg-slate-900 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                     >
                       Ajouter
                     </button>
                   </form>
                 )}
                 {userActionError && (
-                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
                     {userActionError}
                   </div>
                 )}
                 {userActionMessage && (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-800 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
                     {userActionMessage}
                   </div>
                 )}
                 <div className="space-y-2">
                   {loadingUsers ? (
-                    <div className="text-sm text-slate-500 dark:text-slate-300">Chargement…</div>
+                    <div className="ui-body text-slate-500 dark:text-slate-300">Chargement…</div>
                   ) : portalUsers.length ? (
                     [...assignedPortalUsers, ...iamOnlyUsers].map((u) => {
                       const role = u.role || "portal_user";
@@ -1272,7 +1272,7 @@ export default function PortalDashboard() {
                       return (
                         <div
                           key={u.id ?? `${u.email}-iam-only`}
-                          className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm shadow-sm ${
+                          className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 ui-body shadow-sm ${
                             isIamOnly
                               ? "border-slate-200 bg-slate-50 opacity-70 dark:border-slate-700 dark:bg-slate-800/70"
                               : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/70"
@@ -1280,7 +1280,7 @@ export default function PortalDashboard() {
                         >
                           <div>
                             <div className="font-medium text-slate-800 dark:text-slate-100">{u.email}</div>
-                            <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                            <div className="ui-caption font-mono text-slate-500 dark:text-slate-400">
                               IAM: {u.iam_username || "—"}
                             </div>
                             <div className="mt-1 flex items-center gap-2">
@@ -1295,7 +1295,7 @@ export default function PortalDashboard() {
                                   setShowUsersModal(false);
                                   openEditPortalUser(u);
                                 }}
-                                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700"
+                                className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700"
                               >
                                 Éditer
                               </button>
@@ -1303,7 +1303,7 @@ export default function PortalDashboard() {
                                 type="button"
                                 onClick={() => handleChangePortalUserRole(u.id, "portal_user")}
                                 disabled={busy || role === "portal_user" || Boolean(isSelf)}
-                                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700"
+                                className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700"
                               >
                                 Portal user
                               </button>
@@ -1311,7 +1311,7 @@ export default function PortalDashboard() {
                                 type="button"
                                 onClick={() => handleChangePortalUserRole(u.id, "portal_manager")}
                                 disabled={busy || role === "portal_manager"}
-                                className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                                className="rounded-full bg-emerald-600 px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400"
                               >
                                 Promouvoir manager
                               </button>
@@ -1319,7 +1319,7 @@ export default function PortalDashboard() {
                                 type="button"
                                 onClick={() => handleRemovePortalUser(u.id)}
                                 disabled={busy || Boolean(isSelf)}
-                                className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60 dark:border-rose-800 dark:text-rose-200 dark:hover:bg-rose-900/40"
+                                className="rounded-full border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60 dark:border-rose-800 dark:text-rose-200 dark:hover:bg-rose-900/40"
                               >
                                 Retirer
                               </button>
@@ -1329,7 +1329,7 @@ export default function PortalDashboard() {
                       );
                     })
                   ) : (
-                    <div className="text-sm text-slate-500 dark:text-slate-300">Aucun utilisateur portail pour ce compte.</div>
+                    <div className="ui-body text-slate-500 dark:text-slate-300">Aucun utilisateur portail pour ce compte.</div>
                   )}
                 </div>
               </div>
@@ -1340,43 +1340,43 @@ export default function PortalDashboard() {
             <Modal title={`Éditer ${editPortalUser.email}`} onClose={closeEditPortalUser}>
               <div className="space-y-4">
                 {editPortalError && (
-                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
                     {editPortalError}
                   </div>
                 )}
                 {editPortalMessage && (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-800 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
                     {editPortalMessage}
                   </div>
                 )}
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-800/70">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-sm text-white shadow-sm dark:bg-white dark:text-slate-900">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 ui-body text-white shadow-sm dark:bg-white dark:text-slate-900">
                       <span aria-hidden>👤</span>
                     </div>
                     <div>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Email</p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">{editPortalUser.email}</p>
+                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Email</p>
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">{editPortalUser.email}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-800/70">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-sm text-white shadow-sm dark:bg-white dark:text-slate-900">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 ui-body text-white shadow-sm dark:bg-white dark:text-slate-900">
                       <span aria-hidden>🏷️</span>
                     </div>
                     <div>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Rôle</p>
+                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Rôle</p>
                       <div className="mt-1">
                         <Badge label={portalRoleLabel(editPortalUser.role)} tone={portalRoleTone(editPortalUser.role)} />
                       </div>
                     </div>
                   </div>
                   <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-800/70">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-sm text-white shadow-sm dark:bg-white dark:text-slate-900">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 ui-body text-white shadow-sm dark:bg-white dark:text-slate-900">
                       <span aria-hidden>🔗</span>
                     </div>
                     <div>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">IAM user</p>
-                      <p className="text-sm font-mono text-slate-700 dark:text-slate-200">{editPortalUser.iam_username || "—"}</p>
+                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">IAM user</p>
+                      <p className="ui-body font-mono text-slate-700 dark:text-slate-200">{editPortalUser.iam_username || "—"}</p>
                     </div>
                   </div>
                 </div>
@@ -1385,20 +1385,20 @@ export default function PortalDashboard() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span aria-hidden>🪣</span>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Accès buckets</p>
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Accès buckets</p>
                     </div>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                    <span className="ui-caption text-slate-400 dark:text-slate-500">
                       {editPortalBuckets.length} autorisé(s)
                     </span>
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                     <div>
-                      <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Ajouter</label>
+                      <label className="ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Ajouter</label>
                       <select
                         value={editPortalSelectedBucket}
                         onChange={(e) => setEditPortalSelectedBucket(e.target.value)}
                         disabled={editPortalLoading || editPortalSaving || Boolean(editPortalRemovingBucket) || (state?.buckets || []).length === 0}
-                        className="mt-1 w-full rounded-full border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className="mt-1 w-full rounded-full border border-slate-200 bg-white px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       >
                         <option value="">Sélectionnez un bucket</option>
                         {(state?.buckets || []).map((b) => (
@@ -1412,7 +1412,7 @@ export default function PortalDashboard() {
                       type="button"
                       onClick={handleGrantPortalBucket}
                       disabled={editPortalLoading || editPortalSaving || Boolean(editPortalRemovingBucket) || !editPortalSelectedBucket}
-                      className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                      className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                     >
                       <span aria-hidden>{editPortalSaving ? "…" : "➕"}</span>
                       {editPortalSaving ? "Ajout..." : "Autoriser"}
@@ -1420,15 +1420,15 @@ export default function PortalDashboard() {
                   </div>
                   <div className="mt-3">
                     {editPortalLoading ? (
-                      <div className="text-sm text-slate-500 dark:text-slate-400">Chargement…</div>
+                      <div className="ui-body text-slate-500 dark:text-slate-400">Chargement…</div>
                     ) : editPortalBuckets.length === 0 ? (
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Aucun bucket autorisé pour cet utilisateur.</p>
+                      <p className="ui-body text-slate-500 dark:text-slate-400">Aucun bucket autorisé pour cet utilisateur.</p>
                     ) : (
                       <div className="divide-y divide-slate-200 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                         {editPortalBuckets.map((name) => {
                           const removing = editPortalRemovingBucket === name;
                           return (
-                            <div key={name} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                            <div key={name} className="flex items-center justify-between gap-3 px-3 py-2 ui-body">
                               <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
                                 <span aria-hidden>🪣</span>
                                 <span className="font-mono">{name}</span>
@@ -1467,7 +1467,7 @@ export default function PortalDashboard() {
             <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Users</p>
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Users</p>
                 </div>
                 <button
                   type="button"
@@ -1475,14 +1475,14 @@ export default function PortalDashboard() {
                     setFocusedUserKey(null);
                     setShowUsersModal(true);
                   }}
-                  className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                  className="rounded-full bg-slate-900 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
                   Gérer les utilisateurs
                 </button>
               </div>
               <div className="mt-4 flex flex-wrap gap-3 justify-start">
                 {loadingUsers ? (
-                  <div className="text-sm text-slate-500 dark:text-slate-300">Chargement…</div>
+                  <div className="ui-body text-slate-500 dark:text-slate-300">Chargement…</div>
                 ) : portalUsers.length ? (
                   [...assignedPortalUsers, ...iamOnlyUsers].map((u) => {
                     const role = u.role || "portal_user";
@@ -1499,14 +1499,14 @@ export default function PortalDashboard() {
                             openEditPortalUser(u);
                           }
                         }}
-                        className={`w-full max-w-xs cursor-pointer rounded-xl border px-3 py-2 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow ${
+                        className={`w-full max-w-xs cursor-pointer rounded-xl border px-3 py-2 ui-body shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow ${
                           isIamOnly
                             ? "border-slate-200 bg-slate-50 opacity-70 dark:border-slate-700 dark:bg-slate-800/70"
                             : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/70"
                         }`}
                       >
                         <div className="font-semibold text-slate-800 dark:text-slate-100">{u.email}</div>
-                        <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                        <div className="ui-caption font-mono text-slate-500 dark:text-slate-400">
                           IAM: {u.iam_username || "—"}
                         </div>
                         <div className="mt-1">
@@ -1516,7 +1516,7 @@ export default function PortalDashboard() {
                     );
                   })
                 ) : (
-                  <div className="text-sm text-slate-500 dark:text-slate-300">Aucun utilisateur portail pour ce compte.</div>
+                  <div className="ui-body text-slate-500 dark:text-slate-300">Aucun utilisateur portail pour ce compte.</div>
                 )}
               </div>
             </div>
@@ -1525,14 +1525,14 @@ export default function PortalDashboard() {
           <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Buckets</p>
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Buckets</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="search"
                   value={bucketFilter}
                   onChange={(e) => setBucketFilter(e.target.value)}
-                  className="w-48 rounded-full border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="w-48 rounded-full border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   placeholder="Rechercher..."
                   aria-label="Filtrer les buckets"
                 />
@@ -1542,24 +1542,24 @@ export default function PortalDashboard() {
                       type="text"
                       value={newBucketName}
                       onChange={(e) => setNewBucketName(e.target.value)}
-                      className="w-52 rounded-full border border-slate-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className="w-52 rounded-full border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       placeholder="nouveau-bucket"
                     />
                     <button
                       type="submit"
                       disabled={creatingBucket || !newBucketName.trim()}
-                      className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                      className="rounded-full bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
                     >
                       {creatingBucket ? "Création..." : "Créer un bucket"}
                     </button>
                   </form>
                 ) : (
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Accès en lecture seule</p>
+                  <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Accès en lecture seule</p>
                 )}
               </div>
             </div>
             {bucketActionError && (
-              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
                 {bucketActionError}
               </div>
             )}
@@ -1588,7 +1588,7 @@ export default function PortalDashboard() {
                           openBucketModal(bucket);
                         }
                       }}
-                      className="w-full max-w-xs cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800/70"
+                      className="w-full max-w-xs cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 ui-body shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800/70"
                     >
                       <div className="flex items-start gap-2 sm:gap-3">
                         <div className="min-w-0">
@@ -1598,7 +1598,7 @@ export default function PortalDashboard() {
                           >
                             {bucket.name}
                           </div>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                             Créé le {bucket.creation_date ? new Date(bucket.creation_date).toLocaleString() : "—"}
                           </p>
                         </div>
@@ -1627,13 +1627,13 @@ export default function PortalDashboard() {
                           })}
                         </div>
                       </div>
-                      <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-300">
+                      <div className="mt-2 grid grid-cols-2 gap-2 ui-caption text-slate-600 dark:text-slate-300">
                         <div>
-                          <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Volumétrie</div>
+                          <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Volumétrie</div>
                           <div className="font-semibold text-slate-800 dark:text-slate-100">{usedLabel}</div>
                         </div>
                         <div className="text-right">
-                          <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Objets</div>
+                          <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Objets</div>
                           <div className="font-semibold text-slate-800 dark:text-slate-100">{objectsLabel}</div>
                         </div>
                       </div>

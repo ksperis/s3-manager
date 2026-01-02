@@ -34,7 +34,7 @@ export default function PageHeader({
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
           {breadcrumbs.length > 0 && (
-            <nav className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            <nav className="flex flex-wrap items-center gap-2 ui-caption font-medium text-slate-500 dark:text-slate-400">
               {breadcrumbs.map((bc, idx) => (
                 <span key={bc.label} className="flex items-center gap-2">
                   {bc.to ? (
@@ -50,7 +50,7 @@ export default function PageHeader({
             </nav>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-white">{title}</h1>
+            <h1 className="ui-title font-semibold text-slate-900 dark:text-white">{title}</h1>
             {inlineContent}
           </div>
         </div>
@@ -66,7 +66,7 @@ export default function PageHeader({
                     ? "border border-slate-200 text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
                     : "bg-primary text-white hover:bg-primary-600";
               const base =
-                "inline-flex items-center justify-center rounded-md px-3 py-1.5 text-xs font-semibold shadow-sm transition";
+                "inline-flex items-center justify-center rounded-md px-3 py-1.5 ui-caption font-semibold shadow-sm transition";
               if (action.to) {
                 return (
                   <Link key={action.label} to={action.to} className={`${base} ${classes}`}>

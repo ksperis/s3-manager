@@ -170,7 +170,7 @@ export default function AppRouter() {
                   sidebarTitle="ADMIN"
                   hideHeader
                   topbarContent={
-                    <span className="text-sm text-slate-500 dark:text-slate-300">Administration globale</span>
+                    <span className="ui-body text-slate-500 dark:text-slate-300">Administration globale</span>
                   }
                 />
               }

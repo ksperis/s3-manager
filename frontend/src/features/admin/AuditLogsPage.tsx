@@ -24,7 +24,7 @@ const scopeLabels: Record<ScopeFilter, string> = {
 };
 
 function RoleBadge({ role }: { role: string }) {
-  const base = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold";
+  const base = "inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold";
   if (role === "ui_admin") {
     return <span className={`${base} bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200`}>Admin</span>;
   }
@@ -42,7 +42,7 @@ function RoleBadge({ role }: { role: string }) {
 }
 
 function ScopeBadge({ scope }: { scope: string }) {
-  const base = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold";
+  const base = "inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold";
   let styles = "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100";
   let label = "Manager UI";
   if (scope === "admin") {
@@ -57,10 +57,10 @@ function ScopeBadge({ scope }: { scope: string }) {
 
 function MetadataPreview({ metadata }: { metadata?: Record<string, unknown> | null }) {
   if (!metadata || Object.keys(metadata).length === 0) {
-    return <span className="text-xs text-slate-500 dark:text-slate-400">-</span>;
+    return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
   }
   return (
-    <pre className="max-h-36 overflow-auto rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+    <pre className="max-h-36 overflow-auto rounded-lg bg-slate-50 px-3 py-2 ui-caption leading-relaxed text-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
       {JSON.stringify(metadata, null, 2)}
     </pre>
   );
@@ -152,7 +152,7 @@ export default function AuditLogsPage() {
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         >
           {Object.entries(roleLabels).map(([value, label]) => (
             <option key={value} value={value}>
@@ -163,7 +163,7 @@ export default function AuditLogsPage() {
         <select
           value={scopeFilter}
           onChange={(e) => setScopeFilter(e.target.value as ScopeFilter)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         >
           {Object.entries(scopeLabels).map(([value, label]) => (
             <option key={value} value={value}>
@@ -194,7 +194,7 @@ export default function AuditLogsPage() {
 
       <div className="rounded-2xl border border-slate-200/80 bg-white/95 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
         {error && (
-          <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
             {error}
           </div>
         )}
@@ -206,8 +206,8 @@ export default function AuditLogsPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-            <table className="compact-table min-w-full divide-y divide-slate-200 text-left text-sm text-slate-700 dark:divide-slate-800 dark:text-slate-200">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
+            <table className="compact-table min-w-full divide-y divide-slate-200 text-left ui-body text-slate-700 dark:divide-slate-800 dark:text-slate-200">
+                <thead className="bg-slate-50 ui-caption uppercase tracking-wide text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Time</th>
                     <th className="px-4 py-3 font-semibold">Actor</th>
@@ -221,7 +221,7 @@ export default function AuditLogsPage() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                   {logs.map((log) => (
                     <tr key={log.id} className="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50">
-                      <td className="px-4 py-3 align-top text-xs text-slate-500 dark:text-slate-400">
+                      <td className="px-4 py-3 align-top ui-caption text-slate-500 dark:text-slate-400">
                         {new Date(log.created_at).toLocaleString()}
                       </td>
                       <td className="px-4 py-3 align-top">
@@ -233,12 +233,12 @@ export default function AuditLogsPage() {
                       <td className="px-4 py-3 align-top">
                         <ScopeBadge scope={log.scope} />
                       </td>
-                      <td className="px-4 py-3 align-top font-mono text-xs">{log.action}</td>
+                      <td className="px-4 py-3 align-top font-mono ui-caption">{log.action}</td>
                       <td className="px-4 py-3 align-top">
-                        <div className="text-xs text-slate-600 dark:text-slate-300">{log.entity_type || "-"}</div>
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">{log.entity_id || "—"}</div>
+                        <div className="ui-caption text-slate-600 dark:text-slate-300">{log.entity_type || "-"}</div>
+                        <div className="ui-body font-medium text-slate-900 dark:text-white">{log.entity_id || "—"}</div>
                       </td>
-                      <td className="px-4 py-3 align-top text-sm">
+                      <td className="px-4 py-3 align-top ui-body">
                         {log.account_name ? (
                           <div className="font-medium text-slate-900 dark:text-white">{log.account_name}</div>
                         ) : log.account_id ? (
@@ -256,7 +256,7 @@ export default function AuditLogsPage() {
               </table>
             </div>
 
-            <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm dark:border-slate-800">
+            <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 ui-body dark:border-slate-800">
               <span className="text-slate-500 dark:text-slate-400">
                 Showing {logs.length} entr{logs.length === 1 ? "y" : "ies"}
               </span>
@@ -264,7 +264,7 @@ export default function AuditLogsPage() {
                 <button
                   type="button"
                   onClick={handleRefresh}
-                  className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                  className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 ui-caption font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
                   disabled={loading}
                 >
                   Refresh
@@ -273,7 +273,7 @@ export default function AuditLogsPage() {
                   type="button"
                   onClick={handleLoadMore}
                   disabled={!hasMore || loadingMore}
-                  className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                  className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
                 >
                   {loadingMore ? "Loading…" : hasMore ? "Load older" : "No more"}
                 </button>

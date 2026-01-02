@@ -1815,7 +1815,7 @@ export default function BrowserPage() {
             {node.isExpanded && (node.isLoading || node.children.length > 0) && (
               <div className="mt-1">
                 {node.isLoading ? (
-                  <div className="pl-6 text-xs text-slate-400 dark:text-slate-500">Loading...</div>
+                  <div className="pl-6 ui-caption text-slate-400 dark:text-slate-500">Loading...</div>
                 ) : (
                   renderTreeNodes(node.children, depth + 1)
                 )}
@@ -3797,8 +3797,8 @@ export default function BrowserPage() {
       </button>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Browser</span>
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Browser</span>
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
             <div ref={bucketMenuRef} className="relative">
               <button
                 type="button"
@@ -3814,7 +3814,7 @@ export default function BrowserPage() {
                 <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
               </button>
               {showBucketMenu && (
-                <div className="absolute left-0 z-30 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                <div className="absolute left-0 z-30 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900">
                   <div className="flex items-center gap-2 px-2 pb-2 pt-1">
                     <SearchIcon className="h-3.5 w-3.5 text-slate-400" />
                     <input
@@ -3823,19 +3823,19 @@ export default function BrowserPage() {
                       value={bucketFilter}
                       onChange={(event) => setBucketFilter(event.target.value)}
                       placeholder="Filter buckets"
-                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       spellCheck={false}
                     />
                   </div>
                   <div className="max-h-56 overflow-y-auto px-1 pb-1">
                     {loadingBuckets ? (
-                      <div className="px-2 py-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
                         Loading buckets...
                       </div>
                     ) : bucketOptions.length === 0 ? (
-                      <div className="px-2 py-2 text-[11px] text-slate-500 dark:text-slate-400">No buckets</div>
+                      <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">No buckets</div>
                     ) : filteredBucketOptions.length === 0 ? (
-                      <div className="px-2 py-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
                         No buckets match this filter.
                       </div>
                     ) : (
@@ -3854,7 +3854,7 @@ export default function BrowserPage() {
                           >
                             <span className="truncate">{bucket}</span>
                             {isActive && (
-                              <span className="text-[10px] font-semibold uppercase text-primary-600 dark:text-primary-200">
+                              <span className="ui-caption font-semibold uppercase text-primary-600 dark:text-primary-200">
                                 Active
                               </span>
                             )}
@@ -3864,7 +3864,7 @@ export default function BrowserPage() {
                     )}
                   </div>
                   {!loadingBuckets && filteredBucketOptions.length > 0 && (
-                    <div className="border-t border-slate-200 px-2 py-1 text-[10px] text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                    <div className="border-t border-slate-200 px-2 py-1 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
                       {bucketOverflowCount > 0
                         ? `Showing ${visibleBucketOptions.length} of ${filteredBucketOptions.length} buckets. Use filter to narrow.`
                         : `${filteredBucketOptions.length} bucket${filteredBucketOptions.length === 1 ? "" : "s"}`}
@@ -3874,7 +3874,7 @@ export default function BrowserPage() {
               )}
             </div>
             <div
-              className="flex flex-wrap items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400"
+              className="flex flex-wrap items-center gap-1 ui-caption font-semibold text-slate-500 dark:text-slate-400"
               onClick={isEditingPath ? undefined : startEditingPath}
             >
               {isEditingPath ? (
@@ -3887,7 +3887,7 @@ export default function BrowserPage() {
                   onKeyDown={handlePathKeyDown}
                   placeholder="root"
                   aria-label="Path"
-                  className="min-w-[140px] flex-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="min-w-[140px] flex-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   disabled={!bucketName}
                   spellCheck={false}
                 />
@@ -4015,7 +4015,7 @@ export default function BrowserPage() {
               }`}
             >
               Operations
-              <span className={`${countBadgeClasses} text-[10px]`}>{formatBadgeCount(totalOperationsCount)}</span>
+              <span className={`${countBadgeClasses} ui-caption`}>{formatBadgeCount(totalOperationsCount)}</span>
             </button>
             <input
               ref={fileInputRef}
@@ -4035,7 +4035,7 @@ export default function BrowserPage() {
         </div>
 
         {(bucketError || objectsError || statusMessage || warnings.length > 0) && (
-          <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
+          <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
             {bucketError && <p className="font-semibold text-rose-600 dark:text-rose-200">{bucketError}</p>}
             {!bucketError && objectsError && <p className="font-semibold text-rose-600 dark:text-rose-200">{objectsError}</p>}
             {statusMessage && <p className="text-slate-500 dark:text-slate-400">{statusMessage}</p>}
@@ -4063,10 +4063,10 @@ export default function BrowserPage() {
           <div className={`grid min-h-0 flex-1 grid-rows-1 gap-3 ${layoutClass}`}>
             {showFolders && (
               <div className="flex min-h-0 h-full flex-col rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Folders</p>
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Folders</p>
                 <div className="mt-3 min-h-0 flex-1 overflow-x-auto overflow-y-auto pr-1">
                   {!bucketName ? (
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
                   ) : (
                     renderTreeNodes(treeNodes)
                   )}
@@ -4087,10 +4087,10 @@ export default function BrowserPage() {
                     onContextMenu={handlePathContextMenu}
                   >
                     {dragging && (
-                      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-50/80 text-center text-sm font-semibold text-slate-600 backdrop-blur-sm dark:bg-slate-900/70 dark:text-slate-200">
+                      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-slate-50/80 text-center ui-body font-semibold text-slate-600 backdrop-blur-sm dark:bg-slate-900/70 dark:text-slate-200">
                         <div>
                           <div>Drop files or folders to upload</div>
-                          <div className="mt-1 text-xs font-normal text-slate-500 dark:text-slate-400">
+                          <div className="mt-1 ui-caption font-normal text-slate-500 dark:text-slate-400">
                             {bucketName ? `${bucketName}/${normalizedPrefix}` : "Select a bucket first"}
                           </div>
                         </div>
@@ -4101,7 +4101,7 @@ export default function BrowserPage() {
                         <table className="manager-table min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
                           <thead className="bg-slate-50 dark:bg-slate-900/50">
                             <tr>
-                              <th className={`w-9 px-2 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
+                              <th className={`w-9 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 <input
                                   type="checkbox"
                                   checked={allSelected}
@@ -4112,7 +4112,7 @@ export default function BrowserPage() {
                               </th>
                               <th
                                 ref={nameHeaderRef}
-                                className={`px-4 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}
+                                className={`px-4 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}
                               >
                                 <div className="flex min-w-0 items-center gap-2">
                                   <button
@@ -4139,7 +4139,7 @@ export default function BrowserPage() {
                                           onChange={(event) => setFilter(event.target.value)}
                                           placeholder="Filter"
                                           aria-label="Filter by name"
-                                          className="h-6 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 text-[10px] font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 normal-case"
+                                          className="h-6 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 normal-case"
                                         />
                                       </div>
                                       <button
@@ -4160,7 +4160,7 @@ export default function BrowserPage() {
                                   )}
                                 </div>
                               </th>
-                              <th className={`w-20 px-2 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
+                              <th className={`w-20 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 <button
                                   type="button"
                                   onClick={() => handleSortToggle("size")}
@@ -4174,7 +4174,7 @@ export default function BrowserPage() {
                                   />
                                 </button>
                               </th>
-                              <th className={`w-32 px-2 ${headerPadding} !align-middle text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
+                              <th className={`w-32 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 <button
                                   type="button"
                                   onClick={() => handleSortToggle("modified")}
@@ -4188,7 +4188,7 @@ export default function BrowserPage() {
                                   />
                                 </button>
                               </th>
-                              <th className={`w-44 px-2 ${headerPadding} !align-middle text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
+                              <th className={`w-44 px-2 ${headerPadding} !align-middle text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 <span className="inline-flex h-6 items-center">Actions</span>
                               </th>
                             </tr>
@@ -4198,7 +4198,7 @@ export default function BrowserPage() {
                               <tr className={`${rowHeightClasses} text-slate-600 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/40`}>
                                 <td className={`w-9 px-2 ${rowCellClasses} !align-middle`} />
                                 <td
-                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle text-sm`}
+                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle ui-body`}
                                 >
                                   <button
                                     type="button"
@@ -4211,9 +4211,9 @@ export default function BrowserPage() {
                                     <span className="truncate">Parent folder</span>
                                   </button>
                                 </td>
-                                <td className={`px-2 ${rowCellClasses} !align-middle text-sm text-slate-400 whitespace-nowrap`}>-</td>
-                                <td className={`px-2 ${rowCellClasses} !align-middle text-sm text-slate-400 whitespace-nowrap`}>-</td>
-                                <td className={`w-44 px-2 ${rowCellClasses} !align-middle text-right text-xs text-slate-400`} />
+                                <td className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-400 whitespace-nowrap`}>-</td>
+                                <td className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-400 whitespace-nowrap`}>-</td>
+                                <td className={`w-44 px-2 ${rowCellClasses} !align-middle text-right ui-caption text-slate-400`} />
                               </tr>
                             )}
                             {objectsLoading && <TableEmptyState colSpan={5} message="Loading objects..." />}
@@ -4257,7 +4257,7 @@ export default function BrowserPage() {
                                   />
                                 </td>
                                 <td
-                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} align-middle text-sm text-slate-700 dark:text-slate-200`}
+                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} align-middle ui-body text-slate-700 dark:text-slate-200`}
                                 >
                                   <div className={`flex min-w-0 items-center ${nameGapClasses}`}>
                                     <span
@@ -4287,7 +4287,7 @@ export default function BrowserPage() {
                                         {item.name}
                                       </button>
                                       {!compactMode && (
-                                        <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden text-xs text-slate-500 dark:text-slate-400">
+                                        <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden ui-caption text-slate-500 dark:text-slate-400">
                                           <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
                                             {item.type === "folder" ? "Prefix" : "Object"}
                                           </span>
@@ -4306,10 +4306,10 @@ export default function BrowserPage() {
                                     </div>
                                   </div>
                                 </td>
-                                <td className={`px-2 ${rowCellClasses} !align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
+                                <td className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
                                   {item.size}
                                 </td>
-                                <td className={`px-2 ${rowCellClasses} !align-middle text-sm text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
+                                <td className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
                                   {item.modified}
                                 </td>
                                 <td className={`w-44 px-2 ${rowCellClasses} !align-middle text-right`}>
@@ -4373,22 +4373,22 @@ export default function BrowserPage() {
                     ) : (
                       <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                         {objectsLoading && (
-                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             Loading objects...
                           </div>
                         )}
                         {!objectsLoading && !bucketName && (
-                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             Select a bucket to browse objects.
                           </div>
                         )}
                         {!objectsLoading && bucketName && objectsError && (
-                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             {objectsError}
                           </div>
                         )}
                         {!objectsLoading && bucketName && !objectsError && filteredItems.length === 0 && (
-                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             No objects found for this path.
                           </div>
                         )}
@@ -4446,18 +4446,18 @@ export default function BrowserPage() {
                                 </span>
                                 <span className="min-w-0">
                                   <span
-                                    className="block min-w-0 break-words text-sm font-semibold leading-snug text-slate-900 dark:text-slate-100"
+                                    className="block min-w-0 break-words ui-body font-semibold leading-snug text-slate-900 dark:text-slate-100"
                                     style={gridTitleClampStyle}
                                     title={item.name}
                                   >
                                     {item.name}
                                   </span>
-                                  <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                  <span className="mt-1 block ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                                     {item.type === "folder" ? "Folder" : "File"}
                                   </span>
                                 </span>
                               </button>
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                              <div className="flex flex-wrap items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
                                 <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
                                   {item.type === "folder" ? "Prefix" : "Object"}
                                 </span>
@@ -4472,15 +4472,15 @@ export default function BrowserPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                              <div className="grid grid-cols-2 gap-2 ui-caption text-slate-500 dark:text-slate-400">
                                 <div className="min-w-0 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2 py-1 dark:border-slate-700/60 dark:bg-slate-900/50">
-                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                  <div className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                                     Size
                                   </div>
                                   <div className="font-semibold text-slate-700 dark:text-slate-200">{item.size}</div>
                                 </div>
                                 <div className="min-w-0 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2 py-1 dark:border-slate-700/60 dark:bg-slate-900/50">
-                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                  <div className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                                     Modified
                                   </div>
                                   <div
@@ -4613,17 +4613,17 @@ export default function BrowserPage() {
                             role="tabpanel"
                             id="inspector-panel-context"
                             aria-labelledby="inspector-tab-context"
-                            className="space-y-4 text-xs text-slate-600 dark:text-slate-300"
+                            className="space-y-4 ui-caption text-slate-600 dark:text-slate-300"
                           >
                             <div className="space-y-1">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current location</p>
-                              <p className="break-all text-[11px] text-slate-500 dark:text-slate-400">
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Current location</p>
+                              <p className="break-all ui-caption text-slate-500 dark:text-slate-400">
                                 {currentPath || "Select a bucket to get started."}
                               </p>
                             </div>
                             <div className="space-y-3">
                               <div>
-                                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Actions</p>
+                                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Actions</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   <button
                                     type="button"
@@ -4686,7 +4686,7 @@ export default function BrowserPage() {
                                 </div>
                               </div>
                               <div>
-                                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Prefix summary</p>
+                                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Prefix summary</p>
                                 <div className="mt-2 grid gap-2">
                                   <div className="flex items-center justify-between">
                                     <span className="text-slate-500">Files</span>
@@ -4706,7 +4706,7 @@ export default function BrowserPage() {
                               </div>
                               <div>
                                 <div className="flex items-center justify-between gap-2">
-                                  <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Counts</p>
+                                  <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Counts</p>
                                   <button
                                     type="button"
                                     className={bulkActionClasses}
@@ -4717,7 +4717,7 @@ export default function BrowserPage() {
                                   </button>
                                 </div>
                                 {contextCountsError && (
-                                  <p className="mt-2 text-[11px] font-semibold text-rose-600 dark:text-rose-200">
+                                  <p className="mt-2 ui-caption font-semibold text-rose-600 dark:text-rose-200">
                                     {contextCountsError}
                                   </p>
                                 )}
@@ -4743,15 +4743,15 @@ export default function BrowserPage() {
                                 </div>
                               </div>
                               <div>
-                                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Storage classes</p>
+                                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Storage classes</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {Object.keys(pathStats.storageCounts).length === 0 ? (
-                                    <span className="text-xs text-slate-500 dark:text-slate-400">No file data yet.</span>
+                                    <span className="ui-caption text-slate-500 dark:text-slate-400">No file data yet.</span>
                                   ) : (
                                     Object.entries(pathStats.storageCounts).map(([storage, count]) => (
                                       <span
                                         key={storage}
-                                        className={`rounded-full border px-2 py-1 text-xs font-semibold ${
+                                        className={`rounded-full border px-2 py-1 ui-caption font-semibold ${
                                           storageClassChipClasses[storage] ??
                                           "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
                                         }`}
@@ -4774,11 +4774,11 @@ export default function BrowserPage() {
                           className="space-y-4"
                         >
                           {canSelectionActions ? (
-                          <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                          <div className="space-y-3 ui-caption text-slate-600 dark:text-slate-300">
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Selection</p>
-                                <p className="mt-1 text-[11px] text-slate-400">
+                                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Selection</p>
+                                <p className="mt-1 ui-caption text-slate-400">
                                   {selectedCount > 0
                                     ? `${selectedCount} selected`
                                     : selectionPrimary
@@ -4786,21 +4786,21 @@ export default function BrowserPage() {
                                       : "No selection"}
                                 </p>
                                 {selectedCount > 0 && (
-                                  <p className="text-[11px] text-slate-400">
+                                  <p className="ui-caption text-slate-400">
                                     {selectionIsSingle && selectionPrimary
                                       ? selectionPrimary.name
                                       : `${selectionFiles.length} files · ${selectionFolders.length} folders`}
                                   </p>
                                 )}
                                 {selectedCount > 0 && (
-                                  <p className="text-[11px] text-slate-400">Total size: {formatBytes(selectedBytes)}</p>
+                                  <p className="ui-caption text-slate-400">Total size: {formatBytes(selectedBytes)}</p>
                                 )}
                               </div>
                               {selectedCount > 0 && (
                                 <button
                                   type="button"
                                   onClick={() => setSelectedIds([])}
-                                  className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                  className="ui-caption font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                                 >
                                   Clear
                                 </button>
@@ -4904,7 +4904,7 @@ export default function BrowserPage() {
                             </div>
                             <div className="rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/40">
                               <div className="flex items-center justify-between gap-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Selection stats</p>
+                                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Selection stats</p>
                                 <button
                                   type="button"
                                   className={bulkActionClasses}
@@ -4915,12 +4915,12 @@ export default function BrowserPage() {
                                 </button>
                               </div>
                               {selectionStatsError && (
-                                <p className="mt-2 text-[11px] font-semibold text-rose-600 dark:text-rose-200">
+                                <p className="mt-2 ui-caption font-semibold text-rose-600 dark:text-rose-200">
                                   {selectionStatsError}
                                 </p>
                               )}
                               {!selectionStats && !selectionStatsLoading && !selectionStatsError && (
-                                <p className="mt-2 text-[11px] text-slate-400">
+                                <p className="mt-2 ui-caption text-slate-400">
                                   Calculates object count and size, including folder contents.
                                 </p>
                               )}
@@ -4943,7 +4943,7 @@ export default function BrowserPage() {
                             </div>
                           </div>
                         ) : (
-                          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-3 ui-caption text-slate-500 dark:border-slate-800 dark:text-slate-400">
                             Select one or more objects to see selection actions.
                           </div>
                         )}
@@ -4960,11 +4960,11 @@ export default function BrowserPage() {
                         {inspectedItem ? (
                           <div className="space-y-3">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Object details</p>
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Object details</p>
                               <button
                                 type="button"
                                 onClick={() => setActiveItem(null)}
-                                className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                className="ui-caption font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                               >
                                 Clear
                               </button>
@@ -4972,7 +4972,7 @@ export default function BrowserPage() {
                             <div className="rounded-lg border border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-sky-50 px-3 py-2.5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900/60 dark:to-slate-900">
                               <div className="flex items-center gap-3">
                                 <div
-                                  className={`flex h-10 w-10 items-center justify-center rounded-lg border text-[10px] font-bold ${
+                                  className={`flex h-10 w-10 items-center justify-center rounded-lg border ui-caption font-bold ${
                                     isImageFile(inspectedItem.name)
                                       ? "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/30 dark:text-sky-200"
                                       : "border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
@@ -4981,24 +4981,24 @@ export default function BrowserPage() {
                                   {previewLabelForItem(inspectedItem)}
                                 </div>
                                 <div>
-                                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
                                     {inspectedItem.name}
                                   </p>
-                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                  <p className="ui-caption text-slate-500 dark:text-slate-400">
                                     {inspectedItem.type === "folder" ? "Prefix" : "Object"} | {inspectedItem.size}
                                   </p>
                                 </div>
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Metadata</p>
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Metadata</p>
                               {metadataLoading && (
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Loading metadata...</p>
+                                <p className="ui-caption text-slate-500 dark:text-slate-400">Loading metadata...</p>
                               )}
                               {metadataError && (
-                                <p className="text-xs font-semibold text-rose-600 dark:text-rose-200">{metadataError}</p>
+                                <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{metadataError}</p>
                               )}
-                              <div className="grid gap-2 text-xs text-slate-600 dark:text-slate-300">
+                              <div className="grid gap-2 ui-caption text-slate-600 dark:text-slate-300">
                                 <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
                                   <span className="text-slate-500">Path</span>
                                   <span className="truncate font-semibold text-slate-700 dark:text-slate-100">
@@ -5034,7 +5034,7 @@ export default function BrowserPage() {
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Tags</p>
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Tags</p>
                               <div className="flex flex-wrap gap-2">
                                 {inspectedTags.length ? (
                                   inspectedTags.map((tag) => (
@@ -5047,41 +5047,41 @@ export default function BrowserPage() {
                                     </span>
                                   ))
                                 ) : (
-                                  <span className="text-xs text-slate-500 dark:text-slate-400">No tags defined.</span>
+                                  <span className="ui-caption text-slate-500 dark:text-slate-400">No tags defined.</span>
                                 )}
                               </div>
                             </div>
                             {inspectedItem.type === "file" && (
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Versions</p>
+                                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Versions</p>
                                   {objectVersionsLoading && (
-                                    <span className="text-xs text-slate-500 dark:text-slate-400">Loading...</span>
+                                    <span className="ui-caption text-slate-500 dark:text-slate-400">Loading...</span>
                                   )}
                                 </div>
                                 {objectVersionsError && (
-                                  <p className="text-xs font-semibold text-rose-600 dark:text-rose-200">
+                                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
                                     {objectVersionsError}
                                   </p>
                                 )}
                                 <div className="space-y-2">
                                   {objectVersionRows.length === 0 && !objectVersionsLoading && (
-                                    <span className="text-xs text-slate-500 dark:text-slate-400">No versions found.</span>
+                                    <span className="ui-caption text-slate-500 dark:text-slate-400">No versions found.</span>
                                   )}
                                   {objectVersionRows.map((ver) => (
                                     <div
                                       key={`${ver.key}-${ver.version_id ?? "none"}-${ver.is_delete_marker ? "marker" : "version"}`}
-                                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                      className="rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300"
                                     >
                                       <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex flex-wrap items-center gap-2">
                                           {ver.is_delete_marker && (
-                                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+                                            <span className="rounded-full bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
                                               delete marker
                                             </span>
                                           )}
                                           {ver.is_latest && (
-                                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
+                                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 ui-caption font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
                                               latest
                                             </span>
                                           )}
@@ -5105,7 +5105,7 @@ export default function BrowserPage() {
                                           </button>
                                         </div>
                                       </div>
-                                      <div className="mt-2 space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                      <div className="mt-2 space-y-1 ui-caption text-slate-500 dark:text-slate-400">
                                         {ver.version_id && <div>v: {ver.version_id}</div>}
                                         {ver.last_modified && <div>Modified: {formatDateTime(ver.last_modified)}</div>}
                                         {ver.size != null && <div>Size: {formatBytes(ver.size)}</div>}
@@ -5128,7 +5128,7 @@ export default function BrowserPage() {
                             )}
                           </div>
                         ) : (
-                          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-3 ui-caption text-slate-500 dark:border-slate-800 dark:text-slate-400">
                             Select a single object to view details.
                           </div>
                         )}

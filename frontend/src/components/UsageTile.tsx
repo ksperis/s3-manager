@@ -36,7 +36,7 @@ export default function UsageTile({
       <div className="flex items-center gap-3">
         <div className="shrink-0">
           {ratio === null ? (
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-slate-200 text-[11px] font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed border-slate-200 ui-caption font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
               N/A
             </div>
           ) : (
@@ -44,17 +44,17 @@ export default function UsageTile({
           )}
         </div>
         <div className="flex-1 space-y-1">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</p>
-          <p className="text-xl font-semibold text-slate-900 dark:text-white">
+          <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">{label}</p>
+          <p className="ui-title font-semibold text-slate-900 dark:text-white">
             {usedDisplay}
-            {unitHint && hasUsage && <span className="ml-1 text-[11px] font-normal text-slate-500 dark:text-slate-400">{unitHint}</span>}
+            {unitHint && hasUsage && <span className="ml-1 ui-caption font-normal text-slate-500 dark:text-slate-400">{unitHint}</span>}
           </p>
           {quotaDisplay ? (
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
               {usedDisplay} / {quotaDisplay} · {ratioLabel}
             </p>
           ) : (
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">{emptyHint ?? "No quota defined."}</p>
+            <p className="ui-caption text-slate-500 dark:text-slate-400">{emptyHint ?? "No quota defined."}</p>
           )}
         </div>
       </div>
@@ -84,7 +84,7 @@ function UsageGauge({ ratio }: { ratio: number }) {
         background: `conic-gradient(${color} ${angle}deg, ${track} ${angle}deg 360deg)`,
       }}
     >
-      <div className="absolute inset-1.5 flex items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+      <div className="absolute inset-1.5 flex items-center justify-center rounded-full bg-white ui-caption font-semibold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
         {formatPercentage(clamped)}
       </div>
     </div>
