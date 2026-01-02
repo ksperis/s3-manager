@@ -80,7 +80,12 @@ class RGWIAMService:
         except (BotoCoreError, ClientError) as exc:
             raise RuntimeError(f"Unable to list IAM users: {exc}") from exc
 
-    def create_user(self, name: str, create_key: bool = False) -> tuple[IAMUser, Optional[AccessKey]]:
+    def create_user(
+        self,
+        name: str,
+        create_key: bool = False,
+        allow_existing: bool = False,
+    ) -> tuple[IAMUser, Optional[AccessKey]]:
         try:
             resp = self.client.create_user(UserName=name)
             u = resp.get("User", {})
@@ -90,7 +95,14 @@ class RGWIAMService:
                 user_id=u.get("UserId"),
                 arn=u.get("Arn"),
             ), new_key
-        except (BotoCoreError, ClientError) as exc:
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if allow_existing and code in {"EntityAlreadyExists", "UserAlreadyExists"}:
+                existing = self.get_user(name)
+                if existing is not None:
+                    return existing, None
+            raise RuntimeError(f"Unable to create IAM user: {exc}") from exc
+        except BotoCoreError as exc:
             raise RuntimeError(f"Unable to create IAM user: {exc}") from exc
 
     def get_user(self, name: str) -> Optional[IAMUser]:

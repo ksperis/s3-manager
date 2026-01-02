@@ -2,10 +2,10 @@
 # Licensed under the Apache License, Version 2.0
 import copy
 import logging
-import uuid
 from datetime import datetime
 from typing import Optional, Tuple, TYPE_CHECKING
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -200,8 +200,7 @@ class PortalService:
         return get_iam_service(access_key, secret_key, endpoint=resolve_s3_endpoint(account))
 
     def _generate_username(self, account: S3Account, user: User) -> str:
-        suffix = uuid.uuid4().hex[:8]
-        base = f"portal-{account.id}-{user.id}-{suffix}"
+        base = f"portal-{account.id}-{user.id}"
         return base[:63]
 
     def _persist_portal_key(self, link: AccountIAMUser, key: ModelAccessKey) -> PortalAccessKey:
@@ -236,13 +235,18 @@ class PortalService:
         )
         created = False
         iam_user: Optional[IAMUser] = None
+        created_key: Optional[ModelAccessKey] = None
 
         if link and link.iam_username:
             iam_user = iam_service.get_user(link.iam_username)
 
         if link is None or iam_user is None:
-            username = self._generate_username(account, user)
-            iam_user, created_key = iam_service.create_user(username, create_key=True)
+            username = link.iam_username if link and link.iam_username else self._generate_username(account, user)
+            iam_user, created_key = iam_service.create_user(
+                username,
+                create_key=True,
+                allow_existing=True,
+            )
             if link is None:
                 link = AccountIAMUser(
                     user_id=user.id,
@@ -255,12 +259,28 @@ class PortalService:
                 link.iam_username = iam_user.name
                 link.active_access_key = None
                 link.active_secret_key = None
-            self.db.add(link)
-            self.db.commit()
-            self.db.refresh(link)
-            if created_key:
-                self._persist_portal_key(link, created_key)
-            created = True
+            try:
+                self.db.add(link)
+                self.db.commit()
+            except IntegrityError:
+                self.db.rollback()
+                link = (
+                    self.db.query(AccountIAMUser)
+                    .filter(
+                        AccountIAMUser.user_id == user.id,
+                        AccountIAMUser.account_id == account.id,
+                    )
+                    .first()
+                )
+                if not link:
+                    raise
+                if created_key and not link.active_access_key:
+                    self._persist_portal_key(link, created_key)
+            else:
+                self.db.refresh(link)
+                if created_key:
+                    self._persist_portal_key(link, created_key)
+            created = created_key is not None
 
         if not link.iam_user_id and iam_user:
             link.iam_user_id = iam_user.user_id or iam_user.arn or link.iam_username
