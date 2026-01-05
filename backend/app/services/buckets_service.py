@@ -473,8 +473,7 @@ class BucketsService:
             raise ValueError("Target bucket is required when enabling access logging.")
         logging_config = {"TargetBucket": target_bucket}
         target_prefix = (payload.target_prefix or "").strip()
-        if target_prefix:
-            logging_config["TargetPrefix"] = target_prefix
+        logging_config["TargetPrefix"] = target_prefix
         s3_client.put_bucket_logging(
             name,
             logging_config=logging_config,
