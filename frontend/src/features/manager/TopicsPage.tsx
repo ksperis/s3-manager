@@ -26,6 +26,51 @@ const defaultPolicyTemplate = `{
   "Statement": []
 }`;
 
+type AttributeDraft = {
+  key: string;
+  value: string;
+};
+
+const PRIMARY_ATTRIBUTE_KEYS = new Set(["push-endpoint", "verify-ssl"]);
+
+const formatAttributeValue = (value: unknown) => {
+  if (value === null || value === undefined) {
+    return "null";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const parseAttributeValue = (raw: string) => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { value: "" };
+  }
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      return { value: JSON.parse(trimmed) };
+    } catch {
+      return { value: null, error: "JSON values must be valid objects or arrays." };
+    }
+  }
+  return { value: raw };
+};
+
+const buildAttributeDrafts = (configuration: Record<string, unknown> | null | undefined): AttributeDraft[] => {
+  return Object.entries(configuration ?? {})
+    .filter(([key]) => !PRIMARY_ATTRIBUTE_KEYS.has(key))
+    .map(([key, value]) => ({ key, value: formatAttributeValue(value) }));
+};
+
 export default function TopicsPage() {
   const {
     accounts,
@@ -63,7 +108,9 @@ export default function TopicsPage() {
   const [attributesModalOpen, setAttributesModalOpen] = useState(false);
   const [attributesTopicArn, setAttributesTopicArn] = useState<string | null>(null);
   const [attributesTopicName, setAttributesTopicName] = useState<string | null>(null);
-  const [topicAttributes, setTopicAttributes] = useState<Record<string, unknown>>({});
+  const [pushEndpointValue, setPushEndpointValue] = useState("");
+  const [verifySslValue, setVerifySslValue] = useState(true);
+  const [attributeItems, setAttributeItems] = useState<AttributeDraft[]>([]);
   const [attributesLoading, setAttributesLoading] = useState(false);
   const [attributesSaving, setAttributesSaving] = useState(false);
   const [attributesError, setAttributesError] = useState<string | null>(null);
@@ -93,6 +140,18 @@ export default function TopicsPage() {
       );
     }
     return err instanceof Error ? err.message : "Unexpected error";
+  };
+
+  const applyAttributesConfiguration = (configuration: Record<string, unknown> | null | undefined) => {
+    const config = configuration ?? {};
+    const pushEndpoint =
+      typeof config["push-endpoint"] === "string" ? (config["push-endpoint"] as string) : "";
+    const verifySsl =
+      typeof config["verify-ssl"] === "boolean" ? Boolean(config["verify-ssl"]) : true;
+
+    setPushEndpointValue(pushEndpoint);
+    setVerifySslValue(verifySsl);
+    setAttributeItems(buildAttributeDrafts(config));
   };
 
   const fetchTopics = async (accountId: number | string | null) => {
@@ -219,12 +278,12 @@ export default function TopicsPage() {
     setAttributesTopicName(topic.name);
     setAttributesError(null);
     setAttributesStatus(null);
-    setTopicAttributes(topic.configuration ?? {});
+    applyAttributesConfiguration(topic.configuration ?? {});
     setAttributesLoading(true);
     (async () => {
       try {
         const data = await getTopicConfiguration(accountIdForApi, topic.arn);
-        setTopicAttributes(data.configuration ?? {});
+        applyAttributesConfiguration(data.configuration ?? {});
       } catch (err) {
         setAttributesError("Unable to load the topic attributes.");
       } finally {
@@ -235,13 +294,51 @@ export default function TopicsPage() {
 
   const saveAttributes = async () => {
     if (needsS3AccountSelection || !attributesTopicArn) return;
-    setAttributesSaving(true);
     setAttributesError(null);
     setAttributesStatus(null);
+    const configuration: Record<string, unknown> = {};
+    const trimmedEndpoint = pushEndpointValue.trim();
+    if (trimmedEndpoint) {
+      configuration["push-endpoint"] = trimmedEndpoint;
+    }
+    if (!verifySslValue) {
+      configuration["verify-ssl"] = false;
+    }
+
+    const seenKeys = new Set<string>();
+    for (const item of attributeItems) {
+      const key = item.key.trim();
+      const rawValue = item.value ?? "";
+      const hasValue = rawValue.trim().length > 0;
+      if (!key) {
+        if (hasValue) {
+          setAttributesError("Attribute name is required when a value is provided.");
+          return;
+        }
+        continue;
+      }
+      if (PRIMARY_ATTRIBUTE_KEYS.has(key)) {
+        setAttributesError("Use the dedicated fields for push-endpoint and verify-ssl.");
+        return;
+      }
+      if (seenKeys.has(key)) {
+        setAttributesError(`Duplicate attribute key: ${key}.`);
+        return;
+      }
+      const parsed = parseAttributeValue(rawValue);
+      if (parsed.error) {
+        setAttributesError(`${parsed.error} (${key}).`);
+        return;
+      }
+      configuration[key] = parsed.value;
+      seenKeys.add(key);
+    }
+
+    setAttributesSaving(true);
     try {
-      const updated = await updateTopicConfiguration(accountIdForApi, attributesTopicArn, topicAttributes);
+      const updated = await updateTopicConfiguration(accountIdForApi, attributesTopicArn, configuration);
       const newConfig = updated.configuration ?? {};
-      setTopicAttributes(newConfig);
+      applyAttributesConfiguration(newConfig);
       setAttributesStatus("Attributes updated.");
       setTopics((prev) =>
         prev.map((topic) =>
@@ -263,58 +360,45 @@ export default function TopicsPage() {
     setAttributesError(null);
     setAttributesLoading(false);
     setAttributesSaving(false);
-    setTopicAttributes({});
+    setPushEndpointValue("");
+    setVerifySslValue(true);
+    setAttributeItems([]);
   };
 
-  const pushEndpointValue =
-    typeof topicAttributes["push-endpoint"] === "string" ? (topicAttributes["push-endpoint"] as string) : "";
-
-  const verifySslValue =
-    typeof topicAttributes["verify-ssl"] === "boolean" ? Boolean(topicAttributes["verify-ssl"]) : true;
-
   const handlePushEndpointChange = (value: string) => {
-    setTopicAttributes((prev) => {
-      const next = { ...prev };
-      if (value.trim()) {
-        next["push-endpoint"] = value.trim();
-      } else {
-        delete next["push-endpoint"];
-      }
-      return next;
-    });
+    setPushEndpointValue(value);
   };
 
   const handleVerifySslChange = (checked: boolean) => {
-    setTopicAttributes((prev) => {
-      const next = { ...prev };
-      if (checked) {
-        delete next["verify-ssl"];
-      } else {
-        next["verify-ssl"] = false;
-      }
-      return next;
-    });
+    setVerifySslValue(checked);
   };
 
-  const additionalAttributes = Object.entries(topicAttributes).filter(
-    ([key]) => key !== "push-endpoint" && key !== "verify-ssl"
-  );
+  const handleAttributeKeyChange = (index: number, value: string) => {
+    setAttributesStatus(null);
+    setAttributesError(null);
+    setAttributeItems((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, key: value } : item))
+    );
+  };
 
-  const formatAttributeValue = (value: unknown) => {
-    if (value === null || value === undefined) {
-      return "null";
-    }
-    if (typeof value === "string") {
-      return value;
-    }
-    if (typeof value === "number" || typeof value === "boolean") {
-      return String(value);
-    }
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return String(value);
-    }
+  const handleAttributeValueChange = (index: number, value: string) => {
+    setAttributesStatus(null);
+    setAttributesError(null);
+    setAttributeItems((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, value } : item))
+    );
+  };
+
+  const handleAddAttribute = () => {
+    setAttributesStatus(null);
+    setAttributesError(null);
+    setAttributeItems((prev) => [...prev, { key: "", value: "" }]);
+  };
+
+  const handleRemoveAttribute = (index: number) => {
+    setAttributesStatus(null);
+    setAttributesError(null);
+    setAttributeItems((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   return (
@@ -480,6 +564,7 @@ export default function TopicsPage() {
                 value={pushEndpointValue}
                 onChange={(e) => {
                   setAttributesStatus(null);
+                  setAttributesError(null);
                   handlePushEndpointChange(e.target.value);
                 }}
                 className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
@@ -498,6 +583,7 @@ export default function TopicsPage() {
                   checked={verifySslValue}
                   onChange={(e) => {
                     setAttributesStatus(null);
+                    setAttributesError(null);
                     handleVerifySslChange(e.target.checked);
                   }}
                   disabled={attributesLoading}
@@ -508,23 +594,60 @@ export default function TopicsPage() {
                 Disable verification only when testing against endpoints that use self-signed certificates.
               </p>
             </div>
-            {additionalAttributes.length > 0 && (
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
+              <div className="flex items-center justify-between">
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Other attributes
+                  Additional attributes
                 </p>
-                <ul className="mt-2 space-y-1 font-mono ui-caption">
-                  {additionalAttributes.map(([key, value]) => (
-                    <li key={key}>
-                      <span className="text-slate-500">{key}:</span> {formatAttributeValue(value)}
-                    </li>
-                  ))}
-                </ul>
+                <button
+                  type="button"
+                  onClick={handleAddAttribute}
+                  disabled={attributesLoading}
+                  className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100"
+                >
+                  Add attribute
+                </button>
               </div>
-            )}
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Attributes that are not listed above are preserved when saving.
-            </p>
+              {attributeItems.length === 0 ? (
+                <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                  No additional attributes defined.
+                </p>
+              ) : (
+                <div className="mt-2 space-y-2">
+                  {attributeItems.map((item, idx) => (
+                    <div key={`${item.key}-${idx}`} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                      <input
+                        type="text"
+                        value={item.key}
+                        onChange={(e) => handleAttributeKeyChange(idx, e.target.value)}
+                        className="w-full rounded-md border border-slate-200 px-3 py-2 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        placeholder="attribute-key"
+                        disabled={attributesLoading}
+                      />
+                      <input
+                        type="text"
+                        value={item.value}
+                        onChange={(e) => handleAttributeValueChange(idx, e.target.value)}
+                        className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        placeholder='value or JSON ({"key":"value"})'
+                        disabled={attributesLoading}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAttribute(idx)}
+                        disabled={attributesLoading}
+                        className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-rose-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                Paste JSON for object/array values; remove a row to clear an attribute.
+              </p>
+            </div>
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"

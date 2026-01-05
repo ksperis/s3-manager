@@ -17,9 +17,10 @@ class TopicsService:
     _CONFIG_EXCLUDED_KEYS = {
         "TopicArn",
         "TopicName",
+        "Name",
         "Owner",
         "Policy",
-        "DisplayName",
+        "User",
         "SubscriptionsConfirmed",
         "SubscriptionsPending",
         "SubscriptionsDeleted",
@@ -164,12 +165,22 @@ class TopicsService:
     ) -> dict:
         access_key, secret_key = self._account_credentials(account)
         current = self.get_topic_configuration(account, topic_arn)
-        serialized = self._serialize_configuration(configuration)
-        if current:
-            for key in current:
-                if key not in (configuration or {}):
-                    serialized[key] = ""
-        sns_client.set_topic_attributes(topic_arn, serialized, access_key=access_key, secret_key=secret_key)
+        serialized_current = self._serialize_configuration(current)
+        serialized_desired = self._serialize_configuration(configuration)
+        changes: dict[str, str] = {}
+
+        for key, value in serialized_desired.items():
+            if serialized_current.get(key) != value:
+                changes[key] = value
+
+        for key, value in serialized_current.items():
+            if key not in serialized_desired and value != "":
+                changes[key] = ""
+
+        if not changes:
+            return current or {}
+
+        sns_client.set_topic_attributes(topic_arn, changes, access_key=access_key, secret_key=secret_key)
         updated = self.get_topic_configuration(account, topic_arn)
         return updated or {}
 
