@@ -23,6 +23,7 @@ from app.routers.dependencies import (
 )
 from app.services.audit_service import AuditService
 from app.services.portal_service import PortalService, get_portal_service
+from app.services.storage_endpoints_service import normalize_capabilities
 from app.services.rgw_iam import get_iam_service
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.services.traffic_service import TrafficService, TrafficWindow, WINDOW_RESOLUTION_LABELS, WINDOW_DELTAS
@@ -54,6 +55,7 @@ def list_portal_accounts(
     )
     results: list[S3AccountSchema] = []
     for acc in accounts:
+        endpoint = acc.storage_endpoint
         root_link = (
             db.query(UserS3Account)
             .filter(
@@ -73,6 +75,10 @@ def list_portal_accounts(
                 quota_max_objects=acc.quota_max_objects,
                 root_user_email=root_link[0] if root_link else None,
                 root_user_id=root_link[1] if root_link else None,
+                storage_endpoint_id=endpoint.id if endpoint else None,
+                storage_endpoint_name=endpoint.name if endpoint else None,
+                storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+                storage_endpoint_capabilities=normalize_capabilities(endpoint.capabilities) if endpoint else None,
             )
         )
     return results

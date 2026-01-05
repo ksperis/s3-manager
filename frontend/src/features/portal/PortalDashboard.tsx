@@ -33,6 +33,31 @@ import Modal from "../../components/Modal";
 import PortalBucketModal from "./PortalBucketModal";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 
+const MAX_BUCKET_NAME_LENGTH = 63;
+
+function normalizeBucketName(value: string): string {
+  const lower = value.trim().toLowerCase();
+  if (!lower) return "";
+  const sanitized = lower.replace(/[^a-z0-9.-]+/g, "-");
+  const labels = sanitized
+    .split(".")
+    .map((label) => {
+      const collapsed = label.replace(/-+/g, "-");
+      return collapsed.replace(/^-+/, "").replace(/-+$/, "");
+    })
+    .filter(Boolean);
+  const joined = labels.join(".");
+  return joined.replace(/^[.-]+/, "").replace(/[.-]+$/, "").slice(0, MAX_BUCKET_NAME_LENGTH);
+}
+
+function isValidBucketName(value: string): boolean {
+  if (value.length < 3 || value.length > MAX_BUCKET_NAME_LENGTH) return false;
+  if (!/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(value)) return false;
+  if (value.includes("..")) return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return false;
+  return true;
+}
+
 function Badge({ label, tone = "slate" }: { label: string; tone?: "slate" | "sky" | "emerald" | "amber" }) {
   const tones: Record<string, string> = {
     slate: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
@@ -127,6 +152,7 @@ export default function PortalDashboard() {
   const [trafficLoading, setTrafficLoading] = useState(false);
   const accountUsedBytes = accountUsage?.used_bytes ?? state?.used_bytes ?? null;
   const accountUsedObjects = accountUsage?.used_objects ?? state?.used_objects ?? null;
+  const isBucketNameValid = !newBucketName || isValidBucketName(newBucketName);
   const derivedBucketTotals = useMemo(() => {
     const buckets = state?.buckets ?? [];
     let bytesSum = 0;
@@ -679,11 +705,12 @@ export default function PortalDashboard() {
 
   const handleCreateBucket = async (event: FormEvent) => {
     event.preventDefault();
-    if (!accountIdForApi || !newBucketName.trim()) return;
+    const normalizedBucketName = normalizeBucketName(newBucketName);
+    if (!accountIdForApi || !normalizedBucketName) return;
     setBucketActionError(null);
     setCreatingBucket(true);
     try {
-      const bucket = await createPortalBucket(accountIdForApi, newBucketName.trim());
+      const bucket = await createPortalBucket(accountIdForApi, normalizedBucketName);
       setState((prev) =>
         prev ? { ...prev, buckets: [bucket, ...(prev.buckets || [])] } : prev
       );
@@ -1541,13 +1568,23 @@ export default function PortalDashboard() {
                     <input
                       type="text"
                       value={newBucketName}
-                      onChange={(e) => setNewBucketName(e.target.value)}
-                      className="w-52 rounded-full border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      onChange={(e) => setNewBucketName(normalizeBucketName(e.target.value))}
+                      maxLength={MAX_BUCKET_NAME_LENGTH}
+                      title={
+                        isBucketNameValid
+                          ? undefined
+                          : "Nom invalide. 3-63 caractères, minuscules, chiffres, points ou tirets."
+                      }
+                      className={`w-52 rounded-full border px-3 py-2 ui-body focus:outline-none focus:ring-2 ${
+                        isBucketNameValid
+                          ? "border-slate-200 focus:border-primary focus:ring-primary/30 dark:border-slate-700"
+                          : "border-rose-400 text-rose-700 focus:border-rose-500 focus:ring-rose-200 dark:border-rose-500 dark:text-rose-200 dark:focus:ring-rose-900/50"
+                      } dark:bg-slate-900 dark:text-slate-100`}
                       placeholder="nouveau-bucket"
                     />
                     <button
                       type="submit"
-                      disabled={creatingBucket || !newBucketName.trim()}
+                      disabled={creatingBucket || !newBucketName.trim() || !isBucketNameValid}
                       className="rounded-full bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
                     >
                       {creatingBucket ? "Création..." : "Créer un bucket"}

@@ -7,6 +7,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { S3AccountProvider, useS3AccountContext } from "./S3AccountContext";
 import { SidebarSection } from "../../components/Sidebar";
+import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 
 function getUserRole(): string | null {
   if (typeof window === "undefined") return null;
@@ -55,6 +56,7 @@ function ManagerShell() {
   const navigate = useNavigate();
   const selected = accounts.find((a) => a.id === selectedS3AccountId);
   const showSelector = requiresS3AccountSelection && accounts.length > 1;
+  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const userRole = getUserRole();
   const fallbackCapabilities = getUserCapabilities();
   const capabilities = fallbackCapabilities ?? {
@@ -82,6 +84,7 @@ function ManagerShell() {
     if (!canToggleAccess) return;
     setAccessMode(accessMode === "admin" ? "portal" : "admin");
   };
+
   const inlineAction = (
     <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-4">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
@@ -100,8 +103,8 @@ function ManagerShell() {
                   </option>
                 )}
                 {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} {!acc.rgw_account_id ? "(S3 user)" : ""}
+                  <option key={acc.id} value={acc.id} title={acc.storage_endpoint_url || undefined}>
+                    {formatAccountLabel(acc, defaultEndpointId, defaultEndpointName)}
                   </option>
                 ))}
               </select>
@@ -110,8 +113,8 @@ function ManagerShell() {
               </div>
             </div>
           ) : (
-            <div className={pillClasses}>
-              {selected ? `${selected.name}${!selected.rgw_account_id ? " · S3 user" : ""}` : "No account selected"}
+            <div className={pillClasses} title={selected?.storage_endpoint_url || undefined}>
+              {selected ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName) : "No account selected"}
             </div>
           )
         ) : (

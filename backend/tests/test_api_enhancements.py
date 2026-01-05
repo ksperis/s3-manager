@@ -13,7 +13,6 @@ class FakeRGWAdmin:
     def __init__(self):
         self.created_accounts = []
         self.created_root_users = []
-        self.quota_calls = []
         self.cap_calls = []
 
     def create_account(self, account_id: str, account_name: str):
@@ -26,12 +25,6 @@ class FakeRGWAdmin:
 
     def _extract_keys(self, data):
         return data.get("keys", [])
-
-    def set_account_quota(self, account_id: str, max_size_gb=None, max_objects=None, quota_scope="account", enabled=True):
-        self.quota_calls.append(
-            {"account_id": account_id, "max_size_gb": max_size_gb, "max_objects": max_objects, "quota_scope": quota_scope, "enabled": enabled}
-        )
-        return {"ok": True}
 
     def set_user_caps(self, uid: str, cap: str, tenant: Optional[str] = None):
         self.cap_calls.append({"uid": uid, "cap": cap, "tenant": tenant})
@@ -65,7 +58,6 @@ def test_admin_create_account_with_quota(monkeypatch, client: TestClient, db_ses
     assert db_acc is not None
     assert db_acc.quota_max_size_gb == 500
     assert db_acc.quota_max_objects == 1000000
-    assert fake_rgw.quota_calls, "Quota should be set via RGW admin"
 
 
 def test_admin_unlink_account_endpoint(monkeypatch, client: TestClient):

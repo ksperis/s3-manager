@@ -2,13 +2,14 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ChangeEvent } from "react";
+import { ChangeEvent, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { GeneralSettings } from "../api/appSettings";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
+const WORKSPACE_STORAGE_KEY = "selectedWorkspace";
 
 type StoredUser = {
   role?: string | null;
@@ -25,10 +26,10 @@ type EnvironmentOption = {
 };
 
 const ALL_ENVIRONMENTS: EnvironmentOption[] = [
-  { id: "admin", label: "Admin", path: "/admin" },
-  { id: "manager", label: "Manager", path: "/manager" },
-  { id: "browser", label: "Browser", path: "/browser" },
-  { id: "portal", label: "Portail", path: "/portal" },
+  { id: "admin", label: "Admin (plateforme)", path: "/admin" },
+  { id: "manager", label: "Manager (admin tenant)", path: "/manager" },
+  { id: "browser", label: "Browser (objets)", path: "/browser" },
+  { id: "portal", label: "Portail (self-service)", path: "/portal" },
 ];
 
 function getStoredUser(): StoredUser | null {
@@ -40,6 +41,14 @@ function getStoredUser(): StoredUser | null {
   } catch {
     return null;
   }
+}
+
+function getStoredWorkspaceId(): EnvironmentOption["id"] | null {
+  if (typeof window === "undefined") return null;
+  const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+  if (!stored) return null;
+  if (stored === "admin" || stored === "manager" || stored === "browser" || stored === "portal") return stored;
+  return null;
 }
 
 function resolveAvailableEnvironments(user: StoredUser | null): EnvironmentOption[] {
@@ -75,10 +84,18 @@ export default function EnvironmentSwitcher() {
 
   if (environments.length <= 1 || !current) return null;
 
+  useEffect(() => {
+    const stored = getStoredWorkspaceId();
+    if (stored !== current.id) {
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, current.id);
+    }
+  }, [current.id]);
+
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const next = environments.find((env) => env.id === event.target.value);
     if (!next) return;
     if (location.pathname.startsWith(next.path)) return;
+    localStorage.setItem(WORKSPACE_STORAGE_KEY, next.id);
     navigate(next.path);
   };
 
@@ -88,8 +105,8 @@ export default function EnvironmentSwitcher() {
         className="appearance-none rounded-full border border-slate-200 bg-white px-2.5 py-1 pr-6 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900"
         value={current.id}
         onChange={handleChange}
-        aria-label="Changer d'environnement"
-        title="Changer d'environnement"
+        aria-label="Changer de workspace"
+        title="Changer de workspace"
       >
         {environments.map((env) => (
           <option key={env.id} value={env.id}>

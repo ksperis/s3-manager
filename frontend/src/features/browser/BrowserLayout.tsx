@@ -6,6 +6,7 @@ import { ChangeEvent } from "react";
 import { Outlet } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { S3AccountProvider, useS3AccountContext } from "../manager/S3AccountContext";
+import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 
 function BrowserShell() {
   const {
@@ -22,6 +23,7 @@ function BrowserShell() {
   } = useS3AccountContext();
   const selected = accounts.find((a) => a.id === selectedS3AccountId);
   const showSelector = requiresS3AccountSelection && accounts.length > 1;
+  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
   const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
   const baseControlClasses =
@@ -57,8 +59,8 @@ function BrowserShell() {
                   </option>
                 )}
                 {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} {!acc.rgw_account_id ? "(S3 user)" : ""}
+                  <option key={acc.id} value={acc.id} title={acc.storage_endpoint_url || undefined}>
+                    {formatAccountLabel(acc, defaultEndpointId, defaultEndpointName)}
                   </option>
                 ))}
               </select>
@@ -67,8 +69,8 @@ function BrowserShell() {
               </div>
             </div>
           ) : (
-            <div className={pillClasses}>
-              {selected ? `${selected.name}${!selected.rgw_account_id ? " · S3 user" : ""}` : "No account selected"}
+            <div className={pillClasses} title={selected?.storage_endpoint_url || undefined}>
+              {selected ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName) : "No account selected"}
             </div>
           )
         ) : (

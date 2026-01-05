@@ -7,9 +7,11 @@ import { Outlet } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { SidebarSection } from "../../components/Sidebar";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
+import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 
 function AccountSelector() {
   const { accounts, selectedAccountId, setSelectedAccountId, selectedAccount, loading, error } = usePortalAccountContext();
+  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const selectClasses =
     "appearance-none w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
   const pillClasses =
@@ -24,7 +26,13 @@ function AccountSelector() {
   }
 
   if (accounts.length <= 1) {
-    return <div className={pillClasses}>{selectedAccount ? selectedAccount.name : "Aucun compte"}</div>;
+    return (
+      <div className={pillClasses} title={selectedAccount?.storage_endpoint_url || undefined}>
+        {selectedAccount
+          ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
+          : "Aucun compte"}
+      </div>
+    );
   }
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -37,8 +45,8 @@ function AccountSelector() {
       <select className={selectClasses} value={selectedAccountId ?? ""} onChange={handleChange}>
         {!selectedAccount && <option value="">Sélectionnez un compte</option>}
         {accounts.map((acc) => (
-          <option key={acc.id} value={acc.id}>
-            {acc.name}
+          <option key={acc.id} value={acc.id} title={acc.storage_endpoint_url || undefined}>
+            {formatAccountLabel(acc, defaultEndpointId, defaultEndpointName, false)}
           </option>
         ))}
       </select>

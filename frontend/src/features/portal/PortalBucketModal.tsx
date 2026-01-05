@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { Bucket } from "../../api/buckets";
 import { deleteObjects, getObjectDownloadUrl, listObjects, uploadObject, S3Object } from "../../api/objects";
@@ -36,6 +37,7 @@ export default function PortalBucketModal({
   accountUsedBytes,
   accountUsedObjects,
 }: PortalBucketModalProps) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"overview" | "objects">("overview");
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [objects, setObjects] = useState<S3Object[]>([]);
@@ -182,6 +184,13 @@ export default function PortalBucketModal({
 
   const storageShare = computeRelativeShare(bucket.used_bytes, accountUsedBytes);
   const objectsShare = computeRelativeShare(bucket.object_count, accountUsedObjects);
+  const canOpenInBrowser = Boolean(accountId);
+
+  const handleOpenInBrowser = () => {
+    if (!accountId) return;
+    localStorage.setItem("selectedS3AccountId", String(accountId));
+    navigate(`/browser?bucket=${encodeURIComponent(bucket.name)}`);
+  };
 
   return (
     <Modal title={`Bucket ${bucket.name}`} onClose={onClose} maxWidthClass="max-w-6xl">
@@ -195,12 +204,26 @@ export default function PortalBucketModal({
             content: (
               <div className="space-y-4">
                 <section className="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                  <div className="space-y-1">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Résumé</p>
-                    <h3 className="ui-title font-semibold text-slate-900 dark:text-slate-100">Bucket {bucket.name}</h3>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Créé le {bucket.creation_date ? new Date(bucket.creation_date).toLocaleString() : "—"}
-                    </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Résumé</p>
+                      <h3 className="ui-title font-semibold text-slate-900 dark:text-slate-100">Bucket {bucket.name}</h3>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        Créé le {bucket.creation_date ? new Date(bucket.creation_date).toLocaleString() : "—"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleOpenInBrowser}
+                      disabled={!canOpenInBrowser}
+                      className={`inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1 ui-caption font-semibold text-slate-700 shadow-sm transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 ${
+                        canOpenInBrowser
+                          ? "hover:border-primary/60 hover:text-primary-700 dark:hover:text-primary-200"
+                          : "cursor-not-allowed opacity-60"
+                      }`}
+                    >
+                      Ouvrir dans Browser
+                    </button>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
                     <UsageTile

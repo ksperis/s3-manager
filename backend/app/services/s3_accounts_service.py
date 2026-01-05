@@ -691,15 +691,7 @@ class S3AccountsService:
         self.db.add(account)
         self.db.flush()
 
-        # Apply quotas if requested
-        if payload.quota_max_size_gb is not None or payload.quota_max_objects is not None:
-            admin.set_account_quota(
-                account_id=rgw_account_id,
-                max_size_gb=payload.quota_max_size_gb,
-                max_objects=payload.quota_max_objects,
-                quota_scope="account",
-                enabled=True,
-            )
+        # Quota values are stored in the DB only; RGW AdminOps cannot apply account quotas.
 
         self.db.commit()
         self.db.refresh(account)
@@ -736,19 +728,7 @@ class S3AccountsService:
         account.quota_max_size_gb = payload.quota_max_size_gb
         account.quota_max_objects = payload.quota_max_objects
 
-        # Apply quotas to RGW if available
-        admin = self._admin_for_account(account, allow_missing=True) if account.rgw_account_id else None
-        if account.rgw_account_id and admin:
-            try:
-                admin.set_account_quota(
-                    account_id=account.rgw_account_id,
-                    max_size_gb=payload.quota_max_size_gb,
-                    max_objects=payload.quota_max_objects,
-                    quota_scope="account",
-                    enabled=payload.quota_max_size_gb is not None or payload.quota_max_objects is not None,
-                )
-            except RGWAdminError as exc:
-                raise ValueError(f"Unable to apply quotas: {exc}") from exc
+        # Quota values are stored in the DB only; RGW AdminOps cannot apply account quotas.
 
         # Update UI user associations (non-root links only)
         if payload.user_links is not None or payload.user_ids is not None:

@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import JSZip from "jszip";
 import axios from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
@@ -171,6 +172,8 @@ export default function BrowserPage() {
   const [bucketName, setBucketName] = useState("");
   const [showBucketMenu, setShowBucketMenu] = useState(false);
   const [bucketFilter, setBucketFilter] = useState("");
+  const [searchParams] = useSearchParams();
+  const requestedBucket = useMemo(() => searchParams.get("bucket")?.trim() ?? "", [searchParams]);
   const [prefix, setPrefix] = useState("");
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
@@ -682,6 +685,12 @@ export default function BrowserPage() {
         if (!isMounted) return;
         setBuckets(data);
         setBucketName((prev) => {
+          if (requestedBucket && data.some((bucket) => bucket.name === requestedBucket)) {
+            if (requestedBucket !== prev) {
+              setPrefix("");
+            }
+            return requestedBucket;
+          }
           if (prev && data.some((bucket) => bucket.name === prev)) {
             return prev;
           }
@@ -707,7 +716,7 @@ export default function BrowserPage() {
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, hasS3AccountContext]);
+  }, [accountIdForApi, hasS3AccountContext, requestedBucket]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !accountIdForApi) {
