@@ -61,6 +61,12 @@ export type BucketNotificationConfiguration = {
   configuration: Record<string, unknown>;
 };
 
+export type BucketLoggingConfiguration = {
+  enabled?: boolean | null;
+  target_bucket?: string | null;
+  target_prefix?: string | null;
+};
+
 export type BucketPublicAccessBlock = {
   block_public_acls?: boolean | null;
   ignore_public_acls?: boolean | null;
@@ -239,6 +245,36 @@ export async function putBucketTags(accountId: S3AccountSelector, bucketName: st
 
 export async function deleteBucketTags(accountId: S3AccountSelector, bucketName: string): Promise<void> {
   await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/tags`, { params: withS3AccountParam(undefined, accountId) });
+}
+
+export async function getBucketLogging(
+  accountId: S3AccountSelector,
+  bucketName: string
+): Promise<BucketLoggingConfiguration> {
+  const { data } = await client.get<BucketLoggingConfiguration>(
+    `/manager/buckets/${encodeURIComponent(bucketName)}/logging`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function putBucketLogging(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: BucketLoggingConfiguration
+): Promise<BucketLoggingConfiguration> {
+  const { data } = await client.put<BucketLoggingConfiguration>(
+    `/manager/buckets/${encodeURIComponent(bucketName)}/logging`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function deleteBucketLogging(accountId: S3AccountSelector, bucketName: string): Promise<void> {
+  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/logging`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
 }
 
 export async function getBucketNotifications(

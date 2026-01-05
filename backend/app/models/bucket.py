@@ -132,6 +132,12 @@ class BucketNotificationConfiguration(BaseModel):
     configuration: dict = Field(default_factory=dict)
 
 
+class BucketLoggingConfiguration(BaseModel):
+    enabled: Optional[bool] = None
+    target_bucket: Optional[str] = None
+    target_prefix: Optional[str] = None
+
+
 class BucketWebsiteRedirectAllRequestsTo(BaseModel):
     host_name: str
     protocol: Optional[str] = None

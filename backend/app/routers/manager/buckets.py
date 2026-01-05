@@ -10,6 +10,7 @@ from app.models.bucket import (
     BucketCreate,
     BucketCorsUpdate,
     BucketLifecycleConfig,
+    BucketLoggingConfiguration,
     BucketNotificationConfiguration,
     BucketObjectLock,
     BucketObjectLockUpdate,
@@ -436,6 +437,68 @@ def delete_notifications(
             user=current_user,
             scope="manager",
             action="delete_bucket_notifications",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
+def get_logging(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: dict = Depends(get_current_account_admin),
+) -> BucketLoggingConfiguration:
+    try:
+        return service.get_bucket_logging(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
+def put_logging(
+    bucket_name: str,
+    payload: BucketLoggingConfiguration,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketLoggingConfiguration:
+    try:
+        result = service.set_bucket_logging(bucket_name, account, payload)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="update_bucket_logging",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata=payload.model_dump(exclude_none=True),
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/{bucket_name}/logging", status_code=status.HTTP_204_NO_CONTENT)
+def delete_logging(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    try:
+        service.delete_bucket_logging(bucket_name, account)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="delete_bucket_logging",
             entity_type="bucket",
             entity_id=bucket_name,
             account=account,

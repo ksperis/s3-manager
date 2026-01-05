@@ -13,6 +13,7 @@ from app.models.bucket import (
     BucketAclGrantee,
     BucketAclUpdate,
     BucketLifecycleConfig,
+    BucketLoggingConfiguration,
     BucketNotificationConfiguration,
     BucketObjectLock,
     BucketObjectLockUpdate,
@@ -428,6 +429,67 @@ class BucketsService:
         s3_client.put_bucket_notifications(
             name,
             config={},
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=endpoint,
+        )
+
+    def get_bucket_logging(self, name: str, account: S3Account) -> BucketLoggingConfiguration:
+        access_key, secret_key = self._account_credentials(account)
+        endpoint = self._endpoint(account)
+        config = s3_client.get_bucket_logging(
+            name,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=endpoint,
+        )
+        if not config:
+            return BucketLoggingConfiguration(enabled=False)
+        return BucketLoggingConfiguration(
+            enabled=True,
+            target_bucket=config.get("target_bucket"),
+            target_prefix=config.get("target_prefix"),
+        )
+
+    def set_bucket_logging(
+        self,
+        name: str,
+        account: S3Account,
+        payload: BucketLoggingConfiguration,
+    ) -> BucketLoggingConfiguration:
+        access_key, secret_key = self._account_credentials(account)
+        endpoint = self._endpoint(account)
+        if not payload.enabled:
+            s3_client.put_bucket_logging(
+                name,
+                logging_config=None,
+                access_key=access_key,
+                secret_key=secret_key,
+                endpoint=endpoint,
+            )
+            return BucketLoggingConfiguration(enabled=False)
+        target_bucket = (payload.target_bucket or "").strip()
+        if not target_bucket:
+            raise ValueError("Target bucket is required when enabling access logging.")
+        logging_config = {"TargetBucket": target_bucket}
+        target_prefix = (payload.target_prefix or "").strip()
+        if target_prefix:
+            logging_config["TargetPrefix"] = target_prefix
+        s3_client.put_bucket_logging(
+            name,
+            logging_config=logging_config,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=endpoint,
+        )
+        return self.get_bucket_logging(name, account)
+
+    def delete_bucket_logging(self, name: str, account: S3Account) -> None:
+        access_key, secret_key = self._account_credentials(account)
+        endpoint = self._endpoint(account)
+        s3_client.put_bucket_logging(
+            name,
+            logging_config=None,
             access_key=access_key,
             secret_key=secret_key,
             endpoint=endpoint,

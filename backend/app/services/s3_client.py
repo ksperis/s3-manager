@@ -298,6 +298,45 @@ def delete_bucket_tags(
         raise RuntimeError(f"Unable to delete bucket tags for '{bucket_name}': {exc}") from exc
 
 
+def get_bucket_logging(
+    bucket_name: str,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
+) -> Optional[dict]:
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    try:
+        resp = client.get_bucket_logging(Bucket=bucket_name)
+    except (BotoCoreError, ClientError) as exc:
+        raise RuntimeError(f"Unable to fetch bucket logging for '{bucket_name}': {exc}") from exc
+    config = resp.get("LoggingEnabled") or {}
+    if not config:
+        return None
+    return {
+        "target_bucket": config.get("TargetBucket"),
+        "target_prefix": config.get("TargetPrefix"),
+        "target_grants": config.get("TargetGrants"),
+    }
+
+
+def put_bucket_logging(
+    bucket_name: str,
+    logging_config: Optional[dict] = None,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
+) -> None:
+    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    status: dict = {}
+    if logging_config:
+        status["LoggingEnabled"] = logging_config
+    try:
+        client.put_bucket_logging(Bucket=bucket_name, BucketLoggingStatus=status)
+    except (BotoCoreError, ClientError) as exc:
+        raise RuntimeError(f"Unable to update bucket logging for '{bucket_name}': {exc}") from exc
+    logger.debug("Updated bucket logging for %s", bucket_name)
+
+
 def get_bucket_notifications(
     bucket_name: str,
     access_key: Optional[str] = None,

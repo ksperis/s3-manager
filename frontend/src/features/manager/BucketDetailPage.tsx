@@ -10,6 +10,7 @@ import {
   BucketAcl,
   BucketCors,
   BucketLifecycleConfig,
+  BucketLoggingConfiguration,
   BucketNotificationConfiguration,
   BucketObjectLockConfiguration,
   BucketPolicy,
@@ -17,11 +18,13 @@ import {
   BucketPublicAccessBlock,
   BucketWebsiteConfiguration,
   deleteBucketCors,
+  deleteBucketLogging,
   deleteBucketNotifications,
   deleteBucketPolicyApi,
   deleteBucketWebsite,
   deleteBucketLifecycle,
   getBucketCors,
+  getBucketLogging,
   getBucketNotifications,
   getBucketPolicy,
   getBucketProperties,
@@ -31,6 +34,7 @@ import {
   getBucketPublicAccessBlock,
   listBuckets,
   putBucketCors,
+  putBucketLogging,
   putBucketNotifications,
   putBucketPolicy,
   putBucketWebsite,
@@ -238,6 +242,15 @@ export default function BucketDetailPage() {
   const [savingNotifications, setSavingNotifications] = useState(false);
   const [clearingNotifications, setClearingNotifications] = useState(false);
   const [showNotificationExample, setShowNotificationExample] = useState(false);
+  const [accessLoggingConfig, setAccessLoggingConfig] = useState<BucketLoggingConfiguration | null>(null);
+  const [accessLoggingEnabled, setAccessLoggingEnabled] = useState(false);
+  const [accessLoggingTargetBucket, setAccessLoggingTargetBucket] = useState("");
+  const [accessLoggingTargetPrefix, setAccessLoggingTargetPrefix] = useState("");
+  const [accessLoggingError, setAccessLoggingError] = useState<string | null>(null);
+  const [accessLoggingStatus, setAccessLoggingStatus] = useState<string | null>(null);
+  const [accessLoggingLoading, setAccessLoggingLoading] = useState(false);
+  const [savingAccessLogging, setSavingAccessLogging] = useState(false);
+  const [clearingAccessLogging, setClearingAccessLogging] = useState(false);
   const [websiteConfig, setWebsiteConfig] = useState<BucketWebsiteConfiguration | null>(null);
   const [websiteMode, setWebsiteMode] = useState<"hosting" | "redirect">("hosting");
   const [websiteIndexDocument, setWebsiteIndexDocument] = useState("");
@@ -389,6 +402,20 @@ export default function BucketDetailPage() {
     setObjectLockDays(config.days != null ? String(config.days) : "");
     setObjectLockYears(config.years != null ? String(config.years) : "");
     setObjectLockConfig(config);
+  }, []);
+
+  const applyAccessLoggingState = useCallback((config?: BucketLoggingConfiguration | null) => {
+    if (!config || !config.enabled) {
+      setAccessLoggingConfig(config ?? null);
+      setAccessLoggingEnabled(false);
+      setAccessLoggingTargetBucket("");
+      setAccessLoggingTargetPrefix("");
+      return;
+    }
+    setAccessLoggingConfig(config);
+    setAccessLoggingEnabled(Boolean(config.enabled));
+    setAccessLoggingTargetBucket(config.target_bucket ?? "");
+    setAccessLoggingTargetPrefix(config.target_prefix ?? "");
   }, []);
 
   const applyWebsiteState = useCallback((config?: BucketWebsiteConfiguration | null) => {
@@ -612,6 +639,27 @@ export default function BucketDetailPage() {
     }
   }, [accountId, bucketName, hasAccountContext]);
 
+  const loadAccessLogging = useCallback(async () => {
+    if (!bucketName || !hasAccountContext) {
+      applyAccessLoggingState(null);
+      setAccessLoggingError(null);
+      setAccessLoggingStatus(null);
+      return;
+    }
+    setAccessLoggingLoading(true);
+    setAccessLoggingError(null);
+    setAccessLoggingStatus(null);
+    try {
+      const data = await getBucketLogging(accountId, bucketName);
+      applyAccessLoggingState(data);
+    } catch (err) {
+      applyAccessLoggingState(null);
+      setAccessLoggingError("Unable to load bucket access logging.");
+    } finally {
+      setAccessLoggingLoading(false);
+    }
+  }, [accountId, applyAccessLoggingState, bucketName, hasAccountContext]);
+
   const loadWebsite = useCallback(async () => {
     if (!bucketName || !hasAccountContext || !staticWebsiteEnabled) {
       applyWebsiteState(null);
@@ -705,6 +753,10 @@ export default function BucketDetailPage() {
   useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
+
+  useEffect(() => {
+    loadAccessLogging();
+  }, [loadAccessLogging]);
 
   useEffect(() => {
     loadWebsite();
@@ -881,6 +933,9 @@ export default function BucketDetailPage() {
   );
   const policyConfigured = Boolean(policy?.policy && Object.keys(policy.policy).length > 0);
   const corsConfigured = Boolean(cors?.rules && cors.rules.length > 0);
+  const accessLoggingConfigured = Boolean(
+    accessLoggingConfig?.enabled && (accessLoggingConfig.target_bucket ?? "").trim().length > 0
+  );
   const websiteRoutingRulesList = Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : [];
   const websiteConfigured = Boolean(
     (websiteConfig?.redirect_all_requests_to?.host_name ?? "").trim() ||
@@ -955,6 +1010,16 @@ export default function BucketDetailPage() {
           : "Not set";
     const corsTone: PropertySummary["tone"] = corsLoading || corsError ? "unknown" : corsConfigured ? "active" : "inactive";
 
+    const accessLoggingState = accessLoggingLoading
+      ? "Loading..."
+      : accessLoggingError
+        ? "Unavailable"
+        : accessLoggingConfigured
+          ? "Enabled"
+          : "Disabled";
+    const accessLoggingTone: PropertySummary["tone"] =
+      accessLoggingLoading || accessLoggingError ? "unknown" : accessLoggingConfigured ? "active" : "inactive";
+
     const websiteState = !staticWebsiteEnabled
       ? "Unavailable"
       : websiteLoading
@@ -993,9 +1058,13 @@ export default function BucketDetailPage() {
       { label: "Quota", state: quotaState, tone: quotaTone },
       { label: "Bucket policy", state: policyState, tone: policyTone },
       { label: "CORS", state: corsState, tone: corsTone },
+      { label: "Access logging", state: accessLoggingState, tone: accessLoggingTone },
     ];
   }, [
     bucket,
+    accessLoggingConfigured,
+    accessLoggingError,
+    accessLoggingLoading,
     hasLifecycleRules,
     corsConfigured,
     corsError,
@@ -1202,6 +1271,47 @@ export default function BucketDetailPage() {
       setCorsError("Unable to delete the CORS configuration.");
     } finally {
       setDeletingCors(false);
+    }
+  };
+
+  const saveAccessLogging = async () => {
+    if (!bucketName || !hasAccountContext) return;
+    setAccessLoggingError(null);
+    setAccessLoggingStatus(null);
+    if (accessLoggingEnabled && !accessLoggingTargetBucket.trim()) {
+      setAccessLoggingError("Target bucket is required to enable access logging.");
+      return;
+    }
+    setSavingAccessLogging(true);
+    try {
+      const payload: BucketLoggingConfiguration = {
+        enabled: accessLoggingEnabled,
+        target_bucket: accessLoggingTargetBucket.trim() || null,
+        target_prefix: accessLoggingTargetPrefix.trim() || null,
+      };
+      const saved = await putBucketLogging(accountId, bucketName, payload);
+      applyAccessLoggingState(saved);
+      setAccessLoggingStatus(accessLoggingEnabled ? "Access logging updated." : "Access logging disabled.");
+    } catch (err) {
+      setAccessLoggingError("Unable to update access logging.");
+    } finally {
+      setSavingAccessLogging(false);
+    }
+  };
+
+  const clearAccessLogging = async () => {
+    if (!bucketName || !hasAccountContext) return;
+    setClearingAccessLogging(true);
+    setAccessLoggingError(null);
+    setAccessLoggingStatus(null);
+    try {
+      await deleteBucketLogging(accountId, bucketName);
+      applyAccessLoggingState({ enabled: false });
+      setAccessLoggingStatus("Access logging disabled.");
+    } catch (err) {
+      setAccessLoggingError("Unable to disable access logging.");
+    } finally {
+      setClearingAccessLogging(false);
     }
   };
 
@@ -2899,6 +3009,102 @@ export default function BucketDetailPage() {
             label: "Advanced",
             content: (
               <div className="space-y-3">
+                <div className={`${bucketCardClass} space-y-3`}>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Server access logging</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        Deliver S3 server access logs to another bucket.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={loadAccessLogging}
+                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        disabled={accessLoggingLoading}
+                      >
+                        {accessLoggingLoading ? "Loading..." : "Refresh"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveAccessLogging}
+                        disabled={savingAccessLogging || accessLoggingLoading}
+                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                      >
+                        {savingAccessLogging ? "Saving..." : "Save"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearAccessLogging}
+                        disabled={clearingAccessLogging}
+                        className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                      >
+                        {clearingAccessLogging ? "Disabling..." : "Disable"}
+                      </button>
+                    </div>
+                  </div>
+                  {accessLoggingError && (
+                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                      {accessLoggingError}
+                    </div>
+                  )}
+                  {accessLoggingStatus && (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                      {accessLoggingStatus}
+                    </div>
+                  )}
+                  <label className="flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={accessLoggingEnabled}
+                      onChange={(e) => {
+                        setAccessLoggingEnabled(e.target.checked);
+                        setAccessLoggingStatus(null);
+                        setAccessLoggingError(null);
+                      }}
+                      disabled={accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                    />
+                    Enable server access logging
+                  </label>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                      Target bucket
+                      <input
+                        type="text"
+                        value={accessLoggingTargetBucket}
+                        onChange={(e) => {
+                          setAccessLoggingTargetBucket(e.target.value);
+                          setAccessLoggingStatus(null);
+                          setAccessLoggingError(null);
+                        }}
+                        className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        placeholder="logs-bucket"
+                        disabled={accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                      Target prefix (optional)
+                      <input
+                        type="text"
+                        value={accessLoggingTargetPrefix}
+                        onChange={(e) => {
+                          setAccessLoggingTargetPrefix(e.target.value);
+                          setAccessLoggingStatus(null);
+                          setAccessLoggingError(null);
+                        }}
+                        className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        placeholder="access-logs/"
+                        disabled={accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
+                      />
+                    </label>
+                  </div>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    The target bucket must allow log delivery (e.g., ACL <code className="font-mono ui-caption">log-delivery-write</code>
+                    or an equivalent policy).
+                  </p>
+                </div>
                 <div className={`${bucketCardClass} space-y-3`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
