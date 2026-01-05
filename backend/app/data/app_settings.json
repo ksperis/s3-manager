@@ -7,7 +7,7 @@
     "allow_login_custom_endpoint": false
   },
   "portal": {
-    "allow_portal_key": true,
+    "allow_portal_key": false,
     "allow_portal_user_bucket_create": true,
     "iam_group_manager_policy": {
       "actions": [
