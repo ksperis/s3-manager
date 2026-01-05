@@ -53,6 +53,8 @@ export default function S3UsersPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editBusy, setEditBusy] = useState(false);
   const [portalUserSearch, setPortalUserSearch] = useState("");
+  const [showEditPortalUserPanel, setShowEditPortalUserPanel] = useState(false);
+  const [editPortalUserSelections, setEditPortalUserSelections] = useState<number[]>([]);
   const handleFilterChange = (value: string) => {
     setFilter(value);
     setPage(1);
@@ -148,6 +150,11 @@ export default function S3UsersPage() {
   }, []);
 
   const portalUserOptions = useMemo(() => portalUsers.map((u) => ({ id: u.id, label: u.email })), [portalUsers]);
+  const portalUserLabelById = useMemo(() => {
+    const map = new Map<number, string>();
+    portalUsers.forEach((u) => map.set(u.id, u.email));
+    return map;
+  }, [portalUsers]);
   const availablePortalUsers = useMemo(() => {
     const query = portalUserSearch.trim().toLowerCase();
     return portalUserOptions.filter(
@@ -170,6 +177,12 @@ export default function S3UsersPage() {
     }
   }, [cephEndpoints, editForm.storage_endpoint_id]);
 
+  const toggleEditPortalUserSelection = (userId: number) => {
+    setEditPortalUserSelections((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
   const openEditModal = (user: S3User) => {
     setEditingUser(user);
     setEditForm({
@@ -179,6 +192,9 @@ export default function S3UsersPage() {
       storage_endpoint_id: user.storage_endpoint_id ? String(user.storage_endpoint_id) : "",
     });
     setEditError(null);
+    setPortalUserSearch("");
+    setShowEditPortalUserPanel(false);
+    setEditPortalUserSelections([]);
   };
 
   const submitEdit = async (e: FormEvent) => {
@@ -199,6 +215,9 @@ export default function S3UsersPage() {
       });
       await fetchUsers();
       setEditingUser(null);
+      setPortalUserSearch("");
+      setShowEditPortalUserPanel(false);
+      setEditPortalUserSelections([]);
       setActionMessage("User updated.");
     } catch (err) {
       setEditError(extractError(err));
@@ -592,7 +611,15 @@ export default function S3UsersPage() {
       )}
 
       {editingUser && (
-        <Modal title={`Edit ${editingUser.name}`} onClose={() => setEditingUser(null)}>
+        <Modal
+          title={`Edit ${editingUser.name}`}
+          onClose={() => {
+            setEditingUser(null);
+            setPortalUserSearch("");
+            setShowEditPortalUserPanel(false);
+            setEditPortalUserSelections([]);
+          }}
+        >
           {editError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {editError}
@@ -636,75 +663,161 @@ export default function S3UsersPage() {
               </select>
             </div>
             <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-              <div className="flex items-center justify-between">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
-                <span className="ui-caption text-slate-500 dark:text-slate-400">{editForm.user_ids.length} selected</span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
+                  <span className="ui-caption text-slate-500 dark:text-slate-400">
+                    {editForm.user_ids.length} linked
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEditPortalUserPanel((prev) => !prev)}
+                  className={tableActionButtonClasses}
+                >
+                  {showEditPortalUserPanel ? "Close" : "Add UI users"}
+                </button>
               </div>
-              {editForm.user_ids.length === 0 ? (
-                <p className="ui-caption text-slate-500 dark:text-slate-400">No linked users yet. Add one below.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {editForm.user_ids.map((id) => (
-                    <span key={id} className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100">
-                      {portalUserOptions.find((opt) => opt.id === id)?.label ?? `User #${id}`}
-                      <button
-                        type="button"
-                        onClick={() => setEditForm((prev) => ({ ...prev, user_ids: prev.user_ids.filter((uid) => uid !== id) }))}
-                        className={tableDeleteActionClasses}
-                      >
-                        Remove
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add a UI user</label>
-                    <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
+              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                  <thead className="bg-slate-50 dark:bg-slate-900/50">
+                    <tr>
+                      <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        User
+                      </th>
+                      <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {editForm.user_ids.length === 0 ? (
+                      <tr>
+                        <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                          No linked users yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      editForm.user_ids.map((id) => (
+                        <tr key={id}>
+                          <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
+                            {portalUserLabelById.get(id) ?? `User #${id}`}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  user_ids: prev.user_ids.filter((uid) => uid !== id),
+                                }))
+                              }
+                              className={tableDeleteActionClasses}
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {showEditPortalUserPanel && (
+                <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI users</label>
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={portalUserSearch}
+                      onChange={(e) => setPortalUserSearch(e.target.value)}
+                      placeholder="Search..."
+                      className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    value={portalUserSearch}
-                    onChange={(e) => setPortalUserSearch(e.target.value)}
-                    placeholder="Search..."
-                    className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                </div>
-                <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                  {availablePortalUsers.length === 0 && (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                  )}
-                  {visiblePortalUsers.map((option) => (
-                    <div key={option.id} className="flex items-center justify-between rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60">
-                      <span className="ui-body text-slate-700 dark:text-slate-200">{option.label}</span>
+                  <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                    {availablePortalUsers.length === 0 && (
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                    )}
+                    {visiblePortalUsers.map((option) => {
+                      const isSelected = editPortalUserSelections.includes(option.id);
+                      return (
+                        <div
+                          key={option.id}
+                          className={`flex items-center justify-between rounded-md px-2 py-1 ${
+                            isSelected
+                              ? "bg-slate-50 dark:bg-slate-800/60"
+                              : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                          }`}
+                        >
+                          <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleEditPortalUserSelection(option.id)}
+                              className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        </div>
+                      );
+                    })}
+                    {availablePortalUsers.length > MAX_LINK_OPTIONS && (
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="ui-caption text-slate-500 dark:text-slate-400">
+                      {editPortalUserSelections.length} selected
+                    </span>
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          setShowEditPortalUserPanel(false);
+                          setEditPortalUserSelections([]);
+                          setPortalUserSearch("");
+                        }}
+                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={editPortalUserSelections.length === 0}
+                        onClick={() => {
+                          if (editPortalUserSelections.length === 0) return;
                           setEditForm((prev) => ({
                             ...prev,
-                            user_ids: prev.user_ids.includes(option.id) ? prev.user_ids : [...prev.user_ids, option.id],
-                          }))
-                        }
-                        className={tableActionButtonClasses}
+                            user_ids: [...prev.user_ids, ...editPortalUserSelections],
+                          }));
+                          setEditPortalUserSelections([]);
+                          setPortalUserSearch("");
+                          setShowEditPortalUserPanel(false);
+                        }}
+                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
                       >
-                        Add
+                        Add selected
                       </button>
                     </div>
-                  ))}
-                  {availablePortalUsers.length > MAX_LINK_OPTIONS && (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
-                    </p>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setEditingUser(null)}
+                onClick={() => {
+                  setEditingUser(null);
+                  setPortalUserSearch("");
+                  setShowEditPortalUserPanel(false);
+                  setEditPortalUserSelections([]);
+                }}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 Cancel

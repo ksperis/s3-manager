@@ -81,6 +81,8 @@ export default function S3AccountsPage() {
   const [accountToUnlink, setS3AccountToUnlink] = useState<S3Account | null>(null);
   const [unlinkingS3AccountId, setUnlinkingS3AccountId] = useState<number | null>(null);
   const [userSearch, setUserSearch] = useState("");
+  const [showUserPanel, setShowUserPanel] = useState(false);
+  const [userSelections, setUserSelections] = useState<number[]>([]);
   const [userRoleChoice, setUserRoleChoice] = useState<Record<number, AccountUserLink["account_role"]>>({});
   const [userAdminChoice, setUserAdminChoice] = useState<Record<number, boolean>>({});
   const MAX_LINK_OPTIONS = 10;
@@ -90,8 +92,11 @@ export default function S3AccountsPage() {
     loading: editingUsageLoading,
     error: editingUsageError,
   } = useManagerStats(editingAccountId ?? null, Boolean(editingAccountId));
-  const accountAdminFor = (userId: number): boolean =>
-    Boolean(editForm.user_links.find((link) => link.user_id === userId)?.account_admin);
+  const toggleUserSelection = (userId: number) => {
+    setUserSelections((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
 
   const cephEndpoints = useMemo(
     () => storageEndpoints.filter((ep) => ep.provider === "ceph"),
@@ -164,8 +169,12 @@ export default function S3AccountsPage() {
   const assignedUsers = useMemo(() => {
     const selectedIds = new Set(editForm.user_links.map((link) => link.user_id));
     return userOptions.filter((u) => selectedIds.has(u.id)).map((u) => {
-      const role = editForm.user_links.find((link) => link.user_id === u.id)?.account_role ?? "portal_none";
-      return { ...u, role };
+      const link = editForm.user_links.find((item) => item.user_id === u.id);
+      return {
+        ...u,
+        role: link?.account_role ?? "portal_none",
+        account_admin: Boolean(link?.account_admin),
+      };
     });
   }, [editForm.user_links, userOptions]);
   const availableUsers = useMemo(() => {
@@ -410,6 +419,8 @@ export default function S3AccountsPage() {
         })) ?? [],
     });
     setUserSearch("");
+    setShowUserPanel(false);
+    setUserSelections([]);
   };
 
   const submitEditS3Account = async (e: FormEvent) => {
@@ -429,6 +440,9 @@ export default function S3AccountsPage() {
         user_links: editForm.user_links,
       });
       setEditingS3Account(null);
+      setUserSearch("");
+      setShowUserPanel(false);
+      setUserSelections([]);
       await fetchS3Accounts();
       setActionMessage("S3Account updated");
     } catch (err) {
@@ -1011,7 +1025,15 @@ export default function S3AccountsPage() {
       )}
 
       {isSuperAdmin && editingS3Account && (
-        <Modal title={`Edit ${editingS3Account.name}`} onClose={() => setEditingS3Account(null)}>
+        <Modal
+          title={`Edit ${editingS3Account.name}`}
+          onClose={() => {
+            setEditingS3Account(null);
+            setUserSearch("");
+            setShowUserPanel(false);
+            setUserSelections([]);
+          }}
+        >
           {actionError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {actionError}
@@ -1066,164 +1088,247 @@ export default function S3AccountsPage() {
                 </div>
               </div>
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
-                  <span className="ui-caption text-slate-500 dark:text-slate-400">
-                    {assignedUsers.length} selected{loadingUsers ? " · loading..." : ""}
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
+                    <span className="ui-caption text-slate-500 dark:text-slate-400">
+                      {assignedUsers.length} linked{loadingUsers ? " · loading..." : ""}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowUserPanel((prev) => !prev)}
+                    className={tableActionButtonClasses}
+                  >
+                    {showUserPanel ? "Close" : "Add UI users"}
+                  </button>
                 </div>
-                {assignedUsers.length === 0 && (
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">No linked users yet. Add one below.</p>
-                )}
-                {assignedUsers.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    {assignedUsers.map((u) => (
-                      <div
-                        key={u.id}
-                        className="flex flex-wrap items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                      >
-                        {u.label}
-                        <select
-                          className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                          value={u.role}
-                          onChange={(e) =>
-                            setEditForm((prev) => ({
-                              ...prev,
-                              user_links: prev.user_links.map((link) =>
-                                link.user_id === u.id
-                                  ? { ...link, account_role: e.target.value }
-                                  : link
-                              ),
-                            }))
-                          }
-                        >
-                          <option value="portal_user">Portal user</option>
-                          <option value="portal_manager">Portal manager</option>
-                          <option value="portal_none">No portal access</option>
-                        </select>
-                        <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                          <input
-                            type="checkbox"
-                            checked={accountAdminFor(u.id)}
-                            onChange={(e) =>
-                              setEditForm((prev) => ({
-                                ...prev,
-                                user_links: prev.user_links.map((link) =>
-                                  link.user_id === u.id ? { ...link, account_admin: e.target.checked } : link
-                                ),
-                              }))
-                            }
-                            className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                          />
+                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          User
+                        </th>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Portal role
+                        </th>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Admin
-                        </label>
+                        </th>
+                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {assignedUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            No linked users yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        assignedUsers.map((u) => (
+                          <tr key={u.id}>
+                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{u.label}</td>
+                            <td className="px-3 py-2">
+                              <select
+                                className="w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                value={u.role}
+                                onChange={(e) =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    user_links: prev.user_links.map((link) =>
+                                      link.user_id === u.id
+                                        ? { ...link, account_role: e.target.value }
+                                        : link
+                                    ),
+                                  }))
+                                }
+                              >
+                                <option value="portal_user">Portal user</option>
+                                <option value="portal_manager">Portal manager</option>
+                                <option value="portal_none">No portal access</option>
+                              </select>
+                            </td>
+                            <td className="px-3 py-2">
+                              <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  checked={u.account_admin}
+                                  onChange={(e) =>
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      user_links: prev.user_links.map((link) =>
+                                        link.user_id === u.id ? { ...link, account_admin: e.target.checked } : link
+                                      ),
+                                    }))
+                                  }
+                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                                Admin
+                              </label>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    user_links: prev.user_links.filter((link) => link.user_id !== u.id),
+                                  }))
+                                }
+                                className={tableDeleteActionClasses}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {showUserPanel && (
+                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI users</label>
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={userSearch}
+                        onChange={(e) => setUserSearch(e.target.value)}
+                        placeholder="Search..."
+                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                      {availableUsers.length === 0 && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                      )}
+                      {visibleAvailableUsers.map((u) => {
+                        const isSelected = userSelections.includes(u.id);
+                        const role = userRoleChoice[u.id] ?? "portal_none";
+                        const adminChecked = userAdminChoice[u.id] ?? role === "portal_manager";
+                        return (
+                          <div
+                            key={u.id}
+                            className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
+                              isSelected
+                                ? "bg-slate-50 dark:bg-slate-800/60"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                            }`}
+                          >
+                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleUserSelection(u.id)}
+                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                              />
+                              <span>{u.label}</span>
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <select
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                value={role}
+                                onChange={(e) => {
+                                  const nextRole = e.target.value as AccountUserLink["account_role"];
+                                  setUserRoleChoice((prev) => ({
+                                    ...prev,
+                                    [u.id]: nextRole,
+                                  }));
+                                  setUserAdminChoice((prev) => ({
+                                    ...prev,
+                                    [u.id]: prev[u.id] ?? nextRole === "portal_manager",
+                                  }));
+                                }}
+                              >
+                                <option value="portal_user">Portal user</option>
+                                <option value="portal_manager">Portal manager</option>
+                                <option value="portal_none">No portal access</option>
+                              </select>
+                              <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(adminChecked)}
+                                  onChange={(e) =>
+                                    setUserAdminChoice((prev) => ({
+                                      ...prev,
+                                      [u.id]: e.target.checked,
+                                    }))
+                                  }
+                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                                Admin
+                              </label>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {availableUsers.length > MAX_LINK_OPTIONS && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">
+                        {userSelections.length} selected
+                      </span>
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            setShowUserPanel(false);
+                            setUserSelections([]);
+                            setUserSearch("");
+                          }}
+                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={userSelections.length === 0}
+                          onClick={() => {
+                            if (userSelections.length === 0) return;
+                            const toAdd = userSelections.map((id) => ({
+                              user_id: id,
+                              account_role: userRoleChoice[id] ?? "portal_none",
+                              account_admin:
+                                userAdminChoice[id] ??
+                                (userRoleChoice[id] ?? "portal_none") === "portal_manager",
+                            }));
                             setEditForm((prev) => ({
                               ...prev,
-                              user_links: prev.user_links.filter((link) => link.user_id !== u.id),
-                            }))
-                          }
-                          className={tableDeleteActionClasses}
+                              user_links: [...prev.user_links, ...toAdd],
+                            }));
+                            setShowUserPanel(false);
+                            setUserSelections([]);
+                            setUserSearch("");
+                          }}
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
                         >
-                          Remove
+                          Add selected
                         </button>
                       </div>
-                    ))}
+                    </div>
                   </div>
                 )}
-                <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add a UI user</label>
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
-                    </div>
-                    <input
-                      type="text"
-                      value={userSearch}
-                      onChange={(e) => setUserSearch(e.target.value)}
-                      placeholder="Search..."
-                      className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </div>
-                  <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                    {availableUsers.length === 0 && (
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                    )}
-                    {visibleAvailableUsers.map((u) => (
-                      <div key={u.id} className="flex items-center justify-between rounded-md px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60">
-                        <span className="ui-body text-slate-700 dark:text-slate-200">{u.label}</span>
-                        <div className="flex items-center gap-2">
-                          <select
-                            className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                            value={userRoleChoice[u.id] ?? "portal_none"}
-                            onChange={(e) => {
-                              const nextRole = e.target.value as AccountUserLink["account_role"];
-                              setUserRoleChoice((prev) => ({
-                                ...prev,
-                                [u.id]: nextRole,
-                              }));
-                              setUserAdminChoice((prev) => ({
-                                ...prev,
-                                [u.id]: prev[u.id] ?? nextRole === "portal_manager",
-                              }));
-                            }}
-                          >
-                            <option value="portal_user">Portal user</option>
-                            <option value="portal_manager">Portal manager</option>
-                            <option value="portal_none">No portal access</option>
-                          </select>
-                          <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(userAdminChoice[u.id] ?? false)}
-                              onChange={(e) =>
-                                setUserAdminChoice((prev) => ({
-                                  ...prev,
-                                  [u.id]: e.target.checked,
-                                }))
-                              }
-                              className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                            />
-                            Admin
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEditForm((prev) => ({
-                                ...prev,
-                                user_links: [
-                                  ...prev.user_links,
-                                  {
-                                    user_id: u.id,
-                                    account_role: userRoleChoice[u.id] ?? "portal_none",
-                                    account_admin:
-                                      userAdminChoice[u.id] ??
-                                      (userRoleChoice[u.id] ?? "portal_none") === "portal_manager",
-                                  },
-                                ],
-                              }))
-                            }
-                            className={tableActionButtonClasses}
-                          >
-                            Add
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {availableUsers.length > MAX_LINK_OPTIONS && (
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">
-                        Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
-                      </p>
-                    )}
-                  </div>
-                </div>
               </div>
               <div className="flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setEditingS3Account(null)}
+                  onClick={() => {
+                    setEditingS3Account(null);
+                    setUserSearch("");
+                    setShowUserPanel(false);
+                    setUserSelections([]);
+                  }}
                   className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                 >
                   Cancel

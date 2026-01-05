@@ -1553,7 +1553,7 @@ export default function BrowserPage() {
   };
 
   const toggleInspectorForItem = (item: BrowserItem) => {
-    if (showInspector) {
+    if (showInspector && inspectedItem?.id === item.id) {
       setShowInspector(false);
       return;
     }
@@ -1739,9 +1739,10 @@ export default function BrowserPage() {
     }
   };
 
-  const loadTreeChildren = async (targetPrefix: string) => {
+  const loadTreeChildren = async (targetPrefix: string, options?: { expand?: boolean }) => {
     if (!bucketName || !hasS3AccountContext) return;
     const normalized = targetPrefix ? normalizePrefix(targetPrefix) : "";
+    const shouldExpand = options?.expand ?? true;
     setTreeNodes((prev) =>
       updateTreeNodes(prev, targetPrefix, (node) => ({ ...node, isLoading: true }))
     );
@@ -1752,7 +1753,7 @@ export default function BrowserPage() {
         updateTreeNodes(prev, targetPrefix, (node) => ({
           ...node,
           children,
-          isExpanded: true,
+          isExpanded: shouldExpand ? true : node.isExpanded,
           isLoaded: true,
           isLoading: false,
         }))
@@ -1911,6 +1912,7 @@ export default function BrowserPage() {
     objectsRefreshTimeoutRef.current = window.setTimeout(() => {
       objectsRefreshTimeoutRef.current = null;
       void loadObjects({ prefixOverride, silent: true });
+      loadTreeChildren(prefixOverride, { expand: false });
     }, 400);
   };
 

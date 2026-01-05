@@ -8,7 +8,7 @@ from typing import Dict, Iterable, Optional, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db_models import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole
+from app.db_models import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account, UserS3User
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import (
     TrafficWindow,
@@ -42,6 +42,15 @@ class AdminMetricsService:
         if endpoint_id is not None:
             accounts_query = accounts_query.filter(S3Account.storage_endpoint_id == endpoint_id)
         total_accounts = accounts_query.scalar() or 0
+        assigned_accounts_query = (
+            db.query(func.count(func.distinct(S3Account.id)))
+            .join(UserS3Account, UserS3Account.account_id == S3Account.id)
+            .filter(UserS3Account.is_root.is_(False))
+        )
+        if endpoint_id is not None:
+            assigned_accounts_query = assigned_accounts_query.filter(S3Account.storage_endpoint_id == endpoint_id)
+        assigned_accounts = assigned_accounts_query.scalar() or 0
+        unassigned_accounts = max(total_accounts - assigned_accounts, 0)
         total_admins = (
             db.query(func.count(User.id))
             .filter(User.role == UserRole.UI_ADMIN.value)
@@ -58,6 +67,14 @@ class AdminMetricsService:
         if endpoint_id is not None:
             s3_user_query = s3_user_query.filter(S3User.storage_endpoint_id == endpoint_id)
         total_s3_users = s3_user_query.scalar() or 0
+        assigned_s3_users_query = (
+            db.query(func.count(func.distinct(S3User.id)))
+            .join(UserS3User, UserS3User.s3_user_id == S3User.id)
+        )
+        if endpoint_id is not None:
+            assigned_s3_users_query = assigned_s3_users_query.filter(S3User.storage_endpoint_id == endpoint_id)
+        assigned_s3_users = assigned_s3_users_query.scalar() or 0
+        unassigned_s3_users = max(total_s3_users - assigned_s3_users, 0)
         total_ceph_endpoints = (
             db.query(func.count(StorageEndpoint.id))
             .filter(StorageEndpoint.provider == StorageProvider.CEPH.value)
@@ -76,6 +93,10 @@ class AdminMetricsService:
             "total_admins": total_admins,
             "total_portal_users": total_managers,
             "total_s3_users": total_s3_users,
+            "assigned_accounts": assigned_accounts,
+            "unassigned_accounts": unassigned_accounts,
+            "assigned_s3_users": assigned_s3_users,
+            "unassigned_s3_users": unassigned_s3_users,
             "total_endpoints": total_ceph_endpoints + total_other_endpoints,
             "total_ceph_endpoints": total_ceph_endpoints,
             "total_other_endpoints": total_other_endpoints,
@@ -266,7 +287,7 @@ class AdminMetricsService:
 
         account_usage: list[dict] = []
         for acc in accounts:
-            owner_key = acc.rgw_user_uid or acc.rgw_account_id or ""
+            owner_key = acc.rgw_account_id or acc.rgw_user_uid or ""
             used_bytes, used_objects, bucket_count = _aggregate_for_owner(owner_key)
             if used_bytes is None and used_objects is None:
                 continue

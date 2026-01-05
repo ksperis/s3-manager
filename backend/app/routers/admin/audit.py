@@ -22,11 +22,19 @@ def list_audit_logs(
     role: Optional[str] = Query(None, description="Filter by user role"),
     scope: Optional[str] = Query(None, description="Filter by admin/manager scope"),
     account_id: Optional[int] = Query(None, description="Filter by account id"),
+    search: Optional[str] = Query(None, description="Search by actor, action, or target"),
     _: dict = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> AuditLogListResponse:
     effective_limit = min(max(limit, 1), 500)
-    logs = audit_service.list_logs(limit=effective_limit, scope=scope, role=role, account_id=account_id, cursor=cursor)
+    logs = audit_service.list_logs(
+        limit=effective_limit,
+        scope=scope,
+        role=role,
+        account_id=account_id,
+        cursor=cursor,
+        search=search,
+    )
     entries = [AuditLogEntry(**audit_service.serialize_log(item)) for item in logs]
     next_cursor = entries[-1].id if entries and len(entries) == effective_limit else None
     return AuditLogListResponse(logs=entries, next_cursor=next_cursor)

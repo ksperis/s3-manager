@@ -31,12 +31,22 @@ export default function AdminDashboard() {
         ? [
             {
               label: "UI users",
-              value: (summary.total_users ?? 0) + (summary.total_admins ?? 0) + (summary.total_portal_users ?? 0),
-              hint: `Admins: ${summary.total_admins ?? 0} | Managers: ${summary.total_users ?? 0} | Portal: ${summary.total_portal_users ?? 0}`,
+              value: (summary.total_users ?? 0) + (summary.total_admins ?? 0),
+              hint: `Admins: ${summary.total_admins ?? 0} | Users: ${summary.total_users ?? 0}`,
               to: "/admin/users",
             },
-            { label: "Accounts", value: summary.total_accounts, to: "/admin/s3-accounts" },
-            { label: "S3 users", value: summary.total_s3_users ?? 0, to: "/admin/s3-users" },
+            {
+              label: "Accounts",
+              value: summary.total_accounts,
+              hint: `Assigned: ${summary.assigned_accounts ?? 0} | Unassigned: ${summary.unassigned_accounts ?? 0}`,
+              to: "/admin/s3-accounts",
+            },
+            {
+              label: "S3 users",
+              value: summary.total_s3_users ?? 0,
+              hint: `Assigned: ${summary.assigned_s3_users ?? 0} | Unassigned: ${summary.unassigned_s3_users ?? 0}`,
+              to: "/admin/s3-users",
+            },
             {
               label: "Endpoints",
               value: summary.total_endpoints ?? 0,

@@ -72,6 +72,9 @@ export default function AuditLogsPage() {
   const [error, setError] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [actionFilter, setActionFilter] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -81,6 +84,7 @@ export default function AuditLogsPage() {
         limit: 100,
         role: roleFilter !== "all" ? roleFilter : undefined,
         scope: scopeFilter !== "all" ? scopeFilter : undefined,
+        search: searchTerm.trim() || undefined,
         cursor: cursor ?? undefined,
       };
       const response = await listAuditLogs(params);
@@ -91,7 +95,7 @@ export default function AuditLogsPage() {
       }
       setNextCursor(response.next_cursor ?? null);
     },
-    [roleFilter, scopeFilter]
+    [roleFilter, scopeFilter, searchTerm]
   );
 
   useEffect(() => {
@@ -144,11 +148,66 @@ export default function AuditLogsPage() {
   };
 
   const hasMore = Boolean(nextCursor);
-  const isEmpty = !loading && logs.length === 0;
+  const actionOptions = useMemo(() => {
+    const actions = Array.from(new Set(logs.map((log) => log.action).filter(Boolean)));
+    actions.sort((a, b) => a.localeCompare(b));
+    return actions;
+  }, [logs]);
+  const statusOptions = useMemo(() => {
+    const statuses = Array.from(new Set(logs.map((log) => log.status).filter(Boolean)));
+    statuses.sort((a, b) => a.localeCompare(b));
+    return statuses;
+  }, [logs]);
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (statusFilter !== "all" && log.status !== statusFilter) return false;
+      if (actionFilter !== "all" && log.action !== actionFilter) return false;
+      return true;
+    });
+  }, [actionFilter, logs, statusFilter]);
+  const isEmpty = !loading && filteredLogs.length === 0;
+  const isFiltered = filteredLogs.length !== logs.length;
+  const hasActiveFilters =
+    roleFilter !== "all" ||
+    scopeFilter !== "all" ||
+    statusFilter !== "all" ||
+    actionFilter !== "all" ||
+    searchTerm.trim().length > 0;
 
   const filters = useMemo(
     () => (
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="search"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search by actor, action, target, or message"
+          className="min-w-[220px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        />
+        <select
+          value={actionFilter}
+          onChange={(e) => setActionFilter(e.target.value)}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        >
+          <option value="all">All actions</option>
+          {actionOptions.map((action) => (
+            <option key={action} value={action}>
+              {action}
+            </option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+        >
+          <option value="all">All statuses</option>
+          {statusOptions.map((status) => (
+            <option key={status} value={status}>
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </option>
+          ))}
+        </select>
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
@@ -173,7 +232,7 @@ export default function AuditLogsPage() {
         </select>
       </div>
     ),
-    [roleFilter, scopeFilter]
+    [actionFilter, actionOptions, roleFilter, scopeFilter, searchTerm, statusFilter, statusOptions]
   );
 
   return (
@@ -202,7 +261,11 @@ export default function AuditLogsPage() {
         {loading && logs.length === 0 ? (
           <div className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">Loading audit data…</div>
         ) : isEmpty ? (
-          <div className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">No audit entries found.</div>
+          <div className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+            {logs.length === 0 && !hasActiveFilters
+              ? "No audit entries found."
+              : "No audit entries match the current filters."}
+          </div>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -219,7 +282,7 @@ export default function AuditLogsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                  {logs.map((log) => (
+                  {filteredLogs.map((log) => (
                     <tr key={log.id} className="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50">
                       <td className="px-4 py-3 align-top ui-caption text-slate-500 dark:text-slate-400">
                         {new Date(log.created_at).toLocaleString()}
@@ -258,7 +321,8 @@ export default function AuditLogsPage() {
 
             <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 ui-body dark:border-slate-800">
               <span className="text-slate-500 dark:text-slate-400">
-                Showing {logs.length} entr{logs.length === 1 ? "y" : "ies"}
+                Showing {filteredLogs.length} entr{filteredLogs.length === 1 ? "y" : "ies"}
+                {isFiltered && ` of ${logs.length}`}
               </span>
               <div className="flex gap-2">
                 <button

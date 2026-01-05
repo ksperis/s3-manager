@@ -31,6 +31,7 @@ export type AuditLogQuery = {
   role?: string;
   scope?: string;
   account_id?: number;
+  search?: string;
 };
 
 export async function listAuditLogs(params?: AuditLogQuery): Promise<AuditLogResponse> {

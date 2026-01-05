@@ -186,9 +186,7 @@ class S3UsersService:
                 missing_ids = ", ".join(str(mid) for mid in sorted(missing))
                 raise ValueError(f"Users not found: {missing_ids}")
             for user in users:
-                if user.role == UserRole.UI_ADMIN.value:
-                    continue
-                if user.role != UserRole.UI_USER.value:
+                if user.role not in {UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:
                     user.role = UserRole.UI_USER.value
                     self.db.add(user)
                 self.db.add(UserS3UserModel(user_id=user.id, s3_user_id=s3_user.id))
