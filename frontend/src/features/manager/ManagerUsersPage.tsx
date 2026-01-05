@@ -57,8 +57,8 @@ export default function ManagerUsersPage() {
   const [policies, setPolicies] = useState<IamPolicy[]>([]);
   const [selectedPolicies, setSelectedPolicies] = useState<string[]>([]);
   const [policySearch, setPolicySearch] = useState("");
-  const [inlineDraftName, setInlineDraftName] = useState("inline-policy");
-  const [inlinePolicyText, setInlinePolicyText] = useState(DEFAULT_INLINE_POLICY_TEXT);
+  const [inlineDraftName, setInlineDraftName] = useState("");
+  const [inlinePolicyText, setInlinePolicyText] = useState("");
   const [inlineDrafts, setInlineDrafts] = useState<InlinePolicy[]>([]);
   const [filter, setFilter] = useState("");
   const [showGroupOptions, setShowGroupOptions] = useState(false);
@@ -136,8 +136,8 @@ export default function ManagerUsersPage() {
     setShowGroupOptions(false);
     setShowPolicyOptions(false);
     setInlineDrafts([]);
-    setInlineDraftName("inline-policy");
-    setInlinePolicyText(DEFAULT_INLINE_POLICY_TEXT);
+    setInlineDraftName("");
+    setInlinePolicyText("");
   }, [accountIdForApi, needsS3AccountSelection]);
 
   useEffect(() => {
@@ -219,8 +219,8 @@ export default function ManagerUsersPage() {
       setShowGroupOptions(false);
       setShowPolicyOptions(false);
       setInlineDrafts([]);
-      setInlineDraftName("inline-policy");
-      setInlinePolicyText(DEFAULT_INLINE_POLICY_TEXT);
+      setInlineDraftName("");
+      setInlinePolicyText("");
       setShowAdvancedModal(false);
       if (createKey && created.access_key) {
         setCreatedKey(created.access_key);
@@ -259,8 +259,8 @@ export default function ManagerUsersPage() {
   const closeAdvancedModal = () => {
     setShowAdvancedModal(false);
     setInlineDrafts([]);
-    setInlineDraftName("inline-policy");
-    setInlinePolicyText(DEFAULT_INLINE_POLICY_TEXT);
+    setInlineDraftName("");
+    setInlinePolicyText("");
   };
 
   const handleAddInlineDraft = () => {
@@ -289,7 +289,7 @@ export default function ManagerUsersPage() {
     try {
       setInlinePolicyText(JSON.stringify(draft.document ?? {}, null, 2));
     } catch {
-      setInlinePolicyText(DEFAULT_INLINE_POLICY_TEXT);
+      setInlinePolicyText("");
     }
     setInlineDraftName(draft.name);
   };
@@ -297,8 +297,8 @@ export default function ManagerUsersPage() {
   const handleRemoveInlineDraft = (name: string) => {
     setInlineDrafts((prev) => prev.filter((p) => p.name !== name));
     if (inlineDraftName === name) {
-      setInlineDraftName("inline-policy");
-      setInlinePolicyText(DEFAULT_INLINE_POLICY_TEXT);
+      setInlineDraftName("");
+      setInlinePolicyText("");
     }
   };
 
@@ -672,8 +672,8 @@ export default function ManagerUsersPage() {
                     type="button"
                     onClick={() => {
                       setInlineDrafts([]);
-                      setInlineDraftName("inline-policy");
-                      setInlinePolicyText(DEFAULT_INLINE_POLICY_TEXT);
+                      setInlineDraftName("");
+                      setInlinePolicyText("");
                     }}
                     className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                   >
@@ -731,7 +731,7 @@ export default function ManagerUsersPage() {
                   onClick={() => setInlinePolicyText(DEFAULT_INLINE_POLICY_TEXT)}
                   className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                 >
-                  Reset template
+                  Insert template
                 </button>
                 <button
                   type="button"

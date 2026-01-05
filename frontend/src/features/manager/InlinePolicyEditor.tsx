@@ -18,7 +18,7 @@ type InlinePolicyEditorProps = {
   disabledReason?: string;
 };
 
-const DEFAULT_POLICY_NAME = "inline-policy";
+type EditorMode = "idle" | "create" | "edit";
 
 export default function InlinePolicyEditor({
   entityLabel,
@@ -30,15 +30,20 @@ export default function InlinePolicyEditor({
   disabledReason,
 }: InlinePolicyEditorProps) {
   const [policies, setPolicies] = useState<InlinePolicy[]>([]);
-  const [selectedName, setSelectedName] = useState(DEFAULT_POLICY_NAME);
-  const [policyText, setPolicyText] = useState(DEFAULT_INLINE_POLICY_TEXT);
+  const [selectedName, setSelectedName] = useState("");
+  const [policyText, setPolicyText] = useState("");
+  const [editorMode, setEditorMode] = useState<EditorMode>("idle");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const hasExisting = useMemo(() => policies.some((p) => p.name === selectedName), [policies, selectedName]);
+  const hasExisting = useMemo(
+    () => Boolean(selectedName && policies.some((p) => p.name === selectedName)),
+    [policies, selectedName]
+  );
+  const canDelete = editorMode === "edit" && hasExisting;
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
@@ -52,15 +57,15 @@ export default function InlinePolicyEditor({
   };
 
   const formatPolicyText = (policy?: InlinePolicy) => {
-    if (!policy) return DEFAULT_INLINE_POLICY_TEXT;
+    if (!policy) return "";
     try {
       return JSON.stringify(policy.document ?? {}, null, 2);
     } catch {
-      return DEFAULT_INLINE_POLICY_TEXT;
+      return "";
     }
   };
 
-  const refresh = async () => {
+  const refresh = async (activeName?: string) => {
     if (disabled || !entityName) {
       setPolicies([]);
       return;
@@ -70,9 +75,18 @@ export default function InlinePolicyEditor({
     try {
       const data = await loadPolicies();
       setPolicies(data);
-      if (data.length > 0 && data.some((p) => p.name === selectedName)) {
-        const current = data.find((p) => p.name === selectedName);
-        setPolicyText(formatPolicyText(current));
+      const nameToLoad = activeName ?? (editorMode === "edit" ? selectedName : "");
+      if (nameToLoad) {
+        const current = data.find((p) => p.name === nameToLoad);
+        if (current) {
+          setSelectedName(nameToLoad);
+          setPolicyText(formatPolicyText(current));
+          setEditorMode("edit");
+        } else if (editorMode === "edit" && !activeName) {
+          setSelectedName("");
+          setPolicyText("");
+          setEditorMode("idle");
+        }
       }
     } catch (err) {
       setError(extractError(err));
@@ -82,22 +96,40 @@ export default function InlinePolicyEditor({
   };
 
   useEffect(() => {
-    setSelectedName(DEFAULT_POLICY_NAME);
-    setPolicyText(DEFAULT_INLINE_POLICY_TEXT);
+    setSelectedName("");
+    setPolicyText("");
+    setEditorMode("idle");
     setMessage(null);
     setError(null);
-    refresh();
+    refresh("");
   }, [entityName, disabled]);
 
   const handleSelectExisting = (name: string) => {
     setSelectedName(name);
     const existing = policies.find((p) => p.name === name);
     setPolicyText(formatPolicyText(existing));
+    setEditorMode("edit");
     setMessage(null);
     setError(null);
   };
 
-  const handleReset = () => {
+  const handleStartCreate = () => {
+    setSelectedName("");
+    setPolicyText("");
+    setEditorMode("create");
+    setMessage(null);
+    setError(null);
+  };
+
+  const handleCancel = () => {
+    setSelectedName("");
+    setPolicyText("");
+    setEditorMode("idle");
+    setMessage(null);
+    setError(null);
+  };
+
+  const handleInsertTemplate = () => {
     setPolicyText(DEFAULT_INLINE_POLICY_TEXT);
     setMessage(null);
     setError(null);
@@ -123,8 +155,10 @@ export default function InlinePolicyEditor({
     setMessage(null);
     try {
       await savePolicy(trimmedName, parsed);
-      await refresh();
       setSelectedName(trimmedName);
+      setPolicyText(JSON.stringify(parsed, null, 2));
+      setEditorMode("edit");
+      await refresh(trimmedName);
       setMessage("Inline policy saved.");
     } catch (err) {
       setError(extractError(err));
@@ -134,7 +168,7 @@ export default function InlinePolicyEditor({
   };
 
   const handleDelete = async () => {
-    if (disabled || !hasExisting) return;
+    if (disabled || !canDelete) return;
     if (!confirmAction(`Delete inline policy "${selectedName}" from this ${entityLabel}?`)) return;
     setDeleting(true);
     setError(null);
@@ -142,8 +176,9 @@ export default function InlinePolicyEditor({
     try {
       await deletePolicy(selectedName);
       await refresh();
-      setSelectedName(DEFAULT_POLICY_NAME);
-      setPolicyText(DEFAULT_INLINE_POLICY_TEXT);
+      setSelectedName("");
+      setPolicyText("");
+      setEditorMode("idle");
       setMessage("Inline policy deleted.");
     } catch (err) {
       setError(extractError(err));
@@ -154,16 +189,18 @@ export default function InlinePolicyEditor({
 
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <div>
           <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Inline policies</p>
           <p className="ui-caption text-slate-500 dark:text-slate-400">
-            Create or update inline policies directly on this {entityLabel}.
+            {editorMode === "edit" && selectedName
+              ? `Editing "${selectedName}".`
+              : "No inline policy selected yet."}
           </p>
         </div>
         <button
           type="button"
-          onClick={refresh}
+          onClick={() => refresh()}
           disabled={disabled || loading}
           className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100"
         >
@@ -171,7 +208,7 @@ export default function InlinePolicyEditor({
         </button>
       </div>
 
-      <form className="space-y-4 p-4" onSubmit={handleSave}>
+      <div className="space-y-4 p-4">
         {disabled && (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
             {disabledReason ?? "Select an account before editing inline policies."}
@@ -211,59 +248,107 @@ export default function InlinePolicyEditor({
               </button>
             ))}
           </div>
-          <div className="flex flex-col gap-2">
-            <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Inline policy name</label>
-            <input
-              type="text"
-              value={selectedName}
-              onChange={(e) => setSelectedName(e.target.value)}
-              className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              disabled={disabled}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Inline policy document (JSON)</label>
-            <textarea
-              value={policyText}
-              onChange={(e) => setPolicyText(e.target.value)}
-              className="min-h-[220px] rounded-md border border-slate-200 px-3 py-2 ui-body font-mono focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              spellCheck={false}
-              disabled={disabled}
-            />
-            <div className="flex flex-wrap items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
-              <button
-                type="button"
-                onClick={handleReset}
-                className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                disabled={disabled}
-              >
-                Reset template
-              </button>
-              <span>Provide valid JSON. Saving will upsert the inline policy on the {entityLabel}.</span>
-            </div>
-          </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          {hasExisting && (
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={disabled || deleting}
-              className="rounded-md border border-rose-200 px-4 py-2 ui-body font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-700 dark:text-rose-200 dark:hover:bg-rose-900/30"
-            >
-              {deleting ? "Deleting..." : "Delete inline policy"}
-            </button>
-          )}
-          <button
-            type="submit"
-            disabled={disabled || saving}
-            className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-          >
-            {saving ? "Saving..." : "Save inline policy"}
-          </button>
-        </div>
-      </form>
+        {editorMode === "idle" ? (
+          <div className="rounded-xl border border-dashed border-slate-200/80 bg-slate-50/70 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Create an inline policy</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  Start with a blank document or insert a template when needed.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleStartCreate}
+                disabled={disabled}
+                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form className="space-y-4" onSubmit={handleSave}>
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+              <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">
+                {editorMode === "edit" ? "Edit inline policy" : "Create inline policy"}
+              </p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                Provide a name and valid JSON. Saving will create or update the policy on this {entityLabel}.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Inline policy name</label>
+              <input
+                type="text"
+                value={selectedName}
+                onChange={(e) => setSelectedName(e.target.value)}
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                placeholder="inline-policy"
+                disabled={disabled}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="ui-body font-semibold text-slate-700 dark:text-slate-200">Inline policy document (JSON)</label>
+              <textarea
+                value={policyText}
+                onChange={(e) => setPolicyText(e.target.value)}
+                className="min-h-[220px] rounded-md border border-slate-200 px-3 py-2 ui-body font-mono focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                spellCheck={false}
+                disabled={disabled}
+                placeholder={`{
+  "Version": "2012-10-17",
+  "Statement": []
+}`}
+              />
+              <div className="flex flex-wrap items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
+                <button
+                  type="button"
+                  onClick={handleInsertTemplate}
+                  className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                  disabled={disabled}
+                >
+                  Insert template
+                </button>
+                <span>Blank JSON will save as an empty document.</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={disabled || deleting}
+                    className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-700 dark:text-rose-200 dark:hover:bg-rose-900/30"
+                  >
+                    {deleting ? "Deleting..." : "Delete inline policy"}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  disabled={disabled}
+                  className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={disabled || saving}
+                  className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                >
+                  {saving ? "Saving..." : "Save inline policy"}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

@@ -231,7 +231,7 @@ export default function ManagerGroupPoliciesPage() {
               <button
                 type="submit"
                 disabled={busy !== null || !selectedArn}
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
               >
                 {busy === "attach" ? "Attaching..." : "Attach"}
               </button>
