@@ -183,7 +183,7 @@ Such elevation must always be:
 - auditable
 - documented
 
-![Portal](docs/screenshots/Portal.png)
+![Portal](docs/screenshots/portal.png)
 
 ---
 
