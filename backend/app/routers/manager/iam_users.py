@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db_models import S3Account, User
-from app.models.iam import AccessKey, IAMUser, IAMUserCreate, IAMUserWithKey
+from app.models.iam import AccessKey, AccessKeyStatusChange, IAMUser, IAMUserCreate, IAMUserWithKey
 from app.models.policy import InlinePolicy, Policy
 from app.routers.dependencies import (
     get_account_context,
@@ -136,6 +136,39 @@ def create_access_key(
             metadata={"access_key_id": key.access_key_id},
         )
         return key
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/{user_name}/keys/{access_key_id}/status", response_model=AccessKey)
+def update_access_key_status(
+    user_name: str,
+    access_key_id: str,
+    payload: AccessKeyStatusChange,
+    account: S3Account = Depends(get_account_context),
+    current_user: User = Depends(require_iam_capable_manager),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> AccessKey:
+    _, service = get_account_and_service(account)
+    status_value = "Active" if payload.active else "Inactive"
+    try:
+        service.update_access_key_status(user_name, access_key_id, status_value)
+        updated = next(
+            (key for key in service.list_access_keys(user_name) if key.access_key_id == access_key_id),
+            None,
+        )
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="update_access_key_status",
+            entity_type="iam_user",
+            entity_id=user_name,
+            account=account,
+            metadata={"access_key_id": access_key_id, "active": payload.active},
+        )
+        if updated:
+            return updated
+        return AccessKey(access_key_id=access_key_id, status=status_value)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

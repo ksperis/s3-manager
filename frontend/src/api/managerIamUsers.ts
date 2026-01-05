@@ -78,6 +78,20 @@ export async function deleteIamAccessKey(
   );
 }
 
+export async function updateIamAccessKeyStatus(
+  accountId: S3AccountSelector,
+  userName: string,
+  accessKeyId: string,
+  active: boolean
+): Promise<AccessKey> {
+  const { data } = await client.put<AccessKey>(
+    `/manager/iam/users/${encodeURIComponent(userName)}/keys/${encodeURIComponent(accessKeyId)}/status`,
+    { active },
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
 export async function listUserPolicies(accountId: S3AccountSelector, userName: string): Promise<IamPolicy[]> {
   const { data } = await client.get<IamPolicy[]>(
     `/manager/iam/users/${encodeURIComponent(userName)}/policies`,

@@ -23,6 +23,10 @@ class AccessKey(BaseModel):
     secret_access_key: Optional[str] = None
 
 
+class AccessKeyStatusChange(BaseModel):
+    active: bool
+
+
 class IAMUserCreate(BaseModel):
     name: str
     create_key: bool = False

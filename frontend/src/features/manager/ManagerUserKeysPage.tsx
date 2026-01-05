@@ -6,12 +6,18 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 import { S3AccountSelector } from "../../api/accountParams";
-import { AccessKey, createIamAccessKey, deleteIamAccessKey, listIamAccessKeys } from "../../api/managerIamUsers";
+import {
+  AccessKey,
+  createIamAccessKey,
+  deleteIamAccessKey,
+  listIamAccessKeys,
+  updateIamAccessKeyStatus,
+} from "../../api/managerIamUsers";
 import { useS3AccountContext } from "./S3AccountContext";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
-import { tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -61,6 +67,15 @@ export default function ManagerUserKeysPage() {
     if (!value) return "-";
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+  };
+
+  const isKeyActive = (key: AccessKey): boolean => {
+    if (key.status) {
+      const normalized = key.status.toLowerCase();
+      if (["inactive", "disabled", "suspended"].includes(normalized)) return false;
+      if (["active", "enabled"].includes(normalized)) return true;
+    }
+    return true;
   };
 
   const extractError = (err: unknown): string => {
@@ -118,13 +133,30 @@ export default function ManagerUserKeysPage() {
   const handleDeleteKey = async (keyId: string) => {
     if (needsS3AccountSelection || !userName) return;
     if (!confirmAction(`Delete key ${keyId}?`)) return;
-    setBusy(keyId);
+    setBusy(`delete:${keyId}`);
     setError(null);
     setActionMessage(null);
     try {
       await deleteIamAccessKey(accountIdForApi, userName, keyId);
       await load(accountIdForApi, userName);
       setActionMessage("Access key deleted");
+    } catch (err) {
+      setError(extractError(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleToggleKey = async (keyId: string, nextActive: boolean) => {
+    if (needsS3AccountSelection || !userName) return;
+    if (!nextActive && !confirmAction(`Disable key ${keyId}?`)) return;
+    setBusy(`toggle:${keyId}`);
+    setError(null);
+    setActionMessage(null);
+    try {
+      await updateIamAccessKeyStatus(accountIdForApi, userName, keyId, nextActive);
+      await load(accountIdForApi, userName);
+      setActionMessage(nextActive ? "Access key enabled" : "Access key disabled");
     } catch (err) {
       setError(extractError(err));
     } finally {
@@ -227,18 +259,32 @@ export default function ManagerUserKeysPage() {
             {!loading && keys.length === 0 && <TableEmptyState colSpan={4} message="No keys for this user." />}
             {!loading &&
               keys.map((k) => (
-                <tr key={k.access_key_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <tr
+                  key={k.access_key_id}
+                  className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isKeyActive(k) ? "" : "bg-slate-50/70 dark:bg-slate-800/40"}`}
+                >
                   <td className="manager-table-cell px-6 py-4 font-mono text-slate-800 dark:text-slate-100">{k.access_key_id}</td>
-                  <td className="manager-table-cell px-6 py-4 ui-body text-slate-700 dark:text-slate-200">{k.status ?? "-"}</td>
+                  <td className="manager-table-cell px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
+                    {k.status ?? (isKeyActive(k) ? "Active" : "Inactive")}
+                  </td>
                   <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(k.created_at)}</td>
                   <td className="px-6 py-4 text-right">
-                    <button
-                      onClick={() => handleDeleteKey(k.access_key_id)}
-                      className={tableDeleteActionClasses}
-                      disabled={busy === k.access_key_id}
-                    >
-                      {busy === k.access_key_id ? "Deleting..." : "Delete"}
-                    </button>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        onClick={() => handleToggleKey(k.access_key_id, !isKeyActive(k))}
+                        className={tableActionButtonClasses}
+                        disabled={Boolean(busy)}
+                      >
+                        {busy === `toggle:${k.access_key_id}` ? "Saving..." : isKeyActive(k) ? "Disable" : "Enable"}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteKey(k.access_key_id)}
+                        className={tableDeleteActionClasses}
+                        disabled={Boolean(busy)}
+                      >
+                        {busy === `delete:${k.access_key_id}` ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
