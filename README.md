@@ -3,8 +3,11 @@
 Full-stack web portal to manage S3-compatible environments (Ceph RGW, MinIO, others).
 It combines a FastAPI backend and a React frontend for accounts, buckets, IAM, and objects.
 
+## Note
+This project is currently under development. It mainly serves as a POC and is not yet production-ready.
+
 ## Overview
-- 3 functional areas: Admin, Manager, Portal
+- 3 functional areas: Admin, Manager/Browser, Portal
 - S3 object browser with presigned URLs (direct uploads/downloads)
 - Authentication via email/password, S3 access keys, or OIDC
 - Statistics, audit logs, quotas, and app settings
