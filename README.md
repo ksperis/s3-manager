@@ -285,8 +285,18 @@ The workflow is defined in `.github/workflows/publish-ghcr.yml`.
 
 ### Docker Compose (quick start)
 
+To run with prebuilt images:
+
 ```bash
-docker compose up --build
+mkdir s3-manager; cd s3-manager
+wget https://raw.githubusercontent.com/ksperis/s3-manager/refs/heads/main/docker-compose.yml
+S3_MANAGER_TAG=latest docker compose up
+```
+
+To build images from source:
+
+```bash
+docker compose -f docker-compose.build.yml up --build
 ```
 
 Default endpoints:
@@ -299,8 +309,8 @@ Default endpoints:
 helm install s3-manager helm/s3-manager \\
   --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \\
   --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend \\
-  --set image.backend.tag=1.2.3 \\
-  --set image.frontend.tag=1.2.3
+  --set image.backend.tag=latest \\
+  --set image.frontend.tag=latest
 ```
 
 The chart deploys an internal PostgreSQL instance by default.
