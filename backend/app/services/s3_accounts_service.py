@@ -128,6 +128,30 @@ class S3AccountsService:
             raise
         return self._admin_for_endpoint(endpoint, allow_missing=allow_missing)
 
+    def _apply_account_quota(
+        self,
+        account: S3Account,
+        max_size_gb: Optional[int],
+        max_objects: Optional[int],
+    ) -> None:
+        if not account.rgw_account_id:
+            raise ValueError("RGW account ID is missing; cannot apply quotas.")
+        admin = self._admin_for_account(account)
+        enabled = max_size_gb is not None or max_objects is not None
+        try:
+            response = admin.set_account_quota(
+                account_id=account.rgw_account_id,
+                max_size_gb=max_size_gb,
+                max_objects=max_objects,
+                enabled=enabled,
+            )
+        except RGWAdminError as exc:
+            raise ValueError(f"RGW account quota update failed: {exc}") from exc
+        if response.get("not_found"):
+            raise ValueError(f"RGW account not found for quota update: {account.rgw_account_id}")
+        if response.get("not_implemented"):
+            raise ValueError("RGW account quota update is not supported on this cluster.")
+
     def _account_usage(self, acc: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
         try:
             endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
@@ -729,7 +753,12 @@ class S3AccountsService:
         self.db.add(account)
         self.db.flush()
 
-        # Quota values are stored in the DB only; RGW AdminOps cannot apply account quotas.
+        if payload.quota_max_size_gb is not None or payload.quota_max_objects is not None:
+            self._apply_account_quota(
+                account,
+                payload.quota_max_size_gb,
+                payload.quota_max_objects,
+            )
 
         self.db.commit()
         self.db.refresh(account)
@@ -763,10 +792,15 @@ class S3AccountsService:
         if payload.storage_endpoint_id is not None:
             endpoint = self._resolve_storage_endpoint(payload.storage_endpoint_id, require_ceph=True)
             account.storage_endpoint_id = endpoint.id
-        account.quota_max_size_gb = payload.quota_max_size_gb
-        account.quota_max_objects = payload.quota_max_objects
 
-        # Quota values are stored in the DB only; RGW AdminOps cannot apply account quotas.
+        if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
+            account.quota_max_size_gb = payload.quota_max_size_gb
+            account.quota_max_objects = payload.quota_max_objects
+            self._apply_account_quota(
+                account,
+                payload.quota_max_size_gb,
+                payload.quota_max_objects,
+            )
 
         # Update UI user associations (non-root links only)
         if payload.user_links is not None or payload.user_ids is not None:

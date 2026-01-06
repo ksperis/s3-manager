@@ -322,7 +322,7 @@ class RGWAdminClient:
         account_id: str,
         max_size_gb: Optional[int] = None,
         max_objects: Optional[int] = None,
-        quota_scope: str = "account",
+        quota_type: str = "account",
         enabled: bool = True,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
@@ -330,7 +330,7 @@ class RGWAdminClient:
             "quota": "",
             "account-id": account_id,
             "id": account_id,
-            "quota-scope": quota_scope,
+            "quota-type": quota_type,
             "format": "json",
         }
         if max_size_gb is not None:
@@ -338,8 +338,7 @@ class RGWAdminClient:
             params["max-size"] = int(max_size_gb * 1024 * 1024 * 1024)
         if max_objects is not None:
             params["max-objects"] = int(max_objects)
-        if enabled:
-            params["enabled"] = "true"
+        params["enabled"] = "true" if enabled else "false"
         return self._request(
             "PUT",
             "/admin/account",

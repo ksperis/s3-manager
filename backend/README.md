@@ -52,6 +52,7 @@ python -m app.scripts.seed_demo_data \
 - `app/scripts/demo_seed.yaml` provides a curated starting point; omit `--config` to generate everything randomly. Names are automatically hyphenated to satisfy RGW account constraints.
 - For every account the seeder creates an IAM service user, attaches `AmazonS3FullAccess`, and uses that user's keys to create/populate buckets (mirrors UI behaviour).
 - Flags like `--password`, `--users-per-account`, `--quota-gb`, and `--seed` can tailor the output for your scenario.
+- Account quota management (create/update) requires Ceph RGW 20.3.0 or newer.
 
 ## Configuration
 

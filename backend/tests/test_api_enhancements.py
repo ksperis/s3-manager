@@ -14,6 +14,7 @@ class FakeRGWAdmin:
         self.created_accounts = []
         self.created_root_users = []
         self.cap_calls = []
+        self.quota_calls = []
 
     def create_account(self, account_id: str, account_name: str):
         self.created_accounts.append((account_id, account_name))
@@ -28,6 +29,25 @@ class FakeRGWAdmin:
 
     def set_user_caps(self, uid: str, cap: str, tenant: Optional[str] = None):
         self.cap_calls.append({"uid": uid, "cap": cap, "tenant": tenant})
+        return {"ok": True}
+
+    def set_account_quota(
+        self,
+        account_id: str,
+        max_size_gb: Optional[int] = None,
+        max_objects: Optional[int] = None,
+        quota_type: str = "account",
+        enabled: bool = True,
+    ):
+        self.quota_calls.append(
+            {
+                "account_id": account_id,
+                "max_size_gb": max_size_gb,
+                "max_objects": max_objects,
+                "quota_type": quota_type,
+                "enabled": enabled,
+            }
+        )
         return {"ok": True}
 
 
@@ -58,6 +78,15 @@ def test_admin_create_account_with_quota(monkeypatch, client: TestClient, db_ses
     assert db_acc is not None
     assert db_acc.quota_max_size_gb == 500
     assert db_acc.quota_max_objects == 1000000
+    assert fake_rgw.quota_calls == [
+        {
+            "account_id": db_acc.rgw_account_id,
+            "max_size_gb": 500,
+            "max_objects": 1000000,
+            "quota_type": "account",
+            "enabled": True,
+        }
+    ]
 
 
 def test_admin_unlink_account_endpoint(monkeypatch, client: TestClient):

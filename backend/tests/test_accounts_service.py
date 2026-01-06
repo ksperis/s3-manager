@@ -14,6 +14,7 @@ class FakeRGWAdmin:
     def __init__(self):
         self.created_accounts: list[tuple[str, str]] = []
         self.created_users: list[str] = []
+        self.quota_calls: list[dict[str, object]] = []
 
     def create_account(self, account_id: str, account_name: str):
         self.created_accounts.append((account_id, account_name))
@@ -28,6 +29,25 @@ class FakeRGWAdmin:
 
     def set_user_caps(self, uid: str, cap: str, tenant: Optional[str] = None):
         return {"uid": uid, "cap": cap, "tenant": tenant}
+
+    def set_account_quota(
+        self,
+        account_id: str,
+        max_size_gb: Optional[int] = None,
+        max_objects: Optional[int] = None,
+        quota_type: str = "account",
+        enabled: bool = True,
+    ):
+        self.quota_calls.append(
+            {
+                "account_id": account_id,
+                "max_size_gb": max_size_gb,
+                "max_objects": max_objects,
+                "quota_type": quota_type,
+                "enabled": enabled,
+            }
+        )
+        return {"ok": True}
 
     def list_topics(self, account_id: Optional[str] = None):
         return []
