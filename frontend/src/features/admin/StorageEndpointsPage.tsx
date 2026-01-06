@@ -15,6 +15,7 @@ import {
 } from "../../api/storageEndpoints";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
+import PageBanner from "../../components/PageBanner";
 
 type FormState = {
   name: string;
@@ -601,21 +602,9 @@ export default function StorageEndpointsPage() {
         }
       />
 
-      {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-100">
-          {error}
-        </div>
-      )}
-      {defaultError && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-100">
-          {defaultError}
-        </div>
-      )}
-      {actionMessage && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 ui-body text-emerald-800 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-50">
-          {actionMessage}
-        </div>
-      )}
+      {error && <PageBanner tone="error">{error}</PageBanner>}
+      {defaultError && <PageBanner tone="error">{defaultError}</PageBanner>}
+      {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
       {loading ? (
         <div className="rounded-2xl border border-slate-200 bg-white/70 px-5 py-6 ui-body text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
           Loading endpoints...
@@ -631,11 +620,7 @@ export default function StorageEndpointsPage() {
       {showForm && (
         <Modal title={editingId ? "Edit endpoint" : "New endpoint"} onClose={onCloseForm}>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {formError && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/30 dark:text-rose-100">
-                {formError}
-              </div>
-            )}
+            {formError && <PageBanner tone="error">{formError}</PageBanner>}
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                 Storage name
@@ -893,11 +878,7 @@ export default function StorageEndpointsPage() {
       {deleteTarget && (
         <Modal title="Delete endpoint" onClose={() => setDeleteTarget(null)}>
           <div className="space-y-4">
-            {deleteError && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/30 dark:text-rose-100">
-                {deleteError}
-              </div>
-            )}
+            {deleteError && <PageBanner tone="error">{deleteError}</PageBanner>}
             <p className="ui-body text-slate-700 dark:text-slate-100">
               Are you sure you want to delete <strong>{deleteTarget.name}</strong>? This action cannot be undone.
             </p>

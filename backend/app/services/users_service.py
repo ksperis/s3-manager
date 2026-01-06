@@ -11,6 +11,7 @@ from sqlalchemy.orm.exc import DetachedInstanceError
 from app.core.security import get_password_hash, verify_password
 from app.db_models import AccountRole, S3Account, User, UserS3Account, UserRole, S3User, UserS3User
 from app.models.user import AccountMembership, LinkedS3User, UserCreate, UserOut, UserUpdate, UserSummary
+from app.services.app_settings_service import load_app_settings
 
 logger = logging.getLogger(__name__)
 
@@ -226,11 +227,26 @@ class UsersService:
         account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
         if not account:
             raise ValueError("S3Account not found")
-        desired_account_role = account_role or (
-            AccountRole.PORTAL_MANAGER.value
-            if user.role == UserRole.UI_ADMIN.value
-            else AccountRole.PORTAL_USER.value
+        link = (
+            self.db.query(UserS3Account)
+            .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
+            .first()
         )
+        settings = load_app_settings()
+        portal_enabled = bool(settings.general.portal_enabled)
+        if not portal_enabled:
+            if account_role and account_role != AccountRole.PORTAL_NONE.value:
+                raise ValueError("Portal feature is disabled")
+            if account_role is None and link:
+                desired_account_role = link.account_role or AccountRole.PORTAL_NONE.value
+            else:
+                desired_account_role = AccountRole.PORTAL_NONE.value
+        else:
+            desired_account_role = account_role or (
+                AccountRole.PORTAL_MANAGER.value
+                if user.role == UserRole.UI_ADMIN.value
+                else AccountRole.PORTAL_USER.value
+            )
         if desired_account_role not in {role.value for role in AccountRole}:
             raise ValueError("Invalid account role")
         # Keep platform role untouched unless explicitly overridden
@@ -238,11 +254,6 @@ class UsersService:
             user.role = role
         if user.role == UserRole.UI_NONE.value:
             user.role = UserRole.UI_USER.value
-        link = (
-            self.db.query(UserS3Account)
-            .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
-            .first()
-        )
         if not link:
             link = UserS3Account(
                 user_id=user.id,

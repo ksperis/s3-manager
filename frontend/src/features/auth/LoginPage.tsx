@@ -116,7 +116,9 @@ export default function LoginPage() {
     try {
       const normalizedCustom = customEndpoint.trim().replace(/\/+$/, "");
       const normalizedSelected = selectedEndpoint.trim().replace(/\/+$/, "");
-      const endpointUrl = normalizedCustom || normalizedSelected || undefined;
+      const normalizedDefault =
+        loginSettings?.default_endpoint_url?.trim().replace(/\/+$/, "") ?? "";
+      const endpointUrl = normalizedCustom || normalizedSelected || normalizedDefault || undefined;
       const res = await loginWithKeys(accessKey.trim(), secretKey.trim(), endpointUrl);
       localStorage.setItem("token", res.access_token);
       if (endpointUrl) {
@@ -169,25 +171,34 @@ export default function LoginPage() {
         : "text-slate-500 hover:text-slate-800"
     }`;
 
+  const allowAccessKeys = loginSettings?.allow_login_access_keys ?? true;
   const allowEndpointList = Boolean(loginSettings?.allow_login_endpoint_list);
   const allowCustomEndpoint = Boolean(loginSettings?.allow_login_custom_endpoint);
   const endpointOptions = loginSettings?.endpoints ?? [];
+
+  useEffect(() => {
+    if (!allowAccessKeys && mode === "keys") {
+      setMode("password");
+    }
+  }, [allowAccessKeys, mode]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900">
       <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-xl">
         <h1 className="mb-4 ui-title font-semibold text-slate-800">Sign in</h1>
         <p className="mb-6 ui-body text-slate-500">s3-manager admin portal</p>
-        <div className="mb-6 flex rounded-full bg-slate-100 p-1 ui-body font-semibold text-slate-600">
-          <button type="button" className={tabClasses("password")} onClick={() => handleModeChange("password")}>
-            Email & password
-          </button>
-          <button type="button" className={tabClasses("keys")} onClick={() => handleModeChange("keys")}>
-            S3 access keys
-          </button>
-        </div>
+        {allowAccessKeys && (
+          <div className="mb-6 flex rounded-full bg-slate-100 p-1 ui-body font-semibold text-slate-600">
+            <button type="button" className={tabClasses("password")} onClick={() => handleModeChange("password")}>
+              Email & password
+            </button>
+            <button type="button" className={tabClasses("keys")} onClick={() => handleModeChange("keys")}>
+              S3 access keys
+            </button>
+          </div>
+        )}
 
-        {mode === "password" ? (
+        {mode === "password" || !allowAccessKeys ? (
           <form onSubmit={handlePasswordLogin} className="space-y-4">
             <div>
               <label className="ui-body font-medium text-slate-700">Email</label>

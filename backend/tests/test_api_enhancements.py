@@ -15,6 +15,7 @@ class FakeRGWAdmin:
         self.created_root_users = []
         self.cap_calls = []
         self.quota_calls = []
+        self.quota_by_account = {}
 
     def create_account(self, account_id: str, account_name: str):
         self.created_accounts.append((account_id, account_name))
@@ -34,14 +35,26 @@ class FakeRGWAdmin:
     def set_account_quota(
         self,
         account_id: str,
+        max_size_bytes: Optional[int] = None,
         max_size_gb: Optional[int] = None,
         max_objects: Optional[int] = None,
         quota_type: str = "account",
         enabled: bool = True,
     ):
+        max_size_value = None
+        max_objects_value = None
+        if enabled:
+            if max_size_bytes is not None:
+                max_size_value = int(max_size_bytes)
+            elif max_size_gb is not None:
+                max_size_value = int(max_size_gb * 1024 ** 3)
+            if max_objects is not None:
+                max_objects_value = int(max_objects)
+        self.quota_by_account[account_id] = (max_size_value, max_objects_value)
         self.quota_calls.append(
             {
                 "account_id": account_id,
+                "max_size_bytes": max_size_value,
                 "max_size_gb": max_size_gb,
                 "max_objects": max_objects,
                 "quota_type": quota_type,
@@ -49,6 +62,9 @@ class FakeRGWAdmin:
             }
         )
         return {"ok": True}
+
+    def get_account_quota(self, account_id: str):
+        return self.quota_by_account.get(account_id, (None, None))
 
 
 def test_admin_create_account_with_quota(monkeypatch, client: TestClient, db_session):
@@ -76,13 +92,49 @@ def test_admin_create_account_with_quota(monkeypatch, client: TestClient, db_ses
 
     db_acc = db_session.query(S3Account).filter(S3Account.name == "quota-acc").first()
     assert db_acc is not None
-    assert db_acc.quota_max_size_gb == 500
-    assert db_acc.quota_max_objects == 1000000
     assert fake_rgw.quota_calls == [
         {
             "account_id": db_acc.rgw_account_id,
-            "max_size_gb": 500,
+            "max_size_bytes": 500 * 1024 ** 3,
+            "max_size_gb": None,
             "max_objects": 1000000,
+            "quota_type": "account",
+            "enabled": True,
+        }
+    ]
+
+
+def test_admin_create_account_with_quota_unit(monkeypatch, client: TestClient, db_session):
+    fake_rgw = FakeRGWAdmin()
+
+    def fake_get_s3_accounts_service(db, **kwargs):
+        svc = s3_accounts_service.S3AccountsService(db, kwargs.get("rgw_admin_client"))
+        svc.rgw_admin = fake_rgw
+        return svc
+
+    monkeypatch.setattr("app.routers.admin.s3_accounts.get_s3_accounts_service", fake_get_s3_accounts_service)
+
+    payload = {
+        "name": "quota-unit-acc",
+        "email": "quota-unit@example.com",
+        "quota_max_size_gb": 1,
+        "quota_max_size_unit": "TiB",
+        "quota_max_objects": 1000,
+    }
+    resp = client.post("/api/admin/accounts", json=payload)
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["quota_max_size_gb"] == 1024
+    assert data["quota_max_objects"] == 1000
+
+    db_acc = db_session.query(S3Account).filter(S3Account.name == "quota-unit-acc").first()
+    assert db_acc is not None
+    assert fake_rgw.quota_calls == [
+        {
+            "account_id": db_acc.rgw_account_id,
+            "max_size_bytes": 1024 ** 4,
+            "max_size_gb": None,
+            "max_objects": 1000,
             "quota_type": "account",
             "enabled": True,
         }

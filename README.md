@@ -162,6 +162,8 @@ object storage workflows.
 
 Its goal is to simplify day-to-day operations while enforcing best practices.
 
+The portal feature is disabled by default; enable `portal_enabled` in the general settings to expose it.
+
 Responsibilities:
 - Managed workflows for common use cases
 - Guardrails and templates

@@ -63,8 +63,6 @@ class S3Account(Base):
     rgw_access_key = Column(String, nullable=True)
     rgw_secret_key = Column(EncryptedString, nullable=True)
     rgw_user_uid = Column(String, nullable=True)
-    quota_max_size_gb = Column(Integer, nullable=True)
-    quota_max_objects = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
 

@@ -336,6 +336,7 @@ export async function deleteBucketWebsite(accountId: S3AccountSelector, bucketNa
 
 export type BucketQuotaUpdate = {
   max_size_gb?: number | null;
+  max_size_unit?: string | null;
   max_objects?: number | null;
 };
 

@@ -120,7 +120,8 @@ class BucketAclUpdate(BaseModel):
 
 
 class BucketQuotaUpdate(BaseModel):
-    max_size_gb: Optional[int] = None
+    max_size_gb: Optional[float] = None
+    max_size_unit: Optional[str] = None
     max_objects: Optional[int] = None
 
 

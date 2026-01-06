@@ -15,6 +15,8 @@ class S3User(BaseModel):
     email: Optional[str] = None
     created_at: Optional[datetime] = None
     user_ids: list[int] = []
+    quota_max_size_gb: Optional[float] = None
+    quota_max_objects: Optional[int] = None
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None

@@ -128,6 +128,16 @@ class StorageEndpointsService:
         )
         return [self._serialize(ep) for ep in endpoints]
 
+    def get_default_endpoint_url(self) -> Optional[str]:
+        endpoint = (
+            self.db.query(StorageEndpoint)
+            .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
+            .first()
+        )
+        if endpoint and endpoint.endpoint_url:
+            return self._normalize_url(endpoint.endpoint_url)
+        return configured_s3_endpoint()
+
     def get_endpoint(self, endpoint_id: int) -> StorageEndpointSchema:
         endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:

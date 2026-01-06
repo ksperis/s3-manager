@@ -21,14 +21,18 @@ import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoint
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
+import PageBanner from "../../components/PageBanner";
 import PaginationControls from "../../components/PaginationControls";
 import StorageUsageCard from "../../components/StorageUsageCard";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
-import { useManagerStats } from "../manager/useManagerStats";
+import { useAdminAccountStats } from "./useAdminAccountStats";
 
 type SortField = "name" | "rgw_account_id";
 
 export default function S3AccountsPage() {
+  const { generalSettings } = useGeneralSettings();
+  const portalEnabled = generalSettings.portal_enabled;
   const [accounts, setS3Accounts] = useState<S3AccountSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +64,7 @@ export default function S3AccountsPage() {
     name: "",
     email: "",
     quota_max_size_gb: "",
+    quota_max_size_unit: "GiB",
     quota_max_objects: "",
     storage_endpoint_id: "",
   });
@@ -72,6 +77,7 @@ export default function S3AccountsPage() {
   const [editingS3Account, setEditingS3Account] = useState<S3Account | null>(null);
   const [editForm, setEditForm] = useState({
     quota_max_size_gb: "",
+    quota_max_size_unit: "GiB",
     quota_max_objects: "",
     user_links: [] as AccountUserLink[],
   });
@@ -86,12 +92,22 @@ export default function S3AccountsPage() {
   const [userRoleChoice, setUserRoleChoice] = useState<Record<number, AccountUserLink["account_role"]>>({});
   const [userAdminChoice, setUserAdminChoice] = useState<Record<number, boolean>>({});
   const MAX_LINK_OPTIONS = 10;
+  const currentUser = useMemo(() => {
+    const raw = localStorage.getItem("user");
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as { role?: string | null };
+    } catch {
+      return null;
+    }
+  }, []);
+  const isSuperAdmin = currentUser?.role === "ui_admin";
   const editingAccountId = editingS3Account?.db_id ?? null;
   const {
     stats: editingUsageStats,
     loading: editingUsageLoading,
     error: editingUsageError,
-  } = useManagerStats(editingAccountId ?? null, Boolean(editingAccountId));
+  } = useAdminAccountStats(editingAccountId, Boolean(editingAccountId && isSuperAdmin));
   const toggleUserSelection = (userId: number) => {
     setUserSelections((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
@@ -114,6 +130,16 @@ export default function S3AccountsPage() {
       return "rgw_user";
     }
     return "rgw_user";
+  };
+
+  const resolveQuotaForEdit = (quotaGb?: number | null) => {
+    if (quotaGb == null) {
+      return { value: "", unit: "GiB" as const };
+    }
+    if (quotaGb > 0 && quotaGb < 1) {
+      return { value: String(Math.round(quotaGb * 1024)), unit: "MiB" as const };
+    }
+    return { value: String(quotaGb), unit: "GiB" as const };
   };
 
   const renderS3AccountTypeBadge = (account: S3Account | S3AccountSummary) => {
@@ -149,17 +175,6 @@ export default function S3AccountsPage() {
     }
   }, []);
 
-  const currentUser = useMemo(() => {
-    const raw = localStorage.getItem("user");
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as { role?: string | null };
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const isSuperAdmin = currentUser?.role === "ui_admin";
   const userOptions = useMemo(() => users.map((u) => ({ id: u.id, label: u.email })), [users]);
   const userLabelById = useMemo(() => {
     const map = new Map<number, string>();
@@ -279,7 +294,7 @@ export default function S3AccountsPage() {
       }
     };
     fetchEndpoints();
-  }, [fetchS3Accounts]);
+  }, [fetchS3Accounts, portalEnabled]);
 
   const extractError = (err: unknown) => {
     if (axios.isAxiosError(err)) {
@@ -351,6 +366,7 @@ export default function S3AccountsPage() {
         name: form.name.trim(),
         email: form.email.trim() || undefined,
         quota_max_size_gb: form.quota_max_size_gb ? Number(form.quota_max_size_gb) : undefined,
+        quota_max_size_unit: form.quota_max_size_gb ? form.quota_max_size_unit : undefined,
         quota_max_objects: form.quota_max_objects ? Number(form.quota_max_objects) : undefined,
         storage_endpoint_id: form.storage_endpoint_id ? Number(form.storage_endpoint_id) : undefined,
       });
@@ -360,6 +376,7 @@ export default function S3AccountsPage() {
         name: "",
         email: "",
         quota_max_size_gb: "",
+        quota_max_size_unit: "GiB",
         quota_max_objects: "",
         storage_endpoint_id: defaultCeph ? String(defaultCeph.id) : "",
       });
@@ -407,15 +424,17 @@ export default function S3AccountsPage() {
     setUserAdminChoice({});
     const detail = await loadAccountDetail(account);
     if (!detail) return;
+    const quota = resolveQuotaForEdit(detail.quota_max_size_gb);
     setEditingS3Account(detail);
     setEditForm({
-      quota_max_size_gb: detail.quota_max_size_gb != null ? String(detail.quota_max_size_gb) : "",
+      quota_max_size_gb: quota.value,
+      quota_max_size_unit: quota.unit,
       quota_max_objects: detail.quota_max_objects != null ? String(detail.quota_max_objects) : "",
       user_links:
         detail.user_links?.map((link) => ({
           user_id: link.user_id,
           account_role: link.account_role ?? "portal_none",
-          account_admin: Boolean(link.account_admin),
+          account_admin: portalEnabled ? Boolean(link.account_admin) : true,
         })) ?? [],
     });
     setUserSearch("");
@@ -434,10 +453,14 @@ export default function S3AccountsPage() {
     setActionError(null);
     setActionMessage(null);
     try {
+      const userLinksPayload = portalEnabled
+        ? editForm.user_links
+        : editForm.user_links.map((link) => ({ ...link, account_role: null, account_admin: true }));
       await updateS3Account(targetId, {
         quota_max_size_gb: editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null,
+        quota_max_size_unit: editForm.quota_max_size_gb !== "" ? editForm.quota_max_size_unit : null,
         quota_max_objects: editForm.quota_max_objects !== "" ? Number(editForm.quota_max_objects) : null,
-        user_links: editForm.user_links,
+        user_links: userLinksPayload,
       });
       setEditingS3Account(null);
       setUserSearch("");
@@ -562,14 +585,14 @@ export default function S3AccountsPage() {
             Super-admin only. Provision an RGW account (server-side generated <code>account_id</code>) with optional quotas.
           </p>
           {actionError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <PageBanner tone="error" className="mb-3">
               {actionError}
-            </div>
+            </PageBanner>
           )}
           {actionMessage && (
-            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200">
+            <PageBanner tone="success" className="mb-3">
               {actionMessage}
-            </div>
+            </PageBanner>
           )}
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="flex flex-col gap-1">
@@ -611,15 +634,27 @@ export default function S3AccountsPage() {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Capacity quota (GB)</label>
-              <input
-                type="number"
-                min="0"
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                value={form.quota_max_size_gb}
-                onChange={(e) => setForm((f) => ({ ...f, quota_max_size_gb: e.target.value }))}
-                placeholder="e.g. 500"
-              />
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Capacity quota</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  value={form.quota_max_size_gb}
+                  onChange={(e) => setForm((f) => ({ ...f, quota_max_size_gb: e.target.value }))}
+                  placeholder="e.g. 500"
+                />
+                <select
+                  className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  value={form.quota_max_size_unit}
+                  onChange={(e) => setForm((f) => ({ ...f, quota_max_size_unit: e.target.value }))}
+                >
+                  <option value="MiB">MiB</option>
+                  <option value="GiB">GiB</option>
+                  <option value="TiB">TiB</option>
+                </select>
+              </div>
             </div>
             <div className="flex flex-col gap-1">
               <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Object quota (count)</label>
@@ -663,9 +698,9 @@ export default function S3AccountsPage() {
             will be deleted to revoke its access keys.
           </p>
           {actionError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <PageBanner tone="error" className="mb-3">
               {actionError}
-            </div>
+            </PageBanner>
           )}
           <div className="mb-4 rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
             RGW tenant preserved:{" "}
@@ -700,9 +735,9 @@ export default function S3AccountsPage() {
             Removing this account deletes the UI entry. Optionally delete the backing RGW tenant if it no longer contains resources.
           </p>
           {actionError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <PageBanner tone="error" className="mb-3">
               {actionError}
-            </div>
+            </PageBanner>
           )}
           {deleteModalHasResources && (
             <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
@@ -819,14 +854,14 @@ export default function S3AccountsPage() {
               : "Use this mode when the Ceph admin API is unavailable but you already have the account credentials. Tenant ID remains optional."}
           </p>
           {importError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <PageBanner tone="error" className="mb-3">
               {importError}
-            </div>
+            </PageBanner>
           )}
           {importMessage && (
-            <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200">
+            <PageBanner tone="success" className="mb-3">
               {importMessage}
-            </div>
+            </PageBanner>
           )}
           {importMode === "tenant" ? (
             <>
@@ -1035,9 +1070,9 @@ export default function S3AccountsPage() {
           }}
         >
           {actionError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
+            <PageBanner tone="error" className="mb-3">
               {actionError}
-            </div>
+            </PageBanner>
           )}
           <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
             Storage endpoint:{" "}
@@ -1065,15 +1100,27 @@ export default function S3AccountsPage() {
             <form onSubmit={submitEditS3Account} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Max quota (GB)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={editForm.quota_max_size_gb}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
-                    placeholder="Leave empty to disable"
-                  />
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Max quota</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      value={editForm.quota_max_size_gb}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
+                      placeholder="Leave empty to disable"
+                    />
+                    <select
+                      className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      value={editForm.quota_max_size_unit}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
+                    >
+                      <option value="MiB">MiB</option>
+                      <option value="GiB">GiB</option>
+                      <option value="TiB">TiB</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Object quota</label>
@@ -1111,7 +1158,7 @@ export default function S3AccountsPage() {
                           User
                         </th>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Portal role
+                          {portalEnabled ? "Portal role" : "Portal access"}
                         </th>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Admin
@@ -1133,42 +1180,50 @@ export default function S3AccountsPage() {
                           <tr key={u.id}>
                             <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{u.label}</td>
                             <td className="px-3 py-2">
-                              <select
-                                className="w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                                value={u.role}
-                                onChange={(e) =>
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    user_links: prev.user_links.map((link) =>
-                                      link.user_id === u.id
-                                        ? { ...link, account_role: e.target.value }
-                                        : link
-                                    ),
-                                  }))
-                                }
-                              >
-                                <option value="portal_user">Portal user</option>
-                                <option value="portal_manager">Portal manager</option>
-                                <option value="portal_none">No portal access</option>
-                              </select>
-                            </td>
-                            <td className="px-3 py-2">
-                              <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                                <input
-                                  type="checkbox"
-                                  checked={u.account_admin}
+                              {portalEnabled ? (
+                                <select
+                                  className="w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                  value={u.role}
                                   onChange={(e) =>
                                     setEditForm((prev) => ({
                                       ...prev,
                                       user_links: prev.user_links.map((link) =>
-                                        link.user_id === u.id ? { ...link, account_admin: e.target.checked } : link
+                                        link.user_id === u.id
+                                          ? { ...link, account_role: e.target.value }
+                                          : link
                                       ),
                                     }))
                                   }
-                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                />
-                                Admin
-                              </label>
+                                >
+                                  <option value="portal_user">Portal user</option>
+                                  <option value="portal_manager">Portal manager</option>
+                                  <option value="portal_none">Portal none</option>
+                                </select>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-2">
+                              {portalEnabled ? (
+                                <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.account_admin}
+                                    onChange={(e) =>
+                                      setEditForm((prev) => ({
+                                        ...prev,
+                                        user_links: prev.user_links.map((link) =>
+                                          link.user_id === u.id ? { ...link, account_admin: e.target.checked } : link
+                                        ),
+                                      }))
+                                    }
+                                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                  Admin
+                                </label>
+                              ) : (
+                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                                  Admin
+                                </span>
+                              )}
                             </td>
                             <td className="px-3 py-2 text-right">
                               <button
@@ -1211,8 +1266,8 @@ export default function S3AccountsPage() {
                       )}
                       {visibleAvailableUsers.map((u) => {
                         const isSelected = userSelections.includes(u.id);
-                        const role = userRoleChoice[u.id] ?? "portal_none";
-                        const adminChecked = userAdminChoice[u.id] ?? role === "portal_manager";
+                        const role = portalEnabled ? userRoleChoice[u.id] ?? "portal_none" : "portal_none";
+                        const adminChecked = portalEnabled ? userAdminChoice[u.id] ?? role === "portal_manager" : true;
                         return (
                           <div
                             key={u.id}
@@ -1232,39 +1287,47 @@ export default function S3AccountsPage() {
                               <span>{u.label}</span>
                             </label>
                             <div className="flex items-center gap-2">
-                              <select
-                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                                value={role}
-                                onChange={(e) => {
-                                  const nextRole = e.target.value as AccountUserLink["account_role"];
-                                  setUserRoleChoice((prev) => ({
-                                    ...prev,
-                                    [u.id]: nextRole,
-                                  }));
-                                  setUserAdminChoice((prev) => ({
-                                    ...prev,
-                                    [u.id]: prev[u.id] ?? nextRole === "portal_manager",
-                                  }));
-                                }}
-                              >
-                                <option value="portal_user">Portal user</option>
-                                <option value="portal_manager">Portal manager</option>
-                                <option value="portal_none">No portal access</option>
-                              </select>
-                              <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(adminChecked)}
-                                  onChange={(e) =>
+                              {portalEnabled ? (
+                                <select
+                                  className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                  value={role}
+                                  onChange={(e) => {
+                                    const nextRole = e.target.value as AccountUserLink["account_role"];
+                                    setUserRoleChoice((prev) => ({
+                                      ...prev,
+                                      [u.id]: nextRole,
+                                    }));
                                     setUserAdminChoice((prev) => ({
                                       ...prev,
-                                      [u.id]: e.target.checked,
-                                    }))
-                                  }
-                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                />
-                                Admin
-                              </label>
+                                      [u.id]: prev[u.id] ?? nextRole === "portal_manager",
+                                    }));
+                                  }}
+                                >
+                                  <option value="portal_user">Portal user</option>
+                                  <option value="portal_manager">Portal manager</option>
+                                  <option value="portal_none">Portal none</option>
+                                </select>
+                              ) : null}
+                              {portalEnabled ? (
+                                <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(adminChecked)}
+                                    onChange={(e) =>
+                                      setUserAdminChoice((prev) => ({
+                                        ...prev,
+                                        [u.id]: e.target.checked,
+                                      }))
+                                    }
+                                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                  Admin
+                                </label>
+                              ) : (
+                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                                  Admin
+                                </span>
+                              )}
                             </div>
                           </div>
                         );
@@ -1296,13 +1359,14 @@ export default function S3AccountsPage() {
                           disabled={userSelections.length === 0}
                           onClick={() => {
                             if (userSelections.length === 0) return;
-                            const toAdd = userSelections.map((id) => ({
-                              user_id: id,
-                              account_role: userRoleChoice[id] ?? "portal_none",
-                              account_admin:
-                                userAdminChoice[id] ??
-                                (userRoleChoice[id] ?? "portal_none") === "portal_manager",
-                            }));
+                            const toAdd = userSelections.map((id) => {
+                              const role = portalEnabled ? userRoleChoice[id] ?? "portal_none" : "portal_none";
+                              return {
+                                user_id: id,
+                                account_role: role,
+                                account_admin: portalEnabled ? userAdminChoice[id] ?? role === "portal_manager" : true,
+                              };
+                            });
                             setEditForm((prev) => ({
                               ...prev,
                               user_links: [...prev.user_links, ...toAdd],
@@ -1369,11 +1433,7 @@ export default function S3AccountsPage() {
                 </div>
               </div>
             </div>
-            {error && !loading && (
-              <span className="rounded-md bg-rose-50 px-3 py-1 ui-caption font-semibold text-rose-700 dark:bg-rose-900/40 dark:text-rose-100">
-                {error}
-              </span>
-            )}
+            {error && !loading && <PageBanner tone="error">{error}</PageBanner>}
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -1458,7 +1518,7 @@ export default function S3AccountsPage() {
                       <div className="flex flex-wrap gap-2">
                         {accountUserLinks.map((link) => {
                           const role = link.account_role ?? "portal_none";
-                          const showPortalBadge = role !== "portal_none";
+                          const showPortalBadge = portalEnabled && role !== "portal_none";
                           const roleLabel = role === "portal_manager" ? "Portal manager" : "Portal user";
                           const tone =
                             role === "portal_manager"

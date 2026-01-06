@@ -26,6 +26,7 @@ export default function PageTabs({ tabs, activeTab, onChange }: PageTabsProps) {
           return (
             <button
               key={tab.id}
+              type="button"
               disabled={tab.disabled}
               onClick={() => onChange(tab.id)}
               className={[

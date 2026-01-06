@@ -83,6 +83,7 @@ export type CreateS3AccountPayload = {
   name: string;
   email?: string | null;
   quota_max_size_gb?: number | null;
+  quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
   storage_endpoint_id?: number | null;
 };
@@ -94,6 +95,7 @@ export async function createS3Account(payload: CreateS3AccountPayload): Promise<
 
 export type UpdateS3AccountPayload = {
   quota_max_size_gb?: number | null;
+  quota_max_size_unit?: string | null;
   quota_max_objects?: number | null;
   user_ids?: number[] | null;
   user_links?: AccountUserLink[] | null;

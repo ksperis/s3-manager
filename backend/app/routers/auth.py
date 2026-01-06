@@ -112,9 +112,12 @@ def login_with_s3_keys(
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> SessionLoginResponse:
     session_service = SessionService(db)
+    general = load_app_settings().general
+    if not general.allow_login_access_keys:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access-key login is disabled")
     endpoint_url = payload.endpoint_url
+    endpoint_provided = bool(endpoint_url)
     if endpoint_url:
-        general = load_app_settings().general
         if general.allow_login_custom_endpoint:
             pass
         elif general.allow_login_endpoint_list:
@@ -123,6 +126,9 @@ def login_with_s3_keys(
                 endpoint_url = None
         else:
             endpoint_url = None
+    if not endpoint_url and not endpoint_provided:
+        service = get_storage_endpoints_service(db)
+        endpoint_url = service.get_default_endpoint_url()
     try:
         actor_type, account_id, account_name, user_uid, capabilities = session_service.introspect_credentials(
             payload.access_key,

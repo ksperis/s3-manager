@@ -67,14 +67,17 @@ class PortalBucketDefaults(BaseModel):
 class GeneralSettings(BaseModel):
     manager_enabled: bool = True
     browser_enabled: bool = True
-    portal_enabled: bool = True
+    portal_enabled: bool = False
+    allow_login_access_keys: bool = True
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False
 
 
 class LoginSettings(BaseModel):
+    allow_login_access_keys: bool = True
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False
+    default_endpoint_url: Optional[str] = None
     endpoints: list[StorageEndpointPublic] = Field(default_factory=list)
 
 

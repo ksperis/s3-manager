@@ -28,6 +28,7 @@ from app.models.s3_user import (
     S3UserUpdate,
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.utils.quota_stats import bytes_to_gb
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,26 @@ class S3UsersService:
     def _admin_for_user(self, s3_user: S3UserModel) -> RGWAdminClient:
         endpoint = self._resolve_endpoint(s3_user.storage_endpoint_id)
         return self._admin_for_endpoint(endpoint)
+
+    def _user_quota(
+        self,
+        s3_user: S3UserModel,
+        admin: Optional[RGWAdminClient] = None,
+    ) -> tuple[Optional[float], Optional[int]]:
+        try:
+            rgw_admin = admin or self._admin_for_user(s3_user)
+        except ValueError as exc:
+            logger.warning("Unable to resolve RGW admin for %s: %s", s3_user.rgw_user_uid, exc)
+            return None, None
+        try:
+            max_size_bytes, max_objects = rgw_admin.get_user_quota(s3_user.rgw_user_uid)
+        except RGWAdminError as exc:
+            logger.warning("Unable to fetch S3 user quota for %s: %s", s3_user.rgw_user_uid, exc)
+            return None, None
+        return bytes_to_gb(max_size_bytes), max_objects
+
+    def get_user_quota(self, s3_user: S3UserModel) -> tuple[Optional[float], Optional[int]]:
+        return self._user_quota(s3_user)
 
     def _extract_keys(
         self,
@@ -205,6 +226,7 @@ class S3UsersService:
             if row.storage_endpoint_id
             else None
         )
+        quota_max_size_gb, quota_max_objects = self._user_quota(row)
         return S3UserSchema(
             id=row.id,
             name=row.name,
@@ -212,6 +234,8 @@ class S3UsersService:
             email=row.email,
             created_at=row.created_at,
             user_ids=link_map.get(row.id, []),
+            quota_max_size_gb=quota_max_size_gb,
+            quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
@@ -306,6 +330,7 @@ class S3UsersService:
             if s3_user.storage_endpoint_id
             else None
         )
+        quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
         return S3UserSchema(
             id=s3_user.id,
             name=s3_user.name,
@@ -313,6 +338,8 @@ class S3UsersService:
             email=s3_user.email,
             created_at=s3_user.created_at,
             user_ids=user_ids,
+            quota_max_size_gb=quota_max_size_gb,
+            quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
@@ -357,6 +384,7 @@ class S3UsersService:
         self.db.add(s3_user)
         self.db.commit()
         self.db.refresh(s3_user)
+        quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
         return S3UserSchema(
             id=s3_user.id,
             name=s3_user.name,
@@ -364,6 +392,8 @@ class S3UsersService:
             email=s3_user.email,
             created_at=s3_user.created_at,
             user_ids=[],
+            quota_max_size_gb=quota_max_size_gb,
+            quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id,
             storage_endpoint_name=endpoint.name,
             storage_endpoint_url=endpoint.endpoint_url,
@@ -409,6 +439,7 @@ class S3UsersService:
             )
             self.db.add(s3_user)
             self.db.flush()
+            quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
             created.append(
                 S3UserSchema(
                     id=s3_user.id,
@@ -417,6 +448,8 @@ class S3UsersService:
                     email=s3_user.email,
                     created_at=s3_user.created_at,
                     user_ids=[],
+                    quota_max_size_gb=quota_max_size_gb,
+                    quota_max_objects=quota_max_objects,
                     storage_endpoint_id=endpoint.id,
                     storage_endpoint_name=endpoint.name,
                     storage_endpoint_url=endpoint.endpoint_url,
@@ -450,6 +483,7 @@ class S3UsersService:
             if s3_user.storage_endpoint_id
             else None
         )
+        quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
         return S3UserSchema(
             id=s3_user.id,
             name=s3_user.name,
@@ -457,6 +491,8 @@ class S3UsersService:
             email=s3_user.email,
             created_at=s3_user.created_at,
             user_ids=user_ids,
+            quota_max_size_gb=quota_max_size_gb,
+            quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
@@ -509,6 +545,7 @@ class S3UsersService:
             row.user_id
             for row in self.db.query(UserS3UserModel).filter(UserS3UserModel.s3_user_id == s3_user.id).all()
         ]
+        quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
         return S3UserSchema(
             id=s3_user.id,
             name=s3_user.name,
@@ -516,6 +553,8 @@ class S3UsersService:
             email=s3_user.email,
             created_at=s3_user.created_at,
             user_ids=user_ids,
+            quota_max_size_gb=quota_max_size_gb,
+            quota_max_objects=quota_max_objects,
             storage_endpoint_id=endpoint.id if endpoint else s3_user.storage_endpoint_id,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,

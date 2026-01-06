@@ -71,6 +71,9 @@ class FakeRGWAdmin:
             data["caps"] = [dict(entry) for entry in caps]
         return data
 
+    def get_user_quota(self, uid: str, tenant: Optional[str] = None):
+        return None, None
+
     def _extract_keys(self, data):
         return RGWAdminClient._extract_keys(self, data)
 

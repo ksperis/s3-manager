@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuditLogEntry, listAuditLogs } from "../../api/audit";
 import PageHeader from "../../components/PageHeader";
+import PageBanner from "../../components/PageBanner";
 
 type RoleFilter = "all" | "ui_admin" | "ui_user" | "ui_none";
 type ScopeFilter = "all" | "admin" | "manager" | "portal";
@@ -253,9 +254,9 @@ export default function AuditLogsPage() {
 
       <div className="rounded-2xl border border-slate-200/80 bg-white/95 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
         {error && (
-          <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <PageBanner tone="warning" className="rounded-none border-x-0 border-t-0 px-4 py-3">
             {error}
-          </div>
+          </PageBanner>
         )}
 
         {loading && logs.length === 0 ? (

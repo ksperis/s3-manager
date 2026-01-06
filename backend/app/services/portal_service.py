@@ -16,10 +16,10 @@ from app.models.iam import AccessKey as ModelAccessKey, IAMUser
 from app.models.portal import PortalAccessKey, PortalIAMUser, PortalState, PortalUsage
 from app.services.app_settings_service import load_app_settings
 from app.services import s3_client
-from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
-from app.utils.storage_endpoint_features import resolve_feature_flags
+from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_admin_endpoint
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
@@ -170,6 +170,44 @@ class PortalService:
             return get_supervision_rgw_client(endpoint)
         except ValueError as exc:
             raise RuntimeError("Supervision credentials are missing for this endpoint.") from exc
+
+    def _quota_admin_for_account(self, account: S3Account) -> Optional[RGWAdminClient]:
+        endpoint = getattr(account, "storage_endpoint", None)
+        if endpoint is None and account.storage_endpoint_id:
+            endpoint = (
+                self.db.query(StorageEndpoint)
+                .filter(StorageEndpoint.id == account.storage_endpoint_id)
+                .first()
+            )
+        if not endpoint:
+            return None
+        admin_endpoint = resolve_admin_endpoint(endpoint)
+        access_key = getattr(endpoint, "admin_access_key", None)
+        secret_key = getattr(endpoint, "admin_secret_key", None)
+        if not admin_endpoint or not access_key or not secret_key:
+            return None
+        try:
+            return get_rgw_admin_client(
+                access_key=access_key,
+                secret_key=secret_key,
+                endpoint=admin_endpoint,
+                region=endpoint.region,
+            )
+        except Exception as exc:
+            logger.warning("Unable to build admin client for quota lookup: %s", exc)
+            return None
+
+    def _account_quota(self, account: S3Account) -> tuple[Optional[int], Optional[int]]:
+        if not account.rgw_account_id:
+            return None, None
+        admin = self._quota_admin_for_account(account)
+        if not admin:
+            return None, None
+        try:
+            return admin.get_account_quota(account.rgw_account_id)
+        except RGWAdminError as exc:
+            logger.warning("Unable to fetch portal quota for %s: %s", account.rgw_account_id, exc)
+            return None, None
 
     def _admin_bucket_list(self, account: S3Account, admin: Optional[RGWAdminClient] = None) -> list[dict]:
         uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
@@ -706,6 +744,7 @@ class PortalService:
                 except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
                     logger.warning("Unable to list total buckets for portal summary: %s", exc)
                     total_buckets = None
+        quota_max_size_bytes, quota_max_objects = self._account_quota(account)
         return PortalState(
             account_id=account.id,
             iam_user=PortalIAMUser(
@@ -720,8 +759,8 @@ class PortalService:
             s3_endpoint=resolve_s3_endpoint(account),
             used_bytes=used_bytes,
             used_objects=used_objects,
-            quota_max_size_bytes=int(account.quota_max_size_gb * (1024**3)) if account.quota_max_size_gb else None,
-            quota_max_objects=account.quota_max_objects,
+            quota_max_size_bytes=quota_max_size_bytes,
+            quota_max_objects=quota_max_objects,
             just_created=created,
             account_role=access.role,
             can_manage_buckets=access.capabilities.can_manage_buckets,

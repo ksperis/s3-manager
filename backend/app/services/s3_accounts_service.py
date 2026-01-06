@@ -15,6 +15,7 @@ from app.models.s3_account import (
 )
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
+from app.services.app_settings_service import load_app_settings
 from app.utils.storage_endpoint_features import (
     features_to_capabilities,
     normalize_features_config,
@@ -27,6 +28,8 @@ import random
 from typing import Optional, Any
 from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve_admin_uid
 from app.utils.usage_stats import extract_usage_stats
+from app.utils.quota_stats import bytes_to_gb
+from app.utils.size_units import size_to_bytes
 
 
 logger = logging.getLogger(__name__)
@@ -131,17 +134,22 @@ class S3AccountsService:
     def _apply_account_quota(
         self,
         account: S3Account,
-        max_size_gb: Optional[int],
+        max_size_gb: Optional[float],
         max_objects: Optional[int],
+        max_size_unit: Optional[str] = None,
     ) -> None:
         if not account.rgw_account_id:
             raise ValueError("RGW account ID is missing; cannot apply quotas.")
         admin = self._admin_for_account(account)
-        enabled = max_size_gb is not None or max_objects is not None
+        try:
+            max_size_bytes = size_to_bytes(max_size_gb, max_size_unit)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        enabled = max_size_bytes is not None or max_objects is not None
         try:
             response = admin.set_account_quota(
                 account_id=account.rgw_account_id,
-                max_size_gb=max_size_gb,
+                max_size_bytes=max_size_bytes,
                 max_objects=max_objects,
                 enabled=enabled,
             )
@@ -190,6 +198,26 @@ class S3AccountsService:
             total_objects if has_objects else None,
             bucket_count,
         )
+
+    def _account_quota(
+        self,
+        acc: S3Account,
+        admin: Optional[RGWAdminClient] = None,
+    ) -> tuple[Optional[float], Optional[int]]:
+        if not acc.rgw_account_id:
+            return None, None
+        rgw_admin = admin or self._admin_for_account(acc, allow_missing=True)
+        if not rgw_admin:
+            return None, None
+        try:
+            max_size_bytes, max_objects = rgw_admin.get_account_quota(acc.rgw_account_id)
+        except RGWAdminError as exc:
+            logger.warning("Unable to fetch account quota for %s: %s", acc.rgw_account_id, exc)
+            return None, None
+        return bytes_to_gb(max_size_bytes), max_objects
+
+    def get_account_quota(self, account: S3Account) -> tuple[Optional[float], Optional[int]]:
+        return self._account_quota(account)
 
     def _normalize_account_key(self, account_id: Optional[str]) -> Optional[str]:
         if not account_id:
@@ -426,6 +454,7 @@ class S3AccountsService:
                 used_bytes, used_objects, bucket_count = self._account_usage(acc)
             account_identifier = acc.rgw_account_id or str(acc.id)
             admin = self._admin_for_account(acc, allow_missing=True)
+            quota_max_size_gb, quota_max_objects = self._account_quota(acc, admin)
             if admin:
                 rgw_user_count, rgw_user_uids = self._account_rgw_users(account_identifier, None, admin)
                 rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
@@ -437,8 +466,8 @@ class S3AccountsService:
                     name=acc.name,
                     rgw_account_id=acc.rgw_account_id,
                     rgw_user_uid=acc.rgw_user_uid,
-                    quota_max_size_gb=acc.quota_max_size_gb,
-                    quota_max_objects=acc.quota_max_objects,
+                    quota_max_size_gb=quota_max_size_gb,
+                    quota_max_objects=quota_max_objects,
                     root_user_email=root_meta[0] if root_meta else None,
                     root_user_id=root_meta[1] if root_meta else None,
                     email=acc.email,
@@ -524,6 +553,7 @@ class S3AccountsService:
         account_identifier = account.rgw_account_id or str(account.id)
         admin = self._admin_for_account(account, allow_missing=True)
         rgw_user_count = rgw_user_uids = rgw_topic_count = rgw_topics = None
+        quota_max_size_gb, quota_max_objects = self._account_quota(account, admin)
         if admin:
             rgw_user_count, rgw_user_uids = self._account_rgw_users(account_identifier, None, admin)
             rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
@@ -534,8 +564,8 @@ class S3AccountsService:
             name=account.name,
             rgw_account_id=account.rgw_account_id,
             rgw_user_uid=account.rgw_user_uid,
-            quota_max_size_gb=account.quota_max_size_gb,
-            quota_max_objects=account.quota_max_objects,
+            quota_max_size_gb=quota_max_size_gb,
+            quota_max_objects=quota_max_objects,
             root_user_email=root_user[0] if root_user else None,
             root_user_id=root_user[1] if root_user else None,
             email=account.email,
@@ -746,8 +776,6 @@ class S3AccountsService:
             rgw_secret_key=secret_key,
             rgw_user_uid=root_uid,
             email=payload.email,
-            quota_max_size_gb=payload.quota_max_size_gb,
-            quota_max_objects=payload.quota_max_objects,
             storage_endpoint_id=endpoint.id,
         )
         self.db.add(account)
@@ -758,7 +786,9 @@ class S3AccountsService:
                 account,
                 payload.quota_max_size_gb,
                 payload.quota_max_objects,
+                payload.quota_max_size_unit,
             )
+        quota_max_size_gb, quota_max_objects = self._account_quota(account, admin)
 
         self.db.commit()
         self.db.refresh(account)
@@ -770,8 +800,8 @@ class S3AccountsService:
             rgw_user_uid=account.rgw_user_uid,
             root_user_email=root_uid,
             root_user_id=None,
-            quota_max_size_gb=payload.quota_max_size_gb,
-            quota_max_objects=payload.quota_max_objects,
+            quota_max_size_gb=quota_max_size_gb,
+            quota_max_objects=quota_max_objects,
             email=account.email,
             user_ids=[],
             user_links=[],
@@ -794,21 +824,22 @@ class S3AccountsService:
             account.storage_endpoint_id = endpoint.id
 
         if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
-            account.quota_max_size_gb = payload.quota_max_size_gb
-            account.quota_max_objects = payload.quota_max_objects
             self._apply_account_quota(
                 account,
                 payload.quota_max_size_gb,
                 payload.quota_max_objects,
+                payload.quota_max_size_unit,
             )
 
         # Update UI user associations (non-root links only)
         if payload.user_links is not None or payload.user_ids is not None:
+            portal_enabled = bool(load_app_settings().general.portal_enabled)
             desired_links: list[AccountUserLink] = []
             if payload.user_links is not None:
                 desired_links = payload.user_links
             elif payload.user_ids is not None:
-                desired_links = [AccountUserLink(user_id=uid, account_role=AccountRole.PORTAL_MANAGER.value) for uid in payload.user_ids]
+                default_role = AccountRole.PORTAL_MANAGER.value if portal_enabled else AccountRole.PORTAL_NONE.value
+                desired_links = [AccountUserLink(user_id=uid, account_role=default_role) for uid in payload.user_ids]
 
             existing_links = (
                 self.db.query(UserS3Account)
@@ -832,11 +863,22 @@ class S3AccountsService:
 
             for link in desired_links:
                 user_id = int(link.user_id)
-                account_role = link.account_role or AccountRole.PORTAL_MANAGER.value
-                account_admin = bool(link.account_admin) if link.account_admin is not None else False
+                db_link = existing_by_user.get(user_id)
+                if link.account_admin is None:
+                    account_admin = db_link.account_admin if db_link else False
+                else:
+                    account_admin = bool(link.account_admin)
+                if not portal_enabled:
+                    if link.account_role and link.account_role != AccountRole.PORTAL_NONE.value:
+                        raise ValueError("Portal feature is disabled")
+                    if link.account_role is None and db_link:
+                        account_role = db_link.account_role or AccountRole.PORTAL_NONE.value
+                    else:
+                        account_role = AccountRole.PORTAL_NONE.value
+                else:
+                    account_role = link.account_role or AccountRole.PORTAL_MANAGER.value
                 if account_role not in {role.value for role in AccountRole}:
                     raise ValueError(f"Invalid account role for user {user_id}")
-                db_link = existing_by_user.get(user_id)
                 if not db_link:
                     user = self.db.query(User).filter(User.id == user_id).first()
                     if not user:
@@ -850,7 +892,7 @@ class S3AccountsService:
                         is_root=False,
                     )
                 db_link.account_role = account_role
-                db_link.account_admin = account_admin or db_link.account_admin
+                db_link.account_admin = account_admin
                 db_link.can_manage_buckets = db_link.account_admin or account_role in {
                     AccountRole.PORTAL_MANAGER.value,
                     AccountRole.PORTAL_USER.value,
@@ -876,6 +918,7 @@ class S3AccountsService:
             for link in non_root_links
         ]
         endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
+        quota_max_size_gb, quota_max_objects = self._account_quota(account)
 
         return S3AccountSchema(
             id=str(account.id),
@@ -883,8 +926,8 @@ class S3AccountsService:
             name=account.name,
             rgw_account_id=account.rgw_account_id,
             rgw_user_uid=account.rgw_user_uid,
-            quota_max_size_gb=account.quota_max_size_gb,
-            quota_max_objects=account.quota_max_objects,
+            quota_max_size_gb=quota_max_size_gb,
+            quota_max_objects=quota_max_objects,
             root_user_email=None,
             root_user_id=None,
             email=account.email,

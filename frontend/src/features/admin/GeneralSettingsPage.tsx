@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
+import PageBanner from "../../components/PageBanner";
 import { AppSettings, fetchAppSettings, updateAppSettings } from "../../api/appSettings";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
@@ -28,6 +29,7 @@ export default function GeneralSettingsPage() {
       | "manager_enabled"
       | "browser_enabled"
       | "portal_enabled"
+      | "allow_login_access_keys"
       | "allow_login_endpoint_list"
       | "allow_login_custom_endpoint",
     value: boolean
@@ -66,21 +68,9 @@ export default function GeneralSettingsPage() {
         ]}
       />
       <form className="space-y-4" onSubmit={handleSave}>
-        {error && (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
-            {error}
-          </div>
-        )}
-        {savedMessage && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
-            {savedMessage}
-          </div>
-        )}
-        {!settings && !error && (
-          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-            Loading settings...
-          </div>
-        )}
+        {error && <PageBanner tone="error">{error}</PageBanner>}
+        {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
+        {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
           <div className="grid gap-4">
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -137,6 +127,25 @@ export default function GeneralSettingsPage() {
                     className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                   />
                   <span>{settings.general.portal_enabled ? "Enabled" : "Disabled"}</span>
+                </label>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access-key login</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    Allow users to sign in with S3 access keys.
+                  </p>
+                </div>
+                <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.general.allow_login_access_keys)}
+                    onChange={(e) => handleToggle("allow_login_access_keys", e.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                  <span>{settings.general.allow_login_access_keys ? "Enabled" : "Disabled"}</span>
                 </label>
               </div>
             </div>

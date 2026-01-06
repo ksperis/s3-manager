@@ -61,40 +61,45 @@ type StoredUser = {
   };
 };
 
-const adminNav = [
-  {
-    label: "Overview",
-    links: [
-      { to: "/admin", label: "Dashboard", end: true },
-      { to: "/admin/metrics", label: "Metrics" },
-    ],
-  },
-  {
-    label: "Interface",
-    links: [{ to: "/admin/users", label: "UI Users" }],
-  },
-  {
-    label: "Storage",
-    links: [
-      { to: "/admin/storage-endpoints", label: "Endpoints" },
-      { to: "/admin/s3-accounts", label: "Accounts" },
-      { to: "/admin/s3-users", label: "Users" },
-    ],
-  },
-  {
-    label: "Governance",
-    links: [{ to: "/admin/audit", label: "Audit trail" }],
-  },
-  {
-    label: "Settings",
-    links: [
-      { to: "/admin/general-settings", label: "General" },
-      { to: "/admin/manager-settings", label: "Manager" },
-      { to: "/admin/browser-settings", label: "Browser" },
-      { to: "/admin/portal-settings", label: "Portal" },
-    ],
-  },
-];
+const buildAdminNav = (portalEnabled: boolean) => {
+  const settingsLinks = [
+    { to: "/admin/general-settings", label: "General" },
+    { to: "/admin/manager-settings", label: "Manager" },
+    { to: "/admin/browser-settings", label: "Browser" },
+  ];
+  if (portalEnabled) {
+    settingsLinks.push({ to: "/admin/portal-settings", label: "Portal" });
+  }
+  return [
+    {
+      label: "Overview",
+      links: [
+        { to: "/admin", label: "Dashboard", end: true },
+        { to: "/admin/metrics", label: "Metrics" },
+      ],
+    },
+    {
+      label: "Interface",
+      links: [{ to: "/admin/users", label: "UI Users" }],
+    },
+    {
+      label: "Storage",
+      links: [
+        { to: "/admin/storage-endpoints", label: "Endpoints" },
+        { to: "/admin/s3-accounts", label: "Accounts" },
+        { to: "/admin/s3-users", label: "Users" },
+      ],
+    },
+    {
+      label: "Governance",
+      links: [{ to: "/admin/audit", label: "Audit trail" }],
+    },
+    {
+      label: "Settings",
+      links: settingsLinks,
+    },
+  ];
+};
 
 function getStoredUser(): StoredUser | null {
   const raw = typeof window !== "undefined" ? localStorage.getItem("user") : null;
@@ -155,6 +160,8 @@ function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal"
 }
 
 export default function AppRouter() {
+  const { generalSettings } = useGeneralSettings();
+  const adminNav = buildAdminNav(generalSettings.portal_enabled);
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
@@ -186,7 +193,7 @@ export default function AppRouter() {
               <Route path="metrics" element={<AdminMetricsPage />} />
               <Route path="general-settings" element={<GeneralSettingsPage />} />
               <Route path="manager-settings" element={<ManagerSettingsPage />} />
-              <Route path="portal-settings" element={<PortalSettingsPage />} />
+              {generalSettings.portal_enabled && <Route path="portal-settings" element={<PortalSettingsPage />} />}
               <Route path="browser-settings" element={<BrowserSettingsPage />} />
             </Route>
           </Route>

@@ -27,6 +27,7 @@ import {
 } from "../../api/stats";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import PageHeader from "../../components/PageHeader";
+import PageBanner from "../../components/PageBanner";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 
@@ -255,11 +256,7 @@ export default function AdminMetricsPage() {
         </div>
       </div>
 
-      {pageError && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-          {pageError}
-        </div>
-      )}
+      {pageError && <PageBanner tone="warning">{pageError}</PageBanner>}
 
       <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
         <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
@@ -425,11 +422,7 @@ function TrafficOverview({ traffic, timeline, window, onWindowChange, loading, e
         </div>
       </header>
 
-      {error && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 ui-body text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-          {error}
-        </div>
-      )}
+      {error && <PageBanner tone="warning">{error}</PageBanner>}
 
       <div className="grid gap-4 md:grid-cols-3">
         <SnapshotCard label="Egress" value={formatBytes(totals?.bytes_out ?? 0)} hint="Outgoing bytes" loading={loading} />

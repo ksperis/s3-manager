@@ -196,6 +196,13 @@ export async function fetchManagerStats(accountId?: S3AccountSelector): Promise<
   return data;
 }
 
+export async function fetchAdminAccountStats(accountId: number): Promise<ManagerStats> {
+  const { data } = await client.get<ManagerStats>("/admin/stats/account", {
+    params: { account_id: accountId },
+  });
+  return data;
+}
+
 export async function fetchManagerTraffic(
   accountId: S3AccountSelector,
   window: TrafficWindow,

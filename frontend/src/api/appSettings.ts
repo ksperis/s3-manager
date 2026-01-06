@@ -17,6 +17,7 @@ export type GeneralSettings = {
   manager_enabled: boolean;
   browser_enabled: boolean;
   portal_enabled: boolean;
+  allow_login_access_keys: boolean;
   allow_login_endpoint_list: boolean;
   allow_login_custom_endpoint: boolean;
 };
@@ -61,8 +62,10 @@ export type PublicStorageEndpoint = {
 };
 
 export type LoginSettings = {
+  allow_login_access_keys: boolean;
   allow_login_endpoint_list: boolean;
   allow_login_custom_endpoint: boolean;
+  default_endpoint_url?: string | null;
   endpoints: PublicStorageEndpoint[];
 };
 

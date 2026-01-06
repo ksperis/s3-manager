@@ -21,9 +21,11 @@ def get_general_settings(_: object = Depends(get_current_actor)) -> GeneralSetti
 @router.get("/login", response_model=LoginSettings)
 def get_login_settings(db: Session = Depends(get_db)) -> LoginSettings:
     general = load_app_settings().general
+    allow_access_keys = bool(general.allow_login_access_keys)
     allow_list = bool(general.allow_login_endpoint_list)
     allow_custom = bool(general.allow_login_custom_endpoint)
     endpoints: list[StorageEndpointPublic] = []
+    default_endpoint_url = None
     if allow_list:
         service = get_storage_endpoints_service(db)
         endpoints = [
@@ -35,8 +37,15 @@ def get_login_settings(db: Session = Depends(get_db)) -> LoginSettings:
             )
             for endpoint in service.list_endpoints()
         ]
+        if allow_access_keys:
+            default_endpoint_url = service.get_default_endpoint_url()
+    elif allow_access_keys:
+        service = get_storage_endpoints_service(db)
+        default_endpoint_url = service.get_default_endpoint_url()
     return LoginSettings(
+        allow_login_access_keys=allow_access_keys,
         allow_login_endpoint_list=allow_list,
         allow_login_custom_endpoint=allow_custom,
+        default_endpoint_url=default_endpoint_url,
         endpoints=endpoints,
     )

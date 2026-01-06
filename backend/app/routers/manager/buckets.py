@@ -702,5 +702,7 @@ def update_quota(
             metadata=payload.model_dump(exclude_none=True),
         )
         return {"message": "Bucket quota updated"}
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc

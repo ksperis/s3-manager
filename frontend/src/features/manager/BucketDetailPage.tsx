@@ -310,6 +310,7 @@ export default function BucketDetailPage() {
   const [showPolicyExample, setShowPolicyExample] = useState(false);
   const [showCorsExample, setShowCorsExample] = useState(false);
   const [quotaSizeGb, setQuotaSizeGb] = useState<string>("");
+  const [quotaSizeUnit, setQuotaSizeUnit] = useState<"MiB" | "GiB" | "TiB">("GiB");
   const [quotaObjects, setQuotaObjects] = useState<string>("");
   const [quotaStatus, setQuotaStatus] = useState<string | null>(null);
   const [quotaError, setQuotaError] = useState<string | null>(null);
@@ -375,6 +376,7 @@ export default function BucketDetailPage() {
   useEffect(() => {
     if (!bucket) {
       setQuotaSizeGb("");
+      setQuotaSizeUnit("GiB");
       setQuotaObjects("");
       return;
     }
@@ -384,6 +386,7 @@ export default function BucketDetailPage() {
       return gb % 1 === 0 ? String(gb) : gb.toFixed(1);
     };
     setQuotaSizeGb(toGbString(bucket.quota_max_size_bytes ?? null));
+    setQuotaSizeUnit("GiB");
     const objects = bucket.quota_max_objects;
     setQuotaObjects(objects != null && objects > 0 ? String(objects) : "");
   }, [bucket]);
@@ -1590,6 +1593,7 @@ export default function BucketDetailPage() {
       }
       await updateBucketQuota(accountId, bucketName, {
         max_size_gb: maxSizeGb ?? undefined,
+        max_size_unit: maxSizeGb != null ? quotaSizeUnit : undefined,
         max_objects: maxObjects ?? undefined,
       });
       setQuotaStatus("Quota updated");
@@ -3263,17 +3267,29 @@ export default function BucketDetailPage() {
                   <form className={`mt-2 space-y-2 ${!isAdmin ? "pointer-events-none" : ""}`} onSubmit={handleUpdateQuota}>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                        Size (GB)
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.1"
-                          value={quotaSizeGb}
-                          onChange={(e) => setQuotaSizeGb(e.target.value)}
-                          className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                          placeholder="e.g. 100"
-                          disabled={!isAdmin}
-                        />
+                        Size
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.1"
+                            value={quotaSizeGb}
+                            onChange={(e) => setQuotaSizeGb(e.target.value)}
+                            className="flex-1 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            placeholder="e.g. 100"
+                            disabled={!isAdmin}
+                          />
+                          <select
+                            value={quotaSizeUnit}
+                            onChange={(e) => setQuotaSizeUnit(e.target.value as "MiB" | "GiB" | "TiB")}
+                            className="w-20 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            disabled={!isAdmin}
+                          >
+                            <option value="MiB">MiB</option>
+                            <option value="GiB">GiB</option>
+                            <option value="TiB">TiB</option>
+                          </select>
+                        </div>
                       </label>
                       <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                         Object count

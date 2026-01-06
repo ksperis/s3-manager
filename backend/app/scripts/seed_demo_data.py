@@ -406,7 +406,7 @@ def ensure_account(
     db = accounts_service.db
     existing = db.query(S3Account).filter(S3Account.name == name).first()
     if existing:
-        if quota_gb is not None and existing.quota_max_size_gb is None:
+        if quota_gb is not None:
             try:
                 accounts_service.update_account(
                     existing.id,
@@ -415,7 +415,6 @@ def ensure_account(
                         quota_max_objects=None,
                     ),
                 )
-                db.refresh(existing)
             except Exception as exc:
                 logger.debug("Unable to update quota for %s: %s", existing.name, exc)
         return existing

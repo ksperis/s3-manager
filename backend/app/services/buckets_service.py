@@ -33,6 +33,7 @@ from app.utils.rgw import (
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
+from app.utils.size_units import size_to_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -301,14 +302,20 @@ class BucketsService:
         root_identifier = account_id or tenant
         root_uid = f"{root_identifier}-admin" if root_identifier else None
         rgw_admin = self._rgw_admin_for_account(account)
+        max_size_bytes = None
+        if payload.max_size_gb is not None:
+            try:
+                max_size_bytes = size_to_bytes(payload.max_size_gb, payload.max_size_unit)
+            except ValueError as exc:
+                raise ValueError(str(exc)) from exc
         try:
             rgw_admin.set_bucket_quota(
                 bucket=name,
                 tenant=tenant,
                 uid=root_uid,
-                max_size_gb=payload.max_size_gb,
+                max_size_bytes=max_size_bytes,
                 max_objects=payload.max_objects,
-                enabled=payload.max_size_gb is not None or payload.max_objects is not None,
+                enabled=max_size_bytes is not None or payload.max_objects is not None,
                 account_id=account_id,
             )
         except RGWAdminError as exc:

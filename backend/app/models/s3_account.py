@@ -19,7 +19,7 @@ class S3Account(BaseModel):
     name: str
     rgw_account_id: Optional[str] = None
     rgw_user_uid: Optional[str] = None
-    quota_max_size_gb: Optional[int] = None
+    quota_max_size_gb: Optional[float] = None
     quota_max_objects: Optional[int] = None
     root_user_email: Optional[str] = None
     root_user_id: Optional[int] = None
@@ -42,7 +42,8 @@ class S3Account(BaseModel):
 class S3AccountCreate(BaseModel):
     name: str
     email: Optional[str] = None
-    quota_max_size_gb: Optional[int] = None
+    quota_max_size_gb: Optional[float] = None
+    quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
@@ -71,7 +72,8 @@ class S3AccountImport(BaseModel):
 
 
 class S3AccountUpdate(BaseModel):
-    quota_max_size_gb: Optional[int] = None
+    quota_max_size_gb: Optional[float] = None
+    quota_max_size_unit: Optional[str] = None
     quota_max_objects: Optional[int] = None
     user_ids: Optional[list[int]] = None
     user_links: Optional[list[AccountUserLink]] = None

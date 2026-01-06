@@ -8,7 +8,8 @@ import { fetchGeneralSettings, GeneralSettings } from "../api/appSettings";
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   manager_enabled: true,
   browser_enabled: true,
-  portal_enabled: true,
+  portal_enabled: false,
+  allow_login_access_keys: true,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
 };

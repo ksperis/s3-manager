@@ -33,6 +33,7 @@ class FakeRGWAdmin:
     def set_account_quota(
         self,
         account_id: str,
+        max_size_bytes: Optional[int] = None,
         max_size_gb: Optional[int] = None,
         max_objects: Optional[int] = None,
         quota_type: str = "account",
@@ -41,6 +42,7 @@ class FakeRGWAdmin:
         self.quota_calls.append(
             {
                 "account_id": account_id,
+                "max_size_bytes": max_size_bytes,
                 "max_size_gb": max_size_gb,
                 "max_objects": max_objects,
                 "quota_type": quota_type,
@@ -48,6 +50,9 @@ class FakeRGWAdmin:
             }
         )
         return {"ok": True}
+
+    def get_account_quota(self, account_id: str):
+        return None, None
 
     def list_topics(self, account_id: Optional[str] = None):
         return []

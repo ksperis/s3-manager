@@ -13,6 +13,7 @@ const WORKSPACE_STORAGE_KEY = "selectedWorkspace";
 
 type StoredUser = {
   role?: string | null;
+  authType?: string | null;
   account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
   capabilities?: {
     can_manage_buckets?: boolean;
@@ -55,6 +56,9 @@ function resolveAvailableEnvironments(user: StoredUser | null): EnvironmentOptio
   if (!user || !user.role) return [];
   if (user.role === ADMIN_ROLE) return ALL_ENVIRONMENTS;
   if (user.role !== USER_ROLE) return [];
+  if (user.authType === "rgw_session") {
+    return ALL_ENVIRONMENTS.filter((env) => env.id === "manager" || env.id === "browser");
+  }
   const links = user.account_links ?? [];
   const hasPortalAccess = links.some((link) => link.account_role !== "portal_none");
   const hasAccountAdmin = links.some((link) => link.account_admin);

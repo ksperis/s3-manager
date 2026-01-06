@@ -9,6 +9,7 @@ import requests
 from requests_aws4auth import AWS4Auth
 
 from app.core.config import get_settings
+from app.utils.quota_stats import extract_quota_limits
 
 settings = get_settings()
 import logging
@@ -320,6 +321,7 @@ class RGWAdminClient:
     def set_account_quota(
         self,
         account_id: str,
+        max_size_bytes: Optional[int] = None,
         max_size_gb: Optional[int] = None,
         max_objects: Optional[int] = None,
         quota_type: str = "account",
@@ -333,7 +335,9 @@ class RGWAdminClient:
             "quota-type": quota_type,
             "format": "json",
         }
-        if max_size_gb is not None:
+        if max_size_bytes is not None:
+            params["max-size"] = int(max_size_bytes)
+        elif max_size_gb is not None:
             # Ceph expects bytes; convert from GB for UI friendliness
             params["max-size"] = int(max_size_gb * 1024 * 1024 * 1024)
         if max_objects is not None:
@@ -354,6 +358,12 @@ class RGWAdminClient:
         if result.get("not_found"):
             return None
         return result
+
+    def get_account_quota(self, account_id: str) -> Tuple[Optional[int], Optional[int]]:
+        payload = self.get_account(account_id, allow_not_found=True) or {}
+        if payload.get("not_found"):
+            return None, None
+        return extract_quota_limits(payload, keys=("quota", "account_quota"))
 
     def list_accounts(self) -> list[Dict[str, Any]]:
         params: Dict[str, Any] = {"format": "json"}
@@ -493,6 +503,7 @@ class RGWAdminClient:
         bucket: str,
         tenant: Optional[str] = None,
         uid: Optional[str] = None,
+        max_size_bytes: Optional[int] = None,
         max_size_gb: Optional[int] = None,
         max_objects: Optional[int] = None,
         enabled: bool = True,
@@ -510,7 +521,9 @@ class RGWAdminClient:
             params["uid"] = uid
         if account_id:
             params["account-id"] = account_id
-        if max_size_gb is not None:
+        if max_size_bytes is not None:
+            params["max-size"] = int(max_size_bytes)
+        elif max_size_gb is not None:
             params["max-size"] = int(max_size_gb * 1024 * 1024 * 1024)
         if max_objects is not None:
             params["max-objects"] = int(max_objects)
@@ -624,6 +637,12 @@ class RGWAdminClient:
         if not keys:
             return secrets.token_hex(16), secrets.token_urlsafe(32)
         return keys[0].get("access_key"), keys[0].get("secret_key")
+
+    def get_user_quota(self, uid: str, tenant: Optional[str] = None) -> Tuple[Optional[int], Optional[int]]:
+        payload = self.get_user(uid, tenant=tenant, allow_not_found=True) or {}
+        if payload.get("not_found"):
+            return None, None
+        return extract_quota_limits(payload, keys=("user_quota", "quota"))
 
     def set_user_caps(self, uid: str, caps: Any, tenant: Optional[str] = None, op: str = "add") -> Dict[str, Any]:
         if isinstance(caps, (list, tuple, set)):
