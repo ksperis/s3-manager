@@ -80,6 +80,15 @@ export default function LoginPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!loginSettings) return;
+    if (selectedEndpoint || customEndpoint) return;
+    const defaultEndpoint = loginSettings.endpoints.find((endpoint) => endpoint.is_default);
+    if (defaultEndpoint) {
+      setSelectedEndpoint(defaultEndpoint.endpoint_url);
+    }
+  }, [loginSettings, selectedEndpoint, customEndpoint]);
+
   const handlePasswordLogin = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -247,7 +256,7 @@ export default function LoginPage() {
                       className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
                     >
                       {endpointLoading && <option value="">Loading endpoints...</option>}
-                      {!endpointLoading && <option value="">Default endpoint</option>}
+                      {!endpointLoading && <option value="">Select endpoint</option>}
                       {!endpointLoading &&
                         endpointOptions.map((endpoint) => (
                           <option key={endpoint.id} value={endpoint.endpoint_url} title={endpoint.endpoint_url}>
@@ -256,7 +265,11 @@ export default function LoginPage() {
                         ))}
                     </select>
                     {!endpointLoading && endpointOptions.length === 0 && (
-                      <p className="mt-1 ui-caption text-slate-500">No endpoint configured. Default will be used.</p>
+                      <p className="mt-1 ui-caption text-slate-500">
+                        {allowCustomEndpoint
+                          ? "No endpoint configured. Use a custom endpoint URL."
+                          : "No endpoint configured. Ask an admin to add one."}
+                      </p>
                     )}
                   </div>
                 )}

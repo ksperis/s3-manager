@@ -59,12 +59,14 @@ class Settings(BaseSettings):
     )
 
     s3_endpoint: str = Field("http://localhost:9000", description="RGW/S3 endpoint")
+    s3_endpoint_features: Optional[str] = Field(
+        None,
+        description="Default endpoint features (YAML or JSON)",
+    )
     s3_access_key: str = Field("minio", description="Access key for RGW/S3")
     s3_secret_key: str = Field("minio123", description="Secret key for RGW/S3")
     s3_region: str = Field("us-east-1", description="Default S3 region")
-    sts_endpoint: Optional[str] = Field(None, description="STS endpoint (defaults to s3_endpoint if not set)")
 
-    rgw_admin_endpoint: Optional[str] = Field(None, description="Admin ops endpoint (defaults to s3_endpoint)")
     rgw_admin_access_key: Optional[str] = Field(None, description="Admin ops access key (defaults to s3_access_key)")
     rgw_admin_secret_key: Optional[str] = Field(None, description="Admin ops secret key (defaults to s3_secret_key)")
     supervision_access_key: Optional[str] = Field(None, description="Access key dedicated to supervision usage stats")

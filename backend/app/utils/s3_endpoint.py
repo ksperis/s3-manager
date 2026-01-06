@@ -14,6 +14,18 @@ def normalize_s3_endpoint(value: Optional[str]) -> Optional[str]:
     return normalized or None
 
 
+def configured_s3_endpoint() -> Optional[str]:
+    fields_set = getattr(settings, "model_fields_set", None)
+    if isinstance(fields_set, set):
+        if "s3_endpoint" not in fields_set:
+            return None
+    else:
+        fields_set = getattr(settings, "__pydantic_fields_set__", None)
+        if not isinstance(fields_set, set) or "s3_endpoint" not in fields_set:
+            return None
+    return normalize_s3_endpoint(settings.s3_endpoint)
+
+
 def resolve_s3_endpoint(account: object) -> Optional[str]:
     override = getattr(account, "_session_endpoint", None)
     if override:
@@ -26,4 +38,4 @@ def resolve_s3_endpoint(account: object) -> Optional[str]:
     endpoint_url = getattr(account, "storage_endpoint_url", None)
     if endpoint_url:
         return endpoint_url
-    return settings.s3_endpoint
+    return None

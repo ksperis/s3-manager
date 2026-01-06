@@ -14,7 +14,13 @@ from app.models.s3_account import (
     S3AccountUpdate,
 )
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client, RGWAdminError
-from app.services.storage_endpoints_service import StorageEndpointsService, normalize_capabilities
+from app.services.storage_endpoints_service import StorageEndpointsService
+from app.utils.storage_endpoint_features import (
+    features_to_capabilities,
+    normalize_features_config,
+    resolve_admin_endpoint,
+    resolve_feature_flags,
+)
 from app.core.security import get_password_hash
 from app.db_models import UserRole
 import random
@@ -40,14 +46,31 @@ class S3AccountsService:
         elif allow_missing_admin:
             self.rgw_admin = None
         else:
-            self.rgw_admin = get_rgw_admin_client()
+            self.rgw_admin = self._default_admin_client()
         self._topics_cache: dict[str, tuple[Optional[int], Optional[list[str]]]] = {}
         self._topics_global_cache: Optional[dict[str, list[str]]] = None
+
+    def _default_admin_client(self) -> Optional[RGWAdminClient]:
+        try:
+            self.storage_endpoints.ensure_default_endpoint()
+            endpoint = (
+                self.db.query(StorageEndpoint)
+                .filter(StorageEndpoint.is_default.is_(True))
+                .order_by(StorageEndpoint.id.asc())
+                .first()
+            )
+            if not endpoint:
+                return None
+            return self._admin_for_endpoint(endpoint, allow_missing=True)
+        except Exception as exc:
+            logger.warning("RGW admin client unavailable: %s", exc)
+            return None
 
     def _endpoint_capabilities(self, endpoint: Optional[StorageEndpoint]) -> Optional[dict[str, bool]]:
         if not endpoint:
             return None
-        return normalize_capabilities(endpoint.capabilities)
+        features = normalize_features_config(endpoint.provider, endpoint.features_config)
+        return features_to_capabilities(features)
 
     def _resolve_storage_endpoint(self, storage_endpoint_id: Optional[int], require_ceph: bool = False) -> StorageEndpoint:
         if storage_endpoint_id:
@@ -76,11 +99,16 @@ class S3AccountsService:
             if allow_missing:
                 return None
             raise ValueError("Cet endpoint ne supporte pas les opérations Ceph admin.")
+        admin_endpoint = resolve_admin_endpoint(endpoint)
+        if not admin_endpoint:
+            if allow_missing:
+                return None
+            raise ValueError("Les opérations admin sont désactivées pour cet endpoint.")
         try:
             return get_rgw_admin_client(
                 access_key=endpoint.admin_access_key,
                 secret_key=endpoint.admin_secret_key,
-                endpoint=endpoint.admin_endpoint or endpoint.endpoint_url,
+                endpoint=admin_endpoint,
                 region=endpoint.region,
             )
         except Exception as exc:
@@ -101,6 +129,12 @@ class S3AccountsService:
         return self._admin_for_endpoint(endpoint, allow_missing=allow_missing)
 
     def _account_usage(self, acc: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
+        try:
+            endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
+            if not resolve_feature_flags(endpoint).usage_enabled:
+                return None, None, None
+        except Exception:
+            return None, None, None
         admin = self._admin_for_account(acc, allow_missing=True)
         if not admin:
             return None, None, None
@@ -164,6 +198,8 @@ class S3AccountsService:
         return None
 
     def _rgw_account_users(self) -> Optional[dict[str, list[str]]]:
+        if not self.rgw_admin:
+            return None
         try:
             users = self.rgw_admin.list_users()
         except Exception as exc:
@@ -231,6 +267,8 @@ class S3AccountsService:
         return (len(deduped), deduped)
 
     def _all_topics_by_account(self) -> Optional[dict[str, list[str]]]:
+        if not self.rgw_admin:
+            return None
         if self._topics_global_cache is not None:
             return self._topics_global_cache
         try:

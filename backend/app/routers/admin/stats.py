@@ -12,10 +12,17 @@ from app.services.admin_metrics_service import AdminMetricsService
 from app.services.rgw_admin import RGWAdminClient
 from app.services.traffic_service import TrafficWindow
 from app.utils.rgw import get_supervision_rgw_client
+from app.utils.storage_endpoint_features import normalize_features_config
 
 router = APIRouter(prefix="/admin/stats", tags=["admin-stats"])
 
-def _resolve_endpoint(db: Session, endpoint_id: Optional[int]) -> StorageEndpoint:
+def _resolve_endpoint(
+    db: Session,
+    endpoint_id: Optional[int],
+    *,
+    require_usage: bool = False,
+    require_metrics: bool = False,
+) -> StorageEndpoint:
     if endpoint_id is not None:
         endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:
@@ -41,6 +48,11 @@ def _resolve_endpoint(db: Session, endpoint_id: Optional[int]) -> StorageEndpoin
         provider = StorageProvider.OTHER
     if provider != StorageProvider.CEPH:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cet endpoint n'est pas de type Ceph")
+    features = normalize_features_config(endpoint.provider, endpoint.features_config)
+    if require_usage and not features["usage"]["enabled"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are disabled for this endpoint")
+    if require_metrics and not features["metrics"]["enabled"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Traffic metrics are disabled for this endpoint")
     if not endpoint.endpoint_url:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="L'URL de l'endpoint est manquante.")
     if not endpoint.supervision_access_key or not endpoint.supervision_secret_key:
@@ -74,7 +86,7 @@ def global_stats(
     window: TrafficWindow = Query(TrafficWindow.WEEK),
     endpoint_id: Optional[int] = Query(default=None, alias="endpoint_id"),
 ) -> dict:
-    endpoint = _resolve_endpoint(db, endpoint_id)
+    endpoint = _resolve_endpoint(db, endpoint_id, require_usage=True, require_metrics=True)
     rgw_admin = _build_rgw_client(endpoint)
     service = AdminMetricsService(
         db=db,
@@ -90,7 +102,7 @@ def storage_stats(
     db: Session = Depends(get_db),
     endpoint_id: Optional[int] = Query(default=None, alias="endpoint_id"),
 ) -> dict:
-    endpoint = _resolve_endpoint(db, endpoint_id)
+    endpoint = _resolve_endpoint(db, endpoint_id, require_usage=True)
     rgw_admin = _build_rgw_client(endpoint)
     service = AdminMetricsService(
         db=db,
@@ -107,7 +119,7 @@ def traffic_stats(
     db: Session = Depends(get_db),
     endpoint_id: Optional[int] = Query(default=None, alias="endpoint_id"),
 ) -> dict:
-    endpoint = _resolve_endpoint(db, endpoint_id)
+    endpoint = _resolve_endpoint(db, endpoint_id, require_metrics=True)
     rgw_admin = _build_rgw_client(endpoint)
     service = AdminMetricsService(
         db=db,

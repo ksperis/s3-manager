@@ -17,6 +17,7 @@ from app.db_models import (
     StorageProvider,
 )
 from app.services.storage_endpoints_service import StorageEndpointsService
+from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.models.s3_user import (
     S3User as S3UserSchema,
     S3UserAccessKey,
@@ -45,6 +46,8 @@ class S3UsersService:
                 raise ValueError("Storage endpoint introuvable.")
             if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
                 raise ValueError("Seuls les endpoints Ceph sont autorisés pour les S3 users.")
+            if not resolve_feature_flags(endpoint).admin_enabled:
+                raise ValueError("Les opérations admin sont désactivées pour cet endpoint.")
             return endpoint
         self.storage_endpoints.ensure_default_endpoint()
         endpoint = (
@@ -57,14 +60,19 @@ class S3UsersService:
             raise ValueError("Aucun endpoint de stockage disponible.")
         if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
             raise ValueError("Aucun endpoint Ceph disponible.")
+        if not resolve_feature_flags(endpoint).admin_enabled:
+            raise ValueError("Les opérations admin sont désactivées pour cet endpoint.")
         return endpoint
 
     def _admin_for_endpoint(self, endpoint: StorageEndpoint) -> RGWAdminClient:
         try:
+            admin_endpoint = resolve_admin_endpoint(endpoint)
+            if not admin_endpoint:
+                raise ValueError("Les opérations admin sont désactivées pour cet endpoint.")
             return get_rgw_admin_client(
                 access_key=endpoint.admin_access_key,
                 secret_key=endpoint.admin_secret_key,
-                endpoint=endpoint.admin_endpoint or endpoint.endpoint_url,
+                endpoint=admin_endpoint,
                 region=endpoint.region,
             )
         except Exception as exc:

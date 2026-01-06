@@ -45,8 +45,8 @@ from app.models.browser import (
 )
 from app.services.s3_client import _delete_objects, get_s3_client
 from app.services.sts_service import get_session_token
-from app.services.storage_endpoints_service import normalize_capabilities
 from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -75,7 +75,10 @@ _STS_CACHE_LOCK = Lock()
 
 
 def _resolve_endpoint(account: S3Account) -> str:
-    return resolve_s3_endpoint(account) or settings.s3_endpoint
+    endpoint = resolve_s3_endpoint(account)
+    if not endpoint:
+        raise RuntimeError("S3 endpoint is not configured for this account")
+    return endpoint
 
 
 def _sts_cache_key(access_key: str, endpoint: str) -> str:
@@ -124,9 +127,9 @@ class BrowserService:
     def _sts_enabled(self, account: S3Account) -> bool:
         endpoint = getattr(account, "storage_endpoint", None)
         if not endpoint:
-            return True
-        capabilities = normalize_capabilities(getattr(endpoint, "capabilities", None))
-        return capabilities.get("sts", True)
+            return False
+        flags = resolve_feature_flags(endpoint)
+        return flags.sts_enabled
 
     def _resolve_s3_credentials(self, account: S3Account) -> tuple[str, str, Optional[str]]:
         access_key, secret_key = account.effective_rgw_credentials()
@@ -158,7 +161,9 @@ class BrowserService:
     ) -> Optional[CachedStsCredentials]:
         if not self._sts_enabled(account):
             return None
-        endpoint = settings.sts_endpoint or _resolve_endpoint(account)
+        endpoint = resolve_sts_endpoint(account.storage_endpoint) if account.storage_endpoint else None
+        if not endpoint:
+            return None
         cache_key = _sts_cache_key(access_key, endpoint)
         cached = _get_cached_sts_credentials(cache_key)
         if cached:
@@ -344,7 +349,9 @@ class BrowserService:
         if not access_key or not secret_key:
             return StsStatus(available=False, error="S3 credentials missing for this account")
         session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
-        endpoint = settings.sts_endpoint or _resolve_endpoint(account)
+        endpoint = resolve_sts_endpoint(account.storage_endpoint) if account.storage_endpoint else None
+        if not endpoint:
+            return StsStatus(available=False, error="STS endpoint is not configured for this account")
         cache_key = _sts_cache_key(access_key, endpoint)
         cached = _get_cached_sts_credentials(cache_key)
         if cached:
@@ -379,7 +386,9 @@ class BrowserService:
         if not access_key or not secret_key:
             raise RuntimeError("S3 credentials missing for this account")
         session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
-        endpoint = settings.sts_endpoint or _resolve_endpoint(account)
+        endpoint = resolve_sts_endpoint(account.storage_endpoint) if account.storage_endpoint else None
+        if not endpoint:
+            raise RuntimeError("STS endpoint is not configured for this account")
         cache_key = _sts_cache_key(access_key, endpoint)
         cached = _get_cached_sts_credentials(cache_key)
         if cached:

@@ -46,6 +46,7 @@ class StorageEndpoint(Base):
     supervision_access_key = Column(String, nullable=True)
     supervision_secret_key = Column(EncryptedString, nullable=True)
     capabilities = Column(JSON, nullable=True)
+    features_config = Column(Text, nullable=True)
     is_default = Column(Boolean, default=False, nullable=False, server_default="0")
     is_editable = Column(Boolean, default=True, nullable=False, server_default="1")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

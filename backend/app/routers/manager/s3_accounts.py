@@ -10,7 +10,7 @@ from app.db_models import S3Account, S3User, User, UserS3Account, UserS3User, Us
 from app.models.s3_account import S3Account as S3AccountSchema
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_current_account_admin
-from app.services.storage_endpoints_service import normalize_capabilities
+from app.utils.storage_endpoint_features import features_to_capabilities, normalize_features_config
 
 router = APIRouter(prefix="/manager/accounts", tags=["manager-accounts"])
 
@@ -43,7 +43,11 @@ def list_manager_accounts(
                     storage_endpoint_id=endpoint.id if endpoint else None,
                     storage_endpoint_name=endpoint.name if endpoint else None,
                     storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
-                    storage_endpoint_capabilities=normalize_capabilities(endpoint.capabilities) if endpoint else None,
+                    storage_endpoint_capabilities=(
+                        features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
+                        if endpoint
+                        else None
+                    ),
                 )
             )
         return accounts
@@ -96,7 +100,11 @@ def list_manager_accounts(
                 storage_endpoint_id=endpoint.id if endpoint else None,
                 storage_endpoint_name=endpoint.name if endpoint else None,
                 storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
-                storage_endpoint_capabilities=normalize_capabilities(endpoint.capabilities) if endpoint else None,
+                storage_endpoint_capabilities=(
+                    features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
+                    if endpoint
+                    else None
+                ),
             )
         )
     for s3_user in s3_users:
@@ -111,7 +119,11 @@ def list_manager_accounts(
                 storage_endpoint_id=endpoint.id if endpoint else None,
                 storage_endpoint_name=endpoint.name if endpoint else None,
                 storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
-                storage_endpoint_capabilities=normalize_capabilities(endpoint.capabilities) if endpoint else None,
+                storage_endpoint_capabilities=(
+                    features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
+                    if endpoint
+                    else None
+                ),
             )
         )
     return results

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import decode_token
-from app.db_models import AccountRole, S3Account, S3User, User, UserS3Account, UserS3User, UserRole
+from app.db_models import AccountRole, S3Account, S3User, StorageEndpoint, StorageProvider, User, UserS3Account, UserS3User, UserRole
 from app.models.session import ManagerSessionPrincipal
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.app_settings_service import load_app_settings
@@ -20,6 +20,7 @@ from app.services.audit_service import AuditService, get_audit_service as build_
 from app.services.session_service import SessionService
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.rgw import has_supervision_credentials
+from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.s3_endpoint import normalize_s3_endpoint
 
 settings = get_settings()
@@ -485,6 +486,34 @@ def require_usage_capable_manager(
     actor: ManagerActor = Depends(get_current_actor),
 ) -> ManagerActor:
     caps: Optional[AccountCapabilities] = getattr(account, "_manager_capabilities", None)  # type: ignore[attr-defined]
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint:
+        flags = resolve_feature_flags(endpoint)
+        if not flags.usage_enabled:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are disabled for this endpoint")
+    if not has_supervision_credentials(account):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are not configured for this account")
+    if isinstance(actor, ManagerSessionPrincipal) and not actor.capabilities.can_view_traffic:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
+    if caps and not caps.can_manage_buckets:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this account")
+    if caps and isinstance(actor, User) and not caps.using_root_key:
+        settings = load_app_settings()
+        if not settings.manager.allow_manager_user_usage_stats:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
+    return actor
+
+
+def require_metrics_capable_manager(
+    account: S3Account = Depends(get_account_context),
+    actor: ManagerActor = Depends(get_current_actor),
+) -> ManagerActor:
+    caps: Optional[AccountCapabilities] = getattr(account, "_manager_capabilities", None)  # type: ignore[attr-defined]
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint:
+        flags = resolve_feature_flags(endpoint)
+        if not flags.metrics_enabled:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Traffic metrics are disabled for this endpoint")
     if not has_supervision_credentials(account):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are not configured for this account")
     if isinstance(actor, ManagerSessionPrincipal) and not actor.capabilities.can_view_traffic:
@@ -522,35 +551,85 @@ def require_manager_context_enabled() -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access is disabled")
 
 
-def _resolve_admin_rgw_credentials(user: User) -> tuple[str, str]:
-    access_key = user.rgw_access_key or settings.rgw_admin_access_key or settings.s3_access_key
-    secret_key = user.rgw_secret_key or settings.rgw_admin_secret_key or settings.s3_secret_key
+def _resolve_default_endpoint(db: Session) -> StorageEndpoint:
+    service = get_storage_endpoints_service(db)
+    service.ensure_default_endpoint()
+    endpoint = (
+        db.query(StorageEndpoint)
+        .filter(StorageEndpoint.is_default.is_(True))
+        .order_by(StorageEndpoint.id.asc())
+        .first()
+    )
+    if not endpoint:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Default storage endpoint is not configured",
+        )
+    return endpoint
+
+
+def _resolve_admin_rgw_context(db: Session, user: User) -> tuple[str, str, str, Optional[str]]:
+    endpoint = _resolve_default_endpoint(db)
+    if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Default endpoint does not support RGW admin operations",
+        )
+    flags = resolve_feature_flags(endpoint)
+    if not flags.admin_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin operations are disabled for the default endpoint",
+        )
+    admin_endpoint = resolve_admin_endpoint(endpoint)
+    if not admin_endpoint:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin endpoint is not configured for the default endpoint",
+        )
+    access_key = user.rgw_access_key or endpoint.admin_access_key
+    secret_key = user.rgw_secret_key or endpoint.admin_secret_key
     if not access_key or not secret_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="RGW admin credentials are not configured",
         )
-    return access_key, secret_key
+    return access_key, secret_key, admin_endpoint, endpoint.region
 
 
-def get_optional_super_admin_rgw_client(user: User = Depends(get_current_super_admin)) -> Optional[RGWAdminClient]:
+def get_optional_super_admin_rgw_client(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_super_admin),
+) -> Optional[RGWAdminClient]:
     try:
-        access_key, secret_key = _resolve_admin_rgw_credentials(user)
-    except HTTPException as exc:
-        if exc.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
-            logger.warning("RGW admin credentials missing; proceeding without admin client")
-            return None
-        raise
-    try:
-        return get_rgw_admin_client(access_key=access_key, secret_key=secret_key)
+        access_key, secret_key, admin_endpoint, region = _resolve_admin_rgw_context(db, user)
+        return get_rgw_admin_client(
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=admin_endpoint,
+            region=region,
+        )
     except RGWAdminError as exc:
         logger.warning("Unable to build RGW admin client: %s", exc)
         return None
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
+            logger.warning("RGW admin client unavailable: %s", exc.detail)
+            return None
+        raise
 
 
-def get_super_admin_rgw_client(user: User = Depends(get_current_super_admin)) -> RGWAdminClient:
-    access_key, secret_key = _resolve_admin_rgw_credentials(user)
-    return get_rgw_admin_client(access_key=access_key, secret_key=secret_key)
+def get_super_admin_rgw_client(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_super_admin),
+) -> RGWAdminClient:
+    access_key, secret_key, admin_endpoint, region = _resolve_admin_rgw_context(db, user)
+    return get_rgw_admin_client(
+        access_key=access_key,
+        secret_key=secret_key,
+        endpoint=admin_endpoint,
+        region=region,
+    )
 
 
 def get_audit_logger(

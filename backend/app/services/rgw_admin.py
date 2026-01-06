@@ -28,11 +28,13 @@ class RGWAdminClient:
         endpoint: Optional[str] = None,
         region: Optional[str] = None,
     ) -> None:
-        resolved_endpoint = endpoint or settings.rgw_admin_endpoint or settings.s3_endpoint
+        resolved_endpoint = endpoint
+        if not resolved_endpoint:
+            raise RGWAdminError("RGW admin endpoint is not configured")
         self.endpoint = resolved_endpoint.rstrip("/") if resolved_endpoint else ""
         self.region = region or settings.s3_region
-        self.access_key = access_key or settings.rgw_admin_access_key or settings.s3_access_key
-        self.secret_key = secret_key or settings.rgw_admin_secret_key or settings.s3_secret_key
+        self.access_key = access_key
+        self.secret_key = secret_key
         if not self.access_key or not self.secret_key:
             raise RGWAdminError("RGW admin credentials are not configured")
         self.auth = AWS4Auth(self.access_key, self.secret_key, self.region, "s3")

@@ -10,6 +10,7 @@ import {
   createStorageEndpoint,
   deleteStorageEndpoint,
   listStorageEndpoints,
+  setDefaultStorageEndpoint,
   updateStorageEndpoint,
 } from "../../api/storageEndpoints";
 import Modal from "../../components/Modal";
@@ -18,30 +19,93 @@ import PageHeader from "../../components/PageHeader";
 type FormState = {
   name: string;
   endpoint_url: string;
-  admin_endpoint: string;
   region: string;
   provider: StorageProvider;
   admin_access_key: string;
   admin_secret_key: string;
   supervision_access_key: string;
   supervision_secret_key: string;
-  capabilities_sts: boolean;
-  capabilities_static_website: boolean;
+  features: FeaturesState;
+  features_config: string;
+  yaml_dirty: boolean;
 };
 
-const EMPTY_FORM: FormState = {
-  name: "",
-  endpoint_url: "",
-  admin_endpoint: "",
-  region: "",
-  provider: "ceph",
-  admin_access_key: "",
-  admin_secret_key: "",
-  supervision_access_key: "",
-  supervision_secret_key: "",
-  capabilities_sts: true,
-  capabilities_static_website: true,
+type FeatureKey = "admin" | "sts" | "usage" | "metrics" | "static_website";
+
+type FeatureState = {
+  enabled: boolean;
+  endpoint: string;
 };
+
+type FeaturesState = Record<FeatureKey, FeatureState>;
+
+const FEATURE_KEYS: FeatureKey[] = ["admin", "sts", "usage", "metrics", "static_website"];
+
+function createEmptyFeatures(): FeaturesState {
+  return {
+    admin: { enabled: false, endpoint: "" },
+    sts: { enabled: false, endpoint: "" },
+    usage: { enabled: false, endpoint: "" },
+    metrics: { enabled: false, endpoint: "" },
+    static_website: { enabled: false, endpoint: "" },
+  };
+}
+
+function applyFeatureConstraints(features: FeaturesState, provider: StorageProvider): FeaturesState {
+  const next: FeaturesState = {
+    admin: { ...features.admin },
+    sts: { ...features.sts },
+    usage: { ...features.usage },
+    metrics: { ...features.metrics },
+    static_website: { ...features.static_website },
+  };
+  if (provider !== "ceph") {
+    next.admin.enabled = false;
+    next.usage.enabled = false;
+    next.metrics.enabled = false;
+  }
+  if (!next.admin.enabled) {
+    next.admin.endpoint = "";
+    next.usage.enabled = false;
+    next.metrics.enabled = false;
+  }
+  if (!next.sts.enabled) {
+    next.sts.endpoint = "";
+  }
+  return next;
+}
+
+function buildFeaturesYaml(features: FeaturesState): string {
+  const lines: string[] = ["features:"];
+  FEATURE_KEYS.forEach((key) => {
+    const entry = features[key];
+    lines.push(`  ${key}:`);
+    lines.push(`    enabled: ${entry.enabled ? "true" : "false"}`);
+    if ((key === "admin" || key === "sts") && entry.endpoint.trim()) {
+      lines.push(`    endpoint: ${entry.endpoint.trim()}`);
+    }
+  });
+  return lines.join("\n");
+}
+
+function createEmptyForm(): FormState {
+  const features = createEmptyFeatures();
+  return {
+    name: "",
+    endpoint_url: "",
+    region: "",
+    provider: "ceph",
+    admin_access_key: "",
+    admin_secret_key: "",
+    supervision_access_key: "",
+    supervision_secret_key: "",
+    features,
+    features_config: buildFeaturesYaml(features),
+    yaml_dirty: false,
+  };
+}
+
+const EMPTY_FORM: FormState = createEmptyForm();
 
 function extractError(err: unknown): string {
   if (!err) return "Action failed.";
@@ -82,8 +146,54 @@ function LockBadge({ label }: { label: string }) {
   );
 }
 
-function resolveCapability(endpoint: StorageEndpoint, key: string, fallback = true) {
+function StatusBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm dark:bg-slate-800 dark:text-slate-200">
+      {label}
+    </span>
+  );
+}
+
+function resolveCapability(endpoint: StorageEndpoint, key: string, fallback = false) {
   return endpoint.capabilities?.[key] ?? fallback;
+}
+
+function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvider): FeaturesState {
+  if (endpoint.features) {
+    return applyFeatureConstraints(
+      {
+        admin: {
+          enabled: Boolean(endpoint.features.admin?.enabled),
+          endpoint: endpoint.features.admin?.endpoint ?? "",
+        },
+        sts: {
+          enabled: Boolean(endpoint.features.sts?.enabled),
+          endpoint: endpoint.features.sts?.endpoint ?? "",
+        },
+        usage: {
+          enabled: Boolean(endpoint.features.usage?.enabled),
+          endpoint: "",
+        },
+        metrics: {
+          enabled: Boolean(endpoint.features.metrics?.enabled),
+          endpoint: "",
+        },
+        static_website: {
+          enabled: Boolean(endpoint.features.static_website?.enabled),
+          endpoint: "",
+        },
+      },
+      provider
+    );
+  }
+  const fallback: FeaturesState = {
+    admin: { enabled: resolveCapability(endpoint, "admin"), endpoint: endpoint.admin_endpoint ?? "" },
+    sts: { enabled: resolveCapability(endpoint, "sts"), endpoint: "" },
+    usage: { enabled: resolveCapability(endpoint, "usage"), endpoint: "" },
+    metrics: { enabled: resolveCapability(endpoint, "metrics"), endpoint: "" },
+    static_website: { enabled: resolveCapability(endpoint, "static_website"), endpoint: "" },
+  };
+  return applyFeatureConstraints(fallback, provider);
 }
 
 export default function StorageEndpointsPage() {
@@ -96,12 +206,14 @@ export default function StorageEndpointsPage() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [defaultError, setDefaultError] = useState<string | null>(null);
+  const [defaultBusyId, setDefaultBusyId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StorageEndpoint | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
   const resetForm = useCallback(() => {
-    setForm(EMPTY_FORM);
+    setForm(createEmptyForm());
     setFormError(null);
     setEditingId(null);
   }, []);
@@ -125,6 +237,40 @@ export default function StorageEndpointsPage() {
 
   const cephMode = useMemo(() => form.provider === "ceph", [form.provider]);
   const defaultEndpoint = useMemo(() => endpoints.find((ep) => ep.is_default), [endpoints]);
+  const updateFeatures = useCallback(
+    (updater: (current: FeaturesState) => FeaturesState, providerOverride?: StorageProvider) => {
+      setForm((prev) => {
+        const provider = providerOverride ?? prev.provider;
+        const nextRaw = updater(prev.features);
+        const constrained = applyFeatureConstraints(nextRaw, provider);
+        return {
+          ...prev,
+          provider,
+          features: constrained,
+          features_config: buildFeaturesYaml(constrained),
+          yaml_dirty: false,
+        };
+      });
+    },
+    []
+  );
+
+  const handleProviderChange = (provider: StorageProvider) => {
+    setForm((prev) => {
+      const constrained = applyFeatureConstraints(prev.features, provider);
+      return {
+        ...prev,
+        provider,
+        admin_access_key: provider === "ceph" ? prev.admin_access_key : "",
+        admin_secret_key: provider === "ceph" ? prev.admin_secret_key : "",
+        supervision_access_key: provider === "ceph" ? prev.supervision_access_key : "",
+        supervision_secret_key: provider === "ceph" ? prev.supervision_secret_key : "",
+        features: constrained,
+        features_config: buildFeaturesYaml(constrained),
+        yaml_dirty: false,
+      };
+    });
+  };
 
   const startCreate = () => {
     resetForm();
@@ -132,19 +278,24 @@ export default function StorageEndpointsPage() {
   };
 
   const startEdit = (endpoint: StorageEndpoint) => {
+    const features = resolveFeatureState(endpoint, endpoint.provider);
+    const featuresConfig =
+      typeof endpoint.features_config === "string" && endpoint.features_config.trim()
+        ? endpoint.features_config
+        : buildFeaturesYaml(features);
     setEditingId(endpoint.id);
     setForm({
       name: endpoint.name ?? "",
       endpoint_url: endpoint.endpoint_url ?? "",
-      admin_endpoint: endpoint.admin_endpoint ?? "",
       region: endpoint.region ?? "",
       provider: endpoint.provider,
       admin_access_key: endpoint.admin_access_key ?? "",
       admin_secret_key: "",
       supervision_access_key: endpoint.supervision_access_key ?? "",
       supervision_secret_key: "",
-      capabilities_sts: resolveCapability(endpoint, "sts"),
-      capabilities_static_website: resolveCapability(endpoint, "static_website"),
+      features,
+      features_config: featuresConfig,
+      yaml_dirty: false,
     });
     setFormError(null);
     setShowForm(true);
@@ -171,15 +322,30 @@ export default function StorageEndpointsPage() {
     }
   };
 
+  const handleSetDefault = async (endpoint: StorageEndpoint) => {
+    if (endpoint.is_default) return;
+    setDefaultError(null);
+    setDefaultBusyId(endpoint.id);
+    try {
+      await setDefaultStorageEndpoint(endpoint.id);
+      setActionMessage("Default endpoint updated.");
+      loadEndpoints();
+    } catch (err) {
+      setDefaultError(extractError(err));
+    } finally {
+      setDefaultBusyId(null);
+    }
+  };
+
   const buildPayload = (): StorageEndpointPayload | null => {
     const trimmedName = form.name.trim();
     const trimmedEndpoint = form.endpoint_url.trim();
-    const trimmedAdminEndpoint = form.admin_endpoint.trim();
     const trimmedRegion = form.region.trim();
     const trimmedAdminAccess = form.admin_access_key.trim();
     const trimmedAdminSecret = form.admin_secret_key.trim();
     const trimmedSupervisionAccess = form.supervision_access_key.trim();
     const trimmedSupervisionSecret = form.supervision_secret_key.trim();
+    const trimmedFeaturesConfig = form.features_config.trim();
 
     if (!trimmedName) {
       setFormError("Storage name is required.");
@@ -189,35 +355,32 @@ export default function StorageEndpointsPage() {
       setFormError("Endpoint URL is required.");
       return null;
     }
+    if (!trimmedFeaturesConfig) {
+      setFormError("Features YAML is required.");
+      return null;
+    }
 
     const payload: StorageEndpointPayload = {
       name: trimmedName,
       endpoint_url: trimmedEndpoint,
-      admin_endpoint: trimmedAdminEndpoint || null,
       region: trimmedRegion || null,
       provider: form.provider,
+      features_config: trimmedFeaturesConfig,
     };
-    if (form.provider === "ceph") {
-      payload.capabilities = {
-        sts: form.capabilities_sts,
-        static_website: form.capabilities_static_website,
-      };
-    } else {
-      payload.capabilities = null;
-    }
 
     if (form.provider === "ceph") {
+      const adminEnabled = form.features.admin.enabled;
       if (editingId) {
         if (trimmedAdminAccess) payload.admin_access_key = trimmedAdminAccess;
         if (trimmedAdminSecret) payload.admin_secret_key = trimmedAdminSecret;
         if (trimmedSupervisionAccess) payload.supervision_access_key = trimmedSupervisionAccess;
         if (trimmedSupervisionSecret) payload.supervision_secret_key = trimmedSupervisionSecret;
       } else {
-        payload.admin_access_key = trimmedAdminAccess;
-        payload.admin_secret_key = trimmedAdminSecret;
+        payload.admin_access_key = trimmedAdminAccess || null;
+        payload.admin_secret_key = trimmedAdminSecret || null;
         payload.supervision_access_key = trimmedSupervisionAccess || null;
         payload.supervision_secret_key = trimmedSupervisionSecret || null;
-        if (!payload.admin_access_key || !payload.admin_secret_key) {
+        if (!form.yaml_dirty && adminEnabled && (!payload.admin_access_key || !payload.admin_secret_key)) {
           setFormError("Admin credentials are required for a Ceph endpoint.");
           return null;
         }
@@ -252,23 +415,37 @@ export default function StorageEndpointsPage() {
   };
 
   const renderEndpointCard = (endpoint: StorageEndpoint) => {
-    const isLocked = !endpoint.is_editable || endpoint.is_default;
     const showSupervision = endpoint.supervision_access_key || endpoint.has_supervision_secret;
-    const stsEnabled = resolveCapability(endpoint, "sts");
-    const staticWebsiteEnabled = resolveCapability(endpoint, "static_website");
+    const features = resolveFeatureState(endpoint, endpoint.provider);
+    const adminEnabled = features.admin.enabled;
+    const stsEnabled = features.sts.enabled;
+    const usageEnabled = features.usage.enabled;
+    const metricsEnabled = features.metrics.enabled;
+    const staticWebsiteEnabled = features.static_website.enabled;
+    const settingDefault = defaultBusyId === endpoint.id;
+    const adminEndpointOverride = features.admin.endpoint.trim();
+    const stsEndpointOverride = features.sts.endpoint.trim();
+    const showAdminEndpoint =
+      adminEnabled &&
+      Boolean(adminEndpointOverride) &&
+      adminEndpointOverride !== endpoint.endpoint_url;
+    const showStsEndpoint =
+      stsEnabled &&
+      Boolean(stsEndpointOverride) &&
+      stsEndpointOverride !== endpoint.endpoint_url;
 
     return (
-    <div
-      key={endpoint.id}
-      className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/70 ui-body"
-    >
+      <div
+        key={endpoint.id}
+        className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/70 ui-body"
+      >
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="ui-section font-semibold text-slate-900 dark:text-white">{endpoint.name}</h3>
               <ProviderBadge provider={endpoint.provider} />
-              {endpoint.is_default && <LockBadge label="Default (env)" />}
-              {!endpoint.is_editable && !endpoint.is_default && <LockBadge label="Protected" />}
+              {endpoint.is_default && <StatusBadge label="Default" />}
+              {!endpoint.is_editable && <LockBadge label="Protected" />}
             </div>
             <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
               <span className="font-semibold text-slate-700 dark:text-slate-100">Endpoint:</span>
@@ -276,17 +453,35 @@ export default function StorageEndpointsPage() {
                 {endpoint.endpoint_url}
               </code>
             </div>
-            {endpoint.admin_endpoint && endpoint.admin_endpoint !== endpoint.endpoint_url && (
+            {showAdminEndpoint && (
               <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
                 <span className="font-semibold text-slate-700 dark:text-slate-100">Admin endpoint:</span>
                 <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
-                  {endpoint.admin_endpoint}
+                  {adminEndpointOverride}
+                </code>
+              </div>
+            )}
+            {showStsEndpoint && (
+              <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
+                <span className="font-semibold text-slate-700 dark:text-slate-100">STS endpoint:</span>
+                <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                  {stsEndpointOverride}
                 </code>
               </div>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {endpoint.is_editable && !endpoint.is_default ? (
+            {!endpoint.is_default && (
+              <button
+                className="rounded-lg border border-slate-200 px-3 py-1.5 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                onClick={() => handleSetDefault(endpoint)}
+                type="button"
+                disabled={Boolean(defaultBusyId)}
+              >
+                {settingDefault ? "Setting..." : "Set as default"}
+              </button>
+            )}
+            {endpoint.is_editable ? (
               <>
                 <button
                   className="rounded-lg border border-slate-200 px-3 py-1.5 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
@@ -342,31 +537,56 @@ export default function StorageEndpointsPage() {
               <p className="font-semibold text-slate-500">Not set</p>
             )}
           </div>
-          {endpoint.provider === "ceph" && (
-            <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
-              <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Capabilities</p>
-              <div className="mt-1 flex flex-wrap gap-2 ui-caption font-semibold">
-                <span
-                  className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                    stsEnabled
-                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                      : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                  }`}
-                >
-                  STS {stsEnabled ? "on" : "off"}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                    staticWebsiteEnabled
-                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                      : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                  }`}
-                >
-                  Static website {staticWebsiteEnabled ? "on" : "off"}
-                </span>
-              </div>
+          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
+            <div className="mt-1 flex flex-wrap gap-2 ui-caption font-semibold">
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  adminEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                Admin {adminEnabled ? "on" : "off"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  stsEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                STS {stsEnabled ? "on" : "off"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  usageEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                Usage {usageEnabled ? "on" : "off"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  metricsEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                Metrics {metricsEnabled ? "on" : "off"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  staticWebsiteEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                Static website {staticWebsiteEnabled ? "on" : "off"}
+              </span>
             </div>
-          )}
+          </div>
         </div>
       </div>
     );
@@ -380,9 +600,9 @@ export default function StorageEndpointsPage() {
         breadcrumbs={[{ label: "Admin" }, { label: "Endpoints" }]}
         actions={[{ label: "New endpoint", onClick: startCreate }]}
         inlineContent={
-          defaultEndpoint ? (
+          endpoints.length > 0 ? (
             <span className="ui-body font-semibold text-slate-500 dark:text-slate-300">
-              Default endpoint: {defaultEndpoint.name}
+              Default endpoint: {defaultEndpoint ? defaultEndpoint.name : "None"}
             </span>
           ) : null
         }
@@ -391,6 +611,11 @@ export default function StorageEndpointsPage() {
       {error && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-100">
           {error}
+        </div>
+      )}
+      {defaultError && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-100">
+          {defaultError}
         </div>
       )}
       {actionMessage && (
@@ -438,7 +663,7 @@ export default function StorageEndpointsPage() {
                       name="provider"
                       value="ceph"
                       checked={form.provider === "ceph"}
-                      onChange={() => setForm((prev) => ({ ...prev, provider: "ceph" }))}
+                      onChange={() => handleProviderChange("ceph")}
                     />
                     <span>Ceph</span>
                   </label>
@@ -448,16 +673,7 @@ export default function StorageEndpointsPage() {
                       name="provider"
                       value="other"
                       checked={form.provider === "other"}
-                      onChange={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          provider: "other",
-                          admin_access_key: "",
-                          admin_secret_key: "",
-                          supervision_access_key: "",
-                          supervision_secret_key: "",
-                        }))
-                      }
+                      onChange={() => handleProviderChange("other")}
                     />
                     <span>Other</span>
                   </label>
@@ -478,19 +694,6 @@ export default function StorageEndpointsPage() {
                 />
               </label>
               <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                Admin endpoint (optional)
-                <input
-                  type="text"
-                  value={form.admin_endpoint}
-                  onChange={(e) => setForm((prev) => ({ ...prev, admin_endpoint: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  placeholder="http://rgw-admin.local"
-                />
-              </label>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                 Region (optional)
                 <input
                   type="text"
@@ -500,35 +703,35 @@ export default function StorageEndpointsPage() {
                   placeholder="us-east-1"
                 />
               </label>
-              {cephMode && (
-                <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                  Access key admin
-                  <input
-                    type="text"
-                    value={form.admin_access_key}
-                    onChange={(e) => setForm((prev) => ({ ...prev, admin_access_key: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                    placeholder="AKIA..."
-                    required={!editingId}
-                  />
-                </label>
-              )}
             </div>
 
             {cephMode && (
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                    Admin secret key {editingId ? <span className="ui-caption font-normal text-slate-500">(leave blank to keep)</span> : null}
-                    <input
-                      type="password"
-                      value={form.admin_secret_key}
-                      onChange={(e) => setForm((prev) => ({ ...prev, admin_secret_key: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                      placeholder="••••••"
-                      required={!editingId}
-                    />
-                  </label>
+                  <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                    Admin
+                    <div className="grid gap-3">
+                      <input
+                        type="text"
+                        value={form.admin_access_key}
+                        onChange={(e) => setForm((prev) => ({ ...prev, admin_access_key: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder="Access key admin"
+                        required={!editingId && form.features.admin.enabled}
+                      />
+                      <input
+                        type="password"
+                        value={form.admin_secret_key}
+                        onChange={(e) => setForm((prev) => ({ ...prev, admin_secret_key: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder={editingId ? "Secret key admin (leave blank to keep)" : "Secret key admin"}
+                        required={!editingId && form.features.admin.enabled}
+                      />
+                    </div>
+                    <p className="ui-caption font-normal text-slate-500 dark:text-slate-400">
+                      {editingId ? "Leave the secret key empty to keep the current one." : "Required when admin is enabled."}
+                    </p>
+                  </div>
                   <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                     Supervision (optional)
                     <div className="grid gap-3">
@@ -552,34 +755,138 @@ export default function StorageEndpointsPage() {
                     </p>
                   </div>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Capabilities</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                      STS enabled
-                      <input
-                        type="checkbox"
-                        checked={form.capabilities_sts}
-                        onChange={(e) => setForm((prev) => ({ ...prev, capabilities_sts: e.target.checked }))}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                      />
-                    </label>
-                    <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                      Static website enabled
-                      <input
-                        type="checkbox"
-                        checked={form.capabilities_static_website}
-                        onChange={(e) => setForm((prev) => ({ ...prev, capabilities_static_website: e.target.checked }))}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                      />
-                    </label>
-                  </div>
-                  <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                    Disable a capability if the endpoint does not expose it.
-                  </p>
-                </div>
               </div>
             )}
+
+            <div className="space-y-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                    Admin enabled
+                    <input
+                      type="checkbox"
+                      checked={form.features.admin.enabled}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          admin: { ...current.admin, enabled: e.target.checked },
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
+                      disabled={!cephMode}
+                    />
+                  </label>
+                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                    STS enabled
+                    <input
+                      type="checkbox"
+                      checked={form.features.sts.enabled}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          sts: { ...current.sts, enabled: e.target.checked },
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                    Usage enabled
+                    <input
+                      type="checkbox"
+                      checked={form.features.usage.enabled}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          usage: { ...current.usage, enabled: e.target.checked },
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
+                      disabled={!cephMode || !form.features.admin.enabled}
+                    />
+                  </label>
+                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                    Metrics enabled
+                    <input
+                      type="checkbox"
+                      checked={form.features.metrics.enabled}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          metrics: { ...current.metrics, enabled: e.target.checked },
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
+                      disabled={!cephMode || !form.features.admin.enabled}
+                    />
+                  </label>
+                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                    Static website enabled
+                    <input
+                      type="checkbox"
+                      checked={form.features.static_website.enabled}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          static_website: { ...current.static_website, enabled: e.target.checked },
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                    />
+                  </label>
+                </div>
+                <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                  Admin, usage, and metrics require a Ceph endpoint. Usage/metrics require admin.
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
+                    Admin endpoint override (optional)
+                    <input
+                      type="text"
+                      value={form.features.admin.endpoint}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          admin: { ...current.admin, endpoint: e.target.value },
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="http://rgw-admin.local"
+                      disabled={!cephMode || !form.features.admin.enabled}
+                    />
+                  </label>
+                  <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
+                    STS endpoint override (optional)
+                    <input
+                      type="text"
+                      value={form.features.sts.endpoint}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          sts: { ...current.sts, endpoint: e.target.value },
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="https://sts.example.com"
+                      disabled={!form.features.sts.enabled}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <label className="space-y-2 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                Features YAML
+                <textarea
+                  value={form.features_config}
+                  onChange={(e) => setForm((prev) => ({ ...prev, features_config: e.target.value, yaml_dirty: true }))}
+                  className="min-h-[160px] w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs text-slate-800 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+                <p className="ui-caption font-normal text-slate-500 dark:text-slate-400">
+                  Toggles regenerate the YAML. Manual edits override the toggles until you flip a switch again.
+                </p>
+              </label>
+            </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <button

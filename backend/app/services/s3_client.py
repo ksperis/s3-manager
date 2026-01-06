@@ -23,9 +23,11 @@ def get_s3_client(
     endpoint: Optional[str] = None,
     session_token: Optional[str] = None,
 ):
+    if not endpoint:
+        raise RuntimeError("S3 endpoint is not configured")
     client = boto3.client(
         "s3",
-        endpoint_url=(endpoint or settings.s3_endpoint),
+        endpoint_url=endpoint,
         aws_access_key_id=access_key or settings.s3_access_key,
         aws_secret_access_key=secret_key or settings.s3_secret_key,
         aws_session_token=session_token,

@@ -52,12 +52,21 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `60`)
 - `DATABASE_URL` (default: `sqlite:///./app.db`)
 - `S3_ENDPOINT` (default: `http://localhost:9000`)
+- `S3_ENDPOINT_FEATURES` (YAML or JSON, used to seed default endpoint features)
 - `S3_ACCESS_KEY` / `S3_SECRET_KEY`
 - `S3_REGION` (default: `us-east-1`)
+- `RGW_ADMIN_ACCESS_KEY` / `RGW_ADMIN_SECRET_KEY` (optional override for the default endpoint admin credentials)
+- `SUPERVISION_ACCESS_KEY` / `SUPERVISION_SECRET_KEY` (optional read-only credentials for usage/metrics)
 - `CORS_ORIGINS` (default: `["http://localhost:5173"]`)
 - `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` / `SUPER_ADMIN_FULL_NAME`
 - `OIDC_STATE_TTL_SECONDS` (default: `600`, validity of login `state`)
 - `OIDC_PROVIDERS__<key>__*` to configure OpenID Connect providers (see below)
+
+To seed a default endpoint with features enabled, provide `S3_ENDPOINT` along with a JSON/YAML payload:
+
+```bash
+export S3_ENDPOINT_FEATURES='{"features":{"admin":{"enabled":true},"sts":{"enabled":true},"usage":{"enabled":true},"metrics":{"enabled":false},"static_website":{"enabled":true}}}'
+```
 
 ### OpenID Connect / Google Login
 

@@ -23,7 +23,11 @@ from app.routers.dependencies import (
 )
 from app.services.audit_service import AuditService
 from app.services.portal_service import PortalService, get_portal_service
-from app.services.storage_endpoints_service import normalize_capabilities
+from app.utils.storage_endpoint_features import (
+    features_to_capabilities,
+    normalize_features_config,
+    resolve_feature_flags,
+)
 from app.services.rgw_iam import get_iam_service
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.services.traffic_service import TrafficService, TrafficWindow, WINDOW_RESOLUTION_LABELS, WINDOW_DELTAS
@@ -78,7 +82,11 @@ def list_portal_accounts(
                 storage_endpoint_id=endpoint.id if endpoint else None,
                 storage_endpoint_name=endpoint.name if endpoint else None,
                 storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
-                storage_endpoint_capabilities=normalize_capabilities(endpoint.capabilities) if endpoint else None,
+                storage_endpoint_capabilities=(
+                    features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
+                    if endpoint
+                    else None
+                ),
             )
         )
     return results
@@ -106,6 +114,9 @@ def portal_usage(
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    endpoint = getattr(access.account, "storage_endpoint", None)
+    if endpoint and not resolve_feature_flags(endpoint).usage_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are disabled for this endpoint")
     try:
         return service.get_usage(actor, access)
     except RuntimeError as exc:
@@ -326,6 +337,9 @@ def portal_traffic(
     account: S3Account = Depends(get_portal_account_context),
     access: AccountAccess = Depends(get_portal_account_access),
 ) -> dict:
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint and not resolve_feature_flags(endpoint).metrics_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Traffic metrics are disabled for this endpoint")
     try:
         service = TrafficService(account)
     except ValueError as exc:

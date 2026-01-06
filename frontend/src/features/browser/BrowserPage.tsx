@@ -322,7 +322,7 @@ export default function BrowserPage() {
     }
     return accounts.length === 1 ? accounts[0] : null;
   }, [accounts, selectedS3AccountId]);
-  const stsEnabled = selectedAccount?.storage_endpoint_capabilities?.sts ?? true;
+  const stsEnabled = selectedAccount?.storage_endpoint_capabilities?.sts ?? false;
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   useEffect(() => {

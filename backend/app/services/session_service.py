@@ -78,6 +78,8 @@ class SessionService:
         secret_key: str,
         endpoint: Optional[str] = None,
     ) -> tuple[str, Optional[str], Optional[str], Optional[str], SessionCapabilities]:
+        if not endpoint:
+            raise SessionIntrospectionError("S3 endpoint is required")
         raw_client = s3_client.get_s3_client(access_key, secret_key, endpoint=endpoint)
         try:
             raw = raw_client.list_buckets()
@@ -180,5 +182,5 @@ class SessionService:
             client = get_iam_client(access_key, secret_key, endpoint=endpoint)
             client.list_users(MaxItems=1)
             return True
-        except (ClientError, BotoCoreError):
+        except (ClientError, BotoCoreError, RuntimeError):
             return False

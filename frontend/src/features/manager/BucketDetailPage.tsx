@@ -332,7 +332,7 @@ export default function BucketDetailPage() {
     return null;
   }, [accounts, requiresS3AccountSelection, selectedS3AccountId]);
   const staticWebsiteEnabled = useMemo(
-    () => selectedS3Account?.storage_endpoint_capabilities?.static_website ?? true,
+    () => selectedS3Account?.storage_endpoint_capabilities?.static_website ?? false,
     [selectedS3Account]
   );
   const accountId = accountIdForApi ?? null;

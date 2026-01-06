@@ -19,6 +19,7 @@ from app.services import s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
+from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
@@ -162,6 +163,9 @@ class PortalService:
             )
         if not endpoint:
             raise RuntimeError("Endpoint de supervision manquant pour ce compte")
+        flags = resolve_feature_flags(endpoint)
+        if not flags.usage_enabled:
+            raise RuntimeError("Usage metrics are disabled for this endpoint")
         try:
             return get_supervision_rgw_client(endpoint)
         except ValueError as exc:

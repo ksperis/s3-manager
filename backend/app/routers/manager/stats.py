@@ -6,7 +6,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.db_models import S3Account
-from app.routers.dependencies import get_account_context, require_usage_capable_manager
+from app.routers.dependencies import (
+    get_account_context,
+    require_metrics_capable_manager,
+    require_usage_capable_manager,
+)
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_iam import get_iam_service
@@ -104,7 +108,7 @@ def account_traffic(
     window: TrafficWindow = Query(TrafficWindow.DAY),
     bucket: Optional[str] = Query(None),
     account: S3Account = Depends(get_account_context),
-    _: dict = Depends(require_usage_capable_manager),
+    _: dict = Depends(require_metrics_capable_manager),
 ) -> dict:
     try:
         service = TrafficService(account)

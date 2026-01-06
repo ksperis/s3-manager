@@ -8,6 +8,19 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.db_models import StorageProvider
 
 
+class StorageEndpointFeature(BaseModel):
+    enabled: bool = False
+    endpoint: Optional[str] = None
+
+
+class StorageEndpointFeatures(BaseModel):
+    admin: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
+    sts: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
+    usage: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
+    metrics: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
+    static_website: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
+
+
 class StorageEndpointBase(BaseModel):
     name: str
     endpoint_url: str
@@ -19,6 +32,7 @@ class StorageEndpointBase(BaseModel):
     supervision_access_key: Optional[str] = None
     supervision_secret_key: Optional[str] = None
     capabilities: Optional[dict[str, bool]] = None
+    features_config: Optional[str] = None
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
     @classmethod
@@ -43,6 +57,7 @@ class StorageEndpointUpdate(BaseModel):
     supervision_access_key: Optional[str] = None
     supervision_secret_key: Optional[str] = None
     capabilities: Optional[dict[str, bool]] = None
+    features_config: Optional[str] = None
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
     @classmethod
@@ -64,6 +79,8 @@ class StorageEndpoint(StorageEndpointBase):
     has_admin_secret: bool = False
     has_supervision_secret: bool = False
     capabilities: dict[str, bool] = Field(default_factory=dict)
+    features_config: Optional[str] = None
+    features: StorageEndpointFeatures = Field(default_factory=StorageEndpointFeatures)
 
     admin_secret_key: Optional[str] = Field(default=None, exclude=True)
     supervision_secret_key: Optional[str] = Field(default=None, exclude=True)

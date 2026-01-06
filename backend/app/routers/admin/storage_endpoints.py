@@ -101,6 +101,33 @@ def update_storage_endpoint(
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
+@router.put("/{endpoint_id}/default", response_model=StorageEndpoint)
+def set_default_storage_endpoint(
+    endpoint_id: int,
+    service: StorageEndpointsService = Depends(get_service),
+    audit_service: AuditService = Depends(get_audit_logger),
+    current_user=Depends(get_current_super_admin),
+) -> StorageEndpoint:
+    try:
+        updated = service.set_default_endpoint(endpoint_id)
+        audit_service.record_action(
+            user=current_user,
+            scope="admin",
+            action="set_default_storage_endpoint",
+            entity_type="storage_endpoint",
+            entity_id=str(endpoint_id),
+            metadata={
+                "endpoint_url": updated.endpoint_url,
+                "provider": updated.provider.value,
+            },
+        )
+        return updated
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if "introuvable" in detail.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
 @router.delete("/{endpoint_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_storage_endpoint(
     endpoint_id: int,

@@ -19,9 +19,11 @@ def get_sns_client(
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
 ):
+    if not endpoint:
+        raise RuntimeError("SNS endpoint is not configured")
     return boto3.client(
         "sns",
-        endpoint_url=endpoint or settings.s3_endpoint,
+        endpoint_url=endpoint,
         aws_access_key_id=access_key or settings.s3_access_key,
         aws_secret_access_key=secret_key or settings.s3_secret_key,
         region_name=settings.s3_region,
@@ -32,8 +34,9 @@ def get_sns_client(
 def list_topics(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> list[dict]:
-    client = get_sns_client(access_key, secret_key)
+    client = get_sns_client(access_key, secret_key, endpoint=endpoint)
     topics: list[dict] = []
     token: Optional[str] = None
     try:
@@ -56,8 +59,9 @@ def create_topic(
     attributes: Optional[dict[str, str]] = None,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> dict:
-    client = get_sns_client(access_key, secret_key)
+    client = get_sns_client(access_key, secret_key, endpoint=endpoint)
     attrs: dict[str, str] = dict(attributes or {})
     try:
         params = {"Name": name}
@@ -73,8 +77,9 @@ def delete_topic(
     topic_arn: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_sns_client(access_key, secret_key)
+    client = get_sns_client(access_key, secret_key, endpoint=endpoint)
     try:
         client.delete_topic(TopicArn=topic_arn)
     except ClientError as exc:
@@ -90,8 +95,9 @@ def get_topic_attributes(
     topic_arn: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> dict:
-    client = get_sns_client(access_key, secret_key)
+    client = get_sns_client(access_key, secret_key, endpoint=endpoint)
     try:
         resp = client.get_topic_attributes(TopicArn=topic_arn)
     except ClientError as exc:
@@ -108,8 +114,9 @@ def get_topic_policy(
     topic_arn: str,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> Optional[dict]:
-    attrs = get_topic_attributes(topic_arn, access_key=access_key, secret_key=secret_key)
+    attrs = get_topic_attributes(topic_arn, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
     raw_policy = attrs.get("Policy")
     if not raw_policy:
         return None
@@ -125,8 +132,9 @@ def set_topic_policy(
     policy: dict,
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
-    client = get_sns_client(access_key, secret_key)
+    client = get_sns_client(access_key, secret_key, endpoint=endpoint)
     try:
         client.set_topic_attributes(
             TopicArn=topic_arn,
@@ -142,10 +150,11 @@ def set_topic_attributes(
     attributes: dict[str, str],
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
     if not attributes:
         return
-    client = get_sns_client(access_key, secret_key)
+    client = get_sns_client(access_key, secret_key, endpoint=endpoint)
     for name, value in attributes.items():
         try:
             client.set_topic_attributes(

@@ -1,11 +1,8 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-import json
 import logging
 from typing import Optional
-from urllib.parse import urlparse
 
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -15,36 +12,15 @@ from app.models.storage_endpoint import (
     StorageEndpointCreate,
     StorageEndpointUpdate,
 )
+from app.utils.s3_endpoint import configured_s3_endpoint
+from app.utils.storage_endpoint_features import (
+    dump_features_config,
+    features_to_capabilities,
+    normalize_features_config,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-DEFAULT_ENDPOINT_CAPABILITIES: dict[str, bool] = {
-    "sts": True,
-    "static_website": True,
-}
-
-
-def normalize_capabilities(value: Optional[object]) -> dict[str, bool]:
-    if value is None:
-        data: dict[str, object] = {}
-    elif isinstance(value, dict):
-        data = value
-    elif isinstance(value, str):
-        try:
-            raw = json.loads(value)
-        except json.JSONDecodeError:
-            raw = {}
-        data = raw if isinstance(raw, dict) else {}
-    else:
-        data = {}
-    normalized: dict[str, bool] = {}
-    for key, raw_value in data.items():
-        if isinstance(raw_value, bool):
-            normalized[str(key)] = raw_value
-    for key, default in DEFAULT_ENDPOINT_CAPABILITIES.items():
-        normalized.setdefault(key, default)
-    return normalized
 
 
 class StorageEndpointsService:
@@ -77,23 +53,36 @@ class StorageEndpointsService:
         except Exception:
             return StorageProvider.CEPH
 
+    def _normalize_features(
+        self,
+        provider: StorageProvider,
+        raw: Optional[str],
+    ) -> tuple[dict[str, dict[str, object]], str]:
+        features = normalize_features_config(provider, raw)
+        return features, dump_features_config(features)
+
     def _serialize(self, endpoint: StorageEndpoint) -> StorageEndpointSchema:
+        provider = self._normalize_provider(endpoint.provider)
+        features, _ = self._normalize_features(provider, endpoint.features_config)
+        capabilities = features_to_capabilities(features)
         return StorageEndpointSchema(
             id=endpoint.id,
             name=endpoint.name,
             endpoint_url=endpoint.endpoint_url,
-            admin_endpoint=endpoint.admin_endpoint,
+            admin_endpoint=features.get("admin", {}).get("endpoint"),
             region=endpoint.region,
-            provider=self._normalize_provider(endpoint.provider),
+            provider=provider,
             admin_access_key=endpoint.admin_access_key,
             supervision_access_key=endpoint.supervision_access_key,
-            capabilities=normalize_capabilities(endpoint.capabilities),
+            capabilities=capabilities,
             is_default=bool(endpoint.is_default),
             is_editable=bool(endpoint.is_editable),
             created_at=endpoint.created_at,
             updated_at=endpoint.updated_at,
             has_admin_secret=bool(endpoint.admin_secret_key),
             has_supervision_secret=bool(endpoint.supervision_secret_key),
+            features_config=endpoint.features_config,
+            features=features,
         )
 
     def _ensure_unique_name(self, name: str, exclude_id: Optional[int] = None) -> None:
@@ -117,10 +106,11 @@ class StorageEndpointsService:
         admin_secret_key: Optional[str],
         supervision_access_key: Optional[str],
         supervision_secret_key: Optional[str],
+        admin_enabled: bool,
     ) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
         if provider == StorageProvider.CEPH:
-            if not admin_access_key or not admin_secret_key:
-                raise ValueError("Les endpoints Ceph nécessitent une access key et une secret key d'admin.")
+            if admin_enabled and (not admin_access_key or not admin_secret_key):
+                raise ValueError("Les endpoints Ceph avec admin activé nécessitent une access key et une secret key d'admin.")
             return admin_access_key, admin_secret_key, supervision_access_key, supervision_secret_key
         # Provider is not Ceph: clear admin/supervision credentials
         return None, None, None, None
@@ -142,14 +132,15 @@ class StorageEndpointsService:
     def create_endpoint(self, payload: StorageEndpointCreate) -> StorageEndpointSchema:
         name = self._normalize_name(payload.name, fallback="Endpoint")
         endpoint_url = self._normalize_url(payload.endpoint_url)
-        admin_endpoint = self._normalize_url(payload.admin_endpoint) or endpoint_url
         region = self._clean_optional(payload.region)
         provider = self._normalize_provider(payload.provider)
         admin_access = self._clean_optional(payload.admin_access_key)
         admin_secret = self._clean_optional(payload.admin_secret_key)
         supervision_access = self._clean_optional(payload.supervision_access_key)
         supervision_secret = self._clean_optional(payload.supervision_secret_key)
-        capabilities = normalize_capabilities(payload.capabilities)
+        features, features_config = self._normalize_features(provider, payload.features_config)
+        capabilities = features_to_capabilities(features)
+        admin_endpoint = features.get("admin", {}).get("endpoint")
 
         if not endpoint_url:
             raise ValueError("L'URL de l'endpoint est requise.")
@@ -161,6 +152,7 @@ class StorageEndpointsService:
             admin_secret,
             supervision_access,
             supervision_secret,
+            bool(features.get("admin", {}).get("enabled")),
         )
 
         entry = StorageEndpoint(
@@ -174,6 +166,7 @@ class StorageEndpointsService:
             supervision_access_key=supervision_access,
             supervision_secret_key=supervision_secret,
             capabilities=capabilities,
+            features_config=features_config,
             is_default=False,
             is_editable=True,
         )
@@ -186,16 +179,11 @@ class StorageEndpointsService:
         endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:
             raise ValueError("Endpoint introuvable")
-        if not endpoint.is_editable or endpoint.is_default:
+        if not endpoint.is_editable:
             raise ValueError("Cet endpoint est protégé et ne peut pas être modifié.")
 
         name = self._normalize_name(payload.name, fallback=endpoint.name) if payload.name is not None else endpoint.name
         endpoint_url = self._normalize_url(payload.endpoint_url) if payload.endpoint_url is not None else endpoint.endpoint_url
-        admin_endpoint = (
-            self._normalize_url(payload.admin_endpoint)
-            if payload.admin_endpoint is not None
-            else endpoint.admin_endpoint or endpoint_url
-        )
         region = self._clean_optional(payload.region) if payload.region is not None else endpoint.region
         provider = self._normalize_provider(payload.provider or endpoint.provider)
         admin_access = (
@@ -218,8 +206,10 @@ class StorageEndpointsService:
             if payload.supervision_secret_key is not None
             else endpoint.supervision_secret_key
         )
-        capabilities_input = payload.capabilities if payload.capabilities is not None else endpoint.capabilities
-        capabilities = normalize_capabilities(capabilities_input)
+        raw_features = payload.features_config if payload.features_config is not None else endpoint.features_config
+        features, features_config = self._normalize_features(provider, raw_features)
+        capabilities = features_to_capabilities(features)
+        admin_endpoint = features.get("admin", {}).get("endpoint")
 
         if not endpoint_url:
             raise ValueError("L'URL de l'endpoint est requise.")
@@ -233,11 +223,12 @@ class StorageEndpointsService:
             admin_secret,
             supervision_access,
             supervision_secret,
+            bool(features.get("admin", {}).get("enabled")),
         )
 
         endpoint.name = name
         endpoint.endpoint_url = endpoint_url
-        endpoint.admin_endpoint = admin_endpoint or endpoint_url
+        endpoint.admin_endpoint = admin_endpoint
         endpoint.region = region
         endpoint.provider = provider.value
         endpoint.admin_access_key = admin_access
@@ -245,6 +236,7 @@ class StorageEndpointsService:
         endpoint.supervision_access_key = supervision_access
         endpoint.supervision_secret_key = supervision_secret
         endpoint.capabilities = capabilities
+        endpoint.features_config = features_config
         self.db.add(endpoint)
         self.db.commit()
         self.db.refresh(endpoint)
@@ -254,7 +246,7 @@ class StorageEndpointsService:
         endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:
             raise ValueError("Endpoint introuvable")
-        if endpoint.is_default or not endpoint.is_editable:
+        if not endpoint.is_editable:
             raise ValueError("Cet endpoint est protégé et ne peut pas être supprimé.")
         linked_accounts = self.db.query(S3Account).filter(S3Account.storage_endpoint_id == endpoint.id).count()
         linked_users = self.db.query(S3User).filter(S3User.storage_endpoint_id == endpoint.id).count()
@@ -265,6 +257,23 @@ class StorageEndpointsService:
         self.db.delete(endpoint)
         self.db.commit()
 
+    def set_default_endpoint(self, endpoint_id: int) -> StorageEndpointSchema:
+        endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
+        if not endpoint:
+            raise ValueError("Endpoint introuvable")
+        if endpoint.is_default:
+            return self._serialize(endpoint)
+        (
+            self.db.query(StorageEndpoint)
+            .filter(StorageEndpoint.is_default.is_(True), StorageEndpoint.id != endpoint.id)
+            .update({StorageEndpoint.is_default: False}, synchronize_session=False)
+        )
+        endpoint.is_default = True
+        self.db.add(endpoint)
+        self.db.commit()
+        self.db.refresh(endpoint)
+        return self._serialize(endpoint)
+
     def _env_endpoint_name(self) -> str:
         candidate = "Default"
         if not self.db.query(StorageEndpoint).filter(StorageEndpoint.name == candidate).first():
@@ -272,9 +281,12 @@ class StorageEndpointsService:
         suffix = self.db.query(StorageEndpoint).count() + 1
         return f"{candidate}-{suffix}"
 
-    def ensure_default_endpoint(self) -> StorageEndpointSchema:
-        endpoint_url = self._normalize_url(settings.s3_endpoint)
-        admin_endpoint = self._normalize_url(settings.rgw_admin_endpoint) or endpoint_url
+    def ensure_default_endpoint(self) -> Optional[StorageEndpointSchema]:
+        endpoint_url = configured_s3_endpoint()
+        if not endpoint_url:
+            return None
+        if self.db.query(StorageEndpoint).count() > 0:
+            return None
         region = settings.s3_region
         admin_access = settings.rgw_admin_access_key or settings.s3_access_key
         admin_secret = settings.rgw_admin_secret_key or settings.s3_secret_key
@@ -283,70 +295,14 @@ class StorageEndpointsService:
         provider = (
             StorageProvider.CEPH if admin_access and admin_secret else StorageProvider.OTHER
         )
-        capabilities = normalize_capabilities(None)
-
-        existing = (
-            self.db.query(StorageEndpoint)
-            .filter(
-                or_(
-                    StorageEndpoint.is_default.is_(True),
-                    StorageEndpoint.endpoint_url == endpoint_url,
-                )
-            )
-            .first()
-        )
-
+        features, features_config = self._normalize_features(provider, settings.s3_endpoint_features)
+        capabilities = features_to_capabilities(features)
+        admin_endpoint = features.get("admin", {}).get("endpoint")
         name = self._env_endpoint_name()
-        if existing:
-            updated = False
-            desired_name = name if existing.is_default else existing.name
-            if existing.name != desired_name:
-                existing.name = desired_name
-                updated = True
-            desired_admin_endpoint = admin_endpoint or endpoint_url
-            if existing.endpoint_url != endpoint_url:
-                existing.endpoint_url = endpoint_url
-                updated = True
-            if existing.admin_endpoint != desired_admin_endpoint:
-                existing.admin_endpoint = desired_admin_endpoint
-                updated = True
-            if existing.region != region:
-                existing.region = region
-                updated = True
-            if existing.provider != provider.value:
-                existing.provider = provider.value
-                updated = True
-            if existing.admin_access_key != admin_access:
-                existing.admin_access_key = admin_access
-                updated = True
-            if existing.admin_secret_key != admin_secret:
-                existing.admin_secret_key = admin_secret
-                updated = True
-            if existing.supervision_access_key != supervision_access:
-                existing.supervision_access_key = supervision_access
-                updated = True
-            if existing.supervision_secret_key != supervision_secret:
-                existing.supervision_secret_key = supervision_secret
-                updated = True
-            if normalize_capabilities(existing.capabilities) != capabilities:
-                existing.capabilities = capabilities
-                updated = True
-            if not existing.is_default:
-                existing.is_default = True
-                updated = True
-            if existing.is_editable:
-                existing.is_editable = False
-                updated = True
-            if updated:
-                self.db.add(existing)
-                self.db.commit()
-                self.db.refresh(existing)
-            return self._serialize(existing)
-
         entry = StorageEndpoint(
             name=name,
             endpoint_url=endpoint_url,
-            admin_endpoint=admin_endpoint or endpoint_url,
+            admin_endpoint=admin_endpoint,
             region=region,
             provider=provider.value,
             admin_access_key=admin_access,
@@ -354,8 +310,9 @@ class StorageEndpointsService:
             supervision_access_key=supervision_access,
             supervision_secret_key=supervision_secret,
             capabilities=capabilities,
+            features_config=features_config,
             is_default=True,
-            is_editable=False,
+            is_editable=True,
         )
         self.db.add(entry)
         self.db.commit()

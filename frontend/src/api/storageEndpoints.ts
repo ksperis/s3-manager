@@ -6,6 +6,19 @@ import client from "./client";
 
 export type StorageProvider = "ceph" | "other";
 
+export type StorageEndpointFeature = {
+  enabled: boolean;
+  endpoint?: string | null;
+};
+
+export type StorageEndpointFeatures = {
+  admin: StorageEndpointFeature;
+  sts: StorageEndpointFeature;
+  usage: StorageEndpointFeature;
+  metrics: StorageEndpointFeature;
+  static_website: StorageEndpointFeature;
+};
+
 export type StorageEndpoint = {
   id: number;
   name: string;
@@ -18,6 +31,8 @@ export type StorageEndpoint = {
   supervision_access_key?: string | null;
   has_supervision_secret: boolean;
   capabilities?: Record<string, boolean> | null;
+  features_config?: string | null;
+  features?: StorageEndpointFeatures;
   is_default: boolean;
   is_editable: boolean;
   created_at: string;
@@ -34,7 +49,7 @@ export type StorageEndpointPayload = {
   admin_secret_key?: string | null;
   supervision_access_key?: string | null;
   supervision_secret_key?: string | null;
-  capabilities?: Record<string, boolean> | null;
+  features_config?: string | null;
 };
 
 export async function listStorageEndpoints(): Promise<StorageEndpoint[]> {
@@ -52,6 +67,11 @@ export async function updateStorageEndpoint(
   payload: StorageEndpointPayload
 ): Promise<StorageEndpoint> {
   const { data } = await client.put<StorageEndpoint>(`/admin/storage-endpoints/${id}`, payload);
+  return data;
+}
+
+export async function setDefaultStorageEndpoint(id: number): Promise<StorageEndpoint> {
+  const { data } = await client.put<StorageEndpoint>(`/admin/storage-endpoints/${id}/default`);
   return data;
 }
 

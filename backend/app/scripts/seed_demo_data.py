@@ -24,6 +24,7 @@ from app.services.rgw_admin import get_rgw_admin_client
 from app.services.rgw_iam import get_iam_service
 from app.services import s3_client
 from app.models.iam import AccessKey as IAMAccessKey
+from app.utils.s3_endpoint import configured_s3_endpoint, resolve_s3_endpoint
 
 try:
     import yaml
@@ -439,7 +440,10 @@ def ensure_iam_user_with_key(account: S3Account, iam_username: str) -> IAMAccess
     access_key, secret_key = account.effective_rgw_credentials()
     if not access_key or not secret_key:
         raise RuntimeError(f"Missing root keys for account {account.name}")
-    iam_service = get_iam_service(access_key, secret_key)
+    endpoint = resolve_s3_endpoint(account)
+    if not endpoint:
+        raise RuntimeError(f"No endpoint configured for account {account.name}")
+    iam_service = get_iam_service(access_key, secret_key, endpoint=endpoint)
     key: Optional[IAMAccessKey] = None
     try:
         _, key = iam_service.create_user(iam_username, create_key=True)
@@ -473,6 +477,10 @@ def create_account_data(
     if not account:
         logger.error("Unable to load account %s after creation", plan.name)
         return
+    endpoint = resolve_s3_endpoint(account)
+    if not endpoint:
+        logger.error("No endpoint configured for account %s", plan.name)
+        return
     logger.info("Account ready: %s (rgw_id=%s)", account.name, account.rgw_account_id or account.id)
     iam_keys: dict[str, IAMAccessKey] = {}
 
@@ -489,7 +497,7 @@ def create_account_data(
                 return None, None
         if not key or not key.access_key_id or not key.secret_access_key:
             return None, None
-        return key, s3_client.get_s3_client(key.access_key_id, key.secret_access_key)
+        return key, s3_client.get_s3_client(key.access_key_id, key.secret_access_key, endpoint=endpoint)
 
     for bucket_plan in plan.buckets:
         iam_user_name = bucket_plan.iam_user or plan.iam_user or f"{slugify(plan.name)}-svc"
@@ -497,7 +505,12 @@ def create_account_data(
         bucket_ready = True
         try:
             if bucket_client and iam_key:
-                s3_client.create_bucket(bucket_plan.name, access_key=iam_key.access_key_id, secret_key=iam_key.secret_access_key)
+                s3_client.create_bucket(
+                    bucket_plan.name,
+                    access_key=iam_key.access_key_id,
+                    secret_key=iam_key.secret_access_key,
+                    endpoint=endpoint,
+                )
             else:
                 buckets_service.create_bucket(bucket_plan.name, account)
             logger.info("  created bucket %s", bucket_plan.name)
@@ -589,9 +602,12 @@ def main() -> None:
         random.seed(args.seed)
     config = load_yaml_config(args.config)
     settings = get_settings()
+    endpoint = configured_s3_endpoint()
+    if not endpoint:
+        raise SystemExit("S3_ENDPOINT is required to seed demo data.")
     logger.info(
         "Using endpoint %s with database %s",
-        settings.s3_endpoint,
+        endpoint,
         settings.database_url,
     )
     init_db(engine, SessionLocal)
@@ -612,6 +628,7 @@ def main() -> None:
             admin_client = get_rgw_admin_client(
                 access_key=admin_user.rgw_access_key,
                 secret_key=admin_user.rgw_secret_key,
+                endpoint=endpoint,
             )
             logger.info("Using RGW admin credentials from ui-admin %s", admin_user.email)
         accounts_service = get_s3_accounts_service(db, rgw_admin_client=admin_client)

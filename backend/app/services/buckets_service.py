@@ -31,6 +31,7 @@ from app.utils.rgw import (
     get_supervision_credentials,
 )
 from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 
 logger = logging.getLogger(__name__)
@@ -45,12 +46,18 @@ class BucketsService:
         creds = get_supervision_credentials(account)
         if not creds or not endpoint:
             raise RuntimeError("Supervision credentials are not configured for this endpoint")
+        flags = resolve_feature_flags(endpoint)
+        if not flags.usage_enabled:
+            raise RuntimeError("Usage metrics are disabled for this endpoint")
         access_key, secret_key = creds
         try:
+            admin_endpoint = resolve_admin_endpoint(endpoint)
+            if not admin_endpoint:
+                raise RuntimeError("Admin endpoint is not configured for this endpoint")
             return get_rgw_admin_client(
                 access_key=access_key,
                 secret_key=secret_key,
-                endpoint=endpoint.admin_endpoint or endpoint.endpoint_url,
+                endpoint=admin_endpoint,
                 region=endpoint.region,
             )
         except RGWAdminError as exc:

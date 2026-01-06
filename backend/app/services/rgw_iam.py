@@ -14,9 +14,11 @@ settings = get_settings()
 
 
 def get_iam_client(access_key: str, secret_key: str, endpoint: Optional[str] = None, region: Optional[str] = None):
+    if not endpoint:
+        raise RuntimeError("IAM endpoint is not configured")
     return boto3.client(
         "iam",
-        endpoint_url=endpoint or settings.s3_endpoint,
+        endpoint_url=endpoint,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         config=Config(signature_version="s3v4"),
