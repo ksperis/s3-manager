@@ -26,8 +26,6 @@ type FormState = {
   supervision_access_key: string;
   supervision_secret_key: string;
   features: FeaturesState;
-  features_config: string;
-  yaml_dirty: boolean;
 };
 
 type FeatureKey = "admin" | "sts" | "usage" | "metrics" | "static_website";
@@ -100,8 +98,6 @@ function createEmptyForm(): FormState {
     supervision_access_key: "",
     supervision_secret_key: "",
     features,
-    features_config: buildFeaturesYaml(features),
-    yaml_dirty: false,
   };
 }
 
@@ -247,8 +243,6 @@ export default function StorageEndpointsPage() {
           ...prev,
           provider,
           features: constrained,
-          features_config: buildFeaturesYaml(constrained),
-          yaml_dirty: false,
         };
       });
     },
@@ -266,8 +260,6 @@ export default function StorageEndpointsPage() {
         supervision_access_key: provider === "ceph" ? prev.supervision_access_key : "",
         supervision_secret_key: provider === "ceph" ? prev.supervision_secret_key : "",
         features: constrained,
-        features_config: buildFeaturesYaml(constrained),
-        yaml_dirty: false,
       };
     });
   };
@@ -279,10 +271,6 @@ export default function StorageEndpointsPage() {
 
   const startEdit = (endpoint: StorageEndpoint) => {
     const features = resolveFeatureState(endpoint, endpoint.provider);
-    const featuresConfig =
-      typeof endpoint.features_config === "string" && endpoint.features_config.trim()
-        ? endpoint.features_config
-        : buildFeaturesYaml(features);
     setEditingId(endpoint.id);
     setForm({
       name: endpoint.name ?? "",
@@ -294,8 +282,6 @@ export default function StorageEndpointsPage() {
       supervision_access_key: endpoint.supervision_access_key ?? "",
       supervision_secret_key: "",
       features,
-      features_config: featuresConfig,
-      yaml_dirty: false,
     });
     setFormError(null);
     setShowForm(true);
@@ -345,7 +331,8 @@ export default function StorageEndpointsPage() {
     const trimmedAdminSecret = form.admin_secret_key.trim();
     const trimmedSupervisionAccess = form.supervision_access_key.trim();
     const trimmedSupervisionSecret = form.supervision_secret_key.trim();
-    const trimmedFeaturesConfig = form.features_config.trim();
+    const constrainedFeatures = applyFeatureConstraints(form.features, form.provider);
+    const featuresConfig = buildFeaturesYaml(constrainedFeatures);
 
     if (!trimmedName) {
       setFormError("Storage name is required.");
@@ -355,21 +342,17 @@ export default function StorageEndpointsPage() {
       setFormError("Endpoint URL is required.");
       return null;
     }
-    if (!trimmedFeaturesConfig) {
-      setFormError("Features YAML is required.");
-      return null;
-    }
 
     const payload: StorageEndpointPayload = {
       name: trimmedName,
       endpoint_url: trimmedEndpoint,
       region: trimmedRegion || null,
       provider: form.provider,
-      features_config: trimmedFeaturesConfig,
+      features_config: featuresConfig,
     };
 
     if (form.provider === "ceph") {
-      const adminEnabled = form.features.admin.enabled;
+      const adminEnabled = constrainedFeatures.admin.enabled;
       if (editingId) {
         if (trimmedAdminAccess) payload.admin_access_key = trimmedAdminAccess;
         if (trimmedAdminSecret) payload.admin_secret_key = trimmedAdminSecret;
@@ -380,7 +363,7 @@ export default function StorageEndpointsPage() {
         payload.admin_secret_key = trimmedAdminSecret || null;
         payload.supervision_access_key = trimmedSupervisionAccess || null;
         payload.supervision_secret_key = trimmedSupervisionSecret || null;
-        if (!form.yaml_dirty && adminEnabled && (!payload.admin_access_key || !payload.admin_secret_key)) {
+        if (adminEnabled && (!payload.admin_access_key || !payload.admin_secret_key)) {
           setFormError("Admin credentials are required for a Ceph endpoint.");
           return null;
         }
@@ -875,17 +858,6 @@ export default function StorageEndpointsPage() {
                 </div>
               </div>
 
-              <label className="space-y-2 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                Features YAML
-                <textarea
-                  value={form.features_config}
-                  onChange={(e) => setForm((prev) => ({ ...prev, features_config: e.target.value, yaml_dirty: true }))}
-                  className="min-h-[160px] w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs text-slate-800 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                />
-                <p className="ui-caption font-normal text-slate-500 dark:text-slate-400">
-                  Toggles regenerate the YAML. Manual edits override the toggles until you flip a switch again.
-                </p>
-              </label>
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">
