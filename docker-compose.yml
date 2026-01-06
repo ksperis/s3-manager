@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: backend
+    env_file:
+      - backend/.env.example
+    environment:
+      CORS_ORIGINS: '["http://localhost:8080"]'
+      DATABASE_URL: sqlite:////data/app.db
+    volumes:
+      - backend-data:/data
+    ports:
+      - "8000:8000"
+  frontend:
+    build:
+      context: frontend
+      args:
+        VITE_API_URL: http://localhost:8000/api
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  backend-data:

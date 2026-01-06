@@ -267,6 +267,53 @@ Note: `backend/tests_ceph_functional` requires a configured Ceph RGW environment
 - Frontend served via Nginx (`frontend/nginx.conf`)
 - Suitable for lab and development environments
 
+### Container images (GHCR)
+
+Public images are published to:
+- `ghcr.io/ksperis/s3-manager-backend`
+- `ghcr.io/ksperis/s3-manager-frontend`
+
+Set the package visibility to **Public** in GHCR after the first push.
+
+### Versioning strategy
+
+Use git tags in `vMAJOR.MINOR.PATCH` format:
+- Tag `v1.2.3` publishes `1.2.3`, `1.2`, and `latest`
+- `main` publishes `edge` and the commit `sha` tag
+
+The workflow is defined in `.github/workflows/publish-ghcr.yml`.
+
+### Docker Compose (quick start)
+
+```bash
+docker compose up --build
+```
+
+Default endpoints:
+- Frontend: http://localhost:8080
+- API: http://localhost:8000/api
+
+### Helm (Kubernetes)
+
+```bash
+helm install s3-manager helm/s3-manager \\
+  --set image.backend.repository=ghcr.io/ksperis/s3-manager-backend \\
+  --set image.frontend.repository=ghcr.io/ksperis/s3-manager-frontend \\
+  --set image.backend.tag=1.2.3 \\
+  --set image.frontend.tag=1.2.3
+```
+
+The chart deploys an internal PostgreSQL instance by default.
+To disable it and provide your own database, set:
+
+```bash
+helm upgrade --install s3-manager helm/s3-manager \\
+  --set postgresql.enabled=false \\
+  --set backend.env.DATABASE_URL=postgresql://user:pass@host:5432/db
+```
+
+For ingress-based deployments, build the frontend with `VITE_API_URL=/api`.
+
 ---
 
 ## Compatibility

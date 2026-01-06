@@ -1,0 +1,60 @@
+image:
+  backend:
+    repository: ghcr.io/ksperis/s3-manager-backend
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: ghcr.io/ksperis/s3-manager-frontend
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+backend:
+  replicas: 1
+  env:
+    API_V1_PREFIX: /api
+    CORS_ORIGINS: '["http://localhost:8080"]'
+  extraEnv: []
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+
+frontend:
+  replicas: 1
+  env: {}
+  extraEnv: []
+
+service:
+  backend:
+    type: ClusterIP
+    port: 8000
+  frontend:
+    type: ClusterIP
+    port: 80
+
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  auth:
+    username: s3manager
+    password: s3manager
+    database: s3manager
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: s3-manager.local
+  tls: []
+
+nameOverride: ""
+fullnameOverride: ""

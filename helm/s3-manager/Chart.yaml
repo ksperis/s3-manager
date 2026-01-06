@@ -1,0 +1,6 @@
+apiVersion: v2
+name: s3-manager
+description: s3-manager backend and frontend
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
