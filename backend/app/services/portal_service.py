@@ -169,7 +169,7 @@ class PortalService:
         try:
             return get_supervision_rgw_client(endpoint)
         except ValueError as exc:
-            raise RuntimeError("Les identifiants de supervision de l'endpoint sont manquants") from exc
+            raise RuntimeError("Supervision credentials are missing for this endpoint.") from exc
 
     def _admin_bucket_list(self, account: S3Account, admin: Optional[RGWAdminClient] = None) -> list[dict]:
         uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)

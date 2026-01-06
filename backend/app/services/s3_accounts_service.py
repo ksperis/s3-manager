@@ -76,9 +76,9 @@ class S3AccountsService:
         if storage_endpoint_id:
             endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == storage_endpoint_id).first()
             if not endpoint:
-                raise ValueError("Storage endpoint introuvable.")
+                raise ValueError("Storage endpoint not found.")
             if require_ceph and StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-                raise ValueError("Cet endpoint n'est pas de type Ceph.")
+                raise ValueError("This endpoint is not a Ceph endpoint.")
             return endpoint
         # Ensure default exists, then fetch it
         self.storage_endpoints.ensure_default_endpoint()
@@ -89,21 +89,21 @@ class S3AccountsService:
             .first()
         )
         if not endpoint:
-            raise ValueError("Aucun endpoint de stockage par défaut n'est disponible.")
+            raise ValueError("No default storage endpoint is available.")
         if require_ceph and StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-            raise ValueError("Aucun endpoint Ceph disponible.")
+            raise ValueError("No Ceph endpoint available.")
         return endpoint
 
     def _admin_for_endpoint(self, endpoint: StorageEndpoint, allow_missing: bool = False) -> Optional[RGWAdminClient]:
         if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
             if allow_missing:
                 return None
-            raise ValueError("Cet endpoint ne supporte pas les opérations Ceph admin.")
+            raise ValueError("This endpoint does not support Ceph admin operations.")
         admin_endpoint = resolve_admin_endpoint(endpoint)
         if not admin_endpoint:
             if allow_missing:
                 return None
-            raise ValueError("Les opérations admin sont désactivées pour cet endpoint.")
+            raise ValueError("Admin operations are disabled for this endpoint.")
         try:
             return get_rgw_admin_client(
                 access_key=endpoint.admin_access_key,
@@ -687,7 +687,7 @@ class S3AccountsService:
         endpoint = self._resolve_storage_endpoint(payload.storage_endpoint_id, require_ceph=True)
         admin = self._admin_for_endpoint(endpoint)
         if not admin:
-            raise ValueError("Impossible de créer le compte: credentials RGW manquants pour l'endpoint sélectionné.")
+            raise ValueError("Unable to create account: RGW credentials are missing for the selected endpoint.")
 
         rgw_account_id = self._generate_account_id()
         # Create account in RGW
@@ -871,7 +871,7 @@ class S3AccountsService:
             rgw_id = account.rgw_account_id or str(account.id)
             try:
                 if not admin:
-                    raise ValueError("Impossible de supprimer le compte RGW: credentials admin manquants pour l'endpoint.")
+                    raise ValueError("Unable to delete RGW account: admin credentials are missing for this endpoint.")
                 admin.delete_account(rgw_id)
             except RGWAdminError as exc:
                 logger.warning("Unable to delete RGW account %s: %s", rgw_id, exc)

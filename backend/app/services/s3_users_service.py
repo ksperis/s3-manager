@@ -43,11 +43,11 @@ class S3UsersService:
         if storage_endpoint_id:
             endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == storage_endpoint_id).first()
             if not endpoint:
-                raise ValueError("Storage endpoint introuvable.")
+                raise ValueError("Storage endpoint not found.")
             if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-                raise ValueError("Seuls les endpoints Ceph sont autorisés pour les S3 users.")
+                raise ValueError("Only Ceph endpoints are allowed for S3 users.")
             if not resolve_feature_flags(endpoint).admin_enabled:
-                raise ValueError("Les opérations admin sont désactivées pour cet endpoint.")
+                raise ValueError("Admin operations are disabled for this endpoint.")
             return endpoint
         self.storage_endpoints.ensure_default_endpoint()
         endpoint = (
@@ -57,18 +57,18 @@ class S3UsersService:
             .first()
         )
         if not endpoint:
-            raise ValueError("Aucun endpoint de stockage disponible.")
+            raise ValueError("No storage endpoint available.")
         if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
-            raise ValueError("Aucun endpoint Ceph disponible.")
+            raise ValueError("No Ceph endpoint available.")
         if not resolve_feature_flags(endpoint).admin_enabled:
-            raise ValueError("Les opérations admin sont désactivées pour cet endpoint.")
+            raise ValueError("Admin operations are disabled for this endpoint.")
         return endpoint
 
     def _admin_for_endpoint(self, endpoint: StorageEndpoint) -> RGWAdminClient:
         try:
             admin_endpoint = resolve_admin_endpoint(endpoint)
             if not admin_endpoint:
-                raise ValueError("Les opérations admin sont désactivées pour cet endpoint.")
+                raise ValueError("Admin operations are disabled for this endpoint.")
             return get_rgw_admin_client(
                 access_key=endpoint.admin_access_key,
                 secret_key=endpoint.admin_secret_key,
@@ -76,7 +76,7 @@ class S3UsersService:
                 region=endpoint.region,
             )
         except Exception as exc:
-            raise ValueError(f"Impossible de construire le client admin pour {endpoint.name}: {exc}") from exc
+            raise ValueError(f"Unable to build admin client for {endpoint.name}: {exc}") from exc
 
     def _admin_for_user(self, s3_user: S3UserModel) -> RGWAdminClient:
         endpoint = self._resolve_endpoint(s3_user.storage_endpoint_id)

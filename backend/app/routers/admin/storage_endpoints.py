@@ -97,7 +97,12 @@ def update_storage_endpoint(
         return updated
     except ValueError as exc:
         detail = str(exc)
-        status_code = status.HTTP_404_NOT_FOUND if "introuvable" in detail.lower() else status.HTTP_400_BAD_REQUEST
+        lowered = detail.lower()
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if "not found" in lowered or "introuvable" in lowered
+            else status.HTTP_400_BAD_REQUEST
+        )
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
@@ -124,7 +129,12 @@ def set_default_storage_endpoint(
         return updated
     except ValueError as exc:
         detail = str(exc)
-        status_code = status.HTTP_404_NOT_FOUND if "introuvable" in detail.lower() else status.HTTP_400_BAD_REQUEST
+        lowered = detail.lower()
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if "not found" in lowered or "introuvable" in lowered
+            else status.HTTP_400_BAD_REQUEST
+        )
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
@@ -146,5 +156,10 @@ def delete_storage_endpoint(
         )
     except ValueError as exc:
         detail = str(exc)
-        status_code = status.HTTP_404_NOT_FOUND if "introuvable" in detail.lower() else status.HTTP_400_BAD_REQUEST
+        lowered = detail.lower()
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if "not found" in lowered or "introuvable" in lowered
+            else status.HTTP_400_BAD_REQUEST
+        )
         raise HTTPException(status_code=status_code, detail=detail) from exc

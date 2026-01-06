@@ -14,6 +14,17 @@ The backend uses SQLite by default (`app.db`) and auto-seeds a super-admin:
 - email: `admin@example.com`
 - password: `changeme`
 
+## Migrations (Alembic)
+
+Schema migrations are managed by Alembic and are applied automatically at startup.
+
+Common commands (from `backend/`):
+
+```bash
+alembic upgrade head
+alembic revision --autogenerate -m "describe change"
+```
+
 ## Installer Python 3.12 avec pyenv (si absent des dépôts)
 
 ```bash

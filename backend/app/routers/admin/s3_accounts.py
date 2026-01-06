@@ -36,6 +36,12 @@ def get_admin_accounts_service(
 ) -> S3AccountsService:
     return get_s3_accounts_service(db, rgw_admin_client=rgw_admin_client)
 
+def get_admin_accounts_listing_service(
+    db: Session = Depends(get_db),
+    rgw_admin_client=Depends(get_optional_super_admin_rgw_client),
+) -> S3AccountsService:
+    return get_s3_accounts_service(db, rgw_admin_client=rgw_admin_client, allow_missing_admin=True)
+
 
 def get_admin_accounts_import_service(
     db: Session = Depends(get_db),
@@ -51,7 +57,7 @@ def list_accounts(
     search: Optional[str] = Query(None),
     sort_by: str = Query("name"),
     sort_dir: str = Query("asc"),
-    service: S3AccountsService = Depends(get_admin_accounts_service),
+    service: S3AccountsService = Depends(get_admin_accounts_listing_service),
     _: dict = Depends(get_current_super_admin),
 ) -> PaginatedS3AccountsResponse:
     accounts = service.list_accounts(include_usage_stats=False)
@@ -87,7 +93,7 @@ def list_accounts(
 
 @router.get("/minimal", response_model=list[S3AccountSummary])
 def list_accounts_minimal(
-    service: S3AccountsService = Depends(get_admin_accounts_service),
+    service: S3AccountsService = Depends(get_admin_accounts_listing_service),
     _: dict = Depends(get_current_super_admin),
 ) -> list[S3AccountSummary]:
     return service.list_accounts_minimal()

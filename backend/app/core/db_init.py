@@ -2,17 +2,32 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import logging
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import get_password_hash
-from app.db_models import Base, StorageEndpoint, StorageProvider, User, UserRole
+from app.db_models import StorageEndpoint, StorageProvider, User, UserRole
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.utils.storage_endpoint_features import dump_features_config, normalize_legacy_capabilities
 
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+def _alembic_config() -> Config:
+    base_dir = Path(__file__).resolve().parents[2]
+    config = Config(str(base_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(base_dir / "alembic"))
+    config.set_main_option("sqlalchemy.url", settings.database_url)
+    config.attributes["configure_logger"] = False
+    return config
 
 
 def _ensure_storage_endpoint_features(engine, db: Session) -> None:
@@ -57,7 +72,7 @@ def _ensure_storage_endpoint_features(engine, db: Session) -> None:
 
 
 def init_db(engine, session_factory) -> None:
-    Base.metadata.create_all(bind=engine)
+    command.upgrade(_alembic_config(), "head")
     # Seed super-admin if missing
     db: Session = session_factory()
     try:

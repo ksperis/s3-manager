@@ -354,10 +354,20 @@ export default function StorageEndpointsPage() {
     if (form.provider === "ceph") {
       const adminEnabled = constrainedFeatures.admin.enabled;
       if (editingId) {
-        if (trimmedAdminAccess) payload.admin_access_key = trimmedAdminAccess;
-        if (trimmedAdminSecret) payload.admin_secret_key = trimmedAdminSecret;
-        if (trimmedSupervisionAccess) payload.supervision_access_key = trimmedSupervisionAccess;
-        if (trimmedSupervisionSecret) payload.supervision_secret_key = trimmedSupervisionSecret;
+        if (trimmedAdminAccess) {
+          payload.admin_access_key = trimmedAdminAccess;
+          if (trimmedAdminSecret) payload.admin_secret_key = trimmedAdminSecret;
+        } else {
+          payload.admin_access_key = null;
+          payload.admin_secret_key = null;
+        }
+        if (trimmedSupervisionAccess) {
+          payload.supervision_access_key = trimmedSupervisionAccess;
+          if (trimmedSupervisionSecret) payload.supervision_secret_key = trimmedSupervisionSecret;
+        } else {
+          payload.supervision_access_key = null;
+          payload.supervision_secret_key = null;
+        }
       } else {
         payload.admin_access_key = trimmedAdminAccess || null;
         payload.admin_secret_key = trimmedAdminSecret || null;
@@ -692,7 +702,7 @@ export default function StorageEndpointsPage() {
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                    Admin
+                    Admin Ops
                     <div className="grid gap-3">
                       <input
                         type="text"
@@ -716,7 +726,7 @@ export default function StorageEndpointsPage() {
                     </p>
                   </div>
                   <div className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
-                    Supervision (optional)
+                    Supervision Ops
                     <div className="grid gap-3">
                       <input
                         type="text"
