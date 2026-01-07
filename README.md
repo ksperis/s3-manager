@@ -4,9 +4,6 @@
 **S3-compatible object storage** such as **Ceph RGW**, **MinIO**, and other
 implementations exposing S3 and IAM semantics.
 
-The project focuses on **transparency, IAM alignment, and auditability**,
-while providing a **modern web UI with enterprise‑friendly authentication**.
-
 ---
 
 ## Project Status
@@ -26,12 +23,7 @@ Feedback and contributions are welcome.
 - IAM remains the **source of truth** for storage authorization
 - UI authentication is **decoupled** from storage credentials
 - All storage changes result in **standard S3 / IAM resources**
-- No hidden or proprietary authorization model for S3
-- Clear separation between:
-  - configuration exploration
-  - data access
-  - managed workflows
-- Designed primarily for **Ceph RGW (Squid and later)**
+- Designed primarily for **Ceph RGW (Tentacle and later)**
 
 ---
 
@@ -39,7 +31,7 @@ Feedback and contributions are welcome.
 
 ### UI Authentication
 
-Authentication to the s3-manager interface is **identity-based**, not storage-based.
+L'authentification sur l'interface s3-manager est basé sur l'identité.
 
 Supported mechanisms include:
 - Enterprise OIDC (SSO)
@@ -49,8 +41,9 @@ This allows users to access the interface **without ever handling S3 access keys
 
 A single UI user may manage:
 - multiple S3 accounts
-- multiple storage backends
-- multiple RGW endpoints
+- multiple storage/RGW backends
+
+Une authentification basée sur access_key/secret_key permet néanmoins d'accéder aux vues management et browser (option à activer).
 
 ### Storage Authorization
 
@@ -71,7 +64,7 @@ s3-manager exposes four distinct application surfaces, each with a specific goal
 |--------|---------|
 | **Admin**   | UI configuration and platform governance |
 | **Manager** | IAM-aligned configuration exploration |
-| **Browser** | Direct S3 object access (data plane) |
+| **Browser** | Direct S3 object access |
 | **Portal**  | Managed and simplified administration |
 
 Each surface is described in detail below.
@@ -132,7 +125,7 @@ It represents the **data plane** of the platform.
 - Object listing with pagination
 - Object metadata and tags inspection
 - Versioned objects support
-- Multipart upload visibility
+- Multipart upload
 - Upload and download using **presigned URLs**
 - Drag-and-drop uploads from the browser
 
@@ -179,11 +172,6 @@ Characteristics:
 
 In some cases, portal workflows may rely on **controlled privilege elevation**
 (e.g. bucket creation on behalf of a user).
-
-Such elevation must always be:
-- explicit
-- auditable
-- documented
 
 ![Portal](docs/screenshots/portal.png)
 
@@ -275,7 +263,6 @@ Public images are published to:
 - `ghcr.io/ksperis/s3-manager-backend`
 - `ghcr.io/ksperis/s3-manager-frontend`
 
-Set the package visibility to **Public** in GHCR after the first push.
 
 ### Versioning strategy
 
@@ -330,7 +317,7 @@ For ingress-based deployments, build the frontend with `VITE_API_URL=/api`.
 
 ## Compatibility
 
-- **Ceph RGW** (Squid and later)
+- **Ceph RGW** (Tentacle and later)
 - S3-compatible object storage
 - Partial AWS S3 support (feature-dependent)
 
