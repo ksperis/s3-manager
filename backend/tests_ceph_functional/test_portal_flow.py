@@ -124,11 +124,17 @@ def _assign_user_to_account(
     *,
     user_id: int,
     account_id: int,
-    account_role: str,
+    portal_role_key: str,
+    manager_root_access: bool = False,
 ) -> None:
     admin_session.post(
         f"/admin/users/{user_id}/assign-account",
-        json={"account_id": account_id, "account_root": False, "account_role": account_role},
+        json={
+            "account_id": account_id,
+            "account_root": False,
+            "manager_root_access": manager_root_access,
+            "portal_role_key": portal_role_key,
+        },
         expected_status=200,
     )
 
@@ -172,8 +178,8 @@ def test_portal_multi_account_context_and_rbac(
     )
     actor_id = int(actor["id"])
 
-    _assign_user_to_account(super_admin_session, user_id=actor_id, account_id=account1["__account_id"], account_role="portal_user")
-    _assign_user_to_account(super_admin_session, user_id=actor_id, account_id=account2["__account_id"], account_role="portal_manager")
+    _assign_user_to_account(super_admin_session, user_id=actor_id, account_id=account1["__account_id"], portal_role_key="Viewer")
+    _assign_user_to_account(super_admin_session, user_id=actor_id, account_id=account2["__account_id"], portal_role_key="AccountAdmin")
 
     actor_session = backend_authenticator.login(actor["email"], actor["__password"])
 
@@ -231,7 +237,7 @@ def test_portal_integrated_access_sts_and_presigned(
         role="ui_user",
     )
     actor_id = int(actor["id"])
-    _assign_user_to_account(super_admin_session, user_id=actor_id, account_id=account_id, account_role="portal_manager")
+    _assign_user_to_account(super_admin_session, user_id=actor_id, account_id=account_id, portal_role_key="AccountAdmin")
     actor_session = backend_authenticator.login(actor["email"], actor["__password"])
 
     bucket_name = f"{prefix}-bucket"
@@ -378,7 +384,7 @@ def test_portal_external_access_packages_and_bucket_provisioning(
         role="ui_user",
     )
     account_admin_id = int(account_admin["id"])
-    _assign_user_to_account(super_admin_session, user_id=account_admin_id, account_id=account_id, account_role="portal_manager")
+    _assign_user_to_account(super_admin_session, user_id=account_admin_id, account_id=account_id, portal_role_key="AccountAdmin")
     account_admin_session = backend_authenticator.login(account_admin["email"], account_admin["__password"])
 
     delegated = _create_user(
@@ -389,7 +395,7 @@ def test_portal_external_access_packages_and_bucket_provisioning(
         role="ui_user",
     )
     delegated_id = int(delegated["id"])
-    _assign_user_to_account(super_admin_session, user_id=delegated_id, account_id=account_id, account_role="portal_user")
+    _assign_user_to_account(super_admin_session, user_id=delegated_id, account_id=account_id, portal_role_key="Viewer")
 
     with _temporary_endpoint_update(super_admin_session, endpoint_id, allow_payload):
         # Promote delegated user to AccessAdmin

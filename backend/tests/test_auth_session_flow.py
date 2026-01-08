@@ -4,7 +4,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from app.core.security import get_password_hash
-from app.db_models import AccountRole, S3Account, UserS3Account, User, UserRole
+from app.db_models import S3Account, UserS3Account, User, UserRole
 from app.services import session_service as session_module
 
 
@@ -123,7 +123,7 @@ def _setup_account(db_session) -> S3Account:
                 user_id=manager.id,
                 account_id=account.id,
                 is_root=True,
-                account_role=AccountRole.PORTAL_NONE.value,
+                account_role="none",
             )
         )
         db_session.commit()

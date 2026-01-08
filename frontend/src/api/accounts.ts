@@ -7,8 +7,8 @@ import { PaginatedResponse } from "./types";
 
 export type AccountUserLink = {
   user_id: number;
-  account_role?: string | null;
-  account_admin?: boolean | null;
+  manager_root_access?: boolean | null;
+  portal_role_key?: string | null;
 };
 
 export type S3Account = {
@@ -112,10 +112,6 @@ export async function updateS3Account(accountId: number, payload: UpdateS3Accoun
 export async function deleteS3Account(accountId: number, options?: { deleteRgw?: boolean }): Promise<void> {
   const params = options?.deleteRgw ? { delete_rgw: options.deleteRgw } : undefined;
   await client.delete(`/admin/accounts/${accountId}`, { params });
-}
-
-export async function unlinkS3Account(accountId: number): Promise<void> {
-  await client.post(`/admin/accounts/${accountId}/unlink`);
 }
 
 export type ImportS3AccountPayload = {

@@ -44,8 +44,8 @@ export type StorageEndpoint = {
 };
 
 export type StorageEndpointPayload = {
-  name: string;
-  endpoint_url: string;
+  name?: string;
+  endpoint_url?: string;
   admin_endpoint?: string | null;
   region?: string | null;
   provider?: StorageProvider;

@@ -176,7 +176,7 @@ def test_import_account_uses_user_api_when_account_user_missing(db_session, stor
     assert db_account is not None
     assert db_account.rgw_access_key == "IMPORTED"
     assert db_account.rgw_secret_key == "SECRET"
-    assert created[0].root_user_email == "RGW12345678901234567-admin"
+    assert created[0].root_user_email == "RGW12345678901234567-s3m-admin"
 
 
 class FakeRGWAdminImportCreatesRoot:
@@ -235,8 +235,8 @@ def test_import_account_creates_root_user_when_missing(db_session, storage_endpo
     assert db_account is not None
     assert db_account.rgw_access_key == "NEWROOT"
     assert db_account.rgw_secret_key == "NEWSECRET"
-    assert fake_admin.created_users == [("RGW98765432109876543-admin", account_id)]
-    assert created[0].root_user_email == "RGW98765432109876543-admin"
+    assert fake_admin.created_users == [("RGW98765432109876543-s3m-admin", account_id)]
+    assert created[0].root_user_email == "RGW98765432109876543-s3m-admin"
 
 
 def test_import_account_with_provided_keys(db_session, storage_endpoint: StorageEndpoint):
@@ -337,11 +337,14 @@ def test_delete_account_calls_rgw_when_flag_true(db_session):
     svc = S3AccountsService(db_session)
     fake_admin = FakeRGWDeleteAdmin()
     svc._admin_for_account = lambda account, allow_missing=False: fake_admin  # type: ignore[method-assign]
+    svc._account_usage = lambda acc: (0, 0, 0)  # type: ignore[method-assign]
+    svc._account_rgw_users = lambda account_id, tenant, admin: (0, [])  # type: ignore[method-assign]
+    svc._account_topics_info = lambda account_id, admin: (0, [])  # type: ignore[method-assign]
 
     svc.delete_account(account.id, delete_rgw=True)
 
     assert fake_admin.deleted == ["RGW00000000000000002"]
-    assert fake_admin.deleted_users == [("RGW00000000000000002-admin", None)]
+    assert fake_admin.deleted_users == [("RGW00000000000000002-s3m-admin", None)]
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
 
 
@@ -362,7 +365,7 @@ def test_unlink_account_deletes_root_and_interface_links(db_session):
     svc.unlink_account(account.id)
 
     assert fake_admin.deleted == []
-    assert fake_admin.deleted_users == [("RGW00000000000000003-admin", None)]
+    assert fake_admin.deleted_users == [("RGW00000000000000003-s3m-admin", None)]
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
     assert db_session.query(UserS3Account).filter(UserS3Account.account_id == account.id).first() is None
 

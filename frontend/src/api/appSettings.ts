@@ -4,15 +4,6 @@
  */
 import client from "./client";
 
-export type PortalSettings = {
-  allow_portal_key: boolean;
-  allow_portal_user_bucket_create: boolean;
-  iam_group_manager_policy: PortalIAMPolicySettings;
-  iam_group_user_policy: PortalIAMPolicySettings;
-  bucket_access_policy: PortalIAMPolicySettings;
-  bucket_defaults: PortalBucketDefaults;
-};
-
 export type GeneralSettings = {
   manager_enabled: boolean;
   browser_enabled: boolean;
@@ -20,18 +11,6 @@ export type GeneralSettings = {
   allow_login_access_keys: boolean;
   allow_login_endpoint_list: boolean;
   allow_login_custom_endpoint: boolean;
-};
-
-export type PortalIAMPolicySettings = {
-  actions: string[];
-  advanced_policy?: Record<string, unknown> | null;
-};
-
-export type PortalBucketDefaults = {
-  versioning: boolean;
-  enable_cors: boolean;
-  enable_lifecycle: boolean;
-  cors_allowed_origins: string[];
 };
 
 export type ManagerSettings = {
@@ -49,7 +28,6 @@ export type BrowserSettings = {
 
 export type AppSettings = {
   general: GeneralSettings;
-  portal: PortalSettings;
   manager: ManagerSettings;
   browser: BrowserSettings;
 };

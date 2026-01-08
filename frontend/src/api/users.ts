@@ -7,8 +7,13 @@ import { PaginatedResponse } from "./types";
 
 export type AccountMembership = {
   account_id: number;
-  account_role?: string | null;
-  account_admin?: boolean | null;
+  account_root?: boolean | null;
+  manager_root_access?: boolean | null;
+};
+
+export type PortalMembershipSummary = {
+  account_id: number;
+  role_key: string;
 };
 
 export type User = {
@@ -17,6 +22,8 @@ export type User = {
   role?: string | null;
   accounts?: number[];
   account_links?: AccountMembership[];
+  manager_root_access?: number[];
+  portal_memberships?: PortalMembershipSummary[];
   s3_users?: number[];
   s3_user_details?: { id: number; name: string }[];
   is_active?: boolean;
@@ -85,13 +92,13 @@ export async function deleteUser(userId: number): Promise<void> {
 export async function assignUserToS3Account(
   userId: number,
   accountId: number,
-  accountRole?: string | null,
-  accountAdmin?: boolean | null,
+  portalRoleKey?: string | null,
+  managerRootAccess?: boolean | null,
 ): Promise<User> {
   const { data } = await client.post<User>(`/admin/users/${userId}/assign-account`, {
     account_id: accountId,
-    account_role: accountRole,
-    account_admin: accountAdmin,
+    portal_role_key: portalRoleKey,
+    manager_root_access: managerRootAccess,
   });
   return data;
 }

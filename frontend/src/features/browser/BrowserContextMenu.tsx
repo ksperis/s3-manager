@@ -9,6 +9,22 @@ import {
   contextMenuItemDisabledClasses,
   contextMenuSeparatorClasses,
 } from "./browserConstants";
+import {
+  ClockIcon,
+  CopyIcon,
+  DownloadIcon,
+  EyeIcon,
+  FolderIcon,
+  FolderPlusIcon,
+  InfoIcon,
+  ListIcon,
+  OpenIcon,
+  PasteIcon,
+  SlidersIcon,
+  TagIcon,
+  TrashIcon,
+  UploadIcon,
+} from "./browserIcons";
 import { getSelectionInfo } from "./browserUtils";
 import type { BrowserItem, ClipboardState, ContextMenuState } from "./browserTypes";
 
@@ -81,335 +97,362 @@ export default function BrowserContextMenu({
       className="fixed z-50 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
       style={{ left: contextMenu.x, top: contextMenu.y }}
     >
-      {contextMenu.kind === "path" && (
-        <>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+	      {contextMenu.kind === "path" && (
+	        <>
+	          <button
+	            type="button"
+	            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               fileInputRef.current?.click();
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            Upload files
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <UploadIcon className="h-3.5 w-3.5" />
+	            Upload files
+	          </button>
+	          <button
+	            type="button"
+	            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               folderInputRef.current?.click();
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            Upload folder
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <FolderIcon className="h-3.5 w-3.5" />
+	            Upload folder
+	          </button>
+	          <button
+	            type="button"
+	            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onNewFolder();
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            New folder
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!clipboard || !bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <FolderPlusIcon className="h-3.5 w-3.5" />
+	            New folder
+	          </button>
+	          <button
+	            type="button"
+	            className={`${contextMenuItemClasses} ${!clipboard || !bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onPasteItems();
-            }}
-            disabled={!clipboard || !bucketName || !hasS3AccountContext}
-          >
-            Paste
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+	            }}
+	            disabled={!clipboard || !bucketName || !hasS3AccountContext}
+	          >
+	            <PasteIcon className="h-3.5 w-3.5" />
+	            Paste
+	          </button>
+	          <button
+	            type="button"
+	            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onOpenPrefixVersions();
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            Versions
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!currentPath ? contextMenuItemDisabledClasses : ""}`}
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <ListIcon className="h-3.5 w-3.5" />
+	            Versions
+	          </button>
+	          <button
+	            type="button"
+	            className={`${contextMenuItemClasses} ${!currentPath ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onCopyPath(currentPath);
-            }}
-            disabled={!currentPath}
-          >
-            Copy path
-          </button>
-        </>
-      )}
-      {contextMenu.kind === "item" && contextItem && (
-        <>
+	            }}
+	            disabled={!currentPath}
+	          >
+	            <CopyIcon className="h-3.5 w-3.5" />
+	            Copy path
+	          </button>
+	        </>
+	      )}
+	      {contextMenu.kind === "item" && contextItem && (
+	        <>
           <button
             type="button"
             className={contextMenuItemClasses}
-            onClick={() => {
-              onClose();
-              onOpenDetails(contextItem);
-            }}
-          >
-            Details
-          </button>
-          {contextItem.type === "folder" ? (
-            <button
+	            onClick={() => {
+	              onClose();
+	              onOpenDetails(contextItem);
+	            }}
+	          >
+	            <InfoIcon className="h-3.5 w-3.5" />
+	            Details
+	          </button>
+	          {contextItem.type === "folder" ? (
+	            <button
               type="button"
               className={contextMenuItemClasses}
               onClick={() => {
-                onClose();
-                onOpenItem(contextItem);
-              }}
-            >
-              Open
-            </button>
-          ) : (
-            <button
+	                onClose();
+	                onOpenItem(contextItem);
+	              }}
+	            >
+	              <OpenIcon className="h-3.5 w-3.5" />
+	              Open
+	            </button>
+	          ) : (
+	            <button
               type="button"
               className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
                 onClose();
                 onPreviewItem(contextItem);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              Preview
-            </button>
-          )}
-          <button
+	              }}
+	              disabled={!bucketName || !hasS3AccountContext}
+	            >
+	              <EyeIcon className="h-3.5 w-3.5" />
+	              Preview
+	            </button>
+	          )}
+	          <button
             type="button"
             className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onDownloadTarget(contextItem);
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            {contextItem.type === "folder" ? "Download folder" : "Download"}
-          </button>
-          {contextItem.type === "file" && (
-            <button
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <DownloadIcon className="h-3.5 w-3.5" />
+	            {contextItem.type === "folder" ? "Download folder" : "Download"}
+	          </button>
+	          {contextItem.type === "file" && (
+	            <button
               type="button"
               className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
                 onClose();
                 onCopyUrl(contextItem);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              Copy URL
-            </button>
-          )}
-          <button
+	              }}
+	              disabled={!bucketName || !hasS3AccountContext}
+	            >
+	              <CopyIcon className="h-3.5 w-3.5" />
+	              Copy URL
+	            </button>
+	          )}
+	          <button
             type="button"
             className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onCopyPath(`${bucketName}/${contextItem.key}`);
-            }}
-            disabled={!bucketName}
-          >
-            Copy path
-          </button>
-          <button
+	            }}
+	            disabled={!bucketName}
+	          >
+	            <CopyIcon className="h-3.5 w-3.5" />
+	            Copy path
+	          </button>
+	          <button
             type="button"
             className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onCopyItems([contextItem]);
-            }}
-            disabled={!bucketName}
-          >
-            Copy
-          </button>
-          <div className={contextMenuSeparatorClasses} />
-          <button
+	            }}
+	            disabled={!bucketName}
+	          >
+	            <CopyIcon className="h-3.5 w-3.5" />
+	            Copy
+	          </button>
+	          <div className={contextMenuSeparatorClasses} />
+	          <button
             type="button"
             className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onOpenBulkAttributes([contextItem]);
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            Edit attributes
-          </button>
-          <button
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <TagIcon className="h-3.5 w-3.5" />
+	            Bulk attributes
+	          </button>
+	          <button
             type="button"
             className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onOpenBulkRestore([contextItem]);
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            Restore to date
-          </button>
-          {contextItem.type === "file" && (
-            <button
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <ClockIcon className="h-3.5 w-3.5" />
+	            Restore to date
+	          </button>
+	          {contextItem.type === "file" && (
+	            <button
               type="button"
               className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
                 onClose();
                 onOpenAdvanced(contextItem);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              Advanced
-            </button>
-          )}
-          <div className={contextMenuSeparatorClasses} />
-          <button
+	              }}
+	              disabled={!bucketName || !hasS3AccountContext}
+	            >
+	              <SlidersIcon className="h-3.5 w-3.5" />
+	              Advanced
+	            </button>
+	          )}
+	          <div className={contextMenuSeparatorClasses} />
+	          <button
             type="button"
             className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onDeleteItems([contextItem]);
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            Delete
-          </button>
-        </>
-      )}
-      {contextMenu.kind === "selection" && contextSelectionInfo && (
-        <>
-          {contextSelectionInfo.canDownloadFolder && contextSelectionInfo.primary && (
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <TrashIcon className="h-3.5 w-3.5" />
+	            Delete
+	          </button>
+	        </>
+	      )}
+	      {contextMenu.kind === "selection" && contextSelectionInfo && (
+	        <>
+	          {contextSelectionInfo.canDownloadFolder && contextSelectionInfo.primary && (
             <button
               type="button"
               className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
-                onClose();
-                onDownloadFolder(contextSelectionInfo.primary);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              Download folder
-            </button>
-          )}
-          {!contextSelectionInfo.canDownloadFolder && contextSelectionInfo.canDownloadFiles && (
+	                onClose();
+	                onDownloadFolder(contextSelectionInfo.primary);
+	              }}
+	              disabled={!bucketName || !hasS3AccountContext}
+	            >
+	              <DownloadIcon className="h-3.5 w-3.5" />
+	              Download folder
+	            </button>
+	          )}
+	          {!contextSelectionInfo.canDownloadFolder && contextSelectionInfo.canDownloadFiles && (
             <button
               type="button"
               className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
-                onClose();
-                onDownloadItems(contextSelectionInfo.files);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              Download
-            </button>
-          )}
-          {contextSelectionInfo.canOpen && contextSelectionInfo.primary && (
+	                onClose();
+	                onDownloadItems(contextSelectionInfo.files);
+	              }}
+	              disabled={!bucketName || !hasS3AccountContext}
+	            >
+	              <DownloadIcon className="h-3.5 w-3.5" />
+	              Download
+	            </button>
+	          )}
+	          {contextSelectionInfo.canOpen && contextSelectionInfo.primary && (
             <button
               type="button"
               className={contextMenuItemClasses}
-              onClick={() => {
-                onClose();
-                onOpenItem(contextSelectionInfo.primary);
-              }}
-            >
-              Open
-            </button>
-          )}
-          {contextSelectionInfo.canCopyUrl && contextSelectionInfo.primary && (
+	              onClick={() => {
+	                onClose();
+	                onOpenItem(contextSelectionInfo.primary);
+	              }}
+	            >
+	              <OpenIcon className="h-3.5 w-3.5" />
+	              Open
+	            </button>
+	          )}
+	          {contextSelectionInfo.canCopyUrl && contextSelectionInfo.primary && (
             <button
               type="button"
               className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
-                onClose();
-                onCopyUrl(contextSelectionInfo.primary);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              Copy URL
-            </button>
-          )}
-          <button
+	                onClose();
+	                onCopyUrl(contextSelectionInfo.primary);
+	              }}
+	              disabled={!bucketName || !hasS3AccountContext}
+	            >
+	              <CopyIcon className="h-3.5 w-3.5" />
+	              Copy URL
+	            </button>
+	          )}
+	          <button
             type="button"
             className={`${contextMenuItemClasses} ${!bucketName || contextSelectionInfo.items.length === 0 ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
-              onClose();
-              onCopyItems(contextSelectionInfo.items);
-            }}
-            disabled={!bucketName || contextSelectionInfo.items.length === 0}
-          >
-            Copy
-          </button>
-          <div className={contextMenuSeparatorClasses} />
-          {contextSelectionInfo.isSingle && contextSelectionInfo.primary && (
+	              onClose();
+	              onCopyItems(contextSelectionInfo.items);
+	            }}
+	            disabled={!bucketName || contextSelectionInfo.items.length === 0}
+	          >
+	            <CopyIcon className="h-3.5 w-3.5" />
+	            Copy
+	          </button>
+	          <div className={contextMenuSeparatorClasses} />
+	          {contextSelectionInfo.isSingle && contextSelectionInfo.primary && (
             <button
               type="button"
               className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
-                onClose();
-                onCopyPath(`${bucketName}/${contextSelectionInfo.primary.key}`);
-              }}
-              disabled={!bucketName}
-            >
-              Copy path
-            </button>
-          )}
-          <button
+	                onClose();
+	                onCopyPath(`${bucketName}/${contextSelectionInfo.primary.key}`);
+	              }}
+	              disabled={!bucketName}
+	            >
+	              <CopyIcon className="h-3.5 w-3.5" />
+	              Copy path
+	            </button>
+	          )}
+	          <button
             type="button"
             className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
-              onClose();
-              onOpenBulkAttributes(contextSelectionInfo.items);
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            Edit attributes
-          </button>
-          <button
+	              onClose();
+	              onOpenBulkAttributes(contextSelectionInfo.items);
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <TagIcon className="h-3.5 w-3.5" />
+	            Bulk attributes
+	          </button>
+	          <button
             type="button"
             className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
-              onClose();
-              onOpenBulkRestore(contextSelectionInfo.items);
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            Restore to date
-          </button>
-          {contextSelectionInfo.canAdvanced && contextSelectionInfo.primary && (
-            <button
+	              onClose();
+	              onOpenBulkRestore(contextSelectionInfo.items);
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <ClockIcon className="h-3.5 w-3.5" />
+	            Restore to date
+	          </button>
+	          {contextSelectionInfo.canAdvanced && contextSelectionInfo.primary && (
+	            <button
               type="button"
               className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
-                onClose();
-                onOpenAdvanced(contextSelectionInfo.primary);
-              }}
-              disabled={!bucketName || !hasS3AccountContext}
-            >
-              Advanced
-            </button>
-          )}
-          <div className={contextMenuSeparatorClasses} />
-          <button
+	                onClose();
+	                onOpenAdvanced(contextSelectionInfo.primary);
+	              }}
+	              disabled={!bucketName || !hasS3AccountContext}
+	            >
+	              <SlidersIcon className="h-3.5 w-3.5" />
+	              Advanced
+	            </button>
+	          )}
+	          <div className={contextMenuSeparatorClasses} />
+	          <button
             type="button"
             className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
-              onClose();
-              onDeleteItems(contextSelectionInfo.items);
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            Delete
-          </button>
-        </>
-      )}
-    </div>
-  );
+	              onClose();
+	              onDeleteItems(contextSelectionInfo.items);
+	            }}
+	            disabled={!bucketName || !hasS3AccountContext}
+	          >
+	            <TrashIcon className="h-3.5 w-3.5" />
+	            Delete
+	          </button>
+	        </>
+	      )}
+	    </div>
+	  );
 }

@@ -10,7 +10,6 @@ from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core.security import get_password_hash, verify_password
 from app.db_models import (
-    AccountRole,
     ManagerRootAccess,
     PortalMembership,
     PortalRole,
@@ -24,7 +23,7 @@ from app.db_models import (
     UserS3Account,
     UserS3User,
 )
-from app.models.user import AccountMembership, LinkedS3User, UserCreate, UserOut, UserUpdate, UserSummary
+from app.models.user import AccountMembership, LinkedS3User, PortalMembershipSummary, UserCreate, UserOut, UserUpdate, UserSummary
 from app.services.app_settings_service import load_app_settings
 
 logger = logging.getLogger(__name__)
@@ -231,9 +230,9 @@ class UsersService:
         account_id: int,
         account_root: bool = False,
         *,
-        account_role: Optional[str] = None,
+        manager_root_access: Optional[bool] = None,
+        portal_role_key: Optional[str] = None,
         role: Optional[str] = None,
-        account_admin: Optional[bool] = None,
     ) -> User:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -248,45 +247,41 @@ class UsersService:
         )
         settings = load_app_settings()
         portal_enabled = bool(settings.general.portal_enabled)
-        if not portal_enabled:
-            if account_role and account_role != AccountRole.PORTAL_NONE.value:
-                raise ValueError("Portal feature is disabled")
-            if account_role is None and link:
-                desired_account_role = link.account_role or AccountRole.PORTAL_NONE.value
-            else:
-                desired_account_role = AccountRole.PORTAL_NONE.value
-        else:
-            desired_account_role = account_role or (
-                AccountRole.PORTAL_MANAGER.value
-                if user.role == UserRole.UI_ADMIN.value
-                else AccountRole.PORTAL_USER.value
-            )
-        if desired_account_role not in {role.value for role in AccountRole}:
-            raise ValueError("Invalid account role")
+        normalized_portal_role_key = (portal_role_key or "").strip() or None
+        if normalized_portal_role_key and normalized_portal_role_key.lower() in {"none", "no_access", "disabled"}:
+            normalized_portal_role_key = None
+        if normalized_portal_role_key and not portal_enabled:
+            raise ValueError("Portal feature is disabled")
+        if normalized_portal_role_key and account.kind != S3AccountKind.IAM_ACCOUNT.value:
+            raise ValueError("Portal access is only supported for IAM accounts")
+        if normalized_portal_role_key and normalized_portal_role_key not in {k.value for k in PortalRoleKey}:
+            raise ValueError("Invalid portal role")
         # Keep platform role untouched unless explicitly overridden
         if role and user.role != UserRole.UI_ADMIN.value:
             user.role = role
         if user.role == UserRole.UI_NONE.value:
             user.role = UserRole.UI_USER.value
-        if not link:
-            link = UserS3Account(
-                user_id=user.id,
-                account_id=account.id,
-                is_root=bool(account_root),
-                account_role=desired_account_role,
-            )
-        link.account_role = desired_account_role
-        link.is_root = bool(account_root)
-        link.account_admin = bool(account_admin if account_admin is not None else link.account_admin or account_root)
-        link.can_manage_buckets = link.account_admin or desired_account_role in {
-            AccountRole.PORTAL_MANAGER.value,
-            AccountRole.PORTAL_USER.value,
-        }
-        link.can_manage_portal_users = link.account_admin or desired_account_role == AccountRole.PORTAL_MANAGER.value
-        link.can_manage_iam = link.can_manage_portal_users or link.account_admin
-        link.can_view_root_key = bool(link.account_admin or link.is_root or link.can_manage_portal_users or link.can_manage_iam)
-        link.updated_at = datetime.utcnow()
-        self.db.add(link)
+        wants_manager_link = bool(account_root) or bool(manager_root_access)
+        if wants_manager_link:
+            if not link:
+                link = UserS3Account(
+                    user_id=user.id,
+                    account_id=account.id,
+                    is_root=bool(account_root),
+                    account_role="none",
+                )
+            link.is_root = bool(account_root)
+            if manager_root_access is not None:
+                link.account_admin = bool(manager_root_access)
+            link.account_role = "none"
+            link.can_manage_buckets = bool(link.account_admin or link.is_root)
+            link.can_manage_iam = bool(link.account_admin or link.is_root)
+            link.can_view_root_key = bool(link.account_admin or link.is_root)
+            link.can_manage_portal_users = False
+            link.updated_at = datetime.utcnow()
+            self.db.add(link)
+        elif link:
+            self.db.delete(link)
         self.db.add(user)
 
         root_link = (
@@ -294,14 +289,15 @@ class UsersService:
             .filter(ManagerRootAccess.user_id == user.id, ManagerRootAccess.account_id == account.id)
             .first()
         )
-        if link.is_root or link.account_admin:
+        wants_root_access = bool(account_root) or bool(manager_root_access)
+        if wants_root_access:
             if not root_link:
                 self.db.add(ManagerRootAccess(user_id=user.id, account_id=account.id))
         elif root_link:
             self.db.delete(root_link)
 
         if portal_enabled and account.kind == S3AccountKind.IAM_ACCOUNT.value:
-            if desired_account_role == AccountRole.PORTAL_NONE.value:
+            if not normalized_portal_role_key:
                 (
                     self.db.query(PortalRoleBinding)
                     .filter(
@@ -318,22 +314,18 @@ class UsersService:
                     .delete(synchronize_session=False)
                 )
             else:
-                role_key = PortalRoleKey.VIEWER.value
-                if link.account_admin or link.is_root or desired_account_role == AccountRole.PORTAL_MANAGER.value:
-                    role_key = PortalRoleKey.ACCOUNT_ADMIN.value
-
                 membership = (
                     self.db.query(PortalMembership)
                     .filter(PortalMembership.user_id == user.id, PortalMembership.account_id == account.id)
                     .first()
                 )
                 if membership:
-                    membership.role_key = role_key
+                    membership.role_key = normalized_portal_role_key
                 else:
-                    membership = PortalMembership(user_id=user.id, account_id=account.id, role_key=role_key)
+                    membership = PortalMembership(user_id=user.id, account_id=account.id, role_key=normalized_portal_role_key)
                 self.db.add(membership)
 
-                role_row = self.db.query(PortalRole).filter(PortalRole.key == role_key).first()
+                role_row = self.db.query(PortalRole).filter(PortalRole.key == normalized_portal_role_key).first()
                 if role_row:
                     (
                         self.db.query(PortalRoleBinding)
@@ -376,28 +368,51 @@ class UsersService:
     ) -> UserOut:
         account_ids: list[int] = []
         account_links: list[AccountMembership] = []
+        manager_root_access: list[int] = []
+        portal_memberships: list[PortalMembershipSummary] = []
         s3_user_ids: list[int] = []
         try:
             if hasattr(user, "account_links") and user.account_links is not None:
                 account_links = [
                     AccountMembership(
                         account_id=link.account_id,
-                        account_role=link.account_role,
-                        account_admin=link.account_admin,
+                        account_root=link.is_root,
+                        manager_root_access=link.account_admin,
                     )
                     for link in user.account_links
                 ]
                 account_ids = [link.account_id for link in user.account_links]
         except DetachedInstanceError:
             account_rows = (
-                self.db.query(UserS3Account.account_id, UserS3Account.account_role, UserS3Account.account_admin)
+                self.db.query(UserS3Account.account_id, UserS3Account.is_root, UserS3Account.account_admin)
                 .filter(UserS3Account.user_id == user.id)
                 .all()
             )
             account_links = [
-                AccountMembership(account_id=row[0], account_role=row[1], account_admin=row[2]) for row in account_rows
+                AccountMembership(account_id=row[0], account_root=row[1], manager_root_access=row[2]) for row in account_rows
             ]
             account_ids = [row[0] for row in account_rows]
+        try:
+            if hasattr(user, "manager_root_links") and user.manager_root_links is not None:
+                manager_root_access = [link.account_id for link in user.manager_root_links]
+        except DetachedInstanceError:
+            manager_root_access = [
+                row[0]
+                for row in self.db.query(ManagerRootAccess.account_id).filter(ManagerRootAccess.user_id == user.id).all()
+            ]
+        try:
+            if hasattr(user, "portal_memberships") and user.portal_memberships is not None:
+                portal_memberships = [
+                    PortalMembershipSummary(account_id=membership.account_id, role_key=membership.role_key)
+                    for membership in user.portal_memberships
+                ]
+        except DetachedInstanceError:
+            portal_memberships = [
+                PortalMembershipSummary(account_id=row[0], role_key=row[1])
+                for row in self.db.query(PortalMembership.account_id, PortalMembership.role_key)
+                .filter(PortalMembership.user_id == user.id)
+                .all()
+            ]
         try:
             if hasattr(user, "s3_user_links") and user.s3_user_links is not None:
                 s3_user_ids = [link.s3_user_id for link in user.s3_user_links]
@@ -417,6 +432,7 @@ class UsersService:
             LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")
             for s3_id in s3_user_ids
         ]
+        combined_account_ids = sorted({*account_ids, *{entry.account_id for entry in portal_memberships}})
         return UserOut(
             id=user.id,
             email=user.email,
@@ -427,8 +443,10 @@ class UsersService:
             is_admin=user.role == UserRole.UI_ADMIN.value,
             role=user.role,
             is_root=user.is_root,
-            accounts=account_ids,
+            accounts=combined_account_ids,
             account_links=account_links,
+            manager_root_access=manager_root_access,
+            portal_memberships=portal_memberships,
             has_rgw_credentials=bool(user.rgw_access_key and user.rgw_secret_key),
             s3_users=s3_user_ids,
             s3_user_details=s3_user_details,

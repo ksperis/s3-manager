@@ -14,8 +14,13 @@ class LinkedS3User(BaseModel):
 
 class AccountMembership(BaseModel):
     account_id: int
-    account_role: Optional[str] = None
-    account_admin: Optional[bool] = None
+    account_root: Optional[bool] = None
+    manager_root_access: Optional[bool] = None
+
+
+class PortalMembershipSummary(BaseModel):
+    account_id: int
+    role_key: str
 
 
 class UserSummary(BaseModel):
@@ -62,8 +67,8 @@ class UserUpdate(BaseModel):
 class UserAssignS3Account(BaseModel):
     account_id: int
     account_root: Optional[bool] = None
-    account_role: Optional[str] = None
-    account_admin: Optional[bool] = None
+    manager_root_access: Optional[bool] = None
+    portal_role_key: Optional[str] = None
 
 
 class UserOut(BaseModel):
@@ -78,6 +83,8 @@ class UserOut(BaseModel):
     is_root: bool = False
     accounts: list[int] = []
     account_links: list[AccountMembership] = []
+    manager_root_access: list[int] = []
+    portal_memberships: list[PortalMembershipSummary] = []
     has_rgw_credentials: bool = False
     s3_users: list[int] = []
     s3_user_details: list[LinkedS3User] = []

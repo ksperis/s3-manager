@@ -17,12 +17,6 @@ class UserRole(str, Enum):
     UI_NONE = "ui_none"
 
 
-class AccountRole(str, Enum):
-    PORTAL_MANAGER = "portal_manager"
-    PORTAL_USER = "portal_user"
-    PORTAL_NONE = "portal_none"
-
-
 class S3AccountKind(str, Enum):
     IAM_ACCOUNT = "iam_account"
     LEGACY_USER = "legacy_user"
@@ -103,11 +97,6 @@ class S3Account(Base):
         back_populates="account",
         overlaps="users,accounts,account_links",
     )
-    portal_iam_links = relationship(
-        "AccountIAMUser",
-        back_populates="account",
-        overlaps="users,account_links",
-    )
     portal_memberships = relationship("PortalMembership", back_populates="account", overlaps="users")
     manager_root_links = relationship("ManagerRootAccess", back_populates="account", overlaps="users")
     iam_identities = relationship("IamIdentity", back_populates="account", overlaps="users")
@@ -175,11 +164,6 @@ class User(Base):
         back_populates="user",
         overlaps="s3_users",
     )
-    portal_iam_links = relationship(
-        "AccountIAMUser",
-        back_populates="user",
-        overlaps="accounts,account_links",
-    )
     portal_memberships = relationship("PortalMembership", back_populates="user", overlaps="accounts")
     manager_root_links = relationship("ManagerRootAccess", back_populates="user", overlaps="accounts")
     iam_identities = relationship("IamIdentity", back_populates="user", overlaps="accounts")
@@ -193,7 +177,8 @@ class UserS3Account(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
     is_root = Column(Boolean, nullable=False, default=False, server_default="0")
-    account_role = Column(String, nullable=False, default=AccountRole.PORTAL_USER.value)
+    # Legacy field (old portal roles): no longer used by the application.
+    account_role = Column(String, nullable=False, default="none", server_default="none")
     account_admin = Column(Boolean, nullable=False, default=False, server_default="0")
     can_manage_iam = Column(Boolean, nullable=False, default=False, server_default="0")
     can_manage_buckets = Column(Boolean, nullable=False, default=True, server_default="1")
@@ -211,35 +196,6 @@ class UserS3Account(Base):
         "S3Account",
         back_populates="user_links",
         overlaps="users,accounts,account_links",
-    )
-
-
-class AccountIAMUser(Base):
-    __tablename__ = "account_iam_users"
-    __table_args__ = (
-        UniqueConstraint("user_id", "account_id", name="uq_account_iam_user"),
-        UniqueConstraint("iam_user_id", name="uq_account_iam_user_id"),
-    )
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
-    iam_user_id = Column(String, nullable=False)
-    iam_username = Column(String, nullable=True)
-    iam_role_arn = Column(String, nullable=True)
-    active_access_key = Column(String, nullable=True)
-    active_secret_key = Column(EncryptedString, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    user = relationship(
-        "User",
-        back_populates="portal_iam_links",
-        overlaps="accounts,account_links",
-    )
-    account = relationship(
-        "S3Account",
-        back_populates="portal_iam_links",
-        overlaps="users,account_links",
     )
 
 

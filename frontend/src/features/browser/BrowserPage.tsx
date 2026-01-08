@@ -65,17 +65,20 @@ import {
   FileIcon,
   FolderIcon,
   FolderPlusIcon,
-  GridIcon,
-  ListIcon,
-  MoreIcon,
-  OpenIcon,
-  PasteIcon,
-  RefreshIcon,
-  SearchIcon,
-  TrashIcon,
-  UpIcon,
-  UploadIcon,
-} from "./browserIcons";
+	  GridIcon,
+	  ClockIcon,
+	  ListIcon,
+	  MoreIcon,
+	  OpenIcon,
+	  PasteIcon,
+	  RefreshIcon,
+	  SlidersIcon,
+	  TagIcon,
+	  SearchIcon,
+	  TrashIcon,
+	  UpIcon,
+	  UploadIcon,
+	} from "./browserIcons";
 import {
   BUCKET_MENU_LIMIT,
   COMPLETED_OPERATIONS_LIMIT,
@@ -3081,70 +3084,90 @@ export default function BrowserPage() {
     }
   };
 
-  const handleBulkRestoreApply = async () => {
-    if (!bucketName || !hasS3AccountContext) return;
-    const targetTime = bulkRestoreDate ? new Date(bulkRestoreDate).getTime() : Number.NaN;
-    if (!bulkRestoreDate || Number.isNaN(targetTime)) {
-      setBulkRestoreError("Select a valid date.");
-      return;
-    }
-    setBulkRestoreLoading(true);
-    setBulkRestoreError(null);
-    setBulkRestoreSummary(null);
-    try {
-      const fileItems = bulkActionItems.filter((item) => item.type === "file");
-      const folderItems = bulkActionItems.filter((item) => item.type === "folder");
-      const restoreCandidates = new Map<string, string>();
-      const presentAtDate = new Set<string>();
-      const deleteCandidates = new Set<string>();
+	  const handleBulkRestoreApply = async () => {
+	    if (!bucketName || !hasS3AccountContext) return;
+	    const targetTime = bulkRestoreDate ? new Date(bulkRestoreDate).getTime() : Number.NaN;
+	    if (!bulkRestoreDate || Number.isNaN(targetTime)) {
+	      setBulkRestoreError("Select a valid date.");
+	      return;
+	    }
+	    setBulkRestoreLoading(true);
+	    setBulkRestoreError(null);
+	    setBulkRestoreSummary(null);
+	    try {
+	      const fileItems = bulkActionItems.filter((item) => item.type === "file");
+	      const folderItems = bulkActionItems.filter((item) => item.type === "folder");
+	      const restoreCandidates = new Map<string, string>();
+	      const unchangedKeys = new Set<string>();
+	      const presentAtDate = new Set<string>();
+	      const deleteCandidates = new Set<string>();
 
-      for (const item of fileItems) {
-        const { versions, deleteMarkers } = await listAllVersionsForKey(item.key);
-        const match = findVersionForDate([...versions, ...deleteMarkers], targetTime);
-        if (match && !match.is_delete_marker && match.version_id) {
-          restoreCandidates.set(item.key, match.version_id);
-          presentAtDate.add(item.key);
-        } else if (bulkRestoreDeleteMissing) {
-          deleteCandidates.add(item.key);
-        }
-      }
+	      for (const item of fileItems) {
+	        const { versions, deleteMarkers } = await listAllVersionsForKey(item.key);
+	        const entries = [...versions, ...deleteMarkers];
+	        const latest = entries.find((entry) => entry.is_latest) ?? null;
+	        const match = findVersionForDate(entries, targetTime);
+	        if (match && !match.is_delete_marker && match.version_id) {
+	          presentAtDate.add(item.key);
+	          if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
+	            unchangedKeys.add(item.key);
+	            restoreCandidates.delete(item.key);
+	          } else if (!unchangedKeys.has(item.key)) {
+	            restoreCandidates.set(item.key, match.version_id);
+	          }
+	        } else if (bulkRestoreDeleteMissing) {
+	          deleteCandidates.add(item.key);
+	        }
+	      }
 
-      for (const folder of folderItems) {
-        const folderPrefix = normalizePrefix(folder.key);
-        const { versions, deleteMarkers } = await listAllVersionsForPrefix(folderPrefix);
-        const byKey = new Map<string, BrowserObjectVersion[]>();
-        [...versions, ...deleteMarkers].forEach((entry) => {
-          const list = byKey.get(entry.key) ?? [];
-          list.push(entry);
-          byKey.set(entry.key, list);
-        });
-        byKey.forEach((entries, key) => {
-          const match = findVersionForDate(entries, targetTime);
-          if (match && !match.is_delete_marker && match.version_id) {
-            restoreCandidates.set(key, match.version_id);
-            presentAtDate.add(key);
-          }
-        });
-        if (bulkRestoreDeleteMissing) {
-          const currentObjects = await listAllObjectsForPrefix(folderPrefix);
-          currentObjects.forEach((obj) => {
-            if (!presentAtDate.has(obj.key)) {
-              deleteCandidates.add(obj.key);
-            }
-          });
-        }
-      }
+	      for (const folder of folderItems) {
+	        const folderPrefix = normalizePrefix(folder.key);
+	        const { versions, deleteMarkers } = await listAllVersionsForPrefix(folderPrefix);
+	        const byKey = new Map<string, BrowserObjectVersion[]>();
+	        [...versions, ...deleteMarkers].forEach((entry) => {
+	          const list = byKey.get(entry.key) ?? [];
+	          list.push(entry);
+	          byKey.set(entry.key, list);
+	        });
+	        byKey.forEach((entries, key) => {
+	          const latest = entries.find((entry) => entry.is_latest) ?? null;
+	          const match = findVersionForDate(entries, targetTime);
+	          if (match && !match.is_delete_marker && match.version_id) {
+	            presentAtDate.add(key);
+	            if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
+	              unchangedKeys.add(key);
+	              restoreCandidates.delete(key);
+	            } else if (!unchangedKeys.has(key)) {
+	              restoreCandidates.set(key, match.version_id);
+	            }
+	          }
+	        });
+	        if (bulkRestoreDeleteMissing) {
+	          const currentObjects = await listAllObjectsForPrefix(folderPrefix);
+	          currentObjects.forEach((obj) => {
+	            if (!presentAtDate.has(obj.key)) {
+	              deleteCandidates.add(obj.key);
+	            }
+	          });
+	        }
+	      }
 
-      const restoreList = Array.from(restoreCandidates.entries()).map(([key, versionId]) => ({
-        key,
-        versionId,
-      }));
-      const deleteList = bulkRestoreDeleteMissing ? Array.from(deleteCandidates) : [];
-      const total = restoreList.length + deleteList.length;
-      if (total === 0) {
-        setBulkRestoreError("No objects matched the selected date.");
-        return;
-      }
+	      const restoreList = Array.from(restoreCandidates.entries()).map(([key, versionId]) => ({
+	        key,
+	        versionId,
+	      }));
+	      const deleteList = bulkRestoreDeleteMissing ? Array.from(deleteCandidates) : [];
+	      const total = restoreList.length + deleteList.length;
+	      if (total === 0 && unchangedKeys.size > 0) {
+	        const summary = `Restored 0 object(s), deleted 0 object(s), unchanged ${unchangedKeys.size} object(s).`;
+	        setBulkRestoreSummary(summary);
+	        setStatusMessage(summary);
+	        return;
+	      }
+	      if (total === 0) {
+	        setBulkRestoreError("No objects matched the selected date.");
+	        return;
+	      }
 
       const operationId = startOperation(
         "copying",
@@ -3198,18 +3221,20 @@ export default function BrowserPage() {
         }
       }
 
-      const failures = restoreFailures + deleteFailures;
-      completeOperation(operationId, failures > 0 ? "failed" : "done");
-      const summary = `Restored ${restoreList.length - restoreFailures} object(s), deleted ${deleteList.length - deleteFailures} object(s).`;
-      setBulkRestoreSummary(summary);
-      setStatusMessage(summary);
-      requestObjectsRefresh(prefix);
-    } catch (err) {
-      setBulkRestoreError("Unable to restore objects.");
-    } finally {
-      setBulkRestoreLoading(false);
-    }
-  };
+	      const failures = restoreFailures + deleteFailures;
+	      completeOperation(operationId, failures > 0 ? "failed" : "done");
+	      const summary = `Restored ${restoreList.length - restoreFailures} object(s), deleted ${
+	        deleteList.length - deleteFailures
+	      } object(s), unchanged ${unchangedKeys.size} object(s).`;
+	      setBulkRestoreSummary(summary);
+	      setStatusMessage(summary);
+	      requestObjectsRefresh(prefix);
+	    } catch (err) {
+	      setBulkRestoreError("Unable to restore objects.");
+	    } finally {
+	      setBulkRestoreLoading(false);
+	    }
+	  };
 
   const handleCopyItems = (items: BrowserItem[]) => {
     if (!bucketName || items.length === 0) return;
@@ -4840,21 +4865,32 @@ export default function BrowserPage() {
                                   Download
                                 </button>
                               )}
-                              {canSelectionOpen && selectionPrimary && (
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => handleOpenItem(selectionPrimary)}
-                                >
-                                  <OpenIcon className="h-3.5 w-3.5" />
-                                  Open
-                                </button>
-                              )}
-                              {canSelectionCopyUrl && selectionPrimary && (
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => handleCopyUrl(selectionPrimary)}
+	                              {canSelectionOpen && selectionPrimary && (
+	                                <button
+	                                  type="button"
+	                                  className={bulkActionClasses}
+	                                  onClick={() => handleOpenItem(selectionPrimary)}
+	                                >
+	                                  <OpenIcon className="h-3.5 w-3.5" />
+	                                  Open
+	                                </button>
+	                              )}
+	                              {selectionIsSingle && selectionPrimary?.type === "file" && (
+	                                <button
+	                                  type="button"
+	                                  className={bulkActionClasses}
+	                                  onClick={() => handlePreviewItem(selectionPrimary)}
+	                                  disabled={!bucketName || !hasS3AccountContext}
+	                                >
+	                                  <EyeIcon className="h-3.5 w-3.5" />
+	                                  Preview
+	                                </button>
+	                              )}
+	                              {canSelectionCopyUrl && selectionPrimary && (
+	                                <button
+	                                  type="button"
+	                                  className={bulkActionClasses}
+	                                  onClick={() => handleCopyUrl(selectionPrimary)}
                                   disabled={!hasS3AccountContext}
                                 >
                                   <CopyIcon className="h-3.5 w-3.5" />
@@ -4889,41 +4925,48 @@ export default function BrowserPage() {
                                   Copy path
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                className={bulkActionClasses}
-                                onClick={() => openBulkAttributesModal(selectionItems)}
-                              >
-                                Edit attributes
-                              </button>
-                              <button
-                                type="button"
-                                className={bulkActionClasses}
-                                onClick={() => openBulkRestoreModal(selectionItems)}
-                              >
-                                Restore to date
-                              </button>
-                              {canSelectionAdvanced && (
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => setShowAdvancedModal(true)}
-                                >
-                                  Advanced
-                                </button>
-                              )}
+	                              <button
+	                                type="button"
+	                                className={bulkActionClasses}
+	                                onClick={() => openBulkAttributesModal(selectionItems)}
+	                                disabled={!bucketName || !hasS3AccountContext}
+	                              >
+	                                <TagIcon className="h-3.5 w-3.5" />
+	                                Bulk attributes
+	                              </button>
+	                              <button
+	                                type="button"
+	                                className={bulkActionClasses}
+	                                onClick={() => openBulkRestoreModal(selectionItems)}
+	                                disabled={!bucketName || !hasS3AccountContext}
+	                              >
+	                                <ClockIcon className="h-3.5 w-3.5" />
+	                                Restore to date
+	                              </button>
+	                              {canSelectionAdvanced && (
+	                                <button
+	                                  type="button"
+	                                  className={bulkActionClasses}
+	                                  onClick={() => setShowAdvancedModal(true)}
+	                                  disabled={!bucketName || !hasS3AccountContext}
+	                                >
+	                                  <SlidersIcon className="h-3.5 w-3.5" />
+	                                  Advanced
+	                                </button>
+	                              )}
                             </div>
                             <div className="rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/40">
                               <div className="flex items-center justify-between gap-2">
                                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Selection stats</p>
                                 <button
                                   type="button"
-                                  className={bulkActionClasses}
-                                  onClick={calculateSelectionStats}
-                                  disabled={!bucketName || !hasS3AccountContext || selectionStatsLoading}
-                                >
-                                  {selectionStatsLoading ? "Calculating..." : selectionStats ? "Recalculate" : "Calculate"}
-                                </button>
+	                                className={bulkActionClasses}
+	                                onClick={calculateSelectionStats}
+	                                disabled={!bucketName || !hasS3AccountContext || selectionStatsLoading}
+	                              >
+	                                <RefreshIcon className="h-3.5 w-3.5" />
+	                                {selectionStatsLoading ? "Calculating..." : selectionStats ? "Recalculate" : "Calculate"}
+	                              </button>
                               </div>
                               {selectionStatsError && (
                                 <p className="mt-2 ui-caption font-semibold text-rose-600 dark:text-rose-200">

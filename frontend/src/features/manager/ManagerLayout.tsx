@@ -70,10 +70,10 @@ function ManagerShell() {
   const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
   const metricsFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
   const canViewMetricsMenu = usageFeatureEnabled || metricsFeatureEnabled;
-  const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
-  const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
-  const baseControlClasses =
-    "w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
+	  const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
+	  const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
+	  const baseControlClasses =
+	    "w-64 truncate rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
   const selectClasses = `appearance-none pr-8 ${baseControlClasses}`;
   const pillClasses = `${baseControlClasses} ${selected ? "" : "text-slate-500 dark:text-slate-400"}`;
   const handleS3AccountChange = (event: ChangeEvent<HTMLSelectElement>) => {

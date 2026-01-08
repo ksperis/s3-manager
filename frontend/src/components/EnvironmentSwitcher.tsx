@@ -14,7 +14,9 @@ const WORKSPACE_STORAGE_KEY = "selectedWorkspace";
 type StoredUser = {
   role?: string | null;
   authType?: string | null;
-  account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
+  account_links?: { account_id: number; account_root?: boolean | null; manager_root_access?: boolean | null }[] | null;
+  manager_root_access?: number[] | null;
+  portal_memberships?: { account_id: number; role_key: string }[] | null;
   capabilities?: {
     can_manage_buckets?: boolean;
   };
@@ -60,8 +62,8 @@ function resolveAvailableEnvironments(user: StoredUser | null): EnvironmentOptio
     return ALL_ENVIRONMENTS.filter((env) => env.id === "manager" || env.id === "browser");
   }
   const links = user.account_links ?? [];
-  const hasPortalAccess = links.some((link) => link.account_role !== "portal_none");
-  const hasAccountAdmin = links.some((link) => link.account_admin);
+  const hasPortalAccess = (user.portal_memberships ?? []).length > 0;
+  const hasAccountAdmin = (user.manager_root_access ?? []).length > 0 || links.some((link) => Boolean(link.manager_root_access));
   const canManageBuckets = user.capabilities?.can_manage_buckets !== false;
 
   return ALL_ENVIRONMENTS.filter((env) => {

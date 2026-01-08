@@ -29,7 +29,10 @@ def test_assign_user_to_account_api(client: TestClient, db_session, seed_user_ac
     # Monkeypatch RGW call inside UsersService
     from app.services import users_service
 
-    resp = client.post(f"/api/admin/users/{usr.id}/assign-account", json={"account_id": acc.id})
+    resp = client.post(
+        f"/api/admin/users/{usr.id}/assign-account",
+        json={"account_id": acc.id, "manager_root_access": True},
+    )
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert acc.id in data.get("accounts", [])

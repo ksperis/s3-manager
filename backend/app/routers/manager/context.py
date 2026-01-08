@@ -4,10 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
-
-from app.core.database import get_db
-from app.db_models import AccountIAMUser, AccountRole, User, UserS3Account
+from app.db_models import User
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_account_context, get_current_actor
 from app.services.app_settings_service import load_app_settings
@@ -45,51 +42,26 @@ def _manager_stats_enabled(account, actor) -> bool:
 def get_manager_context(
     account=Depends(get_account_context),
     actor=Depends(get_current_actor),
-    db: Session = Depends(get_db),
 ) -> ManagerContext:
     s3_user_id = getattr(account, "s3_user_id", None)
     caps = getattr(account, "_manager_capabilities", None)
-    access_mode = "portal"
+    access_mode = "admin"
     if isinstance(actor, ManagerSessionPrincipal):
         access_mode = "session"
     elif s3_user_id is not None or (hasattr(account, "id") and getattr(account, "id") < 0):
         access_mode = "s3_user"
-    elif caps and getattr(caps, "using_root_key", False):
-        access_mode = "admin"
 
     iam_identity: Optional[str] = None
-    can_switch_access = False
     if access_mode == "admin":
         iam_identity = resolve_admin_uid(getattr(account, "rgw_account_id", None), getattr(account, "rgw_user_uid", None))
-    elif access_mode == "portal" and isinstance(actor, User):
-        if hasattr(account, "id") and getattr(account, "id") and getattr(account, "id") > 0:
-            link = (
-                db.query(AccountIAMUser)
-                .filter(AccountIAMUser.user_id == actor.id, AccountIAMUser.account_id == getattr(account, "id"))
-                .first()
-            )
-            if link:
-                iam_identity = link.iam_username or link.iam_user_id
     elif access_mode == "session":
         iam_identity = actor.user_uid or actor.account_id or actor.account_name
     elif access_mode == "s3_user":
         iam_identity = getattr(account, "rgw_user_uid", None)
 
-    if isinstance(actor, User) and access_mode in {"admin", "portal"}:
-        account_id = getattr(account, "id", None)
-        if account_id and account_id > 0:
-            membership = (
-                db.query(UserS3Account)
-                .filter(UserS3Account.user_id == actor.id, UserS3Account.account_id == account_id)
-                .first()
-            )
-            if membership:
-                role = membership.account_role or AccountRole.PORTAL_USER.value
-                can_switch_access = bool(membership.account_admin and role != AccountRole.PORTAL_NONE.value)
-
     return ManagerContext(
         access_mode=access_mode,
         iam_identity=iam_identity,
-        can_switch_access=can_switch_access,
+        can_switch_access=False,
         manager_stats_enabled=_manager_stats_enabled(account, actor),
     )

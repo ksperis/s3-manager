@@ -216,7 +216,9 @@ def delete_account(
             metadata={"delete_rgw": delete_rgw},
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 @router.post("/{account_id}/unlink", status_code=status.HTTP_204_NO_CONTENT)

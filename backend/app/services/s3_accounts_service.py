@@ -4,7 +4,21 @@ from sqlalchemy.orm import Session
 import logging
 from datetime import datetime
 
-from app.db_models import AccountRole, S3Account, User, UserS3Account, StorageEndpoint, StorageProvider
+from app.db_models import (
+    ManagerRootAccess,
+    IamIdentity,
+    PortalMembership,
+    PortalRole,
+    PortalRoleBinding,
+    PortalRoleKey,
+    S3Account,
+    S3AccountKind,
+    StorageEndpoint,
+    StorageProvider,
+    User,
+    UserRole,
+    UserS3Account,
+)
 from app.models.s3_account import (
     AccountUserLink,
     S3Account as S3AccountSchema,
@@ -23,7 +37,6 @@ from app.utils.storage_endpoint_features import (
     resolve_feature_flags,
 )
 from app.core.security import get_password_hash
-from app.db_models import UserRole
 import random
 from typing import Optional, Any
 from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve_admin_uid
@@ -36,6 +49,8 @@ logger = logging.getLogger(__name__)
 
 
 class S3AccountsService:
+    _ROOT_UID_SUFFIX = "-s3m-admin"
+
     def __init__(
         self,
         db: Session,
@@ -231,7 +246,7 @@ class S3AccountsService:
         normalized = normalize_rgw_identifier(value)
         if not normalized:
             raise ValueError("Missing account identifier for RGW root user")
-        return f"{normalized}-admin"
+        return f"{normalized}{self._ROOT_UID_SUFFIX}"
 
     def _root_display_name(self, account_name: Optional[str], account_identifier: str) -> str:
         base = (account_name or account_identifier or "").strip()
@@ -271,7 +286,8 @@ class S3AccountsService:
             if not key:
                 continue
             tenant_value = tenant_id or ""
-            if uid.lower() == f"{tenant_value.lower()}-admin":
+            normalized_tenant = normalize_rgw_identifier(tenant_value) if tenant_value else None
+            if normalized_tenant and uid.lower() == f"{normalized_tenant.lower()}{self._ROOT_UID_SUFFIX}":
                 continue
             result.setdefault(key, []).append(uid)
 
@@ -404,11 +420,12 @@ class S3AccountsService:
         if not isinstance(user_list, list):
             return 0, []
         cleaned: list[str] = []
+        root_uid = self._root_uid(account_identifier)
         for entry in user_list:
             uid = str(entry) if entry is not None else ""
             if not uid:
                 continue
-            if uid.lower() == f"{normalized_key}-admin":
+            if uid.lower() == root_uid.lower():
                 continue
             cleaned.append(uid)
         deduped = sorted(set(cleaned))
@@ -419,14 +436,35 @@ class S3AccountsService:
 
     def list_accounts(self, include_usage_stats: bool = True) -> list[S3AccountSchema]:
         db_accounts = self.db.query(S3Account).all()
-        user_links = self.db.query(UserS3Account).filter(UserS3Account.is_root.is_(False)).all()
+        manager_links = (
+            self.db.query(UserS3Account.account_id, UserS3Account.user_id, UserS3Account.account_admin)
+            .filter(UserS3Account.is_root.is_(False))
+            .all()
+        )
+        portal_links = self.db.query(PortalMembership.account_id, PortalMembership.user_id, PortalMembership.role_key).all()
+
+        manager_by_account: dict[int, dict[int, bool]] = {}
+        portal_by_account: dict[int, dict[int, str]] = {}
+        for account_id, user_id, account_admin in manager_links:
+            manager_by_account.setdefault(int(account_id), {})[int(user_id)] = bool(account_admin)
+        for account_id, user_id, role_key in portal_links:
+            portal_by_account.setdefault(int(account_id), {})[int(user_id)] = str(role_key)
+
         user_ids_by_account: dict[int, list[int]] = {}
         user_links_by_account: dict[int, list[AccountUserLink]] = {}
-        for link in user_links:
-            user_ids_by_account.setdefault(link.account_id, []).append(link.user_id)
-            user_links_by_account.setdefault(link.account_id, []).append(
-                AccountUserLink(user_id=link.user_id, account_role=link.account_role, account_admin=link.account_admin)
-            )
+        for account_id in {acc.id for acc in db_accounts}:
+            manager_map = manager_by_account.get(int(account_id), {})
+            portal_map = portal_by_account.get(int(account_id), {})
+            user_ids = sorted(set(manager_map.keys()) | set(portal_map.keys()))
+            user_ids_by_account[int(account_id)] = user_ids
+            user_links_by_account[int(account_id)] = [
+                AccountUserLink(
+                    user_id=user_id,
+                    manager_root_access=manager_map.get(user_id),
+                    portal_role_key=portal_map.get(user_id),
+                )
+                for user_id in user_ids
+            ]
 
         roots_by_account: dict[str, tuple[str, int]] = {}
         for acc in db_accounts:
@@ -490,14 +528,35 @@ class S3AccountsService:
 
     def list_accounts_minimal(self) -> list[S3AccountSummary]:
         db_accounts = self.db.query(S3Account).all()
-        user_links = self.db.query(UserS3Account).filter(UserS3Account.is_root.is_(False)).all()
+        manager_links = (
+            self.db.query(UserS3Account.account_id, UserS3Account.user_id, UserS3Account.account_admin)
+            .filter(UserS3Account.is_root.is_(False))
+            .all()
+        )
+        portal_links = self.db.query(PortalMembership.account_id, PortalMembership.user_id, PortalMembership.role_key).all()
+
+        manager_by_account: dict[int, dict[int, bool]] = {}
+        portal_by_account: dict[int, dict[int, str]] = {}
+        for account_id, user_id, account_admin in manager_links:
+            manager_by_account.setdefault(int(account_id), {})[int(user_id)] = bool(account_admin)
+        for account_id, user_id, role_key in portal_links:
+            portal_by_account.setdefault(int(account_id), {})[int(user_id)] = str(role_key)
+
         user_ids_by_account: dict[int, list[int]] = {}
         user_links_by_account: dict[int, list[AccountUserLink]] = {}
-        for link in user_links:
-            user_ids_by_account.setdefault(link.account_id, []).append(link.user_id)
-            user_links_by_account.setdefault(link.account_id, []).append(
-                AccountUserLink(user_id=link.user_id, account_role=link.account_role, account_admin=link.account_admin)
-            )
+        for account_id in {acc.id for acc in db_accounts}:
+            manager_map = manager_by_account.get(int(account_id), {})
+            portal_map = portal_by_account.get(int(account_id), {})
+            user_ids = sorted(set(manager_map.keys()) | set(portal_map.keys()))
+            user_ids_by_account[int(account_id)] = user_ids
+            user_links_by_account[int(account_id)] = [
+                AccountUserLink(
+                    user_id=user_id,
+                    manager_root_access=manager_map.get(user_id),
+                    portal_role_key=portal_map.get(user_id),
+                )
+                for user_id in user_ids
+            ]
         summaries: list[S3AccountSummary] = []
         for acc in db_accounts:
             endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
@@ -529,22 +588,30 @@ class S3AccountsService:
             .with_entities(User.email, User.id)
             .first()
         )
-        non_root_links = (
-            self.db.query(UserS3Account)
+        manager_links = (
+            self.db.query(UserS3Account.user_id, UserS3Account.account_admin)
             .filter(UserS3Account.account_id == account.id, UserS3Account.is_root.is_(False))
             .all()
         )
-        user_ids = [link.user_id for link in non_root_links] if non_root_links else None
+        portal_links = (
+            self.db.query(PortalMembership.user_id, PortalMembership.role_key)
+            .filter(PortalMembership.account_id == account.id)
+            .all()
+        )
+        manager_by_user = {int(row[0]): bool(row[1]) for row in manager_links}
+        portal_by_user = {int(row[0]): str(row[1]) for row in portal_links}
+        combined_user_ids = sorted(set(manager_by_user.keys()) | set(portal_by_user.keys()))
+        user_ids = combined_user_ids if combined_user_ids else None
         user_links = (
             [
                 AccountUserLink(
-                    user_id=link.user_id,
-                    account_role=link.account_role,
-                    account_admin=link.account_admin,
+                    user_id=user_id,
+                    manager_root_access=manager_by_user.get(user_id),
+                    portal_role_key=portal_by_user.get(user_id),
                 )
-                for link in non_root_links
+                for user_id in combined_user_ids
             ]
-            if non_root_links
+            if combined_user_ids
             else None
         )
         used_bytes = used_objects = bucket_count = None
@@ -831,15 +898,18 @@ class S3AccountsService:
                 payload.quota_max_size_unit,
             )
 
-        # Update UI user associations (non-root links only)
+        # Update UI user associations (portal memberships + manager root access; non-root links only)
         if payload.user_links is not None or payload.user_ids is not None:
             portal_enabled = bool(load_app_settings().general.portal_enabled)
             desired_links: list[AccountUserLink] = []
             if payload.user_links is not None:
                 desired_links = payload.user_links
             elif payload.user_ids is not None:
-                default_role = AccountRole.PORTAL_MANAGER.value if portal_enabled else AccountRole.PORTAL_NONE.value
-                desired_links = [AccountUserLink(user_id=uid, account_role=default_role) for uid in payload.user_ids]
+                default_portal_role = PortalRoleKey.VIEWER.value if portal_enabled else None
+                desired_links = [
+                    AccountUserLink(user_id=uid, manager_root_access=True, portal_role_key=default_portal_role)
+                    for uid in payload.user_ids
+                ]
 
             existing_links = (
                 self.db.query(UserS3Account)
@@ -860,62 +930,149 @@ class S3AccountsService:
                     )
                     .delete(synchronize_session=False)
                 )
+                (
+                    self.db.query(ManagerRootAccess)
+                    .filter(ManagerRootAccess.account_id == account.id, ManagerRootAccess.user_id.in_(to_remove))
+                    .delete(synchronize_session=False)
+                )
+                (
+                    self.db.query(PortalRoleBinding)
+                    .filter(PortalRoleBinding.account_id == account.id, PortalRoleBinding.user_id.in_(to_remove))
+                    .delete(synchronize_session=False)
+                )
+                (
+                    self.db.query(PortalMembership)
+                    .filter(PortalMembership.account_id == account.id, PortalMembership.user_id.in_(to_remove))
+                    .delete(synchronize_session=False)
+                )
 
             for link in desired_links:
                 user_id = int(link.user_id)
                 db_link = existing_by_user.get(user_id)
-                if link.account_admin is None:
-                    account_admin = db_link.account_admin if db_link else False
-                else:
-                    account_admin = bool(link.account_admin)
-                if not portal_enabled:
-                    if link.account_role and link.account_role != AccountRole.PORTAL_NONE.value:
-                        raise ValueError("Portal feature is disabled")
-                    if link.account_role is None and db_link:
-                        account_role = db_link.account_role or AccountRole.PORTAL_NONE.value
-                    else:
-                        account_role = AccountRole.PORTAL_NONE.value
-                else:
-                    account_role = link.account_role or AccountRole.PORTAL_MANAGER.value
-                if account_role not in {role.value for role in AccountRole}:
-                    raise ValueError(f"Invalid account role for user {user_id}")
-                if not db_link:
-                    user = self.db.query(User).filter(User.id == user_id).first()
-                    if not user:
-                        raise ValueError(f"User not found: {user_id}")
-                    if user.role != UserRole.UI_ADMIN.value:
-                        user.role = UserRole.UI_USER.value
-                        self.db.add(user)
-                    db_link = UserS3Account(
-                        user_id=user_id,
-                        account_id=account.id,
-                        is_root=False,
+                manager_root_access = bool(link.manager_root_access) if link.manager_root_access is not None else bool(db_link.account_admin if db_link else False)
+                normalized_portal_role = (link.portal_role_key or "").strip() or None
+                if normalized_portal_role and normalized_portal_role.lower() in {"none", "disabled", "no_access"}:
+                    normalized_portal_role = None
+                if normalized_portal_role and not portal_enabled:
+                    raise ValueError("Portal feature is disabled")
+                if normalized_portal_role and normalized_portal_role not in {entry.value for entry in PortalRoleKey}:
+                    raise ValueError(f"Invalid portal role for user {user_id}")
+                if normalized_portal_role and account.kind != S3AccountKind.IAM_ACCOUNT.value:
+                    raise ValueError("Portal access is only supported for IAM accounts")
+
+                user = self.db.query(User).filter(User.id == user_id).first()
+                if not user:
+                    raise ValueError(f"User not found: {user_id}")
+                if user.role != UserRole.UI_ADMIN.value and user.role == UserRole.UI_NONE.value:
+                    user.role = UserRole.UI_USER.value
+                    self.db.add(user)
+
+                if manager_root_access:
+                    if not db_link:
+                        db_link = UserS3Account(
+                            user_id=user_id,
+                            account_id=account.id,
+                            is_root=False,
+                            account_role="none",
+                        )
+                    db_link.account_admin = True
+                    db_link.account_role = "none"
+                    db_link.can_manage_buckets = True
+                    db_link.can_manage_iam = True
+                    db_link.can_view_root_key = True
+                    db_link.updated_at = datetime.utcnow()
+                    self.db.add(db_link)
+                    existing_root = (
+                        self.db.query(ManagerRootAccess)
+                        .filter(ManagerRootAccess.user_id == user_id, ManagerRootAccess.account_id == account.id)
+                        .first()
                     )
-                db_link.account_role = account_role
-                db_link.account_admin = account_admin
-                db_link.can_manage_buckets = db_link.account_admin or account_role in {
-                    AccountRole.PORTAL_MANAGER.value,
-                    AccountRole.PORTAL_USER.value,
-                }
-                db_link.can_manage_portal_users = db_link.account_admin or account_role == AccountRole.PORTAL_MANAGER.value
-                db_link.can_manage_iam = db_link.can_manage_portal_users
-                db_link.can_view_root_key = bool(db_link.account_admin or db_link.can_manage_portal_users or db_link.can_manage_iam)
-                db_link.updated_at = datetime.utcnow()
-                self.db.add(db_link)
+                    if not existing_root:
+                        self.db.add(ManagerRootAccess(user_id=user_id, account_id=account.id))
+                else:
+                    if db_link:
+                        self.db.delete(db_link)
+                    (
+                        self.db.query(ManagerRootAccess)
+                        .filter(ManagerRootAccess.user_id == user_id, ManagerRootAccess.account_id == account.id)
+                        .delete(synchronize_session=False)
+                    )
+
+                if portal_enabled and account.kind == S3AccountKind.IAM_ACCOUNT.value:
+                    if not normalized_portal_role:
+                        (
+                            self.db.query(PortalRoleBinding)
+                            .filter(
+                                PortalRoleBinding.user_id == user_id,
+                                PortalRoleBinding.account_id == account.id,
+                                PortalRoleBinding.bucket.is_(None),
+                                PortalRoleBinding.prefix.is_(None),
+                            )
+                            .delete(synchronize_session=False)
+                        )
+                        (
+                            self.db.query(PortalMembership)
+                            .filter(PortalMembership.user_id == user_id, PortalMembership.account_id == account.id)
+                            .delete(synchronize_session=False)
+                        )
+                    else:
+                        membership = (
+                            self.db.query(PortalMembership)
+                            .filter(PortalMembership.user_id == user_id, PortalMembership.account_id == account.id)
+                            .first()
+                        )
+                        if membership:
+                            membership.role_key = normalized_portal_role
+                        else:
+                            membership = PortalMembership(user_id=user_id, account_id=account.id, role_key=normalized_portal_role)
+                        self.db.add(membership)
+
+                        role_row = self.db.query(PortalRole).filter(PortalRole.key == normalized_portal_role).first()
+                        if role_row:
+                            (
+                                self.db.query(PortalRoleBinding)
+                                .filter(
+                                    PortalRoleBinding.user_id == user_id,
+                                    PortalRoleBinding.account_id == account.id,
+                                    PortalRoleBinding.bucket.is_(None),
+                                    PortalRoleBinding.prefix.is_(None),
+                                )
+                                .delete(synchronize_session=False)
+                            )
+                            self.db.add(
+                                PortalRoleBinding(
+                                    user_id=user_id,
+                                    account_id=account.id,
+                                    role_id=role_row.id,
+                                    bucket=None,
+                                    prefix=None,
+                                )
+                            )
 
         self.db.add(account)
         self.db.commit()
         self.db.refresh(account)
 
         non_root_links = (
-            self.db.query(UserS3Account)
+            self.db.query(UserS3Account.user_id, UserS3Account.account_admin)
             .filter(UserS3Account.account_id == account.id, UserS3Account.is_root.is_(False))
             .all()
         )
-        user_ids = [link.user_id for link in non_root_links]
+        portal_links = (
+            self.db.query(PortalMembership.user_id, PortalMembership.role_key)
+            .filter(PortalMembership.account_id == account.id)
+            .all()
+        )
+        manager_by_user = {int(row[0]): bool(row[1]) for row in non_root_links}
+        portal_by_user = {int(row[0]): str(row[1]) for row in portal_links}
+        user_ids = sorted(set(manager_by_user.keys()) | set(portal_by_user.keys()))
         user_links = [
-            AccountUserLink(user_id=link.user_id, account_role=link.account_role, account_admin=link.account_admin)
-            for link in non_root_links
+            AccountUserLink(
+                user_id=user_id,
+                manager_root_access=manager_by_user.get(user_id),
+                portal_role_key=portal_by_user.get(user_id),
+            )
+            for user_id in user_ids
         ]
         endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
         quota_max_size_gb, quota_max_objects = self._account_quota(account)
@@ -942,39 +1099,69 @@ class S3AccountsService:
         account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
         if not account:
             raise ValueError("S3Account not found")
-        admin = self._admin_for_account(account, allow_missing=True)
         if delete_rgw:
-            self._delete_root_user(account, required=False)
-            rgw_id = account.rgw_account_id or str(account.id)
+            if not account.rgw_account_id:
+                raise ValueError("Unable to delete RGW tenant: rgw_account_id is missing for this account.")
+            admin = self._admin_for_account(account, allow_missing=False)
+            account_identifier = account.rgw_account_id
+
+            # Safety: only allow RGW deletion when we can prove the tenant is empty.
+            _, _, bucket_count = self._account_usage(account)
+            if bucket_count is None:
+                raise ValueError("Unable to verify bucket existence; cannot delete the RGW tenant.")
+            rgw_user_count, _ = self._account_rgw_users(account_identifier, None, admin)
+            if rgw_user_count is None:
+                raise ValueError("Unable to verify RGW users; cannot delete the RGW tenant.")
+            rgw_topic_count, _ = self._account_topics_info(account_identifier, admin)
+            if rgw_topic_count is None:
+                raise ValueError("Unable to verify RGW notification topics; cannot delete the RGW tenant.")
+            if bucket_count > 0 or rgw_user_count > 0 or rgw_topic_count > 0:
+                raise ValueError(
+                    f"RGW tenant still has attached resources (buckets={bucket_count}, users={rgw_user_count}, topics={rgw_topic_count}); remove them first."
+                )
+
+            self._delete_root_user(account, required=True)
             try:
-                if not admin:
-                    raise ValueError("Unable to delete RGW account: admin credentials are missing for this endpoint.")
-                admin.delete_account(rgw_id)
+                admin.delete_account(account_identifier)
             except RGWAdminError as exc:
-                logger.warning("Unable to delete RGW account %s: %s", rgw_id, exc)
+                raise ValueError(f"Unable to delete RGW account {account_identifier}: {exc}") from exc
         self._remove_account_entry(account)
 
     def unlink_account(self, account_id: int) -> None:
         account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
         if not account:
             raise ValueError("S3Account not found")
-        self._delete_root_user(account, required=True)
+        if account.rgw_account_id:
+            self._delete_root_user(account, required=True)
         self._remove_account_entry(account)
 
     def _delete_root_user(self, account: S3Account, required: bool) -> None:
-        rgw_id = account.rgw_account_id or str(account.id)
-        root_uid = self._root_uid(rgw_id)
-        try:
-            admin = self._admin_for_account(account, allow_missing=False)
-            admin.delete_user(root_uid, tenant=None)
-            logger.debug("Deleted RGW root user %s", root_uid)
+        if not account.rgw_account_id:
+            if required:
+                raise ValueError("RGW account ID is missing; cannot delete the root user.")
             return
-        except RGWAdminError as exc:
-            logger.debug("Unable to delete RGW root user %s: %s", root_uid, exc)
+        rgw_id = account.rgw_account_id
+        candidate_uids = [self._root_uid(rgw_id)]
+        last_error: Optional[str] = None
+        admin = self._admin_for_account(account, allow_missing=False)
+        for candidate_uid in candidate_uids:
+            try:
+                admin.delete_user(candidate_uid, tenant=None)
+                logger.debug("Deleted RGW root user %s", candidate_uid)
+                return
+            except RGWAdminError as exc:
+                last_error = str(exc)
+                logger.debug("Unable to delete RGW root user %s: %s", candidate_uid, exc)
         if required:
-            raise ValueError(f"Unable to delete RGW root user for account {account.id}")
+            raise ValueError(
+                f"Unable to delete RGW root user {candidate_uids[0]} for account {account.id}: {last_error or 'unknown error'}"
+            )
 
     def _remove_account_entry(self, account: S3Account) -> None:
+        self.db.query(PortalRoleBinding).filter(PortalRoleBinding.account_id == account.id).delete()
+        self.db.query(PortalMembership).filter(PortalMembership.account_id == account.id).delete()
+        self.db.query(ManagerRootAccess).filter(ManagerRootAccess.account_id == account.id).delete()
+        self.db.query(IamIdentity).filter(IamIdentity.account_id == account.id).delete()
         self.db.query(UserS3Account).filter(UserS3Account.account_id == account.id).delete()
         self.db.delete(account)
         self.db.commit()

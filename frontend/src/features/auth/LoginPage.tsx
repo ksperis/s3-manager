@@ -26,12 +26,15 @@ export default function LoginPage() {
   const [endpointLoading, setEndpointLoading] = useState(false);
   const [selectedEndpoint, setSelectedEndpoint] = useState("");
   const [customEndpoint, setCustomEndpoint] = useState("");
-  const resolveDestination = (role?: string | null, accountLinks?: { account_role?: string | null; account_admin?: boolean | null }[] | null) => {
+  const resolveDestination = (user?: any) => {
+    const role = user?.role as string | undefined;
     if (role === "ui_admin") return "/admin";
     if (role === "ui_user") {
-      const links = accountLinks ?? [];
-      const hasPortalAccess = links.some((link) => link.account_role !== "portal_none");
-      const hasAccountAdmin = links.some((link) => link.account_admin);
+      const links = (user?.account_links ?? []) as { manager_root_access?: boolean | null }[];
+      const hasPortalAccess = Array.isArray(user?.portal_memberships) && user.portal_memberships.length > 0;
+      const hasAccountAdmin =
+        (Array.isArray(user?.manager_root_access) && user.manager_root_access.length > 0) ||
+        links.some((link) => Boolean(link.manager_root_access));
       if (hasPortalAccess) return "/portal";
       if (hasAccountAdmin) return "/manager";
     }
@@ -99,7 +102,7 @@ export default function LoginPage() {
       localStorage.setItem("user", JSON.stringify({ ...res.user, authType: "password" }));
       localStorage.removeItem("s3SessionEndpoint");
       refreshGeneralSettings();
-      const destination = resolveDestination(res.user.role, res.user.account_links ?? null);
+      const destination = resolveDestination(res.user);
       navigate(destination, { replace: true });
     } catch (err) {
       console.error(err);

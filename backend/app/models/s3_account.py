@@ -9,8 +9,8 @@ from app.models.pagination import PaginatedResponse
 
 class AccountUserLink(BaseModel):
     user_id: int
-    account_role: Optional[str] = None
-    account_admin: Optional[bool] = None
+    manager_root_access: Optional[bool] = None
+    portal_role_key: Optional[str] = None
 
 
 class S3Account(BaseModel):

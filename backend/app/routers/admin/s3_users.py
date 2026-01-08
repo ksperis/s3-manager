@@ -94,13 +94,16 @@ def create_s3_user(
 @router.get("/{user_id}", response_model=S3User)
 def get_s3_user(
     user_id: int,
+    include_buckets: bool = Query(False, description="Include bucket count computed from the user's interface key"),
     service: S3UsersService = Depends(get_admin_s3_users_service),
     _: User = Depends(get_current_super_admin),
 ) -> S3User:
     try:
-        return service.get_user(user_id)
+        return service.get_user(user_id, include_buckets=include_buckets)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 @router.post("/import", response_model=list[S3User])
@@ -262,28 +265,6 @@ def delete_s3_user_access_key(
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
-@router.post("/{user_id}/unlink", status_code=status.HTTP_204_NO_CONTENT)
-def unlink_s3_user(
-    user_id: int,
-    service: S3UsersService = Depends(get_admin_s3_users_service),
-    current_user: User = Depends(get_current_super_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
-) -> None:
-    try:
-        service.unlink_user(user_id)
-        audit_service.record_action(
-            user=current_user,
-            scope="admin",
-            action="unlink_s3_user",
-            entity_type="s3_user",
-            entity_id=str(user_id),
-        )
-    except ValueError as exc:
-        detail = str(exc)
-        status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
-        raise HTTPException(status_code=status_code, detail=detail) from exc
-
-
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_s3_user(
     user_id: int,
@@ -303,4 +284,6 @@ def delete_s3_user(
             metadata={"delete_rgw": delete_rgw},
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc

@@ -217,12 +217,50 @@ class StorageEndpointsService:
         endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:
             raise ValueError("Endpoint not found.")
-        if not endpoint.is_editable:
-            raise ValueError("This endpoint is protected and cannot be edited.")
 
         fields_set = getattr(payload, "model_fields_set", None)
         if fields_set is None:
             fields_set = getattr(payload, "__pydantic_fields_set__", set())
+
+        if not endpoint.is_editable:
+            allowed_fields = {
+                "features_config",
+                "presign_enabled",
+                "allow_external_access",
+                "max_session_duration",
+                "allowed_packages",
+            }
+            unexpected = sorted([field for field in fields_set if field not in allowed_fields])
+            if unexpected:
+                raise ValueError(
+                    "This endpoint is protected; only portal settings can be edited "
+                    f"({', '.join(sorted(allowed_fields))})."
+                )
+
+            provider = self._normalize_provider(endpoint.provider)
+            raw_features = payload.features_config if payload.features_config is not None else endpoint.features_config
+            features, features_config = self._normalize_features(provider, raw_features)
+            capabilities = features_to_capabilities(features)
+            endpoint.admin_endpoint = features.get("admin", {}).get("endpoint")
+            endpoint.features_config = features_config
+            endpoint.capabilities = capabilities
+            if "presign_enabled" in fields_set:
+                endpoint.presign_enabled = bool(payload.presign_enabled)
+            if "allow_external_access" in fields_set:
+                endpoint.allow_external_access = bool(payload.allow_external_access)
+            if "max_session_duration" in fields_set and payload.max_session_duration is not None:
+                endpoint.max_session_duration = int(payload.max_session_duration)
+            if "allowed_packages" in fields_set:
+                normalized_packages = payload.allowed_packages or []
+                endpoint.allowed_packages = (
+                    [str(p).strip() for p in normalized_packages if isinstance(p, str) and p.strip()] or None
+                )
+
+            self.db.add(endpoint)
+            self.db.commit()
+            self.db.refresh(endpoint)
+            return self._serialize(endpoint)
+
         name = (
             self._normalize_name(payload.name, fallback=endpoint.name)
             if "name" in fields_set

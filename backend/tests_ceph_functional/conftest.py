@@ -166,7 +166,12 @@ def _provision_account(
 
     super_admin_session.post(
         f"/admin/users/{manager_user_id}/assign-account",
-        json={"account_id": account_id, "account_root": False, "account_role": "portal_manager"},
+        json={
+            "account_id": account_id,
+            "account_root": False,
+            "manager_root_access": True,
+            "portal_role_key": "AccountAdmin",
+        },
         expected_status=200,
     )
 

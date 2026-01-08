@@ -124,8 +124,8 @@ def assign_account(
             user_id,
             payload.account_id,
             account_root=payload.account_root or False,
-            account_role=payload.account_role,
-            account_admin=payload.account_admin,
+            manager_root_access=payload.manager_root_access,
+            portal_role_key=payload.portal_role_key,
         )
         audit_service.record_action(
             user=current_user,
@@ -136,6 +136,8 @@ def assign_account(
             account_id=payload.account_id,
             metadata={
                 "account_root": bool(payload.account_root),
+                "manager_root_access": payload.manager_root_access,
+                "portal_role_key": payload.portal_role_key,
                 "assigned_user_id": user_id,
             },
         )

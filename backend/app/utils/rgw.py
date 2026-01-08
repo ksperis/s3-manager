@@ -65,7 +65,7 @@ def resolve_admin_uid(account_id: Optional[str], user_uid: Optional[str]) -> Opt
         normalized = normalize_rgw_identifier(account_id)
         if not normalized:
             return None
-        return f"{normalized}-admin"
+        return f"{normalized}-s3m-admin"
     return None
 
 

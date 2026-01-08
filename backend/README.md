@@ -118,4 +118,4 @@ If you already have tenants in RGW, run the helper script once after deploying t
 python -m app.scripts.grant_account_caps
 ```
 
-The script uses the credentials defined by `RGW_ADMIN_ACCESS_KEY` / `RGW_ADMIN_SECRET_KEY` to update each `<tenant>-admin` user.
+The script uses the credentials defined by `RGW_ADMIN_ACCESS_KEY` / `RGW_ADMIN_SECRET_KEY` to update each `<tenant>-s3m-admin` user.

@@ -115,6 +115,9 @@ export default function ObjectAdvancedModal({
   onClose,
   onRefresh,
 }: ObjectAdvancedModalProps) {
+  const makeDraftId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  type TagDraft = ObjectTag & { id: string };
+
   const [activeTab, setActiveTab] = useState("metadata");
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>({
     contentType: "",
@@ -125,7 +128,7 @@ export default function ObjectAdvancedModal({
     expires: "",
   });
   const [metadataItems, setMetadataItems] = useState<ObjectTag[]>([]);
-  const [tagsDraft, setTagsDraft] = useState<ObjectTag[]>([]);
+  const [tagsDraft, setTagsDraft] = useState<TagDraft[]>([]);
   const [storageClass, setStorageClass] = useState("");
   const [aclValue, setAclValue] = useState("private");
   const [legalHoldStatus, setLegalHoldStatus] = useState<"ON" | "OFF">("OFF");
@@ -194,7 +197,7 @@ export default function ObjectAdvancedModal({
   }, [item.storageClass, metadata]);
 
   useEffect(() => {
-    setTagsDraft(tags.map((tag) => ({ key: tag.key, value: tag.value })));
+    setTagsDraft(tags.map((tag) => ({ id: makeDraftId(), key: tag.key, value: tag.value })));
   }, [item.key, tags]);
 
   useEffect(() => {
@@ -291,7 +294,9 @@ export default function ObjectAdvancedModal({
       await updateObjectTags(accountId, bucketName, {
         key: item.key,
         version_id: versionId ?? null,
-        tags: tagsDraft.filter((tag) => tag.key.trim().length > 0),
+        tags: tagsDraft
+          .filter((tag) => tag.key.trim().length > 0)
+          .map(({ key, value }) => ({ key, value })),
       });
       pushStatus("Tags updated.", "success");
       await onRefresh?.(item.key);
@@ -587,7 +592,7 @@ export default function ObjectAdvancedModal({
             <button
               type="button"
               className={buttonGhostClasses}
-              onClick={() => setTagsDraft((prev) => [...prev, { key: "", value: "" }])}
+              onClick={() => setTagsDraft((prev) => [...prev, { id: makeDraftId(), key: "", value: "" }])}
             >
               Add tag
             </button>
@@ -596,14 +601,14 @@ export default function ObjectAdvancedModal({
             <p className="ui-caption text-slate-500 dark:text-slate-400">No tags defined.</p>
           ) : (
             <div className="space-y-2">
-              {tagsDraft.map((tag, idx) => (
-                <div key={`${tag.key}-${idx}`} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+              {tagsDraft.map((tag) => (
+                <div key={tag.id} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
                   <input
                     className={inputClasses}
                     value={tag.key}
                     onChange={(event) =>
                       setTagsDraft((prev) =>
-                        prev.map((entry, index) => (index === idx ? { ...entry, key: event.target.value } : entry))
+                        prev.map((entry) => (entry.id === tag.id ? { ...entry, key: event.target.value } : entry))
                       )
                     }
                     placeholder="Key"
@@ -613,7 +618,7 @@ export default function ObjectAdvancedModal({
                     value={tag.value}
                     onChange={(event) =>
                       setTagsDraft((prev) =>
-                        prev.map((entry, index) => (index === idx ? { ...entry, value: event.target.value } : entry))
+                        prev.map((entry) => (entry.id === tag.id ? { ...entry, value: event.target.value } : entry))
                       )
                     }
                     placeholder="Value"
@@ -621,7 +626,7 @@ export default function ObjectAdvancedModal({
                   <button
                     type="button"
                     className={buttonGhostClasses}
-                    onClick={() => setTagsDraft((prev) => prev.filter((_, index) => index !== idx))}
+                    onClick={() => setTagsDraft((prev) => prev.filter((entry) => entry.id !== tag.id))}
                   >
                     Remove
                   </button>

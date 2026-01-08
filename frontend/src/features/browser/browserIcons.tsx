@@ -132,6 +132,44 @@ export const MoreIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   </svg>
 );
 
+export const InfoIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <circle cx="10" cy="10" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M10 9v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M10 7h.01" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+  </svg>
+);
+
+export const ClockIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <circle cx="10" cy="10" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M10 6.5v3.8l2.6 1.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export const TagIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path
+      d="M3.8 9.2V5.7c0-1.2 1-2.2 2.2-2.2h3.5l6.5 6.5a1.8 1.8 0 0 1 0 2.6l-3.3 3.3a1.8 1.8 0 0 1-2.6 0L3.8 9.2Z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinejoin="round"
+    />
+    <circle cx="7.1" cy="7.1" r="1" fill="currentColor" />
+  </svg>
+);
+
+export const SlidersIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path d="M5 4v12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M10 4v12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M15 4v12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M3.5 7h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M8.5 12h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M13.5 8.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
 export const SearchIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
     <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" />

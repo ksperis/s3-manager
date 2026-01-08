@@ -14,7 +14,6 @@ import {
   getS3Account,
   importS3Accounts,
   listMinimalS3Accounts,
-  unlinkS3Account,
   updateS3Account,
 } from "../../api/accounts";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
@@ -84,12 +83,10 @@ export default function S3AccountsPage() {
   const [deletingS3AccountId, setDeletingS3AccountId] = useState<number | null>(null);
   const [accountToDelete, setS3AccountToDelete] = useState<S3Account | null>(null);
   const [deleteFromRgw, setDeleteFromRgw] = useState(false);
-  const [accountToUnlink, setS3AccountToUnlink] = useState<S3Account | null>(null);
-  const [unlinkingS3AccountId, setUnlinkingS3AccountId] = useState<number | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [userSelections, setUserSelections] = useState<number[]>([]);
-  const [userRoleChoice, setUserRoleChoice] = useState<Record<number, AccountUserLink["account_role"]>>({});
+  const [userRoleChoice, setUserRoleChoice] = useState<Record<number, string>>({});
   const [userAdminChoice, setUserAdminChoice] = useState<Record<number, boolean>>({});
   const MAX_LINK_OPTIONS = 10;
   const currentUser = useMemo(() => {
@@ -187,8 +184,8 @@ export default function S3AccountsPage() {
       const link = editForm.user_links.find((item) => item.user_id === u.id);
       return {
         ...u,
-        role: link?.account_role ?? "portal_none",
-        account_admin: Boolean(link?.account_admin),
+        role: link?.portal_role_key ?? "none",
+        account_admin: Boolean(link?.manager_root_access),
       };
     });
   }, [editForm.user_links, userOptions]);
@@ -323,14 +320,14 @@ export default function S3AccountsPage() {
   }, [storageEndpoints, cephEndpoints]);
 
   const loadAccountDetail = useCallback(
-    async (account: S3AccountSummary) => {
+    async (account: S3AccountSummary, includeUsage: boolean) => {
       const targetId = accountDbId(account);
       if (targetId == null || Number.isNaN(targetId)) {
         setActionError("Unable to resolve the account identifier.");
         return null;
       }
       try {
-        const detail = await getS3Account(targetId, { includeUsage: false });
+        const detail = await getS3Account(targetId, { includeUsage });
         return detail;
       } catch (err) {
         setActionError(extractError(err));
@@ -401,16 +398,21 @@ export default function S3AccountsPage() {
     if (account.user_links && account.user_links.length > 0) {
       return account.user_links;
     }
-    return (account.user_ids ?? []).map((id) => ({ user_id: id, account_role: null, account_admin: false }));
+    return (account.user_ids ?? []).map((id) => ({ user_id: id, portal_role_key: "none", manager_root_access: false }));
   };
 
+  const deleteModalCanCheckResources =
+    accountToDelete != null &&
+    accountToDelete.bucket_count != null &&
+    accountToDelete.rgw_user_count != null &&
+    accountToDelete.rgw_topic_count != null;
   const deleteModalHasResources =
     accountToDelete != null &&
-    ((accountToDelete.bucket_count ?? 0) > 0 ||
-      (accountToDelete.rgw_user_count ?? 0) > 0 ||
-      (accountToDelete.rgw_topic_count ?? 0) > 0);
+    (!deleteModalCanCheckResources ||
+      accountToDelete.bucket_count > 0 ||
+      accountToDelete.rgw_user_count > 0 ||
+      accountToDelete.rgw_topic_count > 0);
   const deleteModalBusy = accountToDelete ? deletingS3AccountId === accountDbId(accountToDelete) : false;
-  const accountUnlinkModalBusy = accountToUnlink ? unlinkingS3AccountId === accountDbId(accountToUnlink) : false;
   const importDisabled =
     importBusy ||
     (importMode === "tenant"
@@ -422,7 +424,7 @@ export default function S3AccountsPage() {
     setActionMessage(null);
     setUserRoleChoice({});
     setUserAdminChoice({});
-    const detail = await loadAccountDetail(account);
+    const detail = await loadAccountDetail(account, false);
     if (!detail) return;
     const quota = resolveQuotaForEdit(detail.quota_max_size_gb);
     setEditingS3Account(detail);
@@ -433,8 +435,8 @@ export default function S3AccountsPage() {
       user_links:
         detail.user_links?.map((link) => ({
           user_id: link.user_id,
-          account_role: link.account_role ?? "portal_none",
-          account_admin: portalEnabled ? Boolean(link.account_admin) : true,
+          portal_role_key: link.portal_role_key ?? "none",
+          manager_root_access: Boolean(link.manager_root_access),
         })) ?? [],
     });
     setUserSearch("");
@@ -455,7 +457,7 @@ export default function S3AccountsPage() {
     try {
       const userLinksPayload = portalEnabled
         ? editForm.user_links
-        : editForm.user_links.map((link) => ({ ...link, account_role: null, account_admin: true }));
+        : editForm.user_links.map((link) => ({ ...link, portal_role_key: null, manager_root_access: true }));
       await updateS3Account(targetId, {
         quota_max_size_gb: editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null,
         quota_max_size_unit: editForm.quota_max_size_gb !== "" ? editForm.quota_max_size_unit : null,
@@ -476,7 +478,7 @@ export default function S3AccountsPage() {
   const openDeleteS3AccountModal = async (account: S3AccountSummary) => {
     setActionError(null);
     setActionMessage(null);
-    const detail = await loadAccountDetail(account);
+    const detail = await loadAccountDetail(account, true);
     if (!detail) return;
     setS3AccountToDelete(detail);
     setDeleteFromRgw(false);
@@ -509,42 +511,6 @@ export default function S3AccountsPage() {
       setDeletingS3AccountId(null);
     }
   };
-
-  const openUnlinkS3AccountModal = async (account: S3AccountSummary) => {
-    setActionError(null);
-    setActionMessage(null);
-    const detail = await loadAccountDetail(account);
-    if (!detail) return;
-    setS3AccountToUnlink(detail);
-  };
-
-  const closeUnlinkModal = () => {
-    setS3AccountToUnlink(null);
-    setUnlinkingS3AccountId(null);
-    setActionError(null);
-  };
-
-  const confirmUnlinkS3Account = async () => {
-    if (!accountToUnlink) return;
-    const targetId = accountDbId(accountToUnlink);
-    if (targetId == null || Number.isNaN(targetId)) {
-      setActionError("Missing account identifier.");
-      return;
-    }
-    setUnlinkingS3AccountId(targetId);
-    setActionError(null);
-    setActionMessage(null);
-    try {
-      await unlinkS3Account(targetId);
-      await fetchS3Accounts();
-      closeUnlinkModal();
-    } catch (err) {
-      setActionError(extractError(err));
-    } finally {
-      setUnlinkingS3AccountId(null);
-    }
-  };
-
 
   return (
     <div className="space-y-4">
@@ -687,52 +653,10 @@ export default function S3AccountsPage() {
       </Modal>
     )}
 
-      {isSuperAdmin && accountToUnlink && (
-        <Modal title={`Unlink ${accountToUnlink.name}`} onClose={closeUnlinkModal}>
-          <p className="mb-3 ui-body text-slate-500 dark:text-slate-400">
-            This removes the account from the admin interface and detaches assigned UI users while keeping the RGW tenant and its data.
-            The root user{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 ui-caption dark:bg-slate-800">
-              {(accountToUnlink.rgw_account_id ?? accountToUnlink.id) + "-admin"}
-            </code>{" "}
-            will be deleted to revoke its access keys.
-          </p>
-          {actionError && (
-            <PageBanner tone="error" className="mb-3">
-              {actionError}
-            </PageBanner>
-          )}
-          <div className="mb-4 rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-            RGW tenant preserved:{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 ui-caption dark:bg-slate-800">
-              {accountToUnlink.rgw_account_id ?? accountToUnlink.id}
-            </code>
-          </div>
-          <div className="flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={closeUnlinkModal}
-              className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={confirmUnlinkS3Account}
-              disabled={accountUnlinkModalBusy}
-              className="rounded-md bg-amber-500 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:opacity-60"
-            >
-              {accountUnlinkModalBusy ? "Unlinking..." : "Unlink account"}
-            </button>
-          </div>
-        </Modal>
-      )}
-
-
       {isSuperAdmin && accountToDelete && (
         <Modal title={`Delete ${accountToDelete.name}`} onClose={closeDeleteModal}>
           <p className="mb-3 ui-body text-slate-500 dark:text-slate-400">
-            Removing this account deletes the UI entry. Optionally delete the backing RGW tenant if it no longer contains resources.
+            This removes the account from the admin interface, detaches assigned UI users, and deletes the account root user to revoke its access keys. Optionally delete the backing RGW tenant if it no longer contains resources.
           </p>
           {actionError && (
             <PageBanner tone="error" className="mb-3">
@@ -1161,7 +1085,7 @@ export default function S3AccountsPage() {
                           {portalEnabled ? "Portal role" : "Portal access"}
                         </th>
                         <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Admin
+                          Manager
                         </th>
                         <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Actions
@@ -1189,15 +1113,16 @@ export default function S3AccountsPage() {
                                       ...prev,
                                       user_links: prev.user_links.map((link) =>
                                         link.user_id === u.id
-                                          ? { ...link, account_role: e.target.value }
+                                          ? { ...link, portal_role_key: e.target.value }
                                           : link
                                       ),
                                     }))
                                   }
                                 >
-                                  <option value="portal_user">Portal user</option>
-                                  <option value="portal_manager">Portal manager</option>
-                                  <option value="portal_none">Portal none</option>
+                                  <option value="Viewer">Viewer</option>
+                                  <option value="AccessAdmin">Access admin</option>
+                                  <option value="AccountAdmin">Account admin</option>
+                                  <option value="none">No portal access</option>
                                 </select>
                               ) : null}
                             </td>
@@ -1211,17 +1136,17 @@ export default function S3AccountsPage() {
                                       setEditForm((prev) => ({
                                         ...prev,
                                         user_links: prev.user_links.map((link) =>
-                                          link.user_id === u.id ? { ...link, account_admin: e.target.checked } : link
+                                          link.user_id === u.id ? { ...link, manager_root_access: e.target.checked } : link
                                         ),
                                       }))
                                     }
                                     className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
                                   />
-                                  Admin
+                                  Manager
                                 </label>
                               ) : (
                                 <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                  Admin
+                                  Manager
                                 </span>
                               )}
                             </td>
@@ -1266,8 +1191,8 @@ export default function S3AccountsPage() {
                       )}
                       {visibleAvailableUsers.map((u) => {
                         const isSelected = userSelections.includes(u.id);
-                        const role = portalEnabled ? userRoleChoice[u.id] ?? "portal_none" : "portal_none";
-                        const adminChecked = portalEnabled ? userAdminChoice[u.id] ?? role === "portal_manager" : true;
+                        const role = portalEnabled ? userRoleChoice[u.id] ?? "none" : "none";
+                        const adminChecked = userAdminChoice[u.id] ?? false;
                         return (
                           <div
                             key={u.id}
@@ -1292,20 +1217,17 @@ export default function S3AccountsPage() {
                                   className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                                   value={role}
                                   onChange={(e) => {
-                                    const nextRole = e.target.value as AccountUserLink["account_role"];
+                                    const nextRole = e.target.value;
                                     setUserRoleChoice((prev) => ({
                                       ...prev,
                                       [u.id]: nextRole,
                                     }));
-                                    setUserAdminChoice((prev) => ({
-                                      ...prev,
-                                      [u.id]: prev[u.id] ?? nextRole === "portal_manager",
-                                    }));
                                   }}
                                 >
-                                  <option value="portal_user">Portal user</option>
-                                  <option value="portal_manager">Portal manager</option>
-                                  <option value="portal_none">Portal none</option>
+                                  <option value="Viewer">Viewer</option>
+                                  <option value="AccessAdmin">Access admin</option>
+                                  <option value="AccountAdmin">Account admin</option>
+                                  <option value="none">No portal access</option>
                                 </select>
                               ) : null}
                               {portalEnabled ? (
@@ -1321,11 +1243,11 @@ export default function S3AccountsPage() {
                                     }
                                     className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
                                   />
-                                  Admin
+                                  Manager
                                 </label>
                               ) : (
                                 <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                  Admin
+                                  Manager
                                 </span>
                               )}
                             </div>
@@ -1360,11 +1282,11 @@ export default function S3AccountsPage() {
                           onClick={() => {
                             if (userSelections.length === 0) return;
                             const toAdd = userSelections.map((id) => {
-                              const role = portalEnabled ? userRoleChoice[id] ?? "portal_none" : "portal_none";
+                              const role = portalEnabled ? userRoleChoice[id] ?? "none" : "none";
                               return {
                                 user_id: id,
-                                account_role: role,
-                                account_admin: portalEnabled ? userAdminChoice[id] ?? role === "portal_manager" : true,
+                                portal_role_key: role,
+                                manager_root_access: Boolean(userAdminChoice[id]),
                               };
                             });
                             setEditForm((prev) => ({
@@ -1484,7 +1406,6 @@ export default function S3AccountsPage() {
                 !error &&
                 pagedS3Accounts.map((account) => {
                   const summaryDbId = accountDbId(account);
-                  const unlinkBusy = summaryDbId != null && unlinkingS3AccountId === summaryDbId;
                   const deleteBusy = summaryDbId != null && deletingS3AccountId === summaryDbId;
                   const accountUserLinks = resolveAccountUserLinks(account);
                   return (
@@ -1517,14 +1438,19 @@ export default function S3AccountsPage() {
                     {accountUserLinks.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {accountUserLinks.map((link) => {
-                          const role = link.account_role ?? "portal_none";
-                          const showPortalBadge = portalEnabled && role !== "portal_none";
-                          const roleLabel = role === "portal_manager" ? "Portal manager" : "Portal user";
+                          const role = link.portal_role_key ?? "none";
+                          const showPortalBadge = portalEnabled && role !== "none";
+                          const roleLabel =
+                            role === "AccountAdmin" ? "Account admin" : role === "AccessAdmin" ? "Access admin" : role === "Viewer" ? "Viewer" : role;
                           const tone =
-                            role === "portal_manager"
+                            role === "AccountAdmin"
                               ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100"
-                              : "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100";
-                          const isAccountAdmin = Boolean(link.account_admin);
+                              : role === "AccessAdmin"
+                              ? "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100"
+                              : role === "Viewer"
+                              ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-100"
+                              : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200";
+                          const isAccountAdmin = Boolean(link.manager_root_access);
                           return (
                             <span
                               key={`${account.id}-${link.user_id}-${role}-${isAccountAdmin ? "admin" : "user"}`}
@@ -1538,7 +1464,7 @@ export default function S3AccountsPage() {
                               )}
                               {isAccountAdmin && (
                                 <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                  Admin
+                                  Manager
                                 </span>
                               )}
                             </span>
@@ -1549,18 +1475,11 @@ export default function S3AccountsPage() {
                       <span className="ui-caption text-slate-500 dark:text-slate-400">None</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right">
                     {isSuperAdmin ? (
                       <div className="flex justify-end gap-2">
                         <button onClick={() => startEditS3Account(account)} className={tableActionButtonClasses}>
                           Edit
-                        </button>
-                        <button
-                          onClick={() => openUnlinkS3AccountModal(account)}
-                          className={tableActionButtonClasses}
-                          disabled={unlinkBusy}
-                        >
-                          {unlinkBusy ? "Unlinking..." : "Unlink"}
                         </button>
                         <button
                           onClick={() => openDeleteS3AccountModal(account)}

@@ -210,6 +210,7 @@ export default function StorageEndpointsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingEndpoint, setEditingEndpoint] = useState<StorageEndpoint | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [defaultError, setDefaultError] = useState<string | null>(null);
   const [defaultBusyId, setDefaultBusyId] = useState<number | null>(null);
@@ -221,6 +222,7 @@ export default function StorageEndpointsPage() {
     setForm(createEmptyForm());
     setFormError(null);
     setEditingId(null);
+    setEditingEndpoint(null);
   }, []);
 
   const loadEndpoints = useCallback(async () => {
@@ -241,6 +243,7 @@ export default function StorageEndpointsPage() {
   }, [loadEndpoints]);
 
   const cephMode = useMemo(() => form.provider === "ceph", [form.provider]);
+  const readOnlyEdit = useMemo(() => Boolean(editingEndpoint && !editingEndpoint.is_editable), [editingEndpoint]);
   const defaultEndpoint = useMemo(() => endpoints.find((ep) => ep.is_default), [endpoints]);
   const updateFeatures = useCallback(
     (updater: (current: FeaturesState) => FeaturesState, providerOverride?: StorageProvider) => {
@@ -275,12 +278,14 @@ export default function StorageEndpointsPage() {
 
   const startCreate = () => {
     resetForm();
+    setEditingEndpoint(null);
     setShowForm(true);
   };
 
   const startEdit = (endpoint: StorageEndpoint) => {
     const features = resolveFeatureState(endpoint, endpoint.provider);
     setEditingId(endpoint.id);
+    setEditingEndpoint(endpoint);
     setForm({
       name: endpoint.name ?? "",
       endpoint_url: endpoint.endpoint_url ?? "",
@@ -354,20 +359,18 @@ export default function StorageEndpointsPage() {
       .filter((entry) => entry.length > 0);
     const allowedPackagesUnique = Array.from(new Set(allowedPackages));
 
-    if (!trimmedName) {
-      setFormError("Storage name is required.");
-      return null;
-    }
-    if (!trimmedEndpoint) {
-      setFormError("Endpoint URL is required.");
-      return null;
+    if (!readOnlyEdit) {
+      if (!trimmedName) {
+        setFormError("Storage name is required.");
+        return null;
+      }
+      if (!trimmedEndpoint) {
+        setFormError("Endpoint URL is required.");
+        return null;
+      }
     }
 
     const payload: StorageEndpointPayload = {
-      name: trimmedName,
-      endpoint_url: trimmedEndpoint,
-      region: trimmedRegion || null,
-      provider: form.provider,
       features_config: featuresConfig,
       allow_external_access: form.allow_external_access,
       presign_enabled: form.presign_enabled,
@@ -375,9 +378,17 @@ export default function StorageEndpointsPage() {
       allowed_packages: allowedPackagesUnique.length > 0 ? allowedPackagesUnique : null,
     };
 
+    if (!readOnlyEdit) {
+      payload.name = trimmedName;
+      payload.endpoint_url = trimmedEndpoint;
+      payload.region = trimmedRegion || null;
+      payload.provider = form.provider;
+    }
+
     if (form.provider === "ceph") {
       const adminEnabled = constrainedFeatures.admin.enabled;
       if (editingId) {
+        if (readOnlyEdit) return payload;
         if (trimmedAdminAccess) {
           payload.admin_access_key = trimmedAdminAccess;
           if (trimmedAdminSecret) payload.admin_secret_key = trimmedAdminSecret;
@@ -523,9 +534,13 @@ export default function StorageEndpointsPage() {
                 </button>
               </>
             ) : (
-              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                Read-only
-              </span>
+              <button
+                className="rounded-lg border border-slate-200 px-3 py-1.5 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                onClick={() => startEdit(endpoint)}
+                type="button"
+              >
+                Portal settings
+              </button>
             )}
           </div>
         </div>
@@ -671,9 +686,14 @@ export default function StorageEndpointsPage() {
       )}
 
       {showForm && (
-        <Modal title={editingId ? "Edit endpoint" : "New endpoint"} onClose={onCloseForm}>
+        <Modal title={readOnlyEdit ? "Portal settings" : editingId ? "Edit endpoint" : "New endpoint"} onClose={onCloseForm}>
           <form onSubmit={handleSubmit} className="space-y-4">
             {formError && <PageBanner tone="error">{formError}</PageBanner>}
+            {readOnlyEdit && (
+              <PageBanner tone="info">
+                This endpoint is protected; only portal settings and STS can be edited here.
+              </PageBanner>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
                 Storage name
@@ -682,7 +702,8 @@ export default function StorageEndpointsPage() {
                   value={form.name}
                   onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  required
+                  disabled={readOnlyEdit}
+                  required={!readOnlyEdit}
                 />
               </label>
               <div className="space-y-2">
@@ -695,6 +716,7 @@ export default function StorageEndpointsPage() {
                       value="ceph"
                       checked={form.provider === "ceph"}
                       onChange={() => handleProviderChange("ceph")}
+                      disabled={readOnlyEdit}
                     />
                     <span>Ceph</span>
                   </label>
@@ -705,6 +727,7 @@ export default function StorageEndpointsPage() {
                       value="other"
                       checked={form.provider === "other"}
                       onChange={() => handleProviderChange("other")}
+                      disabled={readOnlyEdit}
                     />
                     <span>Other</span>
                   </label>
@@ -721,7 +744,8 @@ export default function StorageEndpointsPage() {
                   onChange={(e) => setForm((prev) => ({ ...prev, endpoint_url: e.target.value }))}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   placeholder="https://s3.example.com"
-                  required
+                  disabled={readOnlyEdit}
+                  required={!readOnlyEdit}
                 />
               </label>
               <label className="space-y-1 ui-body font-semibold text-slate-700 dark:text-slate-100">
@@ -732,6 +756,7 @@ export default function StorageEndpointsPage() {
                   onChange={(e) => setForm((prev) => ({ ...prev, region: e.target.value }))}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                   placeholder="us-east-1"
+                  disabled={readOnlyEdit}
                 />
               </label>
             </div>
@@ -805,6 +830,7 @@ export default function StorageEndpointsPage() {
                         onChange={(e) => setForm((prev) => ({ ...prev, admin_access_key: e.target.value }))}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="Access key admin"
+                        disabled={readOnlyEdit}
                         required={!editingId && form.features.admin.enabled}
                       />
                       <input
@@ -813,6 +839,7 @@ export default function StorageEndpointsPage() {
                         onChange={(e) => setForm((prev) => ({ ...prev, admin_secret_key: e.target.value }))}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                         placeholder={editingId ? "Secret key admin (leave blank to keep)" : "Secret key admin"}
+                        disabled={readOnlyEdit}
                         required={!editingId && form.features.admin.enabled}
                       />
                     </div>
@@ -829,6 +856,7 @@ export default function StorageEndpointsPage() {
                         onChange={(e) => setForm((prev) => ({ ...prev, supervision_access_key: e.target.value }))}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="Access key supervision"
+                        disabled={readOnlyEdit}
                       />
                       <input
                         type="password"
@@ -836,6 +864,7 @@ export default function StorageEndpointsPage() {
                         onChange={(e) => setForm((prev) => ({ ...prev, supervision_secret_key: e.target.value }))}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="Secret key supervision"
+                        disabled={readOnlyEdit}
                       />
                     </div>
                     <p className="ui-caption font-normal text-slate-500 dark:text-slate-400">
@@ -862,7 +891,7 @@ export default function StorageEndpointsPage() {
                         }))
                       }
                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
-                      disabled={!cephMode}
+                      disabled={readOnlyEdit || !cephMode}
                     />
                   </label>
                   <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
@@ -891,7 +920,7 @@ export default function StorageEndpointsPage() {
                         }))
                       }
                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
-                      disabled={!cephMode || !form.features.admin.enabled}
+                      disabled={readOnlyEdit || !cephMode || !form.features.admin.enabled}
                     />
                   </label>
                   <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
@@ -906,7 +935,7 @@ export default function StorageEndpointsPage() {
                         }))
                       }
                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
-                      disabled={!cephMode || !form.features.admin.enabled}
+                      disabled={readOnlyEdit || !cephMode || !form.features.admin.enabled}
                     />
                   </label>
                   <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
@@ -921,6 +950,7 @@ export default function StorageEndpointsPage() {
                         }))
                       }
                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      disabled={readOnlyEdit}
                     />
                   </label>
                 </div>
@@ -941,7 +971,7 @@ export default function StorageEndpointsPage() {
                       }
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                       placeholder="http://rgw-admin.local"
-                      disabled={!cephMode || !form.features.admin.enabled}
+                      disabled={readOnlyEdit || !cephMode || !form.features.admin.enabled}
                     />
                   </label>
                   <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">

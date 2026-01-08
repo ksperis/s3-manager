@@ -17,6 +17,7 @@ export type S3User = {
   storage_endpoint_id?: number | null;
   storage_endpoint_name?: string | null;
   storage_endpoint_url?: string | null;
+  bucket_count?: number | null;
 };
 
 export type S3UserSummary = {
@@ -99,6 +100,11 @@ export async function getS3User(userId: number): Promise<S3User> {
   return data;
 }
 
+export async function getS3UserWithBuckets(userId: number): Promise<S3User> {
+  const { data } = await client.get<S3User>(`/admin/s3-users/${userId}`, { params: { include_buckets: true } });
+  return data;
+}
+
 export async function importS3Users(payload: ImportS3UserPayload[]): Promise<S3User[]> {
   const { data } = await client.post<S3User[]>("/admin/s3-users/import", payload);
   return data;
@@ -139,8 +145,4 @@ export async function deleteS3UserKey(userId: number, accessKeyId: string): Prom
 export async function deleteS3User(userId: number, options?: { deleteRgw?: boolean }): Promise<void> {
   const params = options?.deleteRgw ? { delete_rgw: options.deleteRgw } : undefined;
   await client.delete(`/admin/s3-users/${userId}`, { params });
-}
-
-export async function unlinkS3User(userId: number): Promise<void> {
-  await client.post(`/admin/s3-users/${userId}/unlink`);
 }

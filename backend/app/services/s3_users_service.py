@@ -28,6 +28,8 @@ from app.models.s3_user import (
     S3UserUpdate,
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
+from app.services import s3_client
+from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.utils.quota_stats import bytes_to_gb
 from app.utils.size_units import size_to_bytes
 
@@ -85,6 +87,23 @@ class S3UsersService:
     def _admin_for_user(self, s3_user: S3UserModel) -> RGWAdminClient:
         endpoint = self._resolve_endpoint(s3_user.storage_endpoint_id)
         return self._admin_for_endpoint(endpoint)
+
+    def _interface_bucket_count(self, s3_user: S3UserModel) -> Optional[int]:
+        access_key = (s3_user.rgw_access_key or "").strip()
+        secret_key = (s3_user.rgw_secret_key or "").strip()
+        if not access_key or not secret_key:
+            return None
+        try:
+            endpoint = resolve_s3_endpoint(s3_user)
+            buckets = s3_client.list_buckets(
+                access_key=access_key,
+                secret_key=secret_key,
+                endpoint=endpoint,
+            )
+            return len([b for b in buckets if isinstance(b, dict) and b.get("name")])
+        except RuntimeError as exc:
+            logger.warning("Unable to list buckets for user %s: %s", s3_user.rgw_user_uid, exc)
+            return None
 
     def _user_quota(
         self,
@@ -349,7 +368,7 @@ class S3UsersService:
             link_map.setdefault(link.s3_user_id, []).append(link.user_id)
         return [self._serialize_s3_user(row, link_map) for row in rows], total
 
-    def get_user(self, user_id: int) -> S3UserSchema:
+    def get_user(self, user_id: int, include_buckets: bool = False) -> S3UserSchema:
         s3_user = self._get_s3_user(user_id)
         user_ids = [
             row.user_id
@@ -361,6 +380,7 @@ class S3UsersService:
             else None
         )
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
+        bucket_count = self._interface_bucket_count(s3_user) if include_buckets else None
         return S3UserSchema(
             id=s3_user.id,
             name=s3_user.name,
@@ -373,6 +393,7 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id if endpoint else None,
             storage_endpoint_name=endpoint.name if endpoint else None,
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
+            bucket_count=bucket_count,
         )
 
     def create_user(self, payload: S3UserCreate) -> S3UserSchema:
@@ -719,17 +740,28 @@ class S3UsersService:
         except RGWAdminError as exc:
             raise ValueError(f"Unable to delete access key: {exc}") from exc
 
-    def unlink_user(self, user_id: int) -> None:
+    def delete_user(self, user_id: int, delete_rgw: bool = False) -> None:
         s3_user = self.db.query(S3UserModel).filter(S3UserModel.id == user_id).first()
         if not s3_user:
             raise ValueError("S3 user not found")
         admin = self._admin_for_user(s3_user)
-        key_to_delete = (s3_user.rgw_access_key or "").strip()
-        if key_to_delete:
+        if delete_rgw:
+            bucket_count = self._interface_bucket_count(s3_user)
+            if bucket_count is None:
+                raise ValueError("Unable to verify owned buckets; cannot delete the RGW user.")
+            if bucket_count > 0:
+                raise ValueError(f"RGW user still owns {bucket_count} bucket(s); delete them first.")
             try:
-                admin.delete_access_key(s3_user.rgw_user_uid, key_to_delete, tenant=None)
+                admin.delete_user(s3_user.rgw_user_uid, tenant=None)
             except RGWAdminError as exc:
-                raise ValueError(f"Unable to delete interface access key: {exc}") from exc
+                raise ValueError(f"Unable to delete RGW user {s3_user.rgw_user_uid}: {exc}") from exc
+        else:
+            key_to_delete = (s3_user.rgw_access_key or "").strip()
+            if key_to_delete:
+                try:
+                    admin.delete_access_key(s3_user.rgw_user_uid, key_to_delete, tenant=None)
+                except RGWAdminError as exc:
+                    raise ValueError(f"Unable to delete interface access key: {exc}") from exc
         (
             self.db.query(UserS3UserModel)
             .filter(UserS3UserModel.s3_user_id == s3_user.id)
@@ -738,23 +770,8 @@ class S3UsersService:
         self.db.delete(s3_user)
         self.db.commit()
 
-    def delete_user(self, user_id: int, delete_rgw: bool = False) -> None:
-        s3_user = self.db.query(S3UserModel).filter(S3UserModel.id == user_id).first()
-        if not s3_user:
-            raise ValueError("S3 user not found")
-        if delete_rgw:
-            admin = self._admin_for_user(s3_user)
-            try:
-                admin.delete_user(s3_user.rgw_user_uid, tenant=None)
-            except RGWAdminError as exc:
-                logger.warning("Unable to delete RGW user %s: %s", s3_user.rgw_user_uid, exc)
-        (
-            self.db.query(UserS3UserModel)
-            .filter(UserS3UserModel.s3_user_id == s3_user.id)
-            .delete(synchronize_session=False)
-        )
-        self.db.delete(s3_user)
-        self.db.commit()
+    def unlink_user(self, user_id: int) -> None:
+        self.delete_user(user_id, delete_rgw=False)
 
 
 def get_s3_users_service(db: Session, rgw_admin_client: Optional[RGWAdminClient] = None) -> S3UsersService:

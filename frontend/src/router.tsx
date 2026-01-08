@@ -16,7 +16,6 @@ import S3UsersPage from "./features/admin/S3UsersPage";
 import S3UserKeysPage from "./features/admin/S3UserKeysPage";
 import GeneralSettingsPage from "./features/admin/GeneralSettingsPage";
 import ManagerSettingsPage from "./features/admin/ManagerSettingsPage";
-import PortalSettingsPage from "./features/admin/PortalSettingsPage";
 import BrowserSettingsPage from "./features/admin/BrowserSettingsPage";
 import FeatureDisabledPage from "./features/shared/FeatureDisabledPage";
 import BucketsPage from "./features/manager/BucketsPage";
@@ -55,7 +54,9 @@ type StoredUser = {
   role?: string | null;
   email?: string | null;
   accounts?: number[] | null;
-  account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
+  account_links?: { account_id: number; account_root?: boolean | null; manager_root_access?: boolean | null }[] | null;
+  manager_root_access?: number[] | null;
+  portal_memberships?: { account_id: number; role_key: string }[] | null;
   authType?: "password" | "rgw_session" | "oidc";
   authProvider?: string | null;
   actorType?: string | null;
@@ -73,9 +74,6 @@ const buildAdminNav = (portalEnabled: boolean) => {
     { to: "/admin/manager-settings", label: "Manager" },
     { to: "/admin/browser-settings", label: "Browser" },
   ];
-  if (portalEnabled) {
-    settingsLinks.push({ to: "/admin/portal-settings", label: "Portal" });
-  }
   return [
     {
       label: "Overview",
@@ -138,8 +136,9 @@ function RoleRedirect() {
   if (user.role === ADMIN_ROLE) return <Navigate to="/admin" replace />;
   if (user.role === USER_ROLE) {
     const links = user.account_links ?? [];
-    const hasPortalAccess = links.some((link) => link.account_role !== "portal_none");
-    const hasAccountAdmin = links.some((link) => link.account_admin);
+    const hasPortalAccess = (user.portal_memberships ?? []).length > 0;
+    const hasAccountAdmin =
+      (user.manager_root_access ?? []).length > 0 || links.some((link) => Boolean(link.manager_root_access));
     const canManageBuckets = user.capabilities?.can_manage_buckets !== false;
     if (hasPortalAccess && generalSettings.portal_enabled) return <Navigate to="/portal" replace />;
     if (hasAccountAdmin && generalSettings.manager_enabled) return <Navigate to="/manager" replace />;
@@ -197,10 +196,9 @@ export default function AppRouter() {
               <Route path="users" element={<UsersPage />} />
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="metrics" element={<AdminMetricsPage />} />
-              <Route path="general-settings" element={<GeneralSettingsPage />} />
-              <Route path="manager-settings" element={<ManagerSettingsPage />} />
-              {generalSettings.portal_enabled && <Route path="portal-settings" element={<PortalSettingsPage />} />}
-              <Route path="browser-settings" element={<BrowserSettingsPage />} />
+            <Route path="general-settings" element={<GeneralSettingsPage />} />
+            <Route path="manager-settings" element={<ManagerSettingsPage />} />
+            <Route path="browser-settings" element={<BrowserSettingsPage />} />
             </Route>
           </Route>
 
