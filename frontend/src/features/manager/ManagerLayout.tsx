@@ -51,7 +51,6 @@ function ManagerShell() {
     accessMode,
     setAccessMode,
     canSwitchAccess,
-    managerStatsEnabled,
   } = useS3AccountContext();
   const navigate = useNavigate();
   const selected = accounts.find((a) => a.id === selectedS3AccountId);
@@ -67,7 +66,10 @@ function ManagerShell() {
   const isS3User = selectedS3AccountType === "s3_user";
   const canManageBuckets = capabilities.can_manage_buckets !== false;
   const canManageIam = !isS3User && capabilities.can_manage_iam !== false;
-  const canViewTraffic = !isS3User && (managerStatsEnabled ?? capabilities.can_view_traffic !== false);
+  const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
+  const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
+  const metricsFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
+  const canViewMetricsMenu = usageFeatureEnabled || metricsFeatureEnabled;
   const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
   const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
   const baseControlClasses =
@@ -176,7 +178,7 @@ function ManagerShell() {
       label: "Overview",
       links: [
         { to: "/manager", label: "Dashboard", end: true },
-        { to: "/manager/metrics", label: "Metrics", disabled: !canViewTraffic },
+        { to: "/manager/metrics", label: "Metrics", disabled: !canViewMetricsMenu },
       ],
     },
   ];

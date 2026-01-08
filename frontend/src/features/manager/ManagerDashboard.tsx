@@ -36,7 +36,6 @@ export default function ManagerDashboard() {
     hasS3AccountContext,
     accountIdForApi,
     accessMode,
-    managerStatsEnabled,
   } = useS3AccountContext();
   const capabilities = getCapabilities();
   const isS3User = selectedS3AccountType === "s3_user";
@@ -45,10 +44,11 @@ export default function ManagerDashboard() {
     [accounts, selectedS3AccountId]
   );
   const hasContext = hasS3AccountContext;
-  const metricsAllowed = !isS3User && (managerStatsEnabled ?? capabilities?.can_view_traffic !== false);
+  const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
+  const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
   const { stats, loading, error } = useManagerStats(
-    metricsAllowed ? accountIdForApi : null,
-    metricsAllowed && hasContext,
+    accountIdForApi,
+    usageFeatureEnabled && hasContext,
     accessMode ?? "default"
   );
   const canManageIam = !isS3User;
@@ -66,9 +66,9 @@ export default function ManagerDashboard() {
       <PageHeader
         title="Manager dashboard"
         description={
-          metricsAllowed
+          usageFeatureEnabled
             ? error || "S3Account-scoped S3 + IAM controls (real-time stats)."
-            : "Usage insights limited: connect with account root keys or ask an admin to enable Allow stats for all users."
+            : "Usage insights disabled for this storage endpoint."
         }
         breadcrumbs={[{ label: "Manager" }, { label: "Dashboard" }]}
       />
@@ -81,7 +81,7 @@ export default function ManagerDashboard() {
 
       {isS3User && (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-          Autonomous S3 users have limited insights. IAM widgets and traffic analytics are disabled for this profile.
+          Autonomous S3 users: IAM widgets are disabled. Usage and traffic insights depend on the storage endpoint features (usage/metrics) and your profile permissions.
         </div>
       )}
 
@@ -104,7 +104,7 @@ export default function ManagerDashboard() {
             statsError={error}
             loading={loading}
             iamDisabled={iamDisabled}
-            metricsDisabled={!metricsAllowed}
+            metricsDisabled={!usageFeatureEnabled}
             iamOverview={iamOverview}
             iamLoading={iamLoading}
             iamError={iamError}
