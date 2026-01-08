@@ -55,6 +55,9 @@ export type StorageEndpointPayload = {
   supervision_secret_key?: string | null;
   features_config?: string | null;
   allow_external_access?: boolean;
+  presign_enabled?: boolean;
+  max_session_duration?: number;
+  allowed_packages?: string[] | null;
 };
 
 export async function listStorageEndpoints(): Promise<StorageEndpoint[]> {

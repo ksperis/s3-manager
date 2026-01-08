@@ -27,6 +27,9 @@ type FormState = {
   supervision_access_key: string;
   supervision_secret_key: string;
   allow_external_access: boolean;
+  presign_enabled: boolean;
+  max_session_duration: number;
+  allowed_packages_csv: string;
   features: FeaturesState;
 };
 
@@ -100,6 +103,9 @@ function createEmptyForm(): FormState {
     supervision_access_key: "",
     supervision_secret_key: "",
     allow_external_access: false,
+    presign_enabled: true,
+    max_session_duration: 3600,
+    allowed_packages_csv: "",
     features,
   };
 }
@@ -285,6 +291,9 @@ export default function StorageEndpointsPage() {
       supervision_access_key: endpoint.supervision_access_key ?? "",
       supervision_secret_key: "",
       allow_external_access: Boolean(endpoint.allow_external_access),
+      presign_enabled: endpoint.presign_enabled !== false,
+      max_session_duration: Math.max(900, Math.min(Number(endpoint.max_session_duration ?? 3600), 43200)),
+      allowed_packages_csv: (endpoint.allowed_packages ?? []).join(", "),
       features,
     });
     setFormError(null);
@@ -337,6 +346,13 @@ export default function StorageEndpointsPage() {
     const trimmedSupervisionSecret = form.supervision_secret_key.trim();
     const constrainedFeatures = applyFeatureConstraints(form.features, form.provider);
     const featuresConfig = buildFeaturesYaml(constrainedFeatures);
+    const maxSession = Number.isFinite(form.max_session_duration) ? form.max_session_duration : 3600;
+    const clampedMaxSession = Math.max(900, Math.min(Math.floor(maxSession), 43200));
+    const allowedPackages = form.allowed_packages_csv
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    const allowedPackagesUnique = Array.from(new Set(allowedPackages));
 
     if (!trimmedName) {
       setFormError("Storage name is required.");
@@ -354,6 +370,9 @@ export default function StorageEndpointsPage() {
       provider: form.provider,
       features_config: featuresConfig,
       allow_external_access: form.allow_external_access,
+      presign_enabled: form.presign_enabled,
+      max_session_duration: clampedMaxSession,
+      allowed_packages: allowedPackagesUnique.length > 0 ? allowedPackagesUnique : null,
     };
 
     if (form.provider === "ceph") {
@@ -431,6 +450,10 @@ export default function StorageEndpointsPage() {
       stsEnabled &&
       Boolean(stsEndpointOverride) &&
       stsEndpointOverride !== endpoint.endpoint_url;
+
+    const presignEnabled = endpoint.presign_enabled !== false;
+    const maxSession = endpoint.max_session_duration ?? 3600;
+    const packageCount = (endpoint.allowed_packages ?? []).length;
 
     return (
       <div
@@ -592,6 +615,23 @@ export default function StorageEndpointsPage() {
               >
                 External access {endpoint.allow_external_access ? "on" : "off"}
               </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  presignEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                Presign {presignEnabled ? "on" : "off"}
+              </span>
+              <span className="rounded-full bg-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                STS max {maxSession}s
+              </span>
+              {packageCount > 0 && (
+                <span className="rounded-full bg-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                  Packages {packageCount}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -710,9 +750,46 @@ export default function StorageEndpointsPage() {
                     className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                   />
                 </label>
+                <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                  Presigned URLs enabled
+                  <input
+                    type="checkbox"
+                    checked={form.presign_enabled}
+                    onChange={(e) => setForm((prev) => ({ ...prev, presign_enabled: e.target.checked }))}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                </label>
               </div>
               <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
                 Enables /portal to provision IAM identities + keys for external S3 access (opt-in per user).
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
+                  Max STS session duration (seconds)
+                  <input
+                    type="number"
+                    min={900}
+                    max={43200}
+                    step={60}
+                    value={form.max_session_duration}
+                    onChange={(e) => setForm((prev) => ({ ...prev, max_session_duration: Number(e.target.value) }))}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                </label>
+                <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
+                  Allowed packages (comma-separated)
+                  <input
+                    type="text"
+                    value={form.allowed_packages_csv}
+                    onChange={(e) => setForm((prev) => ({ ...prev, allowed_packages_csv: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    placeholder="BucketReadOnly, BucketReadWrite, BucketAdmin"
+                    disabled={!form.allow_external_access}
+                  />
+                </label>
+              </div>
+              <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                Allowed packages are guardrails for delegated admins (AccessAdmin). Leave empty to allow all packages.
               </p>
             </div>
 
