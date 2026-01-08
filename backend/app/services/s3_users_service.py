@@ -67,6 +67,8 @@ class S3UsersService:
         return endpoint
 
     def _admin_for_endpoint(self, endpoint: StorageEndpoint) -> RGWAdminClient:
+        if self.default_admin is not None:
+            return self.default_admin
         try:
             admin_endpoint = resolve_admin_endpoint(endpoint)
             if not admin_endpoint:

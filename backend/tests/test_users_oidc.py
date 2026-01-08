@@ -29,7 +29,7 @@ def test_get_or_create_oidc_user_links_existing_user(db_session):
         full_name="Existing",
         hashed_password="hash",
         is_active=True,
-        role=UserRole.ACCOUNT_ADMIN.value,
+        role=UserRole.UI_USER.value,
     )
     db_session.add(existing)
     db_session.commit()
@@ -57,7 +57,7 @@ def test_get_or_create_oidc_user_reuses_existing_mapping(db_session):
         display_name="Mapped",
         hashed_password=None,
         is_active=True,
-        role=UserRole.ACCOUNT_ADMIN.value,
+        role=UserRole.UI_USER.value,
         auth_provider="google",
         auth_provider_subject="sub-999",
     )

@@ -5,6 +5,8 @@ from typing import Optional
 from fastapi.testclient import TestClient
 
 from app.db_models import StorageEndpoint
+from app.main import app
+from app.routers import dependencies
 
 
 class FakeRGWAdmin:
@@ -78,12 +80,12 @@ def _seed_ceph_endpoint(db_session) -> StorageEndpoint:
         return existing
     endpoint = StorageEndpoint(
         name="ceph-test",
-        endpoint_url="http://localhost:8000",
+        endpoint_url="http://ceph-test.invalid",
         provider="ceph",
         admin_access_key="AK",
         admin_secret_key="SK",
         features_config="features:\n  admin:\n    enabled: true\n",
-        is_default=True,
+        is_default=False,
         is_editable=True,
     )
     db_session.add(endpoint)
@@ -96,16 +98,24 @@ def test_admin_create_s3_user_with_quota_unit(monkeypatch, client: TestClient, d
     endpoint = _seed_ceph_endpoint(db_session)
     fake_rgw = FakeRGWAdmin()
     monkeypatch.setattr("app.services.s3_users_service.get_rgw_admin_client", lambda **_: fake_rgw)
+    previous = app.dependency_overrides.get(dependencies.get_super_admin_rgw_client)
+    app.dependency_overrides[dependencies.get_super_admin_rgw_client] = lambda: fake_rgw
+    try:
+        payload = {
+            "name": "quota-user",
+            "email": "quota-user@example.com",
+            "storage_endpoint_id": endpoint.id,
+            "quota_max_size_gb": 1,
+            "quota_max_size_unit": "TiB",
+            "quota_max_objects": 1000,
+        }
+        resp = client.post("/api/admin/s3-users", json=payload)
+    finally:
+        if previous is not None:
+            app.dependency_overrides[dependencies.get_super_admin_rgw_client] = previous
+        else:
+            app.dependency_overrides.pop(dependencies.get_super_admin_rgw_client, None)
 
-    payload = {
-        "name": "quota-user",
-        "email": "quota-user@example.com",
-        "storage_endpoint_id": endpoint.id,
-        "quota_max_size_gb": 1,
-        "quota_max_size_unit": "TiB",
-        "quota_max_objects": 1000,
-    }
-    resp = client.post("/api/admin/s3-users", json=payload)
     assert resp.status_code == 201, resp.text
     data = resp.json()
     assert data["quota_max_size_gb"] == 1024
@@ -126,18 +136,26 @@ def test_admin_update_s3_user_quota(monkeypatch, client: TestClient, db_session)
     endpoint = _seed_ceph_endpoint(db_session)
     fake_rgw = FakeRGWAdmin()
     monkeypatch.setattr("app.services.s3_users_service.get_rgw_admin_client", lambda **_: fake_rgw)
+    previous = app.dependency_overrides.get(dependencies.get_super_admin_rgw_client)
+    app.dependency_overrides[dependencies.get_super_admin_rgw_client] = lambda: fake_rgw
+    try:
+        create = client.post(
+            "/api/admin/s3-users",
+            json={"name": "quota-update", "storage_endpoint_id": endpoint.id},
+        )
+        assert create.status_code == 201, create.text
+        created = create.json()
 
-    create = client.post(
-        "/api/admin/s3-users",
-        json={"name": "quota-update", "storage_endpoint_id": endpoint.id},
-    )
-    assert create.status_code == 201, create.text
-    created = create.json()
+        resp = client.put(
+            f"/api/admin/s3-users/{created['id']}",
+            json={"quota_max_size_gb": 50, "quota_max_size_unit": "GiB", "quota_max_objects": 500},
+        )
+    finally:
+        if previous is not None:
+            app.dependency_overrides[dependencies.get_super_admin_rgw_client] = previous
+        else:
+            app.dependency_overrides.pop(dependencies.get_super_admin_rgw_client, None)
 
-    resp = client.put(
-        f"/api/admin/s3-users/{created['id']}",
-        json={"quota_max_size_gb": 50, "quota_max_size_unit": "GiB", "quota_max_objects": 500},
-    )
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["quota_max_size_gb"] == 50

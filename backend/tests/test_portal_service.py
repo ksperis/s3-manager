@@ -39,7 +39,7 @@ def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
 
     policy_calls: dict = {}
 
-    def fake_ensure_policy(iam_svc, iam_username, bucket_name):
+    def fake_ensure_policy(iam_svc, iam_username, bucket_name, portal_settings=None):
         policy_calls["iam_service"] = iam_svc
         policy_calls["iam_username"] = iam_username
         policy_calls["bucket_name"] = bucket_name
@@ -51,18 +51,24 @@ def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
     monkeypatch.setattr(
         s3_client,
         "create_bucket",
-        lambda name, access_key=None, secret_key=None: created_buckets.append((name, access_key, secret_key)),
+        lambda name, access_key=None, secret_key=None, session_token=None, endpoint=None: created_buckets.append(
+            (name, access_key, secret_key)
+        ),
     )
     monkeypatch.setattr(
         s3_client,
         "set_bucket_versioning",
-        lambda name, enabled=True, access_key=None, secret_key=None: versioning_calls.append((name, enabled)),
+        lambda name, enabled=True, access_key=None, secret_key=None, session_token=None, endpoint=None: versioning_calls.append(
+            (name, enabled)
+        ),
     )
 
     def fail_bucket_policy(*args, **kwargs):
         raise AssertionError("Bucket policy should not be created")
 
     monkeypatch.setattr(s3_client, "put_bucket_policy", fail_bucket_policy)
+    monkeypatch.setattr(s3_client, "put_bucket_lifecycle", lambda *args, **kwargs: None)
+    monkeypatch.setattr(s3_client, "put_bucket_cors", lambda *args, **kwargs: None)
 
     bucket = service.create_bucket(user, access, "user-bucket", versioning=True)
 
@@ -102,7 +108,7 @@ def test_ensure_user_bucket_policy_appends_resources(db_session):
     )
     resources = bucket_statement.get("Resource") or []
 
-    assert bucket_statement.get("Action") == service._bucket_access_actions
+    assert bucket_statement.get("Action") == service._bucket_access_actions()
     assert f"arn:aws:s3:::bucket-one" in resources
     assert f"arn:aws:s3:::bucket-one/*" in resources
     assert f"arn:aws:s3:::bucket-two" in resources

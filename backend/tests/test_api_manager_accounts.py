@@ -19,7 +19,7 @@ def test_super_admin_only_sees_linked_accounts(client: TestClient, db_session):
         full_name="Super Admin",
         hashed_password="x",
         is_active=True,
-        role=UserRole.SUPER_ADMIN.value,
+        role=UserRole.UI_ADMIN.value,
     )
     linked_account = S3Account(name="linked", rgw_account_id="RGW-LINKED")
     other_account = S3Account(name="other", rgw_account_id="RGW-OTHER")

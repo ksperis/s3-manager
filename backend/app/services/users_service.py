@@ -9,7 +9,21 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core.security import get_password_hash, verify_password
-from app.db_models import AccountRole, S3Account, User, UserS3Account, UserRole, S3User, UserS3User
+from app.db_models import (
+    AccountRole,
+    ManagerRootAccess,
+    PortalMembership,
+    PortalRole,
+    PortalRoleBinding,
+    PortalRoleKey,
+    S3Account,
+    S3AccountKind,
+    S3User,
+    User,
+    UserRole,
+    UserS3Account,
+    UserS3User,
+)
 from app.models.user import AccountMembership, LinkedS3User, UserCreate, UserOut, UserUpdate, UserSummary
 from app.services.app_settings_service import load_app_settings
 
@@ -274,6 +288,72 @@ class UsersService:
         link.updated_at = datetime.utcnow()
         self.db.add(link)
         self.db.add(user)
+
+        root_link = (
+            self.db.query(ManagerRootAccess)
+            .filter(ManagerRootAccess.user_id == user.id, ManagerRootAccess.account_id == account.id)
+            .first()
+        )
+        if link.is_root or link.account_admin:
+            if not root_link:
+                self.db.add(ManagerRootAccess(user_id=user.id, account_id=account.id))
+        elif root_link:
+            self.db.delete(root_link)
+
+        if portal_enabled and account.kind == S3AccountKind.IAM_ACCOUNT.value:
+            if desired_account_role == AccountRole.PORTAL_NONE.value:
+                (
+                    self.db.query(PortalRoleBinding)
+                    .filter(
+                        PortalRoleBinding.user_id == user.id,
+                        PortalRoleBinding.account_id == account.id,
+                        PortalRoleBinding.bucket.is_(None),
+                        PortalRoleBinding.prefix.is_(None),
+                    )
+                    .delete(synchronize_session=False)
+                )
+                (
+                    self.db.query(PortalMembership)
+                    .filter(PortalMembership.user_id == user.id, PortalMembership.account_id == account.id)
+                    .delete(synchronize_session=False)
+                )
+            else:
+                role_key = PortalRoleKey.VIEWER.value
+                if link.account_admin or link.is_root or desired_account_role == AccountRole.PORTAL_MANAGER.value:
+                    role_key = PortalRoleKey.ACCOUNT_ADMIN.value
+
+                membership = (
+                    self.db.query(PortalMembership)
+                    .filter(PortalMembership.user_id == user.id, PortalMembership.account_id == account.id)
+                    .first()
+                )
+                if membership:
+                    membership.role_key = role_key
+                else:
+                    membership = PortalMembership(user_id=user.id, account_id=account.id, role_key=role_key)
+                self.db.add(membership)
+
+                role_row = self.db.query(PortalRole).filter(PortalRole.key == role_key).first()
+                if role_row:
+                    (
+                        self.db.query(PortalRoleBinding)
+                        .filter(
+                            PortalRoleBinding.user_id == user.id,
+                            PortalRoleBinding.account_id == account.id,
+                            PortalRoleBinding.bucket.is_(None),
+                            PortalRoleBinding.prefix.is_(None),
+                        )
+                        .delete(synchronize_session=False)
+                    )
+                    self.db.add(
+                        PortalRoleBinding(
+                            user_id=user.id,
+                            account_id=account.id,
+                            role_id=role_row.id,
+                            bucket=None,
+                            prefix=None,
+                        )
+                    )
         self.db.commit()
         self.db.refresh(user)
         return user

@@ -16,7 +16,7 @@ def seed_user_account(db_session):
         full_name="API",
         hashed_password="x",
         is_active=True,
-        role=UserRole.ACCOUNT_ADMIN.value,
+        role=UserRole.UI_USER.value,
     )
     db_session.add(usr)
     db_session.commit()

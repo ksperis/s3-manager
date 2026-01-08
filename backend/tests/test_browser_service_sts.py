@@ -2,13 +2,19 @@
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime, timedelta, timezone
 
-from app.db_models import S3Account
+from app.db_models import S3Account, StorageEndpoint
 from app.services import browser_service
 
 
 def test_browser_service_prefers_sts_credentials(monkeypatch):
     browser_service._STS_CACHE.clear()
     account = S3Account(rgw_access_key="root", rgw_secret_key="secret")
+    account.storage_endpoint = StorageEndpoint(
+        name="sts-test",
+        endpoint_url="http://s3.test",
+        provider="ceph",
+        features_config="features:\n  sts:\n    enabled: true\n",
+    )
 
     def fake_get_session_token(*args, **kwargs):
         return (
@@ -40,6 +46,12 @@ def test_browser_service_prefers_sts_credentials(monkeypatch):
 def test_browser_service_falls_back_on_sts_error(monkeypatch):
     browser_service._STS_CACHE.clear()
     account = S3Account(rgw_access_key="root-access", rgw_secret_key="root-secret")
+    account.storage_endpoint = StorageEndpoint(
+        name="sts-test",
+        endpoint_url="http://s3.test",
+        provider="ceph",
+        features_config="features:\n  sts:\n    enabled: true\n",
+    )
     account._session_token = "session-token"
 
     def fake_get_session_token(*args, **kwargs):

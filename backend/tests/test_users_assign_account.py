@@ -29,7 +29,7 @@ def test_assign_user_to_account_creates_link_and_root(db_session):
         full_name="U",
         hashed_password="x",
         is_active=True,
-        role=UserRole.ACCOUNT_ADMIN.value,
+        role=UserRole.UI_USER.value,
     )
     db_session.add(user)
     db_session.commit()
@@ -39,5 +39,5 @@ def test_assign_user_to_account_creates_link_and_root(db_session):
 
     link = db_session.query(UserS3Account).filter_by(user_id=user.id, account_id=account.id).first()
     assert link is not None
-    assert link.is_root is False
+    assert link.is_root is True
     assert {link.account_id for link in updated.account_links} == {account.id}

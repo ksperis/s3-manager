@@ -68,7 +68,10 @@ def pytest_terminal_summary(terminalreporter, exitstatus: int) -> None:  # type:
 
 @pytest.fixture(scope="session")
 def ceph_test_settings() -> CephTestSettings:
-    return load_settings()
+    try:
+        return load_settings()
+    except RuntimeError as exc:
+        pytest.skip(str(exc))
 
 
 @pytest.fixture(scope="session")
@@ -154,7 +157,7 @@ def _provision_account(
             "email": manager_email,
             "password": manager_password,
             "full_name": "Ceph Functional Manager",
-            "role": "account_admin",
+            "role": "ui_user",
         },
         expected_status=201,
     )
@@ -163,7 +166,7 @@ def _provision_account(
 
     super_admin_session.post(
         f"/admin/users/{manager_user_id}/assign-account",
-        json={"account_id": account_id, "account_root": False},
+        json={"account_id": account_id, "account_root": False, "account_role": "portal_manager"},
         expected_status=200,
     )
 

@@ -65,6 +65,12 @@ class StorageEndpointsService:
         provider = self._normalize_provider(endpoint.provider)
         features, _ = self._normalize_features(provider, endpoint.features_config)
         capabilities = features_to_capabilities(features)
+        allowed_packages = endpoint.allowed_packages
+        if isinstance(allowed_packages, list):
+            cleaned_packages = [str(p).strip() for p in allowed_packages if isinstance(p, str) and p.strip()]
+            allowed_packages = sorted(set(cleaned_packages)) or None
+        else:
+            allowed_packages = None
         return StorageEndpointSchema(
             id=endpoint.id,
             name=endpoint.name,
@@ -75,6 +81,10 @@ class StorageEndpointsService:
             admin_access_key=endpoint.admin_access_key,
             supervision_access_key=endpoint.supervision_access_key,
             capabilities=capabilities,
+            presign_enabled=bool(getattr(endpoint, "presign_enabled", True)),
+            allow_external_access=bool(getattr(endpoint, "allow_external_access", False)),
+            max_session_duration=int(getattr(endpoint, "max_session_duration", 3600) or 3600),
+            allowed_packages=allowed_packages,
             is_default=bool(endpoint.is_default),
             is_editable=bool(endpoint.is_editable),
             created_at=endpoint.created_at,
@@ -156,6 +166,14 @@ class StorageEndpointsService:
         features, features_config = self._normalize_features(provider, payload.features_config)
         capabilities = features_to_capabilities(features)
         admin_endpoint = features.get("admin", {}).get("endpoint")
+        presign_enabled = bool(getattr(payload, "presign_enabled", True))
+        allow_external_access = bool(getattr(payload, "allow_external_access", False))
+        max_session_duration = int(getattr(payload, "max_session_duration", 3600) or 3600)
+        allowed_packages = getattr(payload, "allowed_packages", None)
+        if isinstance(allowed_packages, list):
+            allowed_packages = [str(p).strip() for p in allowed_packages if isinstance(p, str) and p.strip()] or None
+        else:
+            allowed_packages = None
 
         if not endpoint_url:
             raise ValueError("Endpoint URL is required.")
@@ -183,6 +201,10 @@ class StorageEndpointsService:
             supervision_secret_key=supervision_secret,
             capabilities=capabilities,
             features_config=features_config,
+            presign_enabled=presign_enabled,
+            allow_external_access=allow_external_access,
+            max_session_duration=max_session_duration,
+            allowed_packages=allowed_packages,
             is_default=False,
             is_editable=True,
         )
@@ -241,6 +263,21 @@ class StorageEndpointsService:
         features, features_config = self._normalize_features(provider, raw_features)
         capabilities = features_to_capabilities(features)
         admin_endpoint = features.get("admin", {}).get("endpoint")
+        presign_enabled = endpoint.presign_enabled
+        if "presign_enabled" in fields_set:
+            presign_enabled = bool(payload.presign_enabled)
+        allow_external_access = endpoint.allow_external_access
+        if "allow_external_access" in fields_set:
+            allow_external_access = bool(payload.allow_external_access)
+        max_session_duration = endpoint.max_session_duration
+        if "max_session_duration" in fields_set and payload.max_session_duration is not None:
+            max_session_duration = int(payload.max_session_duration)
+        allowed_packages = endpoint.allowed_packages
+        if "allowed_packages" in fields_set:
+            normalized_packages = payload.allowed_packages or []
+            allowed_packages = (
+                [str(p).strip() for p in normalized_packages if isinstance(p, str) and p.strip()] or None
+            )
 
         if not endpoint_url:
             raise ValueError("Endpoint URL is required.")
@@ -269,6 +306,10 @@ class StorageEndpointsService:
         endpoint.supervision_secret_key = supervision_secret
         endpoint.capabilities = capabilities
         endpoint.features_config = features_config
+        endpoint.presign_enabled = presign_enabled
+        endpoint.allow_external_access = allow_external_access
+        endpoint.max_session_duration = max_session_duration
+        endpoint.allowed_packages = allowed_packages
         self.db.add(endpoint)
         self.db.commit()
         self.db.refresh(endpoint)

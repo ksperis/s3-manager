@@ -4,7 +4,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from app.core.security import get_password_hash
-from app.db_models import S3Account, UserS3Account, User, UserRole
+from app.db_models import AccountRole, S3Account, UserS3Account, User, UserRole
 from app.services import session_service as session_module
 
 
@@ -88,7 +88,7 @@ def _setup_account(db_session) -> S3Account:
             full_name="Manager",
             hashed_password="x",
             is_active=True,
-            role=UserRole.ACCOUNT_ADMIN.value,
+            role=UserRole.UI_USER.value,
         )
         db_session.add(manager)
         db_session.commit()
@@ -118,7 +118,14 @@ def _setup_account(db_session) -> S3Account:
         .first()
     )
     if not link:
-        db_session.add(UserS3Account(user_id=manager.id, account_id=account.id, is_root=True))
+        db_session.add(
+            UserS3Account(
+                user_id=manager.id,
+                account_id=account.id,
+                is_root=True,
+                account_role=AccountRole.PORTAL_NONE.value,
+            )
+        )
         db_session.commit()
     return account
 
@@ -130,7 +137,7 @@ def test_ui_login_updates_last_login_timestamp(client, db_session):
         full_name="UI Admin",
         hashed_password=get_password_hash(password),
         is_active=True,
-        role=UserRole.SUPER_ADMIN.value,
+        role=UserRole.UI_ADMIN.value,
     )
     db_session.add(user)
     db_session.commit()

@@ -5,9 +5,28 @@ from typing import Optional
 import pytest
 
 from app.services.s3_accounts_service import S3AccountsService
-from app.db_models import S3Account, User, UserRole, UserS3Account
+from app.db_models import S3Account, StorageEndpoint, User, UserRole, UserS3Account
 from app.models.s3_account import S3AccountImport
 from app.services.rgw_admin import RGWAdminError
+
+import uuid
+
+
+@pytest.fixture
+def storage_endpoint(db_session) -> StorageEndpoint:
+    existing = db_session.query(StorageEndpoint).order_by(StorageEndpoint.id.asc()).first()
+    if existing:
+        return existing
+    endpoint = StorageEndpoint(
+        name=f"TestEndpoint-{uuid.uuid4().hex[:8]}",
+        endpoint_url=f"http://example.com/{uuid.uuid4().hex[:8]}",
+        provider="ceph",
+        is_default=True,
+    )
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
+    return endpoint
 
 
 class FakeRGWAdmin:
@@ -64,11 +83,23 @@ class FakeRGWAdmin:
         return {"id": account_id, "user_list": []}
 
 
-def test_create_account_with_root(db_session):
+def test_create_account_with_root(db_session, storage_endpoint: StorageEndpoint):
     svc = S3AccountsService(db_session)
-    svc.rgw_admin = FakeRGWAdmin()
+    fake_admin = FakeRGWAdmin()
+    svc._admin_for_endpoint = lambda endpoint, allow_missing=False: fake_admin  # type: ignore[method-assign]
 
-    payload = type("obj", (), {"name": "TestS3Account", "email": None, "quota_max_size_gb": None, "quota_max_objects": None})
+    payload = type(
+        "obj",
+        (),
+        {
+            "name": "TestS3Account",
+            "email": None,
+            "quota_max_size_gb": None,
+            "quota_max_objects": None,
+            "quota_max_size_unit": None,
+            "storage_endpoint_id": storage_endpoint.id,
+        },
+    )
     acc = svc.create_account_with_manager(payload)
 
     # S3Account persisted
@@ -125,11 +156,19 @@ class FakeRGWAdminImport:
         return []
 
 
-def test_import_account_uses_user_api_when_account_user_missing(db_session):
+def test_import_account_uses_user_api_when_account_user_missing(db_session, storage_endpoint: StorageEndpoint):
     svc = S3AccountsService(db_session)
-    svc.rgw_admin = FakeRGWAdminImport()
+    fake_admin = FakeRGWAdminImport()
+    svc._admin_for_endpoint = lambda endpoint, allow_missing=False: fake_admin  # type: ignore[method-assign]
 
-    imports = [S3AccountImport(rgw_account_id="RGW12345678901234567", name=None, email=None)]
+    imports = [
+        S3AccountImport(
+            rgw_account_id="RGW12345678901234567",
+            name=None,
+            email=None,
+            storage_endpoint_id=storage_endpoint.id,
+        )
+    ]
     created = svc.import_accounts(imports)
 
     assert len(created) == 1
@@ -175,12 +214,20 @@ class FakeRGWAdminImportCreatesRoot:
         return []
 
 
-def test_import_account_creates_root_user_when_missing(db_session):
+def test_import_account_creates_root_user_when_missing(db_session, storage_endpoint: StorageEndpoint):
     svc = S3AccountsService(db_session)
-    svc.rgw_admin = FakeRGWAdminImportCreatesRoot()
+    fake_admin = FakeRGWAdminImportCreatesRoot()
+    svc._admin_for_endpoint = lambda endpoint, allow_missing=False: fake_admin  # type: ignore[method-assign]
 
     account_id = "RGW98765432109876543"
-    imports = [S3AccountImport(rgw_account_id=account_id, name="Legacy", email="legacy@example.com")]
+    imports = [
+        S3AccountImport(
+            rgw_account_id=account_id,
+            name="Legacy",
+            email="legacy@example.com",
+            storage_endpoint_id=storage_endpoint.id,
+        )
+    ]
     created = svc.import_accounts(imports)
 
     assert len(created) == 1
@@ -188,11 +235,11 @@ def test_import_account_creates_root_user_when_missing(db_session):
     assert db_account is not None
     assert db_account.rgw_access_key == "NEWROOT"
     assert db_account.rgw_secret_key == "NEWSECRET"
-    assert svc.rgw_admin.created_users == [("RGW98765432109876543-admin", account_id)]
+    assert fake_admin.created_users == [("RGW98765432109876543-admin", account_id)]
     assert created[0].root_user_email == "RGW98765432109876543-admin"
 
 
-def test_import_account_with_provided_keys(db_session):
+def test_import_account_with_provided_keys(db_session, storage_endpoint: StorageEndpoint):
     svc = S3AccountsService(db_session, rgw_admin_client=None, allow_missing_admin=True)
 
     imports = [
@@ -201,6 +248,7 @@ def test_import_account_with_provided_keys(db_session):
             access_key="AK_KEY",
             secret_key="SK_SECRET",
             email="keyonly@example.com",
+            storage_endpoint_id=storage_endpoint.id,
         )
     ]
     created = svc.import_accounts(imports)
@@ -213,11 +261,23 @@ def test_import_account_with_provided_keys(db_session):
     assert created[0].rgw_account_id is None
 
 
-def test_import_account_requires_keys_without_admin(db_session):
+def test_import_account_requires_keys_without_admin(db_session, storage_endpoint: StorageEndpoint):
+    endpoint = StorageEndpoint(
+        name=f"NoAdmin-{uuid.uuid4().hex[:8]}",
+        endpoint_url=f"http://no-admin.invalid/{uuid.uuid4().hex[:8]}",
+        provider="ceph",
+        features_config="features:\n  admin:\n    enabled: false\n",
+        is_default=False,
+        is_editable=True,
+    )
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
+
     svc = S3AccountsService(db_session, rgw_admin_client=None, allow_missing_admin=True)
 
     with pytest.raises(ValueError):
-        svc.import_accounts([S3AccountImport(rgw_account_id="RGW00000000000000420")])
+        svc.import_accounts([S3AccountImport(rgw_account_id="RGW00000000000000420", storage_endpoint_id=endpoint.id)])
 
 
 class FakeRGWDeleteAdmin:
@@ -259,12 +319,13 @@ def test_delete_account_skips_rgw_when_flag_false(db_session):
     db_session.commit()
 
     svc = S3AccountsService(db_session)
-    svc.rgw_admin = FakeRGWDeleteAdmin()
+    fake_admin = FakeRGWDeleteAdmin()
+    svc._admin_for_account = lambda account, allow_missing=False: fake_admin  # type: ignore[method-assign]
 
     svc.delete_account(account.id, delete_rgw=False)
 
-    assert svc.rgw_admin.deleted == []
-    assert svc.rgw_admin.deleted_users == []
+    assert fake_admin.deleted == []
+    assert fake_admin.deleted_users == []
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
 
 
@@ -274,12 +335,13 @@ def test_delete_account_calls_rgw_when_flag_true(db_session):
     db_session.commit()
 
     svc = S3AccountsService(db_session)
-    svc.rgw_admin = FakeRGWDeleteAdmin()
+    fake_admin = FakeRGWDeleteAdmin()
+    svc._admin_for_account = lambda account, allow_missing=False: fake_admin  # type: ignore[method-assign]
 
     svc.delete_account(account.id, delete_rgw=True)
 
-    assert svc.rgw_admin.deleted == ["RGW00000000000000002"]
-    assert svc.rgw_admin.deleted_users == [("RGW00000000000000002-admin", None)]
+    assert fake_admin.deleted == ["RGW00000000000000002"]
+    assert fake_admin.deleted_users == [("RGW00000000000000002-admin", None)]
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
 
 
@@ -287,19 +349,20 @@ def test_unlink_account_deletes_root_and_interface_links(db_session):
     account = S3Account(name="UnlinkMe", rgw_account_id="RGW00000000000000003")
     db_session.add(account)
     db_session.flush()
-    user = User(email="unlink@example.com", hashed_password="hash", role=UserRole.ACCOUNT_ADMIN.value)
+    user = User(email="unlink@example.com", hashed_password="hash", role=UserRole.UI_USER.value)
     db_session.add(user)
     db_session.flush()
     db_session.add(UserS3Account(user_id=user.id, account_id=account.id, is_root=False))
     db_session.commit()
 
     svc = S3AccountsService(db_session)
-    svc.rgw_admin = FakeRGWDeleteAdmin()
+    fake_admin = FakeRGWDeleteAdmin()
+    svc._admin_for_account = lambda account, allow_missing=False: fake_admin  # type: ignore[method-assign]
 
     svc.unlink_account(account.id)
 
-    assert svc.rgw_admin.deleted == []
-    assert svc.rgw_admin.deleted_users == [("RGW00000000000000003-admin", None)]
+    assert fake_admin.deleted == []
+    assert fake_admin.deleted_users == [("RGW00000000000000003-admin", None)]
     assert db_session.query(S3Account).filter(S3Account.id == account.id).first() is None
     assert db_session.query(UserS3Account).filter(UserS3Account.account_id == account.id).first() is None
 
@@ -310,7 +373,7 @@ def test_unlink_account_raises_when_root_user_cannot_be_deleted(db_session):
     db_session.commit()
 
     svc = S3AccountsService(db_session)
-    svc.rgw_admin = FakeRGWDeleteAdminFails()
+    svc._admin_for_account = lambda account, allow_missing=False: FakeRGWDeleteAdminFails()  # type: ignore[method-assign]
 
     with pytest.raises(ValueError):
         svc.unlink_account(account.id)

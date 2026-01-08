@@ -6,7 +6,9 @@ from app.services.topics_service import TopicsService
 
 
 def _account() -> S3Account:
-    return S3Account(rgw_access_key="AKIA_TEST", rgw_secret_key="SECRET_TEST")
+    account = S3Account(rgw_access_key="AKIA_TEST", rgw_secret_key="SECRET_TEST")
+    account._session_endpoint = "http://sns.test"
+    return account
 
 
 def test_set_topic_configuration_skips_noop(monkeypatch):
@@ -66,7 +68,7 @@ def test_set_topic_configuration_only_sends_changes(monkeypatch):
     monkeypatch.setattr(sns_client, "get_topic_attributes", fake_get_topic_attributes)
     sent: dict | None = None
 
-    def fake_set_topic_attributes(topic_arn, attrs, access_key=None, secret_key=None):
+    def fake_set_topic_attributes(topic_arn, attrs, access_key=None, secret_key=None, endpoint=None):
         nonlocal sent
         sent = {"topic_arn": topic_arn, "attrs": attrs}
 

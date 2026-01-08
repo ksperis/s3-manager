@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -118,12 +118,12 @@ def rotate_my_external_access_key(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/me/revoke", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/me/revoke", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 def revoke_my_external_access(
     ctx: PortalContext = Depends(get_portal_context),
     service: PortalExternalAccessService = Depends(lambda db=Depends(get_db): get_portal_external_access_service(db)),
     audit: AuditService = Depends(get_audit_logger),
-) -> None:
+) -> Response:
     if not ctx.can("portal.external.self.manage"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     try:
@@ -141,6 +141,7 @@ def revoke_my_external_access(
             executor_principal="account_root",
             delta={"user_id": ctx.actor.id},
         )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -212,14 +213,14 @@ def rotate_user_external_access_key(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/users/{user_id}/revoke", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/users/{user_id}/revoke", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 def revoke_user_external_access(
     user_id: int,
     ctx: PortalContext = Depends(get_portal_context),
     db: Session = Depends(get_db),
     service: PortalExternalAccessService = Depends(lambda db=Depends(get_db): get_portal_external_access_service(db)),
     audit: AuditService = Depends(get_audit_logger),
-) -> None:
+) -> Response:
     if not ctx.can("portal.external.team.manage"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     target = db.query(User).filter(User.id == user_id).first()
@@ -240,6 +241,7 @@ def revoke_user_external_access(
             executor_principal="account_root",
             delta={"target_user_id": target.id},
         )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -288,14 +290,14 @@ def assign_grant(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.delete("/grants/{user_id}/{grant_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/grants/{user_id}/{grant_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 def revoke_grant(
     user_id: int,
     grant_id: int,
     ctx: PortalContext = Depends(get_portal_context),
     db: Session = Depends(get_db),
     audit: AuditService = Depends(get_audit_logger),
-) -> None:
+) -> Response:
     if not ctx.can("portal.external.team.manage"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     service = PortalGrantsService(db)
@@ -313,3 +315,4 @@ def revoke_grant(
         executor_principal="account_root",
         delta={"target_user_id": user_id, "grant_id": grant_id},
     )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

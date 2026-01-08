@@ -72,7 +72,7 @@ def test_admin_create_account_with_quota(monkeypatch, client: TestClient, db_ses
 
     def fake_get_s3_accounts_service(db, **kwargs):
         svc = s3_accounts_service.S3AccountsService(db, kwargs.get("rgw_admin_client"))
-        svc.rgw_admin = fake_rgw
+        svc._admin_for_endpoint = lambda endpoint, allow_missing=False: fake_rgw  # type: ignore[method-assign]
         return svc
 
     monkeypatch.setattr("app.routers.admin.s3_accounts.get_s3_accounts_service", fake_get_s3_accounts_service)
@@ -109,7 +109,7 @@ def test_admin_create_account_with_quota_unit(monkeypatch, client: TestClient, d
 
     def fake_get_s3_accounts_service(db, **kwargs):
         svc = s3_accounts_service.S3AccountsService(db, kwargs.get("rgw_admin_client"))
-        svc.rgw_admin = fake_rgw
+        svc._admin_for_endpoint = lambda endpoint, allow_missing=False: fake_rgw  # type: ignore[method-assign]
         return svc
 
     monkeypatch.setattr("app.routers.admin.s3_accounts.get_s3_accounts_service", fake_get_s3_accounts_service)
@@ -171,27 +171,25 @@ def test_manager_create_bucket_with_versioning(monkeypatch, client: TestClient, 
 
     calls = {"create": [], "versioning": [], "public_block": []}
 
-    def fake_create_bucket(name, access_key=None, secret_key=None):
+    def fake_create_bucket(name, access_key=None, secret_key=None, session_token=None, endpoint=None):
         calls["create"].append({"name": name, "ak": access_key, "sk": secret_key})
 
-    def fake_set_bucket_versioning(name, enabled=True, access_key=None, secret_key=None):
+    def fake_set_bucket_versioning(name, enabled=True, access_key=None, secret_key=None, session_token=None, endpoint=None):
         calls["versioning"].append({"name": name, "enabled": enabled})
-
-    def fake_set_public_access_block(name, block=True, access_key=None, secret_key=None):
-        calls["public_block"].append({"name": name, "block": block})
 
     monkeypatch.setattr(s3_client, "create_bucket", fake_create_bucket)
     monkeypatch.setattr(s3_client, "set_bucket_versioning", fake_set_bucket_versioning)
-    monkeypatch.setattr(s3_client, "set_bucket_public_access_block", fake_set_public_access_block)
 
-    resp = client.post(f"/api/manager/buckets?account_id={acc.id}", json={"name": "my-bucket", "versioning": True})
+    resp = client.post(
+        f"/api/manager/buckets?account_id={acc.id}",
+        json={"name": "my-bucket", "versioning": True},
+        headers={"X-Manager-Access-Mode": "admin"},
+    )
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["versioning"] is True
     assert calls["create"] and calls["versioning"]
-    assert calls["public_block"] == []
     assert calls["versioning"][0]["enabled"] is True
-    assert calls["public_block"][0]["block"] is True
 
 
 def test_admin_create_user_requires_email_format(client: TestClient):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -95,14 +95,14 @@ def presign_object(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/buckets/{bucket_name}/delete", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/buckets/{bucket_name}/delete", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 def delete_objects(
     bucket_name: str,
     payload: DeleteObjectsPayload,
     ctx: PortalContext = Depends(require_portal_permission("portal.objects.delete")),
     service: PortalBrowserService = Depends(lambda db=Depends(get_db): get_portal_browser_service(db)),
     audit: AuditService = Depends(get_audit_logger),
-) -> None:
+) -> Response:
     try:
         service.delete_objects(ctx, bucket_name, payload)
         audit.record_action(
@@ -118,6 +118,7 @@ def delete_objects(
             executor_principal="portal-browser",
             delta={"bucket": bucket_name, "objects": [o.key for o in payload.objects]},
         )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -141,7 +142,7 @@ def get_sts_credentials(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/buckets/{bucket_name}/proxy-upload", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/buckets/{bucket_name}/proxy-upload", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 def proxy_upload(
     bucket_name: str,
     key: str = Form(...),
@@ -149,7 +150,7 @@ def proxy_upload(
     ctx: PortalContext = Depends(require_portal_permission("portal.objects.put")),
     service: PortalBrowserService = Depends(lambda db=Depends(get_db): get_portal_browser_service(db)),
     audit: AuditService = Depends(get_audit_logger),
-) -> None:
+) -> Response:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
@@ -167,6 +168,7 @@ def proxy_upload(
             executor_principal="portal-browser",
             delta={"bucket": bucket_name, "key": key, "content_type": file.content_type},
         )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -208,4 +210,3 @@ def proxy_download(
         return StreamingResponse(body.iter_chunks(chunk_size=1024 * 1024), media_type=content_type, headers=headers)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-

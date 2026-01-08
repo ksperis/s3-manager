@@ -54,3 +54,10 @@ resources created during a test are tracked and deleted automatically, even when
 - **Bucket configuration**: validates lifecycle, CORS and per-bucket quotas (Super Admin safeguarded route included).
 - **IAM & policies**: provisions IAM users/keys, creates managed policies, attaches them to users, and exercises key/user deletion.
 - **Stats & traffic**: hits `/manager/stats/overview` and `/manager/stats/traffic` after generating activity, skipping gracefully when RGW usage logs are unavailable.
+- **Portal (E2E)**: validates multi-account portal context + RBAC gates, integrated access (STS + presigned fallback), external access enable/rotate/revoke, packages/grants, and bucket provisioning.
+
+Run only the portal suite:
+
+```bash
+python backend/tests_ceph_functional/run_portal.py
+```

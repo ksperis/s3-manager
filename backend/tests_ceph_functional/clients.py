@@ -22,6 +22,34 @@ except ModuleNotFoundError as exc:  # pragma: no cover - defensive guard when PY
 
 logger = logging.getLogger(__name__)
 
+_REDACT_KEYS = {
+    "access_token",
+    "admin_secret_key",
+    "authorization",
+    "rgw_secret_key",
+    "secret_access_key",
+    "secret_key",
+    "session_token",
+    "supervision_secret_key",
+    "token",
+    "url",
+}
+
+
+def _redact_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[Any, Any] = {}
+        for key, child in value.items():
+            key_str = str(key).lower() if key is not None else ""
+            if key_str in _REDACT_KEYS:
+                redacted[key] = "***REDACTED***"
+            else:
+                redacted[key] = _redact_payload(child)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_payload(item) for item in value]
+    return value
+
 
 class BackendAPIError(RuntimeError):
     """Raised when the API returns an unexpected response."""
@@ -80,7 +108,7 @@ class BackendSession:
         if response.status_code not in expected:
             body: Any
             try:
-                body = response.json()
+                body = _redact_payload(response.json())
             except ValueError:
                 body = response.text
             raise BackendAPIError(

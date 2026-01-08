@@ -121,7 +121,7 @@ def test_update_links_portal_users(db_session):
     fake = FakeRGWAdmin()
     service = S3UsersService(db_session, rgw_admin_client=fake)
     created = service.create_user(S3UserCreate(name="Standalone", uid="link-me"))
-    portal_user = User(email="user@example.com", full_name="Portal", hashed_password="x", role=UserRole.ACCOUNT_ADMIN.value)
+    portal_user = User(email="user@example.com", full_name="Portal", hashed_password="x", role=UserRole.UI_USER.value)
     db_session.add(portal_user)
     db_session.commit()
 
@@ -181,9 +181,12 @@ def test_rotate_keys_skips_previous_entry_when_secret_missing(db_session):
             for entry in existing_entries:
                 entry.pop("secret_key", None)
             count = len(existing_entries) + 1
-            new_entry = {"access_key": f"ROT-{uid}-{count}", "status": "enabled"}
+            new_access_key = f"ROT-{uid}-{count}"
+            new_secret_key = f"SEC-{uid}-{count}"
+            new_entry = {"access_key": new_access_key, "status": "enabled"}
             combined = existing_entries + [new_entry]
-            return {"keys": combined}
+            # RGW may not include the secret in the keys list, but still returns it once at the top-level.
+            return {"keys": combined, "access_key": new_access_key, "secret_key": new_secret_key}
 
     fake = NoSecretRGW()
     service = S3UsersService(db_session, rgw_admin_client=fake)

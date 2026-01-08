@@ -33,6 +33,10 @@ class StorageEndpointBase(BaseModel):
     supervision_secret_key: Optional[str] = None
     capabilities: Optional[dict[str, bool]] = None
     features_config: Optional[str] = None
+    presign_enabled: bool = True
+    allow_external_access: bool = False
+    max_session_duration: int = 3600
+    allowed_packages: Optional[list[str]] = None
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
     @classmethod
@@ -40,6 +44,32 @@ class StorageEndpointBase(BaseModel):
         if isinstance(value, str):
             value = value.strip()
         return value or None
+
+    @field_validator("allowed_packages", mode="before")
+    @classmethod
+    def normalize_allowed_packages(cls, value: Optional[object]) -> Optional[list[str]]:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            raise ValueError("allowed_packages must be a list of strings")
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for entry in value:
+            if not isinstance(entry, str):
+                continue
+            normalized = entry.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            cleaned.append(normalized)
+        return cleaned or None
+
+    @field_validator("max_session_duration")
+    @classmethod
+    def validate_session_duration(cls, value: int) -> int:
+        if value < 900 or value > 43200:
+            raise ValueError("max_session_duration must be between 900 and 43200 seconds")
+        return value
 
 
 class StorageEndpointCreate(StorageEndpointBase):
@@ -58,6 +88,10 @@ class StorageEndpointUpdate(BaseModel):
     supervision_secret_key: Optional[str] = None
     capabilities: Optional[dict[str, bool]] = None
     features_config: Optional[str] = None
+    presign_enabled: Optional[bool] = None
+    allow_external_access: Optional[bool] = None
+    max_session_duration: Optional[int] = None
+    allowed_packages: Optional[list[str]] = None
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
     @classmethod
@@ -65,6 +99,34 @@ class StorageEndpointUpdate(BaseModel):
         if isinstance(value, str):
             value = value.strip()
         return value or None
+
+    @field_validator("allowed_packages", mode="before")
+    @classmethod
+    def normalize_allowed_packages_update(cls, value: Optional[object]) -> Optional[list[str]]:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            raise ValueError("allowed_packages must be a list of strings")
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for entry in value:
+            if not isinstance(entry, str):
+                continue
+            normalized = entry.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            cleaned.append(normalized)
+        return cleaned or []
+
+    @field_validator("max_session_duration")
+    @classmethod
+    def validate_session_duration_update(cls, value: Optional[int]) -> Optional[int]:
+        if value is None:
+            return None
+        if value < 900 or value > 43200:
+            raise ValueError("max_session_duration must be between 900 and 43200 seconds")
+        return value
 
 
 class StorageEndpoint(StorageEndpointBase):
