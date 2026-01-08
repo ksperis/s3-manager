@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db_models import S3Account, StorageEndpoint, StorageProvider
+from app.db_models import S3Account, S3User, StorageEndpoint, StorageProvider
 from app.routers.dependencies import get_current_super_admin
 from app.services.admin_metrics_service import AdminMetricsService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
@@ -77,6 +77,14 @@ def _resolve_account_endpoint(db: Session, account: S3Account) -> StorageEndpoin
         )
     return _resolve_endpoint(db, account.storage_endpoint_id, require_usage=True)
 
+def _resolve_s3_user_endpoint(db: Session, s3_user: S3User) -> StorageEndpoint:
+    if s3_user.storage_endpoint_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Storage endpoint is not configured for this user.",
+        )
+    return _resolve_endpoint(db, s3_user.storage_endpoint_id, require_usage=True)
+
 
 @router.get("/summary")
 def summary_stats(
@@ -107,6 +115,84 @@ def account_stats(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usage metrics not available for this account")
     try:
         payload = rgw_admin.get_all_buckets(uid=uid, with_stats=True)
+    except RGWAdminError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Unable to fetch buckets: {exc}") from exc
+
+    buckets = extract_bucket_list(payload)
+    bucket_usage: list[dict] = []
+    for bucket in buckets:
+        if not isinstance(bucket, dict):
+            continue
+        name = bucket.get("bucket") or bucket.get("name")
+        if not name:
+            continue
+        used_bytes, object_count = extract_usage_stats(bucket.get("usage"))
+        bucket_usage.append(
+            {
+                "name": name,
+                "used_bytes": used_bytes,
+                "object_count": object_count,
+            }
+        )
+
+    bucket_usage.sort(key=lambda bucket: bucket.get("used_bytes") or 0, reverse=True)
+    total_bytes = sum((entry.get("used_bytes") or 0) for entry in bucket_usage if entry.get("used_bytes") is not None)
+    total_objects = sum(
+        (entry.get("object_count") or 0) for entry in bucket_usage if entry.get("object_count") is not None
+    )
+    total_buckets = len(bucket_usage)
+
+    non_empty_buckets = [entry for entry in bucket_usage if (entry.get("used_bytes") or 0) > 0]
+    object_sorted = sorted(bucket_usage, key=lambda entry: entry.get("object_count") or 0, reverse=True)
+    avg_bucket_size = (
+        int(sum((entry.get("used_bytes") or 0) for entry in non_empty_buckets) / len(non_empty_buckets))
+        if non_empty_buckets
+        else None
+    )
+    object_samples = [
+        entry.get("object_count") or 0
+        for entry in bucket_usage
+        if entry.get("object_count") not in (None, 0)
+    ]
+    avg_object_count = int(sum(object_samples) / len(object_samples)) if object_samples else None
+    bucket_overview = {
+        "bucket_count": total_buckets,
+        "non_empty_buckets": len(non_empty_buckets),
+        "empty_buckets": max(total_buckets - len(non_empty_buckets), 0),
+        "avg_bucket_size_bytes": avg_bucket_size,
+        "avg_objects_per_bucket": avg_object_count,
+        "largest_bucket": bucket_usage[0] if bucket_usage else None,
+        "most_objects_bucket": object_sorted[0] if object_sorted else None,
+    }
+
+    return {
+        "total_buckets": total_buckets,
+        "total_iam_users": 0,
+        "total_iam_groups": 0,
+        "total_iam_roles": 0,
+        "total_iam_policies": 0,
+        "total_bytes": total_bytes,
+        "total_objects": total_objects,
+        "bucket_usage": bucket_usage,
+        "bucket_overview": bucket_overview,
+    }
+
+@router.get("/s3-user")
+def s3_user_stats(
+    _: dict = Depends(get_current_super_admin),
+    db: Session = Depends(get_db),
+    user_id: int = Query(..., alias="user_id"),
+) -> dict:
+    s3_user = db.query(S3User).filter(S3User.id == user_id).first()
+    if not s3_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3 user not found")
+
+    endpoint = _resolve_s3_user_endpoint(db, s3_user)
+    rgw_admin = _build_rgw_client(endpoint)
+    if not s3_user.rgw_user_uid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usage metrics not available for this user")
+    try:
+        payload = rgw_admin.get_all_buckets(uid=s3_user.rgw_user_uid, with_stats=True)
     except RGWAdminError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Unable to fetch buckets: {exc}") from exc
 

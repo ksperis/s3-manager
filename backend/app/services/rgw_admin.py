@@ -644,6 +644,40 @@ class RGWAdminClient:
             return None, None
         return extract_quota_limits(payload, keys=("user_quota", "quota"))
 
+    def set_user_quota(
+        self,
+        uid: str,
+        tenant: Optional[str] = None,
+        max_size_bytes: Optional[int] = None,
+        max_size_gb: Optional[int] = None,
+        max_objects: Optional[int] = None,
+        quota_type: str = "user",
+        enabled: bool = True,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
+            "quota": "",
+            "uid": uid,
+            "quota-type": quota_type,
+            "format": "json",
+        }
+        if tenant:
+            params["tenant"] = tenant
+        if max_size_bytes is not None:
+            params["max-size"] = int(max_size_bytes)
+        elif max_size_gb is not None:
+            params["max-size"] = int(max_size_gb * 1024 * 1024 * 1024)
+        if max_objects is not None:
+            params["max-objects"] = int(max_objects)
+        params["enabled"] = "true" if enabled else "false"
+        return self._request(
+            "PUT",
+            "/admin/user",
+            params=params,
+            data=None,
+            allow_not_found=True,
+            allow_not_implemented=True,
+        )
+
     def set_user_caps(self, uid: str, caps: Any, tenant: Optional[str] = None, op: str = "add") -> Dict[str, Any]:
         if isinstance(caps, (list, tuple, set)):
             caps_values = [str(value) for value in caps if value]

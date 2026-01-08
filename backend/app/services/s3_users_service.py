@@ -29,6 +29,7 @@ from app.models.s3_user import (
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.utils.quota_stats import bytes_to_gb
+from app.utils.size_units import size_to_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,33 @@ class S3UsersService:
 
     def get_user_quota(self, s3_user: S3UserModel) -> tuple[Optional[float], Optional[int]]:
         return self._user_quota(s3_user)
+
+    def _apply_user_quota(
+        self,
+        s3_user: S3UserModel,
+        max_size_gb: Optional[float],
+        max_objects: Optional[int],
+        max_size_unit: Optional[str] = None,
+    ) -> None:
+        admin = self._admin_for_user(s3_user)
+        try:
+            max_size_bytes = size_to_bytes(max_size_gb, max_size_unit)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        enabled = max_size_bytes is not None or max_objects is not None
+        try:
+            response = admin.set_user_quota(
+                uid=s3_user.rgw_user_uid,
+                max_size_bytes=max_size_bytes,
+                max_objects=max_objects,
+                enabled=enabled,
+            )
+        except RGWAdminError as exc:
+            raise ValueError(f"RGW user quota update failed: {exc}") from exc
+        if response.get("not_found"):
+            raise ValueError(f"RGW user not found for quota update: {s3_user.rgw_user_uid}")
+        if response.get("not_implemented"):
+            raise ValueError("RGW user quota update is not supported on this cluster.")
 
     def _extract_keys(
         self,
@@ -382,6 +410,15 @@ class S3UsersService:
             storage_endpoint_id=endpoint.id,
         )
         self.db.add(s3_user)
+
+        if payload.quota_max_size_gb is not None or payload.quota_max_objects is not None:
+            self._apply_user_quota(
+                s3_user,
+                payload.quota_max_size_gb,
+                payload.quota_max_objects,
+                payload.quota_max_size_unit,
+            )
+
         self.db.commit()
         self.db.refresh(s3_user)
         quota_max_size_gb, quota_max_objects = self._user_quota(s3_user, admin)
@@ -471,6 +508,15 @@ class S3UsersService:
             s3_user.storage_endpoint_id = endpoint.id
         if payload.user_ids is not None:
             self._ensure_links(s3_user, payload.user_ids)
+
+        if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
+            self._apply_user_quota(
+                s3_user,
+                payload.quota_max_size_gb,
+                payload.quota_max_objects,
+                payload.quota_max_size_unit,
+            )
+
         self.db.add(s3_user)
         self.db.commit()
         self.db.refresh(s3_user)

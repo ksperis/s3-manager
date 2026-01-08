@@ -21,9 +21,21 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
 import PaginationControls from "../../components/PaginationControls";
+import StorageUsageCard from "../../components/StorageUsageCard";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 export default function S3UsersPage() {
+  const resolveQuotaForEdit = (quotaGb?: number | null) => {
+    if (quotaGb == null) {
+      return { value: "", unit: "GiB" as const };
+    }
+    if (quotaGb > 0 && quotaGb < 1) {
+      return { value: String(Math.round(quotaGb * 1024)), unit: "MiB" as const };
+    }
+    return { value: String(quotaGb), unit: "GiB" as const };
+  };
+
   const [users, setUsers] = useState<S3User[]>([]);
   const [portalUsers, setPortalUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +49,15 @@ export default function S3UsersPage() {
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: "", uid: "", email: "", storage_endpoint_id: "" });
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    uid: "",
+    email: "",
+    quota_max_size_gb: "",
+    quota_max_size_unit: "GiB",
+    quota_max_objects: "",
+    storage_endpoint_id: "",
+  });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -49,7 +69,15 @@ export default function S3UsersPage() {
   const [importEndpointId, setImportEndpointId] = useState("");
 
   const [editingUser, setEditingUser] = useState<S3User | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", email: "", user_ids: [] as number[], storage_endpoint_id: "" });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    user_ids: [] as number[],
+    quota_max_size_gb: "",
+    quota_max_size_unit: "GiB",
+    quota_max_objects: "",
+    storage_endpoint_id: "",
+  });
   const [editError, setEditError] = useState<string | null>(null);
   const [editBusy, setEditBusy] = useState(false);
   const [portalUserSearch, setPortalUserSearch] = useState("");
@@ -78,6 +106,12 @@ export default function S3UsersPage() {
   const [userToDelete, setUserToDelete] = useState<S3User | null>(null);
   const [deleteFromRgw, setDeleteFromRgw] = useState(false);
   const [deleteModalError, setDeleteModalError] = useState<string | null>(null);
+  const editingUserId = editingUser?.id ?? null;
+  const {
+    stats: editingUsageStats,
+    loading: editingUsageLoading,
+    error: editingUsageError,
+  } = useAdminS3UserStats(editingUserId, Boolean(editingUserId));
 
   const closeUserUnlinkModal = () => {
     if (unlinkModalBusy) {
@@ -184,11 +218,15 @@ export default function S3UsersPage() {
   };
 
   const openEditModal = (user: S3User) => {
+    const quota = resolveQuotaForEdit(user.quota_max_size_gb);
     setEditingUser(user);
     setEditForm({
       name: user.name,
       email: user.email ?? "",
       user_ids: user.user_ids ?? [],
+      quota_max_size_gb: quota.value,
+      quota_max_size_unit: quota.unit,
+      quota_max_objects: user.quota_max_objects != null ? String(user.quota_max_objects) : "",
       storage_endpoint_id: user.storage_endpoint_id ? String(user.storage_endpoint_id) : "",
     });
     setEditError(null);
@@ -211,6 +249,9 @@ export default function S3UsersPage() {
         name: editForm.name || undefined,
         email: editForm.email || undefined,
         user_ids: editForm.user_ids,
+        quota_max_size_gb: editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null,
+        quota_max_size_unit: editForm.quota_max_size_gb !== "" ? editForm.quota_max_size_unit : null,
+        quota_max_objects: editForm.quota_max_objects !== "" ? Number(editForm.quota_max_objects) : null,
         storage_endpoint_id: editForm.storage_endpoint_id ? Number(editForm.storage_endpoint_id) : undefined,
       });
       await fetchUsers();
@@ -243,10 +284,20 @@ export default function S3UsersPage() {
         name: createForm.name.trim(),
         uid: createForm.uid.trim() || undefined,
         email: createForm.email.trim() || undefined,
+        quota_max_size_gb: createForm.quota_max_size_gb ? Number(createForm.quota_max_size_gb) : undefined,
+        quota_max_size_unit: createForm.quota_max_size_gb ? createForm.quota_max_size_unit : undefined,
+        quota_max_objects: createForm.quota_max_objects ? Number(createForm.quota_max_objects) : undefined,
         storage_endpoint_id: createForm.storage_endpoint_id ? Number(createForm.storage_endpoint_id) : undefined,
       });
       setShowCreateModal(false);
-      setCreateForm({ name: "", uid: "", email: "", storage_endpoint_id: createForm.storage_endpoint_id });
+      setCreateForm((prev) => ({
+        ...prev,
+        name: "",
+        uid: "",
+        email: "",
+        quota_max_size_gb: "",
+        quota_max_objects: "",
+      }));
       setActionMessage("User created.");
       await fetchUsers();
     } catch (err) {
@@ -531,6 +582,46 @@ export default function S3UsersPage() {
                 placeholder="user@example.com"
               />
             </div>
+            <div className="flex flex-col gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+              <div className="flex flex-col gap-1">
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max size</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={createForm.quota_max_size_gb}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
+                    placeholder="e.g. 500"
+                  />
+                  <select
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={createForm.quota_max_size_unit}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
+                    disabled={!createForm.quota_max_size_gb}
+                  >
+                    {["MiB", "GiB", "TiB"].map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max objects</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  value={createForm.quota_max_objects}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
+                  placeholder="e.g. 1000000"
+                />
+              </div>
+            </div>
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -625,6 +716,23 @@ export default function S3UsersPage() {
               {editError}
             </div>
           )}
+          <div className="space-y-4">
+            <StorageUsageCard
+              accountName={editingUser.name}
+              storage={{
+                used: editingUsageStats?.total_bytes ?? null,
+                quotaBytes:
+                  editingUser.quota_max_size_gb != null ? editingUser.quota_max_size_gb * 1024 ** 3 : null,
+              }}
+              objects={{
+                used: editingUsageStats?.total_objects ?? null,
+                quota: editingUser.quota_max_objects ?? null,
+              }}
+              bucketOverview={editingUsageStats?.bucket_overview}
+              loading={editingUsageLoading}
+              metricsDisabled={false}
+              errorMessage={editingUsageError}
+            />
           <form onSubmit={submitEdit} className="space-y-4">
             <div className="flex flex-col gap-1">
               <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Display name</label>
@@ -661,6 +769,46 @@ export default function S3UsersPage() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="flex flex-col gap-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+              <div className="flex flex-col gap-1">
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max size</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={editForm.quota_max_size_gb}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
+                    placeholder="e.g. 500"
+                  />
+                  <select
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={editForm.quota_max_size_unit}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
+                    disabled={!editForm.quota_max_size_gb}
+                  >
+                    {["MiB", "GiB", "TiB"].map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max objects</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  value={editForm.quota_max_objects}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
+                  placeholder="e.g. 1000000"
+                />
+              </div>
             </div>
             <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -831,6 +979,7 @@ export default function S3UsersPage() {
               </button>
             </div>
           </form>
+          </div>
         </Modal>
       )}
 

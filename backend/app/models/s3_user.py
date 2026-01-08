@@ -26,6 +26,9 @@ class S3UserCreate(BaseModel):
     name: str
     uid: Optional[str] = None
     email: Optional[str] = None
+    quota_max_size_gb: Optional[float] = None
+    quota_max_size_unit: Optional[str] = None
+    quota_max_objects: Optional[int] = None
     storage_endpoint_id: Optional[int] = None
 
 
@@ -40,6 +43,9 @@ class S3UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     user_ids: Optional[list[int]] = None
+    quota_max_size_gb: Optional[float] = None
+    quota_max_size_unit: Optional[str] = None
+    quota_max_objects: Optional[int] = None
     storage_endpoint_id: Optional[int] = None
 
 
