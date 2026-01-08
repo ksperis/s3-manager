@@ -26,6 +26,7 @@ type FormState = {
   admin_secret_key: string;
   supervision_access_key: string;
   supervision_secret_key: string;
+  allow_external_access: boolean;
   features: FeaturesState;
 };
 
@@ -98,6 +99,7 @@ function createEmptyForm(): FormState {
     admin_secret_key: "",
     supervision_access_key: "",
     supervision_secret_key: "",
+    allow_external_access: false,
     features,
   };
 }
@@ -282,6 +284,7 @@ export default function StorageEndpointsPage() {
       admin_secret_key: "",
       supervision_access_key: endpoint.supervision_access_key ?? "",
       supervision_secret_key: "",
+      allow_external_access: Boolean(endpoint.allow_external_access),
       features,
     });
     setFormError(null);
@@ -350,6 +353,7 @@ export default function StorageEndpointsPage() {
       region: trimmedRegion || null,
       provider: form.provider,
       features_config: featuresConfig,
+      allow_external_access: form.allow_external_access,
     };
 
     if (form.provider === "ceph") {
@@ -579,6 +583,15 @@ export default function StorageEndpointsPage() {
               >
                 Static website {staticWebsiteEnabled ? "on" : "off"}
               </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  endpoint.allow_external_access
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                External access {endpoint.allow_external_access ? "on" : "off"}
+              </span>
             </div>
           </div>
         </div>
@@ -681,6 +694,26 @@ export default function StorageEndpointsPage() {
                   placeholder="us-east-1"
                 />
               </label>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Portal
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                  Allow external access
+                  <input
+                    type="checkbox"
+                    checked={form.allow_external_access}
+                    onChange={(e) => setForm((prev) => ({ ...prev, allow_external_access: e.target.checked }))}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                </label>
+              </div>
+              <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                Enables /portal to provision IAM identities + keys for external S3 access (opt-in per user).
+              </p>
             </div>
 
             {cephMode && (
