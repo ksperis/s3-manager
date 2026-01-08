@@ -8,12 +8,14 @@ import { PortalAccountListItem, PortalContextResponse, fetchPortalContext, listP
 
 type PortalAccountContextType = {
   accounts: PortalAccountListItem[];
+  reloadAccounts: () => Promise<void>;
   selectedAccountId: number | null;
   setSelectedAccountId: (id: number | null) => void;
   hasAccountContext: boolean;
   accountIdForApi: S3AccountSelector;
   selectedAccount: PortalAccountListItem | null;
   portalContext: PortalContextResponse | null;
+  reloadPortalContext: () => Promise<void>;
   loading: boolean;
   contextLoading: boolean;
   error: string | null;
@@ -22,12 +24,14 @@ type PortalAccountContextType = {
 
 const PortalAccountContext = createContext<PortalAccountContextType>({
   accounts: [],
+  reloadAccounts: async () => {},
   selectedAccountId: null,
   setSelectedAccountId: () => {},
   hasAccountContext: false,
   accountIdForApi: null,
   selectedAccount: null,
   portalContext: null,
+  reloadPortalContext: async () => {},
   loading: false,
   contextLoading: false,
   error: null,
@@ -43,51 +47,43 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
   const [contextLoading, setContextLoading] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await listPortalAccounts();
-        if (cancelled) return;
-        setAccounts(data);
-        if (data.length === 0) {
-          setSelectedAccountId(null);
-          localStorage.removeItem("selectedPortalAccountId");
-          return;
-        }
-        if (data.length === 1) {
-          const onlyId = data[0].id;
-          setSelectedAccountId(onlyId);
-          localStorage.setItem("selectedPortalAccountId", String(onlyId));
-          return;
-        }
-        const stored = localStorage.getItem("selectedPortalAccountId");
-        const storedId = stored ? Number(stored) : null;
-        if (storedId && data.some((a) => a.id === storedId)) {
-          setSelectedAccountId(storedId);
-          return;
-        }
-        setSelectedAccountId(null);
+  const resolveSelection = (items: PortalAccountListItem[], currentId: number | null): number | null => {
+    if (items.length === 0) return null;
+    if (items.length === 1) return items[0].id;
+    if (currentId && items.some((acc) => acc.id === currentId)) return currentId;
+    const stored = localStorage.getItem("selectedPortalAccountId");
+    const storedId = stored ? Number(stored) : null;
+    if (storedId && items.some((acc) => acc.id === storedId)) return storedId;
+    return null;
+  };
+
+  const reloadAccounts = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await listPortalAccounts();
+      setAccounts(data);
+      const nextSelected = resolveSelection(data, selectedAccountId);
+      setSelectedAccountId(nextSelected);
+      if (nextSelected === null) {
         localStorage.removeItem("selectedPortalAccountId");
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) {
-          setError("Impossible de charger les comptes S3.");
-          setAccounts([]);
-          setSelectedAccountId(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      } else {
+        localStorage.setItem("selectedPortalAccountId", String(nextSelected));
       }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
+    } catch (err) {
+      console.error(err);
+      setError("Impossible de charger les comptes S3.");
+      setAccounts([]);
+      setSelectedAccountId(null);
+      localStorage.removeItem("selectedPortalAccountId");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void reloadAccounts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateSelected = (id: number | null) => {
@@ -106,49 +102,43 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
   const hasAccountContext = Boolean(selectedAccountId && selectedAccount);
   const accountIdForApi: S3AccountSelector = hasAccountContext ? selectedAccountId : null;
 
+  const reloadPortalContext = async (): Promise<void> => {
+    if (!selectedAccountId) {
+      setPortalContext(null);
+      setContextError(null);
+      return;
+    }
+    try {
+      setContextLoading(true);
+      setContextError(null);
+      const data = await fetchPortalContext(selectedAccountId);
+      setPortalContext(data);
+    } catch (err) {
+      console.error(err);
+      setPortalContext(null);
+      setContextError("Impossible de charger le contexte du portail.");
+    } finally {
+      setContextLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let cancelled = false;
-    const loadContext = async () => {
-      if (!selectedAccountId) {
-        setPortalContext(null);
-        setContextError(null);
-        return;
-      }
-      try {
-        setContextLoading(true);
-        setContextError(null);
-        const data = await fetchPortalContext(selectedAccountId);
-        if (!cancelled) {
-          setPortalContext(data);
-        }
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) {
-          setPortalContext(null);
-          setContextError("Impossible de charger le contexte du portail.");
-        }
-      } finally {
-        if (!cancelled) {
-          setContextLoading(false);
-        }
-      }
-    };
-    loadContext();
-    return () => {
-      cancelled = true;
-    };
+    void reloadPortalContext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId]);
 
   return (
     <PortalAccountContext.Provider
       value={{
         accounts,
+        reloadAccounts,
         selectedAccountId,
         setSelectedAccountId: updateSelected,
         hasAccountContext,
         accountIdForApi,
         selectedAccount,
         portalContext,
+        reloadPortalContext,
         loading,
         contextLoading,
         error,
