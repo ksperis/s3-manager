@@ -4,18 +4,20 @@
  */
 import { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 import { S3AccountSelector } from "../../api/accountParams";
-import { S3Account } from "../../api/accounts";
-import { listPortalAccounts } from "../../api/portal";
+import { PortalAccountListItem, PortalContextResponse, fetchPortalContext, listPortalAccounts } from "../../api/portal";
 
 type PortalAccountContextType = {
-  accounts: S3Account[];
-  selectedAccountId: string | null;
-  setSelectedAccountId: (id: string | null) => void;
+  accounts: PortalAccountListItem[];
+  selectedAccountId: number | null;
+  setSelectedAccountId: (id: number | null) => void;
   hasAccountContext: boolean;
   accountIdForApi: S3AccountSelector;
-  selectedAccount: S3Account | null;
+  selectedAccount: PortalAccountListItem | null;
+  portalContext: PortalContextResponse | null;
   loading: boolean;
+  contextLoading: boolean;
   error: string | null;
+  contextError: string | null;
 };
 
 const PortalAccountContext = createContext<PortalAccountContextType>({
@@ -25,15 +27,21 @@ const PortalAccountContext = createContext<PortalAccountContextType>({
   hasAccountContext: false,
   accountIdForApi: null,
   selectedAccount: null,
+  portalContext: null,
   loading: false,
+  contextLoading: false,
   error: null,
+  contextError: null,
 });
 
 export function PortalAccountProvider({ children }: { children: ReactNode }) {
-  const [accounts, setAccounts] = useState<S3Account[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<PortalAccountListItem[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [portalContext, setPortalContext] = useState<PortalContextResponse | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,14 +57,20 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem("selectedPortalAccountId");
           return;
         }
-        const stored = localStorage.getItem("selectedPortalAccountId");
-        if (stored && data.some((a) => a.id === stored)) {
-          setSelectedAccountId(stored);
+        if (data.length === 1) {
+          const onlyId = data[0].id;
+          setSelectedAccountId(onlyId);
+          localStorage.setItem("selectedPortalAccountId", String(onlyId));
           return;
         }
-        const defaultId = String(data[0].id);
-        setSelectedAccountId(defaultId);
-        localStorage.setItem("selectedPortalAccountId", defaultId);
+        const stored = localStorage.getItem("selectedPortalAccountId");
+        const storedId = stored ? Number(stored) : null;
+        if (storedId && data.some((a) => a.id === storedId)) {
+          setSelectedAccountId(storedId);
+          return;
+        }
+        setSelectedAccountId(null);
+        localStorage.removeItem("selectedPortalAccountId");
       } catch (err) {
         console.error(err);
         if (!cancelled) {
@@ -76,12 +90,12 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const updateSelected = (id: string | null) => {
+  const updateSelected = (id: number | null) => {
     setSelectedAccountId(id);
     if (id === null) {
       localStorage.removeItem("selectedPortalAccountId");
     } else {
-      localStorage.setItem("selectedPortalAccountId", id);
+      localStorage.setItem("selectedPortalAccountId", String(id));
     }
   };
 
@@ -89,8 +103,41 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
     () => accounts.find((acc) => acc.id === selectedAccountId) ?? null,
     [accounts, selectedAccountId]
   );
-  const hasAccountContext = Boolean(selectedAccount);
-  const accountIdForApi: S3AccountSelector = hasAccountContext ? selectedAccount?.id ?? null : null;
+  const hasAccountContext = Boolean(selectedAccountId && selectedAccount);
+  const accountIdForApi: S3AccountSelector = hasAccountContext ? selectedAccountId : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadContext = async () => {
+      if (!selectedAccountId) {
+        setPortalContext(null);
+        setContextError(null);
+        return;
+      }
+      try {
+        setContextLoading(true);
+        setContextError(null);
+        const data = await fetchPortalContext(selectedAccountId);
+        if (!cancelled) {
+          setPortalContext(data);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setPortalContext(null);
+          setContextError("Impossible de charger le contexte du portail.");
+        }
+      } finally {
+        if (!cancelled) {
+          setContextLoading(false);
+        }
+      }
+    };
+    loadContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAccountId]);
 
   return (
     <PortalAccountContext.Provider
@@ -101,8 +148,11 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
         hasAccountContext,
         accountIdForApi,
         selectedAccount,
+        portalContext,
         loading,
+        contextLoading,
         error,
+        contextError,
       }}
     >
       {children}

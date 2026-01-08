@@ -38,6 +38,12 @@ import ManagerMetricsPage from "./features/manager/ManagerMetricsPage";
 import TopicsPage from "./features/manager/TopicsPage";
 import PortalLayout from "./features/portal/PortalLayout";
 import PortalDashboard from "./features/portal/PortalDashboard";
+import PortalBucketsPage from "./features/portal/PortalBucketsPage";
+import PortalBrowserPage from "./features/portal/PortalBrowserPage";
+import PortalAccessPage from "./features/portal/PortalAccessPage";
+import PortalUsersPage from "./features/portal/PortalUsersPage";
+import PortalAdminPage from "./features/portal/PortalAdminPage";
+import PortalAuditPage from "./features/portal/PortalAuditPage";
 import BrowserLayout from "./features/browser/BrowserLayout";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
 
@@ -238,6 +244,12 @@ export default function AppRouter() {
                 element={<PortalLayout />}
               >
                 <Route index element={<PortalDashboard />} />
+                <Route path="buckets" element={<PortalBucketsPage />} />
+                <Route path="browser" element={<PortalBrowserPage />} />
+                <Route path="access" element={<PortalAccessPage />} />
+                <Route path="users" element={<PortalUsersPage />} />
+                <Route path="admin" element={<PortalAdminPage />} />
+                <Route path="audit" element={<PortalAuditPage />} />
               </Route>
             </Route>
           </Route>

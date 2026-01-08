@@ -12,7 +12,6 @@ import {
   TrafficWindow,
   fetchManagerTraffic,
 } from "../../api/stats";
-import { fetchPortalTraffic } from "../../api/portal";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import {
   Bar,
@@ -48,11 +47,10 @@ type ChartPoint = TrafficSeriesPoint & { total_bytes: number; timestampMs: numbe
 type TrafficAnalyticsProps = {
   accountId: S3AccountSelector;
   bucketName?: string;
-  scope?: "manager" | "portal";
   enabled?: boolean;
 };
 
-export default function TrafficAnalytics({ accountId, bucketName, scope = "manager", enabled = true }: TrafficAnalyticsProps) {
+export default function TrafficAnalytics({ accountId, bucketName, enabled = true }: TrafficAnalyticsProps) {
   const [window, setWindow] = useState<TrafficWindow>("day");
   const [traffic, setTraffic] = useState<ManagerTrafficStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,10 +68,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
       setLoading(true);
       setError(null);
       try {
-        const data =
-          scope === "portal"
-            ? await fetchPortalTraffic(accountId, window, bucketName)
-            : await fetchManagerTraffic(accountId, window, bucketName);
+        const data = await fetchManagerTraffic(accountId, window, bucketName);
         if (!cancelled) {
           setTraffic(data);
         }
@@ -92,7 +87,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
     return () => {
       cancelled = true;
     };
-  }, [accountId, window, bucketName, scope, enabled]);
+  }, [accountId, window, bucketName, enabled]);
 
   const totals = traffic?.totals;
   const chartData = useMemo<ChartPoint[]>(() => {
