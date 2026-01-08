@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.routers.portal import accounts, audit, context, members
+from app.routers.portal import accounts, audit, browser, context, members
 
 
 router = APIRouter(prefix="/portal", tags=["portal"])
@@ -13,4 +13,4 @@ router.include_router(accounts.router)
 router.include_router(context.router)
 router.include_router(members.router)
 router.include_router(audit.router)
-
+router.include_router(browser.router)
