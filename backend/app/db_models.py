@@ -23,6 +23,17 @@ class AccountRole(str, Enum):
     PORTAL_NONE = "portal_none"
 
 
+class S3AccountKind(str, Enum):
+    IAM_ACCOUNT = "iam_account"
+    LEGACY_USER = "legacy_user"
+
+
+class PortalRoleKey(str, Enum):
+    VIEWER = "Viewer"
+    ACCESS_ADMIN = "AccessAdmin"
+    ACCOUNT_ADMIN = "AccountAdmin"
+
+
 class StorageProvider(str, Enum):
     CEPH = "ceph"
     OTHER = "other"
@@ -47,6 +58,10 @@ class StorageEndpoint(Base):
     supervision_secret_key = Column(EncryptedString, nullable=True)
     capabilities = Column(JSON, nullable=True)
     features_config = Column(Text, nullable=True)
+    presign_enabled = Column(Boolean, default=True, nullable=False, server_default="1")
+    allow_external_access = Column(Boolean, default=False, nullable=False, server_default="0")
+    max_session_duration = Column(Integer, nullable=False, default=3600, server_default="3600")
+    allowed_packages = Column(JSON, nullable=True)
     is_default = Column(Boolean, default=False, nullable=False, server_default="0")
     is_editable = Column(Boolean, default=True, nullable=False, server_default="1")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -57,6 +72,12 @@ class S3Account(Base):
     __tablename__ = "s3_accounts"
 
     id = Column(Integer, primary_key=True, index=True)
+    kind = Column(
+        String,
+        nullable=False,
+        default=S3AccountKind.IAM_ACCOUNT.value,
+        server_default=S3AccountKind.IAM_ACCOUNT.value,
+    )
     name = Column(String, unique=True, nullable=False)
     rgw_account_id = Column(String, unique=True, nullable=True)
     email = Column(String, nullable=True)
@@ -84,6 +105,9 @@ class S3Account(Base):
         back_populates="account",
         overlaps="users,account_links",
     )
+    portal_memberships = relationship("PortalMembership", back_populates="account", overlaps="users")
+    manager_root_links = relationship("ManagerRootAccess", back_populates="account", overlaps="users")
+    iam_identities = relationship("IamIdentity", back_populates="account", overlaps="users")
 
     def set_session_credentials(self, access_key: Optional[str], secret_key: Optional[str]) -> None:
         self._session_access_key = access_key
@@ -153,6 +177,9 @@ class User(Base):
         back_populates="user",
         overlaps="accounts,account_links",
     )
+    portal_memberships = relationship("PortalMembership", back_populates="user", overlaps="accounts")
+    manager_root_links = relationship("ManagerRootAccess", back_populates="user", overlaps="accounts")
+    iam_identities = relationship("IamIdentity", back_populates="user", overlaps="accounts")
 
 
 class UserS3Account(Base):
@@ -213,6 +240,132 @@ class AccountIAMUser(Base):
     )
 
 
+class PortalPermission(Base):
+    __tablename__ = "portal_permissions"
+    __table_args__ = (UniqueConstraint("key", name="uq_portal_permissions_key"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+
+
+class PortalRole(Base):
+    __tablename__ = "portal_roles"
+    __table_args__ = (UniqueConstraint("key", name="uq_portal_roles_key"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+
+    permissions = relationship("PortalRolePermission", back_populates="role", cascade="all, delete-orphan")
+
+
+class PortalRolePermission(Base):
+    __tablename__ = "portal_role_permissions"
+    __table_args__ = (UniqueConstraint("role_id", "permission_id", name="uq_portal_role_permission"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    role_id = Column(Integer, ForeignKey("portal_roles.id"), nullable=False)
+    permission_id = Column(Integer, ForeignKey("portal_permissions.id"), nullable=False)
+
+    role = relationship("PortalRole", back_populates="permissions")
+    permission = relationship("PortalPermission")
+
+
+class PortalMembership(Base):
+    __tablename__ = "portal_memberships"
+    __table_args__ = (UniqueConstraint("user_id", "account_id", name="uq_portal_membership"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
+    role_key = Column(
+        String,
+        nullable=False,
+        default=PortalRoleKey.VIEWER.value,
+        server_default=PortalRoleKey.VIEWER.value,
+    )
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="portal_memberships", overlaps="accounts")
+    account = relationship("S3Account", back_populates="portal_memberships", overlaps="users")
+
+
+class PortalRoleBinding(Base):
+    __tablename__ = "portal_role_bindings"
+    __table_args__ = (
+        UniqueConstraint("user_id", "account_id", "role_id", "bucket", "prefix", name="uq_portal_role_binding"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
+    role_id = Column(Integer, ForeignKey("portal_roles.id"), nullable=False)
+    bucket = Column(String, nullable=True)
+    prefix = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+    account = relationship("S3Account")
+    role = relationship("PortalRole")
+
+
+class ManagerRootAccess(Base):
+    __tablename__ = "manager_root_access"
+    __table_args__ = (UniqueConstraint("user_id", "account_id", name="uq_manager_root_access"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="manager_root_links", overlaps="accounts")
+    account = relationship("S3Account", back_populates="manager_root_links", overlaps="users")
+
+
+class IamIdentity(Base):
+    __tablename__ = "iam_identities"
+    __table_args__ = (UniqueConstraint("user_id", "account_id", name="uq_iam_identity_user_account"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=False)
+    iam_user_id = Column(String, nullable=True)
+    iam_username = Column(String, nullable=True)
+    arn = Column(String, nullable=True)
+    active_access_key_id = Column(String, nullable=True)
+    is_enabled = Column(Boolean, default=True, nullable=False, server_default="1")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="iam_identities", overlaps="accounts")
+    account = relationship("S3Account", back_populates="iam_identities", overlaps="users")
+    grants = relationship("AccessGrant", back_populates="iam_identity", cascade="all, delete-orphan")
+
+
+class AccessGrant(Base):
+    __tablename__ = "access_grants"
+    __table_args__ = (
+        UniqueConstraint("iam_identity_id", "package_key", "bucket", "prefix", name="uq_access_grant"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    iam_identity_id = Column(Integer, ForeignKey("iam_identities.id"), nullable=False)
+    package_key = Column(String, nullable=False)
+    bucket = Column(String, nullable=False)
+    prefix = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    materialization_status = Column(String, nullable=False, default="pending", server_default="pending")
+    materialization_error = Column(Text, nullable=True)
+    iam_group_name = Column(String, nullable=True)
+    iam_policy_arn = Column(String, nullable=True)
+
+    iam_identity = relationship("IamIdentity", back_populates="grants")
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
@@ -223,13 +376,19 @@ class AuditLog(Base):
     user_role = Column(String, nullable=False)
     scope = Column(String, nullable=False)  # e.g. admin / manager
     action = Column(String, nullable=False)
+    surface = Column(String, nullable=True)
+    workflow = Column(String, nullable=True)
     entity_type = Column(String, nullable=True)
     entity_id = Column(String, nullable=True)
     account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=True)
     account_name = Column(String, nullable=True)
+    executor_type = Column(String, nullable=True)
+    executor_principal = Column(String, nullable=True)
     status = Column(String, nullable=False, default="success")
     message = Column(String, nullable=True)
     metadata_json = Column(Text, nullable=True)
+    delta_json = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
 
     user = relationship("User", lazy="joined")
     account = relationship("S3Account", lazy="joined")
