@@ -63,6 +63,12 @@ class AdminMetricsService:
             .scalar()
             or 0
         )
+        total_none_users = (
+            db.query(func.count(User.id))
+            .filter(User.role == UserRole.UI_NONE.value)
+            .scalar()
+            or 0
+        )
         s3_user_query = db.query(func.count(S3User.id))
         if endpoint_id is not None:
             s3_user_query = s3_user_query.filter(S3User.storage_endpoint_id == endpoint_id)
@@ -91,6 +97,7 @@ class AdminMetricsService:
             "total_accounts": total_accounts,
             "total_users": total_managers,
             "total_admins": total_admins,
+            "total_none_users": total_none_users,
             "total_portal_users": total_managers,
             "total_s3_users": total_s3_users,
             "assigned_accounts": assigned_accounts,
