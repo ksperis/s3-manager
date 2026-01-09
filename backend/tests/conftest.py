@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 
-from app.db_models import Base, User, UserRole, S3Account
+from app.db import Base, User, UserRole, S3Account
 from app.main import app
 from app.routers import dependencies
 

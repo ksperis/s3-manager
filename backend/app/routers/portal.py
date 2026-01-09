@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db_models import AccountIAMUser, AccountRole, S3Account, User, UserS3Account
+from app.db import AccountIAMUser, AccountRole, S3Account, User, UserS3Account
 from app.models.bucket import Bucket, BucketCreate
 from app.models.portal import PortalAccessKey, PortalAccessKeyStatusChange, PortalState, PortalUsage, PortalUserCard
 from app.models.s3_account import S3Account as S3AccountSchema
@@ -35,7 +35,7 @@ from app.services.traffic_service import TrafficService, TrafficWindow, WINDOW_R
 from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
 from app.services.app_settings_service import load_app_settings
-from app.db_models import UserRole
+from app.db import UserRole
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/portal", tags=["portal"])

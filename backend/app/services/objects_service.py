@@ -6,7 +6,7 @@ from io import BytesIO
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from app.db_models import S3Account
+from app.db import S3Account
 from app.models.object import ListObjectsResponse, S3Object
 from app.services.s3_client import _delete_objects, get_s3_client
 from app.utils.s3_endpoint import resolve_s3_endpoint

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db_models import User
+from app.db import User
 from app.models.s3_account import (
     PaginatedS3AccountsResponse,
     S3Account,

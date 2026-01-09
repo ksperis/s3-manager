@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import get_password_hash
-from app.db_models import User, UserRole
+from app.db import User, UserRole
 from app.services.storage_endpoints_service import StorageEndpointsService
 
 

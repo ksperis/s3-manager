@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from app.services.users_service import UsersService
-from app.db_models import S3Account, User, UserS3Account, UserRole
+from app.db import S3Account, User, UserS3Account, UserRole
 
 
 class FakeRGWAdmin:

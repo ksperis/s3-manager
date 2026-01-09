@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.db_models import S3Account
+from app.db import S3Account
 from app.services.rgw_admin import RGWAdminError
 from app.services.traffic_service import TrafficService, TrafficWindow
 

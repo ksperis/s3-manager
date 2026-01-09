@@ -1,0 +1,62 @@
+# Copyright (c) 2025 Laurent Barbe
+# Licensed under the Apache License, Version 2.0
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy.orm import relationship
+
+from app.core.security import EncryptedString
+from .base import Base
+from .enums import UserRole
+
+
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_users_email"),
+        UniqueConstraint("auth_provider", "auth_provider_subject", name="uq_users_provider_subject"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, nullable=False)
+    full_name = Column(String, nullable=True)
+    display_name = Column(String, nullable=True)
+    picture_url = Column(String, nullable=True)
+    hashed_password = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    role = Column(String, nullable=False, default=UserRole.UI_USER.value)
+    is_root = Column(Boolean, default=False, nullable=False, server_default="0")
+    rgw_access_key = Column(String, nullable=True)
+    rgw_secret_key = Column(EncryptedString, nullable=True)
+    auth_provider = Column(String, nullable=True)
+    auth_provider_subject = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login_at = Column(DateTime, nullable=True)
+
+    accounts = relationship(
+        "S3Account",
+        secondary="user_s3_accounts",
+        back_populates="users",
+        overlaps="user_links,account_links",
+    )
+    account_links = relationship(
+        "UserS3Account",
+        back_populates="user",
+        overlaps="accounts,users,user_links",
+    )
+    s3_users = relationship(
+        "S3User",
+        secondary="user_s3_users",
+        back_populates="users",
+        overlaps="s3_user_links",
+    )
+    s3_user_links = relationship(
+        "UserS3User",
+        back_populates="user",
+        overlaps="s3_users",
+    )
+    portal_iam_links = relationship(
+        "AccountIAMUser",
+        back_populates="user",
+        overlaps="accounts,account_links",
+    )

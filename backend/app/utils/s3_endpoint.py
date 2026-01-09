@@ -15,14 +15,8 @@ def normalize_s3_endpoint(value: Optional[str]) -> Optional[str]:
 
 
 def configured_s3_endpoint() -> Optional[str]:
-    fields_set = getattr(settings, "model_fields_set", None)
-    if isinstance(fields_set, set):
-        if "s3_endpoint" not in fields_set:
-            return None
-    else:
-        fields_set = getattr(settings, "__pydantic_fields_set__", None)
-        if not isinstance(fields_set, set) or "s3_endpoint" not in fields_set:
-            return None
+    if "s3_endpoint" not in settings.model_fields_set:
+        return None
     return normalize_s3_endpoint(settings.s3_endpoint)
 
 

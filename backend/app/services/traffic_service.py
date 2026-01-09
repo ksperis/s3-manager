@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from app.db_models import S3Account
+from app.db import S3Account
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.utils.rgw import get_supervision_credentials, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags

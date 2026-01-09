@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db_models import S3Account, S3User, StorageEndpoint, StorageProvider
+from app.db import S3Account, S3User, StorageEndpoint, StorageProvider
 from app.routers.dependencies import get_current_super_admin
 from app.services.admin_metrics_service import AdminMetricsService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError

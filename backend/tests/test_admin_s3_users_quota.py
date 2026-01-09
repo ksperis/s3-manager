@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi.testclient import TestClient
 
-from app.db_models import StorageEndpoint
+from app.db import StorageEndpoint
 
 
 class FakeRGWAdmin:

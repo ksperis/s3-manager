@@ -3,7 +3,7 @@
 import re
 from typing import Any, Optional, Tuple
 
-from app.db_models import S3Account, StorageEndpoint
+from app.db import S3Account, StorageEndpoint
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
 

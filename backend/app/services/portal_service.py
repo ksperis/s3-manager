@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db_models import AccountIAMUser, AccountRole, S3Account, StorageEndpoint, User
+from app.db import AccountIAMUser, AccountRole, S3Account, StorageEndpoint, User
 from app.models.app_settings import PortalSettings
 from app.models.bucket import Bucket
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
@@ -21,6 +21,7 @@ from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_admin_endpoint
 from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.normalize import normalize_string_list
 from app.utils.usage_stats import extract_usage_stats
 
 if TYPE_CHECKING:
@@ -45,34 +46,10 @@ class PortalService:
         return load_app_settings().portal
 
     def _normalize_actions(self, actions: Optional[list[str]]) -> list[str]:
-        if not actions:
-            return []
-        seen: set[str] = set()
-        normalized = []
-        for entry in actions:
-            if not isinstance(entry, str):
-                continue
-            cleaned = entry.strip()
-            if not cleaned or cleaned in seen:
-                continue
-            seen.add(cleaned)
-            normalized.append(cleaned)
-        return normalized
+        return normalize_string_list(actions)
 
     def _normalize_origins(self, origins: Optional[list[str]]) -> list[str]:
-        if not origins:
-            return []
-        seen: set[str] = set()
-        normalized = []
-        for entry in origins:
-            if not isinstance(entry, str):
-                continue
-            cleaned = entry.strip()
-            if not cleaned or cleaned in seen:
-                continue
-            seen.add(cleaned)
-            normalized.append(cleaned)
-        return normalized
+        return normalize_string_list(origins)
 
     def _resolve_group_policy(
         self,

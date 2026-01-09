@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.db_models import S3Account, User
+from app.db import S3Account, User
 from app.models.policy import Policy, PolicyCreate
 from app.routers.dependencies import (
     get_account_context,

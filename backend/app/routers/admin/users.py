@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db_models import User as DbUser
+from app.db import User as DbUser
 from app.models.user import PaginatedUsersResponse, UserAssignS3Account, UserCreate, UserOut, UserSummary, UserUpdate
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService

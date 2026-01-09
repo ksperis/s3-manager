@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import decode_token
-from app.db_models import AccountRole, S3Account, S3User, StorageEndpoint, StorageProvider, User, UserS3Account, UserS3User, UserRole
+from app.db import AccountRole, S3Account, S3User, StorageEndpoint, StorageProvider, User, UserS3Account, UserS3User, UserRole
 from app.models.session import ManagerSessionPrincipal
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.app_settings_service import load_app_settings
@@ -148,6 +148,127 @@ def _build_s3_user_account(s3_user: S3User) -> S3Account:
     return account
 
 
+def _resolve_default_account_id(db: Session, user: User) -> int:
+    links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
+    if len(links) == 1:
+        return links[0].account_id
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
+
+
+def _resolve_account_by_id(db: Session, account_id: int) -> S3Account:
+    account = db.query(S3Account).filter(S3Account.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
+    account.clear_session_credentials()
+    return account
+
+
+def _resolve_user_account_link(
+    db: Session,
+    user: User,
+    account_id: Optional[int],
+    allow_default: bool,
+) -> tuple[S3Account, UserS3Account]:
+    if account_id is None or account_id <= 0:
+        if not allow_default:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
+        account_id = _resolve_default_account_id(db, user)
+    account = _resolve_account_by_id(db, account_id)
+    link = (
+        db.query(UserS3Account)
+        .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
+        .first()
+    )
+    if not link:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+    return account, link
+
+
+def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int) -> S3Account:
+    s3_user = db.query(S3User).filter(S3User.id == s3_user_id).first()
+    if not s3_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3 user not found")
+    if user.role != UserRole.UI_ADMIN.value:
+        link_exists = (
+            db.query(UserS3User)
+            .filter(
+                UserS3User.user_id == user.id,
+                UserS3User.s3_user_id == s3_user.id,
+            )
+            .first()
+        )
+        if not link_exists:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this user")
+    account = _build_s3_user_account(s3_user)
+    account.set_session_credentials(s3_user.rgw_access_key, s3_user.rgw_secret_key)
+    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
+        can_manage_buckets=True,
+        can_manage_portal_users=False,
+        can_manage_iam=False,
+        can_view_root_key=False,
+        using_root_key=False,
+    )
+    return account
+
+
+def _manager_membership_capabilities(
+    link: UserS3Account,
+    requested_mode: Optional[str],
+) -> tuple[str, AccountCapabilities]:
+    account_role = link.account_role
+    is_account_admin = bool(link.account_admin or link.is_root)
+    if account_role == AccountRole.PORTAL_NONE.value and not is_account_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+    can_portal_role = account_role != AccountRole.PORTAL_NONE.value
+    if can_portal_role:
+        using_root = bool(is_account_admin and requested_mode == "admin")
+    else:
+        using_root = bool(is_account_admin)
+    can_manage_iam = bool(using_root or account_role == AccountRole.PORTAL_MANAGER.value)
+    can_manage_buckets = bool(
+        using_root or account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}
+    )
+    can_manage_portal_users = bool(account_role == AccountRole.PORTAL_MANAGER.value or (is_account_admin and using_root))
+    capabilities = AccountCapabilities(
+        can_manage_buckets=can_manage_buckets,
+        can_manage_portal_users=can_manage_portal_users,
+        can_manage_iam=can_manage_iam,
+        can_view_root_key=using_root,
+        using_root_key=using_root,
+    )
+    return account_role, capabilities
+
+
+def _resolve_session_account(
+    db: Session,
+    actor: ManagerSessionPrincipal,
+    account_id: Optional[int],
+    requested_endpoint: Optional[str] = None,
+) -> S3Account:
+    if not actor.account_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Account context unavailable for session")
+    account: Optional[S3Account] = None
+    if account_id and account_id > 0:
+        account = _resolve_account_by_id(db, account_id)
+        if account.rgw_account_id and account.rgw_account_id.lower() != actor.account_id.lower():
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+    else:
+        account = (
+            db.query(S3Account)
+            .filter(S3Account.rgw_account_id == actor.account_id)
+            .first()
+        )
+        if not account:
+            account = S3Account(
+                name=actor.account_name or actor.account_id,
+                rgw_account_id=actor.account_id,
+            )
+    account.set_session_credentials(actor.access_key, actor.secret_key)
+    if requested_endpoint:
+        account._session_endpoint = requested_endpoint  # type: ignore[attr-defined]
+    return account
+
+
 def get_account_context(
     request: Request,
     account_ref: Optional[str] = Query(default=None, alias="account_id"),
@@ -169,64 +290,14 @@ def get_account_context(
             requested_endpoint = None
     if isinstance(actor, User):
         if s3_user_id is not None:
-            s3_user = (
-                db.query(S3User)
-                .filter(S3User.id == s3_user_id)
-                .first()
-            )
-            if not s3_user:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3 user not found")
-            if actor.role != UserRole.UI_ADMIN.value:
-                link_exists = (
-                    db.query(UserS3User)
-                    .filter(
-                        UserS3User.user_id == actor.id,
-                        UserS3User.s3_user_id == s3_user.id,
-                    )
-                    .first()
-                )
-                if not link_exists:
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this user")
-            account = _build_s3_user_account(s3_user)
-            account.set_session_credentials(s3_user.rgw_access_key, s3_user.rgw_secret_key)
-            account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
-                can_manage_buckets=True,
-                can_manage_portal_users=False,
-                can_manage_iam=False,
-                can_view_root_key=False,
-                using_root_key=False,
-            )
-            return account
-        if account_id is None or account_id <= 0:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
-        account = db.query(S3Account).filter(S3Account.id == account_id).first()
-        if not account:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
-        account.clear_session_credentials()
-        link = (
-            db.query(UserS3Account)
-            .filter(UserS3Account.user_id == actor.id, UserS3Account.account_id == account.id)
-            .first()
-        )
-        if not link:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-        account_role = link.account_role if link else AccountRole.PORTAL_NONE.value
-        is_account_admin = bool((link.account_admin or link.is_root) if link else False)
-        if account_role == AccountRole.PORTAL_NONE.value and not is_account_admin:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-        can_portal_role = account_role != AccountRole.PORTAL_NONE.value
-        if can_portal_role:
-            using_root = bool(is_account_admin and requested_mode == "admin")
-        else:
-            using_root = bool(is_account_admin)
-        can_manage_iam = bool(using_root or account_role == AccountRole.PORTAL_MANAGER.value)
-        can_manage_buckets = bool(using_root or account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value})
-        can_manage_portal_users = bool(account_role == AccountRole.PORTAL_MANAGER.value or (is_account_admin and using_root))
-        if not can_manage_buckets:
+            return _resolve_s3_user_context(db, actor, s3_user_id)
+        account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
+        account_role, capabilities = _manager_membership_capabilities(link, requested_mode)
+        if not capabilities.can_manage_buckets:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
         access_key: Optional[str]
         secret_key: Optional[str]
-        if using_root:
+        if capabilities.using_root_key:
             access_key, secret_key = account.effective_rgw_credentials()
             if not access_key or not secret_key:
                 raise HTTPException(
@@ -240,42 +311,13 @@ def get_account_context(
             except RuntimeError as exc:
                 raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
         account.set_session_credentials(access_key, secret_key)
-        account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
-            can_manage_buckets=can_manage_buckets,
-            can_manage_portal_users=can_manage_portal_users,
-            can_manage_iam=can_manage_iam,
-            can_view_root_key=using_root,
-            using_root_key=using_root,
-        )
+        account._manager_capabilities = capabilities  # type: ignore[attr-defined]
         return account
 
     if s3_user_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sessions cannot assume S3 user context")
 
-    if not actor.account_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Account context unavailable for session")
-
-    account: Optional[S3Account] = None
-    if account_id and account_id > 0:
-        account = db.query(S3Account).filter(S3Account.id == account_id).first()
-        if not account:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
-        if account.rgw_account_id and account.rgw_account_id.lower() != actor.account_id.lower():
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-    else:
-        account = (
-            db.query(S3Account)
-            .filter(S3Account.rgw_account_id == actor.account_id)
-            .first()
-        )
-        if not account:
-            account = S3Account(
-                name=actor.account_name or actor.account_id,
-                rgw_account_id=actor.account_id,
-            )
-    account.set_session_credentials(actor.access_key, actor.secret_key)
-    if requested_endpoint:
-        account._session_endpoint = requested_endpoint  # type: ignore[attr-defined]
+    account = _resolve_session_account(db, actor, account_id, requested_endpoint=requested_endpoint)
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
         can_manage_buckets=actor.capabilities.can_manage_buckets,
         can_manage_portal_users=False,
@@ -294,23 +336,7 @@ def get_portal_account_context(
     account_id, s3_user_id = _parse_account_selector(account_ref)
     if s3_user_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
-    if account_id is None or account_id <= 0:
-        links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
-        if len(links) == 1:
-            account_id = links[0].account_id
-        else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
-    account = db.query(S3Account).filter(S3Account.id == account_id).first()
-    if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
-    account.clear_session_credentials()
-    link_exists = (
-        db.query(UserS3Account)
-        .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
-        .first()
-    )
-    if not link_exists:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+    account, _ = _resolve_user_account_link(db, user, account_id, allow_default=True)
     return account
 
 
@@ -322,23 +348,7 @@ def get_portal_account_access(
     account_id, s3_user_id = _parse_account_selector(account_ref)
     if s3_user_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
-    if account_id is None or account_id <= 0:
-        links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
-        if len(links) == 1:
-            account_id = links[0].account_id
-        else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
-    account = db.query(S3Account).filter(S3Account.id == account_id).first()
-    if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
-    account.clear_session_credentials()
-    link = (
-        db.query(UserS3Account)
-        .filter(UserS3Account.user_id == user.id, UserS3Account.account_id == account.id)
-        .first()
-    )
-    if not link:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+    account, link = _resolve_user_account_link(db, user, account_id, allow_default=True)
     role, capabilities = _portal_membership_capabilities(link)
     if role == AccountRole.PORTAL_NONE.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
@@ -403,50 +413,14 @@ def get_account_access(
 
     # Resolve target account
     if isinstance(actor, User):
-        if account_id is None or account_id <= 0:
-            links = db.query(UserS3Account).filter(UserS3Account.user_id == actor.id).all()
-            if len(links) == 1:
-                account_id = links[0].account_id
-            else:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account id required")
-        account = db.query(S3Account).filter(S3Account.id == account_id).first()
-        if not account:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
-        account.clear_session_credentials()
-        link = (
-            db.query(UserS3Account)
-            .filter(UserS3Account.user_id == actor.id, UserS3Account.account_id == account.id)
-            .first()
-        )
-        if not link:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+        account, link = _resolve_user_account_link(db, actor, account_id, allow_default=True)
         role, capabilities = _membership_capabilities(link, actor)
         if role == AccountRole.PORTAL_NONE.value:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
         return AccountAccess(account=account, actor=actor, membership=link, role=role, capabilities=capabilities)
 
     # Session principal
-    if not actor.account_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Account context unavailable for session")
-    account: Optional[S3Account] = None
-    if account_id and account_id > 0:
-        account = db.query(S3Account).filter(S3Account.id == account_id).first()
-        if not account:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Account not found")
-        if account.rgw_account_id and account.rgw_account_id.lower() != actor.account_id.lower():
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-    else:
-        account = (
-            db.query(S3Account)
-            .filter(S3Account.rgw_account_id == actor.account_id)
-            .first()
-        )
-        if not account:
-            account = S3Account(
-                name=actor.account_name or actor.account_id,
-                rgw_account_id=actor.account_id,
-            )
-    account.set_session_credentials(actor.access_key, actor.secret_key)
+    account = _resolve_session_account(db, actor, account_id)
     role, capabilities = _membership_capabilities(None, actor)
     return AccountAccess(account=account, actor=actor, membership=None, role=role, capabilities=capabilities)
 
@@ -473,6 +447,33 @@ def _ensure_manager_capabilities(account: S3Account, require_iam: bool = False, 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this account")
 
 
+def _require_supervision_access(
+    account: S3Account,
+    actor: ManagerActor,
+    disabled_detail: str,
+    enabled_flag: str,
+) -> ManagerActor:
+    caps: Optional[AccountCapabilities] = getattr(account, "_manager_capabilities", None)  # type: ignore[attr-defined]
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint:
+        flags = resolve_feature_flags(endpoint)
+        if enabled_flag == "usage" and not flags.usage_enabled:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=disabled_detail)
+        if enabled_flag == "metrics" and not flags.metrics_enabled:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=disabled_detail)
+    if not has_supervision_credentials(account):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are not configured for this account")
+    if isinstance(actor, ManagerSessionPrincipal) and not actor.capabilities.can_view_traffic:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
+    if caps and not caps.can_manage_buckets:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this account")
+    if caps and isinstance(actor, User) and not caps.using_root_key:
+        settings = load_app_settings()
+        if not settings.manager.allow_manager_user_usage_stats:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
+    return actor
+
+
 def require_iam_capable_manager(
     account: S3Account = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_actor),
@@ -485,46 +486,24 @@ def require_usage_capable_manager(
     account: S3Account = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_actor),
 ) -> ManagerActor:
-    caps: Optional[AccountCapabilities] = getattr(account, "_manager_capabilities", None)  # type: ignore[attr-defined]
-    endpoint = getattr(account, "storage_endpoint", None)
-    if endpoint:
-        flags = resolve_feature_flags(endpoint)
-        if not flags.usage_enabled:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are disabled for this endpoint")
-    if not has_supervision_credentials(account):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are not configured for this account")
-    if isinstance(actor, ManagerSessionPrincipal) and not actor.capabilities.can_view_traffic:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
-    if caps and not caps.can_manage_buckets:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this account")
-    if caps and isinstance(actor, User) and not caps.using_root_key:
-        settings = load_app_settings()
-        if not settings.manager.allow_manager_user_usage_stats:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
-    return actor
+    return _require_supervision_access(
+        account,
+        actor,
+        disabled_detail="Usage metrics are disabled for this endpoint",
+        enabled_flag="usage",
+    )
 
 
 def require_metrics_capable_manager(
     account: S3Account = Depends(get_account_context),
     actor: ManagerActor = Depends(get_current_actor),
 ) -> ManagerActor:
-    caps: Optional[AccountCapabilities] = getattr(account, "_manager_capabilities", None)  # type: ignore[attr-defined]
-    endpoint = getattr(account, "storage_endpoint", None)
-    if endpoint:
-        flags = resolve_feature_flags(endpoint)
-        if not flags.metrics_enabled:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Traffic metrics are disabled for this endpoint")
-    if not has_supervision_credentials(account):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are not configured for this account")
-    if isinstance(actor, ManagerSessionPrincipal) and not actor.capabilities.can_view_traffic:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
-    if caps and not caps.can_manage_buckets:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this account")
-    if caps and isinstance(actor, User) and not caps.using_root_key:
-        settings = load_app_settings()
-        if not settings.manager.allow_manager_user_usage_stats:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
-    return actor
+    return _require_supervision_access(
+        account,
+        actor,
+        disabled_detail="Traffic metrics are disabled for this endpoint",
+        enabled_flag="metrics",
+    )
 
 
 def require_manager_enabled() -> None:

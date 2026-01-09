@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db_models import S3Account, S3User, User, UserS3Account, UserS3User, UserRole
+from app.db import S3Account, S3User, User, UserS3Account, UserS3User, UserRole
 from app.models.s3_account import S3Account as S3AccountSchema
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_current_account_admin

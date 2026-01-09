@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import get_settings
-from app.db_models import S3Account
+from app.db import S3Account
 from app.models.browser import (
     BrowserBucket,
     BrowserObject,

@@ -5,7 +5,7 @@ from typing import Optional
 import pytest
 
 from app.services.s3_accounts_service import S3AccountsService
-from app.db_models import S3Account, User, UserRole, UserS3Account
+from app.db import S3Account, User, UserRole, UserS3Account
 from app.models.s3_account import S3AccountImport
 from app.services.rgw_admin import RGWAdminError
 

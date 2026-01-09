@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import logging
 from datetime import datetime
 
-from app.db_models import AccountRole, S3Account, User, UserS3Account, StorageEndpoint, StorageProvider
+from app.db import AccountRole, S3Account, User, UserS3Account, StorageEndpoint, StorageProvider
 from app.models.s3_account import (
     AccountUserLink,
     S3Account as S3AccountSchema,
@@ -23,7 +23,7 @@ from app.utils.storage_endpoint_features import (
     resolve_feature_flags,
 )
 from app.core.security import get_password_hash
-from app.db_models import UserRole
+from app.db import UserRole
 import random
 from typing import Optional, Any
 from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve_admin_uid

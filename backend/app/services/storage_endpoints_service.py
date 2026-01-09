@@ -6,7 +6,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db_models import StorageEndpoint, StorageProvider, S3Account, S3User
+from app.db import StorageEndpoint, StorageProvider, S3Account, S3User
 from app.models.storage_endpoint import (
     StorageEndpoint as StorageEndpointSchema,
     StorageEndpointCreate,
@@ -18,6 +18,7 @@ from app.utils.storage_endpoint_features import (
     features_to_capabilities,
     normalize_features_config,
 )
+from app.utils.normalize import normalize_storage_provider
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -43,15 +44,7 @@ class StorageEndpointsService:
         return normalized or fallback
 
     def _normalize_provider(self, provider: Optional[StorageProvider]) -> StorageProvider:
-        if provider is None:
-            return StorageProvider.CEPH
-        if isinstance(provider, StorageProvider):
-            return provider
-        # Fallback in case a string sneaks in
-        try:
-            return StorageProvider(provider)
-        except Exception:
-            return StorageProvider.CEPH
+        return normalize_storage_provider(provider)
 
     def _normalize_features(
         self,
@@ -196,9 +189,7 @@ class StorageEndpointsService:
         if not endpoint.is_editable:
             raise ValueError("This endpoint is protected and cannot be edited.")
 
-        fields_set = getattr(payload, "model_fields_set", None)
-        if fields_set is None:
-            fields_set = getattr(payload, "__pydantic_fields_set__", set())
+        fields_set = payload.model_fields_set
         name = (
             self._normalize_name(payload.name, fallback=endpoint.name)
             if "name" in fields_set

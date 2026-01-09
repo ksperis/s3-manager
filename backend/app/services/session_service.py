@@ -10,7 +10,7 @@ from typing import Optional
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.security import decrypt_secret, encrypt_secret
-from app.db_models import RgwSession, UserRole
+from app.db import RgwSession, UserRole
 from app.models.session import ManagerSessionPrincipal, SessionCapabilities
 
 from app.services import s3_client

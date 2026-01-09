@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db_models import AccountIAMUser, AccountRole, User, UserS3Account
+from app.db import AccountIAMUser, AccountRole, User, UserS3Account
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_account_context, get_current_actor
 from app.services.app_settings_service import load_app_settings

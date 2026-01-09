@@ -7,7 +7,8 @@ from typing import Any, Optional
 
 import yaml
 
-from app.db_models import StorageEndpoint, StorageProvider
+from app.db import StorageEndpoint, StorageProvider
+from app.utils.normalize import normalize_storage_provider
 
 
 FEATURE_KEYS: tuple[str, ...] = ("admin", "sts", "usage", "metrics", "static_website")
@@ -48,17 +49,6 @@ def _normalize_url(value: Optional[str]) -> Optional[str]:
     return normalized or None
 
 
-def _normalize_provider(provider: Optional[object]) -> StorageProvider:
-    if provider is None:
-        return StorageProvider.CEPH
-    if isinstance(provider, StorageProvider):
-        return provider
-    try:
-        return StorageProvider(str(provider))
-    except Exception:
-        return StorageProvider.CEPH
-
-
 def parse_features_config(raw: Optional[str]) -> dict[str, Any]:
     if not raw or not raw.strip():
         return {}
@@ -82,7 +72,7 @@ def normalize_features_config(
     provider: Optional[object],
     raw: Optional[str],
 ) -> dict[str, dict[str, Any]]:
-    normalized_provider = _normalize_provider(provider)
+    normalized_provider = normalize_storage_provider(provider)
     base = DEFAULT_FEATURES.get(normalized_provider, DEFAULT_FEATURES[StorageProvider.CEPH])
     features: dict[str, dict[str, Any]] = {key: dict(value) for key, value in base.items()}
     raw_features = parse_features_config(raw)

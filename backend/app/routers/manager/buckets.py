@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.db_models import S3Account, User
+from app.db import S3Account, User
 from app.models.bucket import (
     Bucket,
     BucketAcl,

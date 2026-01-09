@@ -8,7 +8,7 @@ from typing import Any, Optional
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.db_models import (
+from app.db import (
     S3User as S3UserModel,
     User,
     UserS3User as UserS3UserModel,

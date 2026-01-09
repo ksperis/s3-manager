@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.db_models import S3Account
+from app.db import S3Account
 from app.routers.dependencies import get_account_context, require_iam_capable_manager
 from app.services.rgw_iam import get_iam_service
 from app.utils.s3_endpoint import resolve_s3_endpoint

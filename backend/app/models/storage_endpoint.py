@@ -5,7 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.db_models import StorageProvider
+from app.db import StorageProvider
 
 
 class StorageEndpointFeature(BaseModel):

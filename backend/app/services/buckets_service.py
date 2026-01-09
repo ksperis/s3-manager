@@ -3,7 +3,7 @@
 from typing import List, Optional
 import logging
 
-from app.db_models import S3Account
+from app.db import S3Account
 from app.services import s3_client
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.models.bucket import (

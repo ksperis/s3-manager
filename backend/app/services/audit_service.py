@@ -10,7 +10,7 @@ from sqlalchemy import String, cast, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.db_models import S3Account, AuditLog, User
+from app.db import S3Account, AuditLog, User
 
 logger = logging.getLogger(__name__)
 

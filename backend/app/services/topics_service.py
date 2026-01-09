@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Any, Optional
 
-from app.db_models import S3Account
+from app.db import S3Account
 from app.models.topic import Topic
 from app.services import sns_client
 from app.utils.s3_endpoint import resolve_s3_endpoint

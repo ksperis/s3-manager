@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 import pytest
 from app.main import app
-from app.db_models import S3Account, User, UserRole
+from app.db import S3Account, User, UserRole
 from fastapi.testclient import TestClient
 
 

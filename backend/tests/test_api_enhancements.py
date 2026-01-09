@@ -5,7 +5,7 @@ from typing import Optional
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db_models import S3Account, UserS3Account
+from app.db import S3Account, UserS3Account
 from app.services import s3_accounts_service, s3_client
 
 

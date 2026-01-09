@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.db_models import S3Account
+from app.db import S3Account
 from app.routers.dependencies import (
     get_account_context,
     require_metrics_capable_manager,

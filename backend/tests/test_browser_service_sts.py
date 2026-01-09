@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime, timedelta, timezone
 
-from app.db_models import S3Account
+from app.db import S3Account
 from app.services import browser_service
 
 

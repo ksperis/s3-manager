@@ -4,7 +4,7 @@ from typing import Optional
 
 import pytest
 
-from app.db_models import S3User, User, UserS3User, UserRole
+from app.db import S3User, User, UserS3User, UserRole
 from app.models.s3_user import S3UserCreate, S3UserImport, S3UserUpdate
 from app.services.s3_users_service import S3UsersService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError

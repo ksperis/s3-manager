@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from app.db_models import S3Account
+from app.db import S3Account
 from app.models.policy import Policy
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.s3_endpoint import resolve_s3_endpoint

@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db_models import S3Account
+from app.db import S3Account
 from app.services import sns_client
 from app.services.topics_service import TopicsService
 

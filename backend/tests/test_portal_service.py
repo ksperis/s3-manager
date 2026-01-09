@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db_models import AccountIAMUser, AccountRole, S3Account, User
+from app.db import AccountIAMUser, AccountRole, S3Account, User
 from app.routers.dependencies import AccountAccess, AccountCapabilities
 from app.services import s3_client
 from app.services.portal_service import PortalService

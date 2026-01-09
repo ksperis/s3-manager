@@ -8,7 +8,7 @@ from typing import Dict, Iterable, Optional, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db_models import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account, UserS3User
+from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account, UserS3User
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import (
     TrafficWindow,

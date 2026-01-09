@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.db_models import S3Account, User
+from app.db import S3Account, User
 from app.models.browser import (
     CompleteMultipartUploadRequest,
     CopyObjectPayload,

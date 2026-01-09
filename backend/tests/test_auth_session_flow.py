@@ -4,7 +4,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from app.core.security import get_password_hash
-from app.db_models import S3Account, UserS3Account, User, UserRole
+from app.db import S3Account, UserS3Account, User, UserRole
 from app.services import session_service as session_module
 
 

@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db_models import User, UserRole
+from app.db import User, UserRole
 from app.services.users_service import UsersService
 
 

@@ -7,7 +7,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.db_models import UserRole
+from app.db import UserRole
 
 
 class S3KeyLogin(BaseModel):

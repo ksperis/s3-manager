@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db_models import S3Account, User
+from app.db import S3Account, User
 from app.models.iam import IAMRole, IAMRoleCreate, IAMRoleUpdate
 from app.models.policy import InlinePolicy, Policy
 from app.routers.dependencies import (

@@ -16,7 +16,7 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.core.config import OIDCProviderSettings, Settings, get_settings
-from app.db_models import OidcLoginState
+from app.db import OidcLoginState
 from app.services.users_service import UsersService, get_users_service
 
 LOGGER = logging.getLogger(__name__)

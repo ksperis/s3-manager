@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from app.db_models import (
+from app.db import (
     S3Account,
     S3User,
     User,

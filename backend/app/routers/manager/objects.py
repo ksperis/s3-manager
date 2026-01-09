@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
-from app.db_models import S3Account, User
+from app.db import S3Account, User
 from app.models.object import ListObjectsResponse
 from app.routers.dependencies import get_account_context, get_audit_logger, get_current_account_admin
 from app.services.audit_service import AuditService

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core.security import get_password_hash, verify_password
-from app.db_models import AccountRole, S3Account, User, UserS3Account, UserRole, S3User, UserS3User
+from app.db import AccountRole, S3Account, User, UserS3Account, UserRole, S3User, UserS3User
 from app.models.user import AccountMembership, LinkedS3User, UserCreate, UserOut, UserUpdate, UserSummary
 from app.services.app_settings_service import load_app_settings
 

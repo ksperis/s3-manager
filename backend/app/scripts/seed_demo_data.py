@@ -13,7 +13,7 @@ from typing import Optional
 from app.core.config import get_settings
 from app.core.database import SessionLocal, engine
 from app.core.db_init import init_db
-from app.db_models import S3Account, User, UserRole
+from app.db import S3Account, User, UserRole
 from app.models.s3_account import S3AccountCreate, S3AccountUpdate
 from app.models.user import UserCreate
 from app.services.buckets_service import BucketsService
