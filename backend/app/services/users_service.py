@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core.security import get_password_hash, verify_password
-from app.db import AccountRole, S3Account, User, UserS3Account, UserRole, S3User, UserS3User
+from app.db import AccountIAMUser, AccountRole, S3Account, User, UserS3Account, UserRole, S3User, UserS3User
 from app.models.user import AccountMembership, LinkedS3User, UserCreate, UserOut, UserUpdate, UserSummary
 from app.services.app_settings_service import load_app_settings
 
@@ -121,6 +121,11 @@ class UsersService:
         if not user:
             raise ValueError("User not found")
         # Remove account links first to satisfy NOT NULL constraints
+        (
+            self.db.query(AccountIAMUser)
+            .filter(AccountIAMUser.user_id == user.id)
+            .delete(synchronize_session=False)
+        )
         (
             self.db.query(UserS3Account)
             .filter(UserS3Account.user_id == user.id)

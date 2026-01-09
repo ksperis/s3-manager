@@ -61,15 +61,13 @@ type StoredUser = {
   };
 };
 
-const buildAdminNav = (portalEnabled: boolean) => {
+const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean) => {
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
     { to: "/admin/manager-settings", label: "Manager" },
-    { to: "/admin/browser-settings", label: "Browser" },
+    { to: "/admin/browser-settings", label: "Browser", disabled: !browserEnabled },
+    { to: "/admin/portal-settings", label: "Portal", disabled: !portalEnabled },
   ];
-  if (portalEnabled) {
-    settingsLinks.push({ to: "/admin/portal-settings", label: "Portal" });
-  }
   return [
     {
       label: "Overview",
@@ -161,7 +159,7 @@ function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal"
 
 export default function AppRouter() {
   const { generalSettings } = useGeneralSettings();
-  const adminNav = buildAdminNav(generalSettings.portal_enabled);
+  const adminNav = buildAdminNav(generalSettings.portal_enabled, generalSettings.browser_enabled);
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
