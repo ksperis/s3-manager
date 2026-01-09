@@ -7,6 +7,7 @@ services:
     environment:
       CORS_ORIGINS: '["http://localhost:8080"]'
       DATABASE_URL: sqlite:////data/app.db
+      APP_SETTINGS_PATH: /data/app_settings.json
     volumes:
       - backend-data:/data
     ports:
