@@ -146,6 +146,7 @@ export type AdminSummary = {
   total_accounts: number;
   total_users: number;
   total_admins: number;
+  total_none_users: number;
   total_portal_users?: number;
   total_s3_users: number;
   assigned_accounts: number;

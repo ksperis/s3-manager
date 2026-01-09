@@ -31,8 +31,10 @@ export default function AdminDashboard() {
         ? [
             {
               label: "UI users",
-              value: (summary.total_users ?? 0) + (summary.total_admins ?? 0),
-              hint: `Admins: ${summary.total_admins ?? 0} | Users: ${summary.total_users ?? 0}`,
+              value: (summary.total_users ?? 0) + (summary.total_admins ?? 0) + (summary.total_none_users ?? 0),
+              hint: `Admins: ${summary.total_admins ?? 0} | Users: ${summary.total_users ?? 0} | None: ${
+                summary.total_none_users ?? 0
+              }`,
               to: "/admin/users",
             },
             {
