@@ -57,6 +57,10 @@ class Settings(BaseSettings):
         "sqlite:///./app.db",
         description="Database connection string (default sqlite)",
     )
+    app_settings_path: Optional[str] = Field(
+        None,
+        description="Path to app_settings.json (defaults to backend/app/data/app_settings.json)",
+    )
 
     s3_endpoint: str = Field("http://localhost:9000", description="RGW/S3 endpoint")
     s3_endpoint_features: Optional[str] = Field(

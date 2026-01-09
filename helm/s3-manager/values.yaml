@@ -13,6 +13,7 @@ backend:
   env:
     API_V1_PREFIX: /api
     CORS_ORIGINS: '["http://localhost:8080"]'
+    APP_SETTINGS_PATH: /data/app_settings.json
   extraEnv: []
   persistence:
     enabled: true

@@ -63,6 +63,7 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `SECRET_KEY` (default: `change-me`)
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `60`)
 - `DATABASE_URL` (default: `sqlite:///./app.db`)
+- `APP_SETTINGS_PATH` (default: `backend/app/data/app_settings.json`, set to a persistent path to keep UI settings)
 - `S3_ENDPOINT` (default: `http://localhost:9000`)
 - `S3_ENDPOINT_FEATURES` (YAML or JSON, used to seed default endpoint features)
 - `S3_ACCESS_KEY` / `S3_SECRET_KEY`
