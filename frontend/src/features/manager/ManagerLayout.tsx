@@ -48,6 +48,7 @@ function ManagerShell() {
     sessionS3AccountName,
     selectedS3AccountType,
     accessError,
+    iamIdentity,
     accessMode,
     setAccessMode,
     canSwitchAccess,
@@ -72,6 +73,11 @@ function ManagerShell() {
   const canViewMetricsMenu = usageFeatureEnabled || metricsFeatureEnabled;
   const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
   const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
+  const identityLabel = iamIdentity
+    ? `Identité IAM: ${iamIdentity}`
+    : selectedS3AccountType === "s3_user" && sessionS3AccountName
+      ? `Compte utilisateur S3: ${sessionS3AccountName}`
+      : "Identité non disponible";
   const baseControlClasses =
     "w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
   const selectClasses = `appearance-none pr-8 ${baseControlClasses}`;
@@ -168,6 +174,14 @@ function ManagerShell() {
               }`}
             />
           </button>
+          <span
+            role="img"
+            aria-label={identityLabel}
+            title={identityLabel}
+            className="flex h-6 w-6 items-center justify-center rounded-full ui-caption text-primary opacity-30 transition hover:bg-slate-200/70 hover:text-sky-600 hover:opacity-80 dark:hover:bg-slate-800/60"
+          >
+            ℹ️
+          </span>
         </div>
       )}
     </div>

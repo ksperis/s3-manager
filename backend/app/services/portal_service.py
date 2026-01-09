@@ -400,6 +400,11 @@ class PortalService:
         if not iam_username:
             raise RuntimeError("IAM username missing for this portal user")
         if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+            for group in (self._manager_group_name, self._user_group_name):
+                try:
+                    iam_service.remove_user_from_group(group, iam_username)
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.warning("Unable to remove %s from %s: %s", iam_username, group, exc)
             return
 
         portal_settings = self._portal_settings()
@@ -414,6 +419,14 @@ class PortalService:
         other_members = iam_service.list_group_users(other_group)
         if any(m.name == iam_username for m in other_members):
             iam_service.remove_user_from_group(other_group, iam_username)
+
+    def _clear_user_bucket_policy(self, iam_service: RGWIAMService, iam_username: Optional[str]) -> None:
+        if not iam_username:
+            raise RuntimeError("IAM username missing for this portal user")
+        try:
+            iam_service.delete_user_inline_policy(iam_username, self._bucket_access_policy_name)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Unable to delete bucket policy for %s: %s", iam_username, exc)
 
     def _ensure_policy_and_key(self, link: AccountIAMUser, iam_service: RGWIAMService) -> PortalAccessKey:
         return self._ensure_active_key(link, iam_service)
@@ -957,7 +970,10 @@ class PortalService:
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
         self._sync_user_group_membership(iam_service, link.iam_username, account_role)
-        self._ensure_active_key(link, iam_service)
+        if account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+            self._ensure_active_key(link, iam_service)
+            return
+        self._clear_user_bucket_policy(iam_service, link.iam_username)
 
     def _delete_portal_iam_user(self, iam_service: RGWIAMService, iam_username: str) -> None:
         iam_user = iam_service.get_user(iam_username)

@@ -171,7 +171,7 @@ import type {
 } from "./browserTypes";
 
 export default function BrowserPage() {
-  const { accountIdForApi, hasS3AccountContext, accounts, selectedS3AccountId } = useS3AccountContext();
+  const { accountIdForApi, hasS3AccountContext, accounts, selectedS3AccountId, accessMode } = useS3AccountContext();
   const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
   const [bucketName, setBucketName] = useState("");
   const [showBucketMenu, setShowBucketMenu] = useState(false);
@@ -752,7 +752,7 @@ export default function BrowserPage() {
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, hasS3AccountContext, requestedBucket]);
+  }, [accountIdForApi, hasS3AccountContext, requestedBucket, accessMode]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !accountIdForApi) {
@@ -774,7 +774,7 @@ export default function BrowserPage() {
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, hasS3AccountContext]);
+  }, [accountIdForApi, accessMode, hasS3AccountContext]);
 
   const loadObjects = async (opts?: {
     append?: boolean;
@@ -932,7 +932,7 @@ export default function BrowserPage() {
       return;
     }
     loadObjects({ prefixOverride: prefix });
-  }, [accountIdForApi, bucketName, filter, hasS3AccountContext, prefix, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [accountIdForApi, accessMode, bucketName, filter, hasS3AccountContext, prefix, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!showPrefixVersions || !bucketName || !hasS3AccountContext) {
@@ -946,7 +946,7 @@ export default function BrowserPage() {
     setPrefixVersionKeyMarker(null);
     setPrefixVersionIdMarker(null);
     loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
-  }, [accountIdForApi, bucketName, hasS3AccountContext, normalizedPrefix, showPrefixVersions]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [accountIdForApi, accessMode, bucketName, hasS3AccountContext, normalizedPrefix, showPrefixVersions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {
@@ -987,7 +987,7 @@ export default function BrowserPage() {
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, bucketName, hasS3AccountContext]);
+  }, [accountIdForApi, accessMode, bucketName, hasS3AccountContext]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext || treeNodes.length === 0) return;
@@ -1031,7 +1031,7 @@ export default function BrowserPage() {
       });
       return next;
     });
-  }, [bucketName, hasS3AccountContext, prefix, treeNodes]);
+  }, [accessMode, bucketName, hasS3AccountContext, prefix, treeNodes]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {
@@ -1053,7 +1053,7 @@ export default function BrowserPage() {
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, bucketName, hasS3AccountContext, uiOrigin]);
+  }, [accountIdForApi, accessMode, bucketName, hasS3AccountContext, uiOrigin]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !stsEnabled) {
@@ -1075,7 +1075,7 @@ export default function BrowserPage() {
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, hasS3AccountContext, stsEnabled]);
+  }, [accountIdForApi, accessMode, hasS3AccountContext, stsEnabled]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !stsEnabled || !stsStatus?.available) {
@@ -1084,7 +1084,7 @@ export default function BrowserPage() {
       return;
     }
     ensureStsCredentials(true);
-  }, [accountIdForApi, ensureStsCredentials, hasS3AccountContext, stsEnabled, stsStatus?.available]);
+  }, [accountIdForApi, accessMode, ensureStsCredentials, hasS3AccountContext, stsEnabled, stsStatus?.available]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {
