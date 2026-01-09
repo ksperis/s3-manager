@@ -129,43 +129,6 @@ def dump_features_config(features: dict[str, dict[str, Any]]) -> str:
     return dumped.strip()
 
 
-def features_from_legacy(
-    provider: Optional[object],
-    legacy_capabilities: Optional[dict[str, bool]],
-    legacy_admin_endpoint: Optional[str],
-) -> dict[str, dict[str, Any]]:
-    features = normalize_features_config(provider, None)
-    if isinstance(legacy_capabilities, dict):
-        if "sts" in legacy_capabilities:
-            features["sts"]["enabled"] = bool(legacy_capabilities.get("sts"))
-        if "static_website" in legacy_capabilities:
-            features["static_website"]["enabled"] = bool(legacy_capabilities.get("static_website"))
-    legacy_admin = _normalize_url(legacy_admin_endpoint)
-    if legacy_admin:
-        features["admin"]["endpoint"] = legacy_admin
-    return features
-
-
-def normalize_legacy_capabilities(value: Optional[object]) -> dict[str, bool]:
-    if value is None:
-        data: dict[str, object] = {}
-    elif isinstance(value, dict):
-        data = value
-    elif isinstance(value, str):
-        try:
-            raw = yaml.safe_load(value)
-        except yaml.YAMLError:
-            raw = {}
-        data = raw if isinstance(raw, dict) else {}
-    else:
-        data = {}
-    normalized: dict[str, bool] = {}
-    for key, raw_value in data.items():
-        if isinstance(raw_value, bool):
-            normalized[str(key)] = raw_value
-    return normalized
-
-
 def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
     features = normalize_features_config(endpoint.provider, endpoint.features_config)
     return EndpointFeatureFlags(

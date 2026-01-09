@@ -30,7 +30,6 @@ def upgrade() -> None:
         sa.Column("admin_secret_key", EncryptedString(), nullable=True),
         sa.Column("supervision_access_key", sa.String(), nullable=True),
         sa.Column("supervision_secret_key", EncryptedString(), nullable=True),
-        sa.Column("capabilities", sa.JSON(), nullable=True),
         sa.Column("features_config", sa.Text(), nullable=True),
         sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.text("0")),
         sa.Column("is_editable", sa.Boolean(), nullable=False, server_default=sa.text("1")),
@@ -72,8 +71,6 @@ def upgrade() -> None:
         sa.Column("rgw_access_key", sa.String(), nullable=True),
         sa.Column("rgw_secret_key", EncryptedString(), nullable=True),
         sa.Column("rgw_user_uid", sa.String(), nullable=True),
-        sa.Column("quota_max_size_gb", sa.Integer(), nullable=True),
-        sa.Column("quota_max_objects", sa.Integer(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=True),
         sa.Column("storage_endpoint_id", sa.Integer(), sa.ForeignKey("storage_endpoints.id"), nullable=True),
     )

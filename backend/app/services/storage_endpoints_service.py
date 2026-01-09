@@ -154,7 +154,6 @@ class StorageEndpointsService:
         supervision_access = self._clean_optional(payload.supervision_access_key)
         supervision_secret = self._clean_optional(payload.supervision_secret_key)
         features, features_config = self._normalize_features(provider, payload.features_config)
-        capabilities = features_to_capabilities(features)
         admin_endpoint = features.get("admin", {}).get("endpoint")
 
         if not endpoint_url:
@@ -181,7 +180,6 @@ class StorageEndpointsService:
             admin_secret_key=admin_secret,
             supervision_access_key=supervision_access,
             supervision_secret_key=supervision_secret,
-            capabilities=capabilities,
             features_config=features_config,
             is_default=False,
             is_editable=True,
@@ -239,7 +237,6 @@ class StorageEndpointsService:
         )
         raw_features = payload.features_config if payload.features_config is not None else endpoint.features_config
         features, features_config = self._normalize_features(provider, raw_features)
-        capabilities = features_to_capabilities(features)
         admin_endpoint = features.get("admin", {}).get("endpoint")
 
         if not endpoint_url:
@@ -267,7 +264,6 @@ class StorageEndpointsService:
         endpoint.admin_secret_key = admin_secret
         endpoint.supervision_access_key = supervision_access
         endpoint.supervision_secret_key = supervision_secret
-        endpoint.capabilities = capabilities
         endpoint.features_config = features_config
         self.db.add(endpoint)
         self.db.commit()
@@ -328,7 +324,6 @@ class StorageEndpointsService:
             StorageProvider.CEPH if admin_access and admin_secret else StorageProvider.OTHER
         )
         features, features_config = self._normalize_features(provider, settings.s3_endpoint_features)
-        capabilities = features_to_capabilities(features)
         admin_endpoint = features.get("admin", {}).get("endpoint")
         name = self._env_endpoint_name()
         admin_access, admin_secret, supervision_access, supervision_secret = self._validate_credentials(
@@ -350,7 +345,6 @@ class StorageEndpointsService:
             admin_secret_key=admin_secret,
             supervision_access_key=supervision_access,
             supervision_secret_key=supervision_secret,
-            capabilities=capabilities,
             features_config=features_config,
             is_default=True,
             is_editable=True,
