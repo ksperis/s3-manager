@@ -66,11 +66,15 @@ import {
   FolderIcon,
   FolderPlusIcon,
   GridIcon,
+  HistoryIcon,
   ListIcon,
+  LinkIcon,
   MoreIcon,
   OpenIcon,
   PasteIcon,
   RefreshIcon,
+  SettingsIcon,
+  SlidersIcon,
   SearchIcon,
   TrashIcon,
   UpIcon,
@@ -3097,12 +3101,19 @@ export default function BrowserPage() {
       const restoreCandidates = new Map<string, string>();
       const presentAtDate = new Set<string>();
       const deleteCandidates = new Set<string>();
+      const unchangedKeys = new Set<string>();
 
       for (const item of fileItems) {
         const { versions, deleteMarkers } = await listAllVersionsForKey(item.key);
-        const match = findVersionForDate([...versions, ...deleteMarkers], targetTime);
+        const allEntries = [...versions, ...deleteMarkers];
+        const match = findVersionForDate(allEntries, targetTime);
+        const latest = allEntries.find((entry) => entry.is_latest);
         if (match && !match.is_delete_marker && match.version_id) {
-          restoreCandidates.set(item.key, match.version_id);
+          if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
+            unchangedKeys.add(item.key);
+          } else {
+            restoreCandidates.set(item.key, match.version_id);
+          }
           presentAtDate.add(item.key);
         } else if (bulkRestoreDeleteMissing) {
           deleteCandidates.add(item.key);
@@ -3120,8 +3131,13 @@ export default function BrowserPage() {
         });
         byKey.forEach((entries, key) => {
           const match = findVersionForDate(entries, targetTime);
+          const latest = entries.find((entry) => entry.is_latest);
           if (match && !match.is_delete_marker && match.version_id) {
-            restoreCandidates.set(key, match.version_id);
+            if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
+              unchangedKeys.add(key);
+            } else {
+              restoreCandidates.set(key, match.version_id);
+            }
             presentAtDate.add(key);
           }
         });
@@ -3140,9 +3156,16 @@ export default function BrowserPage() {
         versionId,
       }));
       const deleteList = bulkRestoreDeleteMissing ? Array.from(deleteCandidates) : [];
+      const unchangedCount = unchangedKeys.size;
       const total = restoreList.length + deleteList.length;
       if (total === 0) {
-        setBulkRestoreError("No objects matched the selected date.");
+        if (unchangedCount > 0) {
+          const summary = `Unchanged ${unchangedCount} object(s).`;
+          setBulkRestoreSummary(summary);
+          setStatusMessage(summary);
+        } else {
+          setBulkRestoreError("No objects matched the selected date.");
+        }
         return;
       }
 
@@ -3200,7 +3223,7 @@ export default function BrowserPage() {
 
       const failures = restoreFailures + deleteFailures;
       completeOperation(operationId, failures > 0 ? "failed" : "done");
-      const summary = `Restored ${restoreList.length - restoreFailures} object(s), deleted ${deleteList.length - deleteFailures} object(s).`;
+      const summary = `Restored ${restoreList.length - restoreFailures} object(s), deleted ${deleteList.length - deleteFailures} object(s), unchanged ${unchangedCount} object(s).`;
       setBulkRestoreSummary(summary);
       setStatusMessage(summary);
       requestObjectsRefresh(prefix);
@@ -4696,6 +4719,110 @@ export default function BrowserPage() {
                                   </button>
                                 </div>
                               </div>
+                              {selectedCount > 0 && (
+                                <div>
+                                  <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Bulk actions</p>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {canSelectionDownloadFolder && selectionPrimary && (
+                                      <button
+                                        type="button"
+                                        className={bulkActionClasses}
+                                        onClick={() => handleDownloadFolder(selectionPrimary)}
+                                        disabled={!bucketName || !hasS3AccountContext}
+                                      >
+                                        <DownloadIcon className="h-3.5 w-3.5" />
+                                        Download folder
+                                      </button>
+                                    )}
+                                    {!canSelectionDownloadFolder && canSelectionDownloadFiles && (
+                                      <button
+                                        type="button"
+                                        className={bulkActionClasses}
+                                        onClick={() => handleDownloadItems(selectionFiles)}
+                                        disabled={!bucketName || !hasS3AccountContext}
+                                      >
+                                        <DownloadIcon className="h-3.5 w-3.5" />
+                                        Download
+                                      </button>
+                                    )}
+                                    {canSelectionOpen && selectionPrimary && (
+                                      <button
+                                        type="button"
+                                        className={bulkActionClasses}
+                                        onClick={() => handleOpenItem(selectionPrimary)}
+                                      >
+                                        <OpenIcon className="h-3.5 w-3.5" />
+                                        Open
+                                      </button>
+                                    )}
+                                    {canSelectionCopyUrl && selectionPrimary && (
+                                      <button
+                                        type="button"
+                                        className={bulkActionClasses}
+                                        onClick={() => handleCopyUrl(selectionPrimary)}
+                                        disabled={!hasS3AccountContext}
+                                      >
+                                        <LinkIcon className="h-3.5 w-3.5" />
+                                        Copy URL
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => handleCopyItems(selectionItems)}
+                                      disabled={!canSelectionActions}
+                                    >
+                                      <CopyIcon className="h-3.5 w-3.5" />
+                                      Copy
+                                    </button>
+                                    {selectionIsSingle && selectionPrimary && (
+                                      <button
+                                        type="button"
+                                        className={bulkActionClasses}
+                                        onClick={() => handleCopyPath(`${bucketName}/${selectionPrimary.key}`)}
+                                      >
+                                        <CopyIcon className="h-3.5 w-3.5" />
+                                        Copy path
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => openBulkAttributesModal(selectionItems)}
+                                    >
+                                      <SlidersIcon className="h-3.5 w-3.5" />
+                                      Bulk attributes
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => openBulkRestoreModal(selectionItems)}
+                                    >
+                                      <HistoryIcon className="h-3.5 w-3.5" />
+                                      Restore to date
+                                    </button>
+                                    {canSelectionAdvanced && (
+                                      <button
+                                        type="button"
+                                        className={bulkActionClasses}
+                                        onClick={() => setShowAdvancedModal(true)}
+                                      >
+                                        <SettingsIcon className="h-3.5 w-3.5" />
+                                        Advanced
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className={bulkDangerClasses}
+                                      onClick={() => handleDeleteItems(selectionItems)}
+                                      disabled={!hasS3AccountContext}
+                                    >
+                                      <TrashIcon className="h-3.5 w-3.5" />
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                               <div>
                                 <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Prefix summary</p>
                                 <div className="mt-2 grid gap-2">
@@ -4724,6 +4851,7 @@ export default function BrowserPage() {
                                     onClick={handleContextCount}
                                     disabled={!bucketName || !hasS3AccountContext || contextCountsLoading}
                                   >
+                                    <RefreshIcon className="h-3.5 w-3.5" />
                                     {contextCountsLoading ? "Counting..." : contextCounts ? "Recount" : "Count"}
                                   </button>
                                 </div>
@@ -4857,7 +4985,7 @@ export default function BrowserPage() {
                                   onClick={() => handleCopyUrl(selectionPrimary)}
                                   disabled={!hasS3AccountContext}
                                 >
-                                  <CopyIcon className="h-3.5 w-3.5" />
+                                  <LinkIcon className="h-3.5 w-3.5" />
                                   Copy URL
                                 </button>
                               )}
@@ -4894,13 +5022,15 @@ export default function BrowserPage() {
                                 className={bulkActionClasses}
                                 onClick={() => openBulkAttributesModal(selectionItems)}
                               >
-                                Edit attributes
+                                <SlidersIcon className="h-3.5 w-3.5" />
+                                Bulk attributes
                               </button>
                               <button
                                 type="button"
                                 className={bulkActionClasses}
                                 onClick={() => openBulkRestoreModal(selectionItems)}
                               >
+                                <HistoryIcon className="h-3.5 w-3.5" />
                                 Restore to date
                               </button>
                               {canSelectionAdvanced && (
@@ -4909,6 +5039,7 @@ export default function BrowserPage() {
                                   className={bulkActionClasses}
                                   onClick={() => setShowAdvancedModal(true)}
                                 >
+                                  <SettingsIcon className="h-3.5 w-3.5" />
                                   Advanced
                                 </button>
                               )}
@@ -4922,6 +5053,7 @@ export default function BrowserPage() {
                                   onClick={calculateSelectionStats}
                                   disabled={!bucketName || !hasS3AccountContext || selectionStatsLoading}
                                 >
+                                  <RefreshIcon className="h-3.5 w-3.5" />
                                   {selectionStatsLoading ? "Calculating..." : selectionStats ? "Recalculate" : "Calculate"}
                                 </button>
                               </div>

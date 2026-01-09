@@ -109,10 +109,67 @@ export const CopyIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   </svg>
 );
 
+export const LinkIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path
+      d="M8 6h-2.5a3 3 0 1 0 0 6H8"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+    <path
+      d="M12 6h2.5a3 3 0 1 1 0 6H12"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+    <path d="M7.5 10h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
 export const PasteIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
     <rect x="6.5" y="3" width="7" height="3.5" rx="1" stroke="currentColor" strokeWidth="1.4" />
     <rect x="4.5" y="6" width="11" height="11" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+);
+
+export const InfoIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M10 9v5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <circle cx="10" cy="6.5" r="1" fill="currentColor" />
+  </svg>
+);
+
+export const SlidersIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path d="M5 5.5h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M5 10h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M5 14.5h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <circle cx="8" cy="5.5" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="12" cy="10" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="9" cy="14.5" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+);
+
+export const HistoryIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path d="M4 10a6 6 0 1 0 2-4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M4 5v3.5h3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M10 6.5v3.5l2.5 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
+export const SettingsIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <path
+      d="M8.3 3.5h3.4l.6 1.9 2 .8 1.6-1 2.4 2.4-1 1.6.8 2 .9.3v3.4l-.9.3-.8 2 1 1.6-2.4 2.4-1.6-1-2 .8-.6 1.9H8.3l-.6-1.9-2-.8-1.6 1-2.4-2.4 1-1.6-.8-2-.9-.3V10l.9-.3.8-2-1-1.6L4.7 3.7l1.6 1 2-.8.6-1.9Z"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinejoin="round"
+    />
+    <circle cx="10" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.4" />
   </svg>
 );
 

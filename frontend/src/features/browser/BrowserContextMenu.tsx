@@ -9,6 +9,23 @@ import {
   contextMenuItemDisabledClasses,
   contextMenuSeparatorClasses,
 } from "./browserConstants";
+import {
+  CopyIcon,
+  DownloadIcon,
+  EyeIcon,
+  FolderIcon,
+  FolderPlusIcon,
+  HistoryIcon,
+  InfoIcon,
+  LinkIcon,
+  ListIcon,
+  OpenIcon,
+  PasteIcon,
+  SettingsIcon,
+  SlidersIcon,
+  TrashIcon,
+  UploadIcon,
+} from "./browserIcons";
 import { getSelectionInfo } from "./browserUtils";
 import type { BrowserItem, ClipboardState, ContextMenuState } from "./browserTypes";
 
@@ -92,6 +109,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
+            <UploadIcon className="h-3.5 w-3.5" />
             Upload files
           </button>
           <button
@@ -103,6 +121,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
+            <FolderIcon className="h-3.5 w-3.5" />
             Upload folder
           </button>
           <button
@@ -114,6 +133,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
+            <FolderPlusIcon className="h-3.5 w-3.5" />
             New folder
           </button>
           <button
@@ -125,6 +145,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!clipboard || !bucketName || !hasS3AccountContext}
           >
+            <PasteIcon className="h-3.5 w-3.5" />
             Paste
           </button>
           <button
@@ -136,6 +157,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
+            <ListIcon className="h-3.5 w-3.5" />
             Versions
           </button>
           <button
@@ -147,6 +169,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!currentPath}
           >
+            <CopyIcon className="h-3.5 w-3.5" />
             Copy path
           </button>
         </>
@@ -161,6 +184,7 @@ export default function BrowserContextMenu({
               onOpenDetails(contextItem);
             }}
           >
+            <InfoIcon className="h-3.5 w-3.5" />
             Details
           </button>
           {contextItem.type === "folder" ? (
@@ -172,6 +196,7 @@ export default function BrowserContextMenu({
                 onOpenItem(contextItem);
               }}
             >
+              <OpenIcon className="h-3.5 w-3.5" />
               Open
             </button>
           ) : (
@@ -184,6 +209,7 @@ export default function BrowserContextMenu({
               }}
               disabled={!bucketName || !hasS3AccountContext}
             >
+              <EyeIcon className="h-3.5 w-3.5" />
               Preview
             </button>
           )}
@@ -196,6 +222,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
+            <DownloadIcon className="h-3.5 w-3.5" />
             {contextItem.type === "folder" ? "Download folder" : "Download"}
           </button>
           {contextItem.type === "file" && (
@@ -208,6 +235,7 @@ export default function BrowserContextMenu({
               }}
               disabled={!bucketName || !hasS3AccountContext}
             >
+              <LinkIcon className="h-3.5 w-3.5" />
               Copy URL
             </button>
           )}
@@ -220,6 +248,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName}
           >
+            <CopyIcon className="h-3.5 w-3.5" />
             Copy path
           </button>
           <button
@@ -231,6 +260,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName}
           >
+            <CopyIcon className="h-3.5 w-3.5" />
             Copy
           </button>
           <div className={contextMenuSeparatorClasses} />
@@ -243,7 +273,8 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
-            Edit attributes
+            <SlidersIcon className="h-3.5 w-3.5" />
+            Bulk attributes
           </button>
           <button
             type="button"
@@ -254,6 +285,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
+            <HistoryIcon className="h-3.5 w-3.5" />
             Restore to date
           </button>
           {contextItem.type === "file" && (
@@ -266,6 +298,7 @@ export default function BrowserContextMenu({
               }}
               disabled={!bucketName || !hasS3AccountContext}
             >
+              <SettingsIcon className="h-3.5 w-3.5" />
               Advanced
             </button>
           )}
@@ -279,6 +312,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
+            <TrashIcon className="h-3.5 w-3.5" />
             Delete
           </button>
         </>
@@ -295,6 +329,7 @@ export default function BrowserContextMenu({
               }}
               disabled={!bucketName || !hasS3AccountContext}
             >
+              <DownloadIcon className="h-3.5 w-3.5" />
               Download folder
             </button>
           )}
@@ -308,6 +343,7 @@ export default function BrowserContextMenu({
               }}
               disabled={!bucketName || !hasS3AccountContext}
             >
+              <DownloadIcon className="h-3.5 w-3.5" />
               Download
             </button>
           )}
@@ -320,6 +356,7 @@ export default function BrowserContextMenu({
                 onOpenItem(contextSelectionInfo.primary);
               }}
             >
+              <OpenIcon className="h-3.5 w-3.5" />
               Open
             </button>
           )}
@@ -333,6 +370,7 @@ export default function BrowserContextMenu({
               }}
               disabled={!bucketName || !hasS3AccountContext}
             >
+              <LinkIcon className="h-3.5 w-3.5" />
               Copy URL
             </button>
           )}
@@ -345,6 +383,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || contextSelectionInfo.items.length === 0}
           >
+            <CopyIcon className="h-3.5 w-3.5" />
             Copy
           </button>
           <div className={contextMenuSeparatorClasses} />
@@ -358,6 +397,7 @@ export default function BrowserContextMenu({
               }}
               disabled={!bucketName}
             >
+              <CopyIcon className="h-3.5 w-3.5" />
               Copy path
             </button>
           )}
@@ -370,7 +410,8 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
-            Edit attributes
+            <SlidersIcon className="h-3.5 w-3.5" />
+            Bulk attributes
           </button>
           <button
             type="button"
@@ -381,6 +422,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
+            <HistoryIcon className="h-3.5 w-3.5" />
             Restore to date
           </button>
           {contextSelectionInfo.canAdvanced && contextSelectionInfo.primary && (
@@ -393,6 +435,7 @@ export default function BrowserContextMenu({
               }}
               disabled={!bucketName || !hasS3AccountContext}
             >
+              <SettingsIcon className="h-3.5 w-3.5" />
               Advanced
             </button>
           )}
@@ -406,6 +449,7 @@ export default function BrowserContextMenu({
             }}
             disabled={!bucketName || !hasS3AccountContext}
           >
+            <TrashIcon className="h-3.5 w-3.5" />
             Delete
           </button>
         </>

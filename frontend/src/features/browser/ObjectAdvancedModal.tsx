@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
 import PageTabs from "../../components/PageTabs";
 import {
@@ -52,6 +52,8 @@ type MetadataDraft = {
   contentLanguage: string;
   expires: string;
 };
+
+type TagDraft = ObjectTag & { id: string };
 
 const inputClasses =
   "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
@@ -125,7 +127,7 @@ export default function ObjectAdvancedModal({
     expires: "",
   });
   const [metadataItems, setMetadataItems] = useState<ObjectTag[]>([]);
-  const [tagsDraft, setTagsDraft] = useState<ObjectTag[]>([]);
+  const [tagsDraft, setTagsDraft] = useState<TagDraft[]>([]);
   const [storageClass, setStorageClass] = useState("");
   const [aclValue, setAclValue] = useState("private");
   const [legalHoldStatus, setLegalHoldStatus] = useState<"ON" | "OFF">("OFF");
@@ -153,6 +155,13 @@ export default function ObjectAdvancedModal({
   const [savingRetention, setSavingRetention] = useState(false);
   const [savingRestore, setSavingRestore] = useState(false);
   const [savingPresign, setSavingPresign] = useState(false);
+
+  const tagIdRef = useRef(0);
+
+  const nextTagId = () => {
+    tagIdRef.current += 1;
+    return `tag-${tagIdRef.current}`;
+  };
 
   const versionId = metadata?.version_id ?? tagsVersionId ?? undefined;
 
@@ -194,7 +203,7 @@ export default function ObjectAdvancedModal({
   }, [item.storageClass, metadata]);
 
   useEffect(() => {
-    setTagsDraft(tags.map((tag) => ({ key: tag.key, value: tag.value })));
+    setTagsDraft(tags.map((tag) => ({ id: nextTagId(), key: tag.key, value: tag.value })));
   }, [item.key, tags]);
 
   useEffect(() => {
@@ -291,7 +300,9 @@ export default function ObjectAdvancedModal({
       await updateObjectTags(accountId, bucketName, {
         key: item.key,
         version_id: versionId ?? null,
-        tags: tagsDraft.filter((tag) => tag.key.trim().length > 0),
+        tags: tagsDraft
+          .filter((tag) => tag.key.trim().length > 0)
+          .map((tag) => ({ key: tag.key, value: tag.value })),
       });
       pushStatus("Tags updated.", "success");
       await onRefresh?.(item.key);
@@ -587,7 +598,7 @@ export default function ObjectAdvancedModal({
             <button
               type="button"
               className={buttonGhostClasses}
-              onClick={() => setTagsDraft((prev) => [...prev, { key: "", value: "" }])}
+              onClick={() => setTagsDraft((prev) => [...prev, { id: nextTagId(), key: "", value: "" }])}
             >
               Add tag
             </button>
@@ -597,7 +608,7 @@ export default function ObjectAdvancedModal({
           ) : (
             <div className="space-y-2">
               {tagsDraft.map((tag, idx) => (
-                <div key={`${tag.key}-${idx}`} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                <div key={tag.id} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
                   <input
                     className={inputClasses}
                     value={tag.key}
