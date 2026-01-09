@@ -42,18 +42,25 @@ function normalizeBucketName(value: string): string {
   const labels = sanitized
     .split(".")
     .map((label) => {
-      const collapsed = label.replace(/-+/g, "-");
-      return collapsed.replace(/^-+/, "").replace(/-+$/, "");
+      return label.replace(/^-+/, "").replace(/-+$/, "");
     })
     .filter(Boolean);
   const joined = labels.join(".");
   return joined.replace(/^[.-]+/, "").replace(/[.-]+$/, "").slice(0, MAX_BUCKET_NAME_LENGTH);
 }
 
+function normalizeBucketInput(value: string): string {
+  const lower = value.toLowerCase();
+  if (!lower) return "";
+  return lower.replace(/[^a-z0-9.-]+/g, "-").slice(0, MAX_BUCKET_NAME_LENGTH);
+}
+
 function isValidBucketName(value: string): boolean {
   if (value.length < 3 || value.length > MAX_BUCKET_NAME_LENGTH) return false;
   if (!/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(value)) return false;
   if (value.includes("..")) return false;
+  const labelPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+  if (value.split(".").some((label) => !labelPattern.test(label))) return false;
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return false;
   return true;
 }
@@ -706,7 +713,10 @@ export default function PortalDashboard() {
   const handleCreateBucket = async (event: FormEvent) => {
     event.preventDefault();
     const normalizedBucketName = normalizeBucketName(newBucketName);
-    if (!accountIdForApi || !normalizedBucketName) return;
+    if (!accountIdForApi || !normalizedBucketName || !isValidBucketName(normalizedBucketName)) {
+      setBucketActionError("Nom invalide. 3-63 caractères, minuscules, chiffres, points ou tirets.");
+      return;
+    }
     setBucketActionError(null);
     setCreatingBucket(true);
     try {
@@ -1568,7 +1578,7 @@ export default function PortalDashboard() {
                     <input
                       type="text"
                       value={newBucketName}
-                      onChange={(e) => setNewBucketName(normalizeBucketName(e.target.value))}
+                      onChange={(e) => setNewBucketName(normalizeBucketInput(e.target.value))}
                       maxLength={MAX_BUCKET_NAME_LENGTH}
                       title={
                         isBucketNameValid
