@@ -20,6 +20,7 @@ class S3User(BaseModel):
     storage_endpoint_id: Optional[int] = None
     storage_endpoint_name: Optional[str] = None
     storage_endpoint_url: Optional[str] = None
+    bucket_count: Optional[int] = None
 
 
 class S3UserCreate(BaseModel):

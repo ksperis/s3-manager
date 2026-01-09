@@ -36,6 +36,8 @@ logger = logging.getLogger(__name__)
 
 
 class S3AccountsService:
+    _ROOT_UID_SUFFIX = "-admin"
+
     def __init__(
         self,
         db: Session,
@@ -231,7 +233,7 @@ class S3AccountsService:
         normalized = normalize_rgw_identifier(value)
         if not normalized:
             raise ValueError("Missing account identifier for RGW root user")
-        return f"{normalized}-admin"
+        return f"{normalized}{self._ROOT_UID_SUFFIX}"
 
     def _root_display_name(self, account_name: Optional[str], account_identifier: str) -> str:
         base = (account_name or account_identifier or "").strip()
@@ -271,7 +273,8 @@ class S3AccountsService:
             if not key:
                 continue
             tenant_value = tenant_id or ""
-            if uid.lower() == f"{tenant_value.lower()}-admin":
+            normalized_tenant = normalize_rgw_identifier(tenant_value) if tenant_value else None
+            if normalized_tenant and uid.lower() == f"{normalized_tenant.lower()}{self._ROOT_UID_SUFFIX}":
                 continue
             result.setdefault(key, []).append(uid)
 
@@ -404,11 +407,12 @@ class S3AccountsService:
         if not isinstance(user_list, list):
             return 0, []
         cleaned: list[str] = []
+        root_uid = self._root_uid(account_identifier)
         for entry in user_list:
             uid = str(entry) if entry is not None else ""
             if not uid:
                 continue
-            if uid.lower() == f"{normalized_key}-admin":
+            if uid.lower() == root_uid.lower():
                 continue
             cleaned.append(uid)
         deduped = sorted(set(cleaned))
@@ -942,37 +946,63 @@ class S3AccountsService:
         account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
         if not account:
             raise ValueError("S3Account not found")
-        admin = self._admin_for_account(account, allow_missing=True)
         if delete_rgw:
-            self._delete_root_user(account, required=False)
-            rgw_id = account.rgw_account_id or str(account.id)
+            if not account.rgw_account_id:
+                raise ValueError("Unable to delete RGW tenant: rgw_account_id is missing for this account.")
+            admin = self._admin_for_account(account, allow_missing=False)
+            account_identifier = account.rgw_account_id
+
+            # Safety: only allow RGW deletion when we can prove the tenant is empty.
+            _, _, bucket_count = self._account_usage(account)
+            if bucket_count is None:
+                raise ValueError("Unable to verify bucket existence; cannot delete the RGW tenant.")
+            rgw_user_count, _ = self._account_rgw_users(account_identifier, None, admin)
+            if rgw_user_count is None:
+                raise ValueError("Unable to verify RGW users; cannot delete the RGW tenant.")
+            rgw_topic_count, _ = self._account_topics_info(account_identifier, admin)
+            if rgw_topic_count is None:
+                raise ValueError("Unable to verify RGW notification topics; cannot delete the RGW tenant.")
+            if bucket_count > 0 or rgw_user_count > 0 or rgw_topic_count > 0:
+                raise ValueError(
+                    f"RGW tenant still has attached resources (buckets={bucket_count}, users={rgw_user_count}, topics={rgw_topic_count}); remove them first."
+                )
+
+            self._delete_root_user(account, required=True)
             try:
-                if not admin:
-                    raise ValueError("Unable to delete RGW account: admin credentials are missing for this endpoint.")
-                admin.delete_account(rgw_id)
+                admin.delete_account(account_identifier)
             except RGWAdminError as exc:
-                logger.warning("Unable to delete RGW account %s: %s", rgw_id, exc)
+                raise ValueError(f"Unable to delete RGW account {account_identifier}: {exc}") from exc
         self._remove_account_entry(account)
 
     def unlink_account(self, account_id: int) -> None:
         account = self.db.query(S3Account).filter(S3Account.id == account_id).first()
         if not account:
             raise ValueError("S3Account not found")
-        self._delete_root_user(account, required=True)
+        if account.rgw_account_id:
+            self._delete_root_user(account, required=True)
         self._remove_account_entry(account)
 
     def _delete_root_user(self, account: S3Account, required: bool) -> None:
-        rgw_id = account.rgw_account_id or str(account.id)
-        root_uid = self._root_uid(rgw_id)
-        try:
-            admin = self._admin_for_account(account, allow_missing=False)
-            admin.delete_user(root_uid, tenant=None)
-            logger.debug("Deleted RGW root user %s", root_uid)
+        if not account.rgw_account_id:
+            if required:
+                raise ValueError("RGW account ID is missing; cannot delete the root user.")
             return
-        except RGWAdminError as exc:
-            logger.debug("Unable to delete RGW root user %s: %s", root_uid, exc)
+        rgw_id = account.rgw_account_id
+        candidate_uids = [self._root_uid(rgw_id)]
+        last_error: Optional[str] = None
+        admin = self._admin_for_account(account, allow_missing=False)
+        for candidate_uid in candidate_uids:
+            try:
+                admin.delete_user(candidate_uid, tenant=None)
+                logger.debug("Deleted RGW root user %s", candidate_uid)
+                return
+            except RGWAdminError as exc:
+                last_error = str(exc)
+                logger.debug("Unable to delete RGW root user %s: %s", candidate_uid, exc)
         if required:
-            raise ValueError(f"Unable to delete RGW root user for account {account.id}")
+            raise ValueError(
+                f"Unable to delete RGW root user {candidate_uids[0]} for account {account.id}: {last_error or 'unknown error'}"
+            )
 
     def _remove_account_entry(self, account: S3Account) -> None:
         self.db.query(UserS3Account).filter(UserS3Account.account_id == account.id).delete()

@@ -300,7 +300,7 @@ class BucketsService:
     def set_bucket_quota(self, name: str, account: S3Account, payload: BucketQuotaUpdate) -> None:
         account_id, tenant = resolve_account_scope(account.rgw_account_id)
         root_identifier = account_id or tenant
-        root_uid = f"{root_identifier}-admin" if root_identifier else None
+        root_uid = resolve_admin_uid(root_identifier, account.rgw_user_uid) if root_identifier else None
         rgw_admin = self._rgw_admin_for_account(account)
         max_size_bytes = None
         if payload.max_size_gb is not None:

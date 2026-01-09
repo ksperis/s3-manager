@@ -112,7 +112,9 @@ def get_account(
     try:
         return service.get_account_detail(account_id, include_usage=include_usage)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 @router.post("", response_model=S3Account, status_code=status.HTTP_201_CREATED)
 def create_account(

@@ -8,6 +8,7 @@ from app.db_models import S3User, User, UserS3User, UserRole
 from app.models.s3_user import S3UserCreate, S3UserImport, S3UserUpdate
 from app.services.s3_users_service import S3UsersService
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services import s3_client
 
 
 class FakeRGWAdmin:
@@ -236,10 +237,13 @@ def test_import_s3_user_leaves_existing_caps(db_session):
     assert fake.user_caps["cap-import"] != []
 
 
-def test_delete_user_can_skip_rgw(db_session):
+def test_delete_user_can_skip_rgw(monkeypatch, db_session):
     fake = FakeRGWAdmin()
     service = S3UsersService(db_session, rgw_admin_client=fake)
     created = service.create_user(S3UserCreate(name="Standalone", uid="delete-me"))
+
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: [])
+
     service.delete_user(created.id, delete_rgw=True)
     assert fake.deleted_users == ["delete-me"]
     assert db_session.query(S3User).filter_by(id=created.id).first() is None

@@ -260,6 +260,9 @@ def test_delete_account_skips_rgw_when_flag_false(db_session):
 
     svc = S3AccountsService(db_session)
     svc.rgw_admin = FakeRGWDeleteAdmin()
+    svc._account_usage = lambda acc: (0, 0, 0)  # type: ignore[method-assign]
+    svc._account_rgw_users = lambda account_id, tenant, admin: (0, [])  # type: ignore[method-assign]
+    svc._account_topics_info = lambda account_id, admin: (0, [])  # type: ignore[method-assign]
 
     svc.delete_account(account.id, delete_rgw=False)
 

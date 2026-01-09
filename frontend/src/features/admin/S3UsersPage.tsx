@@ -9,9 +9,9 @@ import {
   S3User,
   createS3User,
   deleteS3User,
+  getS3UserWithBuckets,
   importS3Users,
   listS3Users,
-  unlinkS3User,
   updateS3User,
 } from "../../api/s3Users";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
@@ -98,28 +98,18 @@ export default function S3UsersPage() {
 
   const [deleteBusyId, setDeleteBusyId] = useState<number | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [userToUnlink, setUserToUnlink] = useState<S3User | null>(null);
-  const [unlinkingUserId, setUnlinkingUserId] = useState<number | null>(null);
-  const [unlinkError, setUnlinkError] = useState<string | null>(null);
-  const unlinkModalBusy = userToUnlink ? unlinkingUserId === userToUnlink.id : false;
 
   const [userToDelete, setUserToDelete] = useState<S3User | null>(null);
   const [deleteFromRgw, setDeleteFromRgw] = useState(false);
   const [deleteModalError, setDeleteModalError] = useState<string | null>(null);
+  const deleteModalHasResources =
+    userToDelete != null && (userToDelete.bucket_count == null || userToDelete.bucket_count > 0);
   const editingUserId = editingUser?.id ?? null;
   const {
     stats: editingUsageStats,
     loading: editingUsageLoading,
     error: editingUsageError,
   } = useAdminS3UserStats(editingUserId, Boolean(editingUserId));
-
-  const closeUserUnlinkModal = () => {
-    if (unlinkModalBusy) {
-      return;
-    }
-    setUserToUnlink(null);
-    setUnlinkError(null);
-  };
 
   const extractError = (err: unknown) => {
     if (axios.isAxiosError(err)) {
@@ -344,11 +334,18 @@ export default function S3UsersPage() {
     }
   };
 
-  const startDeleteUser = (user: S3User) => {
-    setUserToDelete(user);
-    setDeleteFromRgw(false);
+  const startDeleteUser = async (user: S3User) => {
     setDeleteModalError(null);
     setActionMessage(null);
+    try {
+      const detail = await getS3UserWithBuckets(user.id);
+      setUserToDelete(detail);
+      setDeleteFromRgw(false);
+    } catch (err) {
+      setUserToDelete(user);
+      setDeleteFromRgw(false);
+      setDeleteModalError(extractError(err));
+    }
   };
 
   const closeDeleteModal = () => {
@@ -377,28 +374,6 @@ export default function S3UsersPage() {
       setDeleteModalError(extractError(err));
     } finally {
       setDeleteBusyId(null);
-    }
-  };
-
-  const startUnlinkUser = (user: S3User) => {
-    setUserToUnlink(user);
-    setUnlinkError(null);
-  };
-
-  const confirmUnlinkUser = async () => {
-    if (!userToUnlink) return;
-    setUnlinkingUserId(userToUnlink.id);
-    setUnlinkError(null);
-    setActionMessage(null);
-    try {
-      await unlinkS3User(userToUnlink.id);
-      await fetchUsers();
-      setActionMessage(`Unlinked ${userToUnlink.name}.`);
-      setUserToUnlink(null);
-    } catch (err) {
-      setUnlinkError(extractError(err));
-    } finally {
-      setUnlinkingUserId(null);
     }
   };
 
@@ -466,7 +441,6 @@ export default function S3UsersPage() {
               )}
               {!loading &&
                 users.map((user) => {
-                  const unlinkBusy = unlinkingUserId === user.id;
                   const deleteBusy = deleteBusyId === user.id;
                   return (
                     <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -499,13 +473,6 @@ export default function S3UsersPage() {
                           <Link to={`/admin/s3-users/${user.id}/keys`} className={tableActionButtonClasses}>
                             Keys
                           </Link>
-                          <button
-                            onClick={() => startUnlinkUser(user)}
-                            className={tableActionButtonClasses}
-                            disabled={unlinkBusy}
-                          >
-                            {unlinkBusy ? "Unlinking..." : "Unlink"}
-                          </button>
                           <button onClick={() => startDeleteUser(user)} className={tableDeleteActionClasses} disabled={deleteBusy}>
                             {deleteBusy ? "Deleting..." : "Delete"}
                           </button>
@@ -987,15 +954,27 @@ export default function S3UsersPage() {
         <Modal title={`Delete ${userToDelete.name}`} onClose={closeDeleteModal}>
           <div className="space-y-3 ui-body text-slate-600 dark:text-slate-300">
             <p>
-              This removes the standalone RGW user from the UI. You can also delete the underlying RGW user to revoke all access keys and data associated with it.
+              This removes the standalone RGW user from the UI and deletes the access key used by this interface. You can also delete the underlying RGW user once it no longer owns buckets.
             </p>
-            <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-body dark:border-slate-700">
+            {deleteModalHasResources && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
+                This RGW user still has linked resources. Remove owned buckets before deleting it from RGW.
+                <div className="mt-1 ui-caption font-semibold">Buckets: {userToDelete.bucket_count ?? "unknown"}</div>
+              </div>
+            )}
+            <label
+              className={`flex items-start gap-3 rounded-lg border px-3 py-2 ui-body ${
+                deleteModalHasResources
+                  ? "border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                  : "border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-100"
+              }`}
+            >
               <input
                 type="checkbox"
                 className="mt-1"
                 checked={deleteFromRgw}
                 onChange={(e) => setDeleteFromRgw(e.target.checked)}
-                disabled={deleteModalBusy}
+                disabled={deleteModalBusy || deleteModalHasResources}
               />
               <span>
                 Also delete RGW user{" "}
@@ -1029,41 +1008,6 @@ export default function S3UsersPage() {
         </Modal>
       )}
 
-      {userToUnlink && (
-        <Modal title={`Unlink ${userToUnlink.name}`} onClose={closeUserUnlinkModal}>
-          {unlinkError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
-              {unlinkError}
-            </div>
-          )}
-          <div className="space-y-3 ui-body text-slate-600 dark:text-slate-300">
-            <p>
-              This removes the UI-managed user entry and deletes the access key used by this console. The underlying RGW user and any of its data are left untouched.
-            </p>
-            <ul className="list-disc space-y-1 pl-5 ui-caption text-slate-500 dark:text-slate-400">
-              <li>Linked UI users will lose access to this standalone user.</li>
-              <li>The RGW user credentials outside this interface remain valid.</li>
-            </ul>
-          </div>
-          <div className="mt-5 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={closeUserUnlinkModal}
-              className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={confirmUnlinkUser}
-              disabled={unlinkModalBusy}
-              className="rounded-md bg-amber-500 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:opacity-60"
-            >
-              {unlinkModalBusy ? "Unlinking..." : "Unlink user"}
-            </button>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }
