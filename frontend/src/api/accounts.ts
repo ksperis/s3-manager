@@ -114,10 +114,6 @@ export async function deleteS3Account(accountId: number, options?: { deleteRgw?:
   await client.delete(`/admin/accounts/${accountId}`, { params });
 }
 
-export async function unlinkS3Account(accountId: number): Promise<void> {
-  await client.post(`/admin/accounts/${accountId}/unlink`);
-}
-
 export type ImportS3AccountPayload = {
   rgw_account_id?: string | null;
   name?: string | null;

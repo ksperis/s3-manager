@@ -14,7 +14,6 @@ import {
   getS3Account,
   importS3Accounts,
   listMinimalS3Accounts,
-  unlinkS3Account,
   updateS3Account,
 } from "../../api/accounts";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
@@ -84,8 +83,6 @@ export default function S3AccountsPage() {
   const [deletingS3AccountId, setDeletingS3AccountId] = useState<number | null>(null);
   const [accountToDelete, setS3AccountToDelete] = useState<S3Account | null>(null);
   const [deleteFromRgw, setDeleteFromRgw] = useState(false);
-  const [accountToUnlink, setS3AccountToUnlink] = useState<S3Account | null>(null);
-  const [unlinkingS3AccountId, setUnlinkingS3AccountId] = useState<number | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [userSelections, setUserSelections] = useState<number[]>([]);
@@ -323,14 +320,14 @@ export default function S3AccountsPage() {
   }, [storageEndpoints, cephEndpoints]);
 
   const loadAccountDetail = useCallback(
-    async (account: S3AccountSummary) => {
+    async (account: S3AccountSummary, options?: { includeUsage?: boolean }) => {
       const targetId = accountDbId(account);
       if (targetId == null || Number.isNaN(targetId)) {
         setActionError("Unable to resolve the account identifier.");
         return null;
       }
       try {
-        const detail = await getS3Account(targetId, { includeUsage: false });
+        const detail = await getS3Account(targetId, { includeUsage: options?.includeUsage });
         return detail;
       } catch (err) {
         setActionError(extractError(err));
@@ -404,13 +401,18 @@ export default function S3AccountsPage() {
     return (account.user_ids ?? []).map((id) => ({ user_id: id, account_role: null, account_admin: false }));
   };
 
-  const deleteModalHasResources =
+  const deleteModalUnknownResources =
+    accountToDelete != null &&
+    (accountToDelete.bucket_count == null ||
+      accountToDelete.rgw_user_count == null ||
+      accountToDelete.rgw_topic_count == null);
+  const deleteModalHasLinkedResources =
     accountToDelete != null &&
     ((accountToDelete.bucket_count ?? 0) > 0 ||
       (accountToDelete.rgw_user_count ?? 0) > 0 ||
       (accountToDelete.rgw_topic_count ?? 0) > 0);
+  const deleteModalHasResources = deleteModalUnknownResources || deleteModalHasLinkedResources;
   const deleteModalBusy = accountToDelete ? deletingS3AccountId === accountDbId(accountToDelete) : false;
-  const accountUnlinkModalBusy = accountToUnlink ? unlinkingS3AccountId === accountDbId(accountToUnlink) : false;
   const importDisabled =
     importBusy ||
     (importMode === "tenant"
@@ -476,7 +478,7 @@ export default function S3AccountsPage() {
   const openDeleteS3AccountModal = async (account: S3AccountSummary) => {
     setActionError(null);
     setActionMessage(null);
-    const detail = await loadAccountDetail(account);
+    const detail = await loadAccountDetail(account, { includeUsage: true });
     if (!detail) return;
     setS3AccountToDelete(detail);
     setDeleteFromRgw(false);
@@ -509,42 +511,6 @@ export default function S3AccountsPage() {
       setDeletingS3AccountId(null);
     }
   };
-
-  const openUnlinkS3AccountModal = async (account: S3AccountSummary) => {
-    setActionError(null);
-    setActionMessage(null);
-    const detail = await loadAccountDetail(account);
-    if (!detail) return;
-    setS3AccountToUnlink(detail);
-  };
-
-  const closeUnlinkModal = () => {
-    setS3AccountToUnlink(null);
-    setUnlinkingS3AccountId(null);
-    setActionError(null);
-  };
-
-  const confirmUnlinkS3Account = async () => {
-    if (!accountToUnlink) return;
-    const targetId = accountDbId(accountToUnlink);
-    if (targetId == null || Number.isNaN(targetId)) {
-      setActionError("Missing account identifier.");
-      return;
-    }
-    setUnlinkingS3AccountId(targetId);
-    setActionError(null);
-    setActionMessage(null);
-    try {
-      await unlinkS3Account(targetId);
-      await fetchS3Accounts();
-      closeUnlinkModal();
-    } catch (err) {
-      setActionError(extractError(err));
-    } finally {
-      setUnlinkingS3AccountId(null);
-    }
-  };
-
 
   return (
     <div className="space-y-4">
@@ -687,48 +653,6 @@ export default function S3AccountsPage() {
       </Modal>
     )}
 
-      {isSuperAdmin && accountToUnlink && (
-        <Modal title={`Unlink ${accountToUnlink.name}`} onClose={closeUnlinkModal}>
-          <p className="mb-3 ui-body text-slate-500 dark:text-slate-400">
-            This removes the account from the admin interface and detaches assigned UI users while keeping the RGW tenant and its data.
-            The root user{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 ui-caption dark:bg-slate-800">
-              {(accountToUnlink.rgw_account_id ?? accountToUnlink.id) + "-admin"}
-            </code>{" "}
-            will be deleted to revoke its access keys.
-          </p>
-          {actionError && (
-            <PageBanner tone="error" className="mb-3">
-              {actionError}
-            </PageBanner>
-          )}
-          <div className="mb-4 rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-            RGW tenant preserved:{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 ui-caption dark:bg-slate-800">
-              {accountToUnlink.rgw_account_id ?? accountToUnlink.id}
-            </code>
-          </div>
-          <div className="flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={closeUnlinkModal}
-              className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={confirmUnlinkS3Account}
-              disabled={accountUnlinkModalBusy}
-              className="rounded-md bg-amber-500 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:opacity-60"
-            >
-              {accountUnlinkModalBusy ? "Unlinking..." : "Unlink account"}
-            </button>
-          </div>
-        </Modal>
-      )}
-
-
       {isSuperAdmin && accountToDelete && (
         <Modal title={`Delete ${accountToDelete.name}`} onClose={closeDeleteModal}>
           <p className="mb-3 ui-body text-slate-500 dark:text-slate-400">
@@ -741,9 +665,11 @@ export default function S3AccountsPage() {
           )}
           {deleteModalHasResources && (
             <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
-              This RGW tenant still has attached resources. Remove buckets and RGW users (excluding the admin user) before deleting it from RGW.
+              {deleteModalUnknownResources
+                ? "Unable to verify linked RGW resources. RGW deletion is disabled until counts are available."
+                : "This RGW tenant still has attached resources. Remove buckets and RGW users (excluding the admin user) before deleting it from RGW."}
               <div className="mt-1 ui-caption font-semibold">
-                Buckets: {accountToDelete.bucket_count ?? "unknown"} · RGW users (excl. admin):{" "}
+                Buckets: {accountToDelete.bucket_count ?? "unknown"} · IAM users (excl. admin):{" "}
                 {accountToDelete.rgw_user_count ?? "unknown"} · RGW topics:{" "}
                 {accountToDelete.rgw_topic_count ?? "unknown"}
               </div>
@@ -1484,7 +1410,6 @@ export default function S3AccountsPage() {
                 !error &&
                 pagedS3Accounts.map((account) => {
                   const summaryDbId = accountDbId(account);
-                  const unlinkBusy = summaryDbId != null && unlinkingS3AccountId === summaryDbId;
                   const deleteBusy = summaryDbId != null && deletingS3AccountId === summaryDbId;
                   const accountUserLinks = resolveAccountUserLinks(account);
                   return (
@@ -1554,13 +1479,6 @@ export default function S3AccountsPage() {
                       <div className="flex justify-end gap-2">
                         <button onClick={() => startEditS3Account(account)} className={tableActionButtonClasses}>
                           Edit
-                        </button>
-                        <button
-                          onClick={() => openUnlinkS3AccountModal(account)}
-                          className={tableActionButtonClasses}
-                          disabled={unlinkBusy}
-                        >
-                          {unlinkBusy ? "Unlinking..." : "Unlink"}
                         </button>
                         <button
                           onClick={() => openDeleteS3AccountModal(account)}

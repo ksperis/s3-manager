@@ -673,14 +673,18 @@ class S3AccountsService:
             root_display = self._root_display_name(account_name, item.rgw_account_id)
             access_key = item.access_key
             secret_key = item.secret_key
-            try:
-                existing_root = admin.get_user(root_uid, tenant=None, allow_not_found=True)
-            except RGWAdminError:
-                existing_root = None
+            existing_root = None
+            for tenant in (item.rgw_account_id, None):
+                if existing_root:
+                    break
+                try:
+                    existing_root = admin.get_user(root_uid, tenant=tenant, allow_not_found=True)
+                except RGWAdminError:
+                    existing_root = None
             keys = admin._extract_keys(existing_root or {})
             access_key = access_key or (keys[0].get("access_key") if keys else None)
             secret_key = secret_key or (keys[0].get("secret_key") if keys else None)
-            if not access_key or not secret_key:
+            if not existing_root:
                 resp = admin.create_user_with_account_id(
                     uid=root_uid,
                     account_id=item.rgw_account_id,
@@ -690,6 +694,14 @@ class S3AccountsService:
                 keys = admin._extract_keys(resp)
                 access_key = access_key or (keys[0].get("access_key") if keys else None)
                 secret_key = secret_key or (keys[0].get("secret_key") if keys else None)
+                if not access_key or not secret_key:
+                    try:
+                        existing_root = admin.get_user(root_uid, tenant=item.rgw_account_id, allow_not_found=True)
+                    except RGWAdminError:
+                        existing_root = None
+                    keys = admin._extract_keys(existing_root or {})
+                    access_key = access_key or (keys[0].get("access_key") if keys else None)
+                    secret_key = secret_key or (keys[0].get("secret_key") if keys else None)
             if not access_key or not secret_key:
                 try:
                     resp = admin.create_access_key(
