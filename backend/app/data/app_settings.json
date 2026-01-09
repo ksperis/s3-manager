@@ -57,7 +57,7 @@
     "allow_manager_user_usage_stats": true
   },
   "browser": {
-    "allow_proxy_transfers": false,
+    "allow_proxy_transfers": true,
     "direct_upload_parallelism": 5,
     "proxy_upload_parallelism": 2,
     "direct_download_parallelism": 5,
