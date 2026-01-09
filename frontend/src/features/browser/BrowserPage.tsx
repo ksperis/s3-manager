@@ -1604,6 +1604,20 @@ export default function BrowserPage() {
     setContextMenu({ kind: "path", x, y });
   };
 
+  const handleListBackgroundClick = (event: ReactMouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button, a, input, textarea, select, label")) {
+      return;
+    }
+    if (target.closest("[data-browser-item]")) {
+      return;
+    }
+    setSelectedIds([]);
+    setActiveItem(null);
+    setInspectorTab("context");
+    setShowInspector(true);
+  };
+
   const handleBucketChange = (value: string) => {
     setShowBucketMenu(false);
     setBucketFilter("");
@@ -4131,7 +4145,7 @@ export default function BrowserPage() {
                       </div>
                     )}
                     {viewMode === "list" ? (
-                      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+                      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto" onClick={handleListBackgroundClick}>
                         <table className="manager-table min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
                           <thead className="bg-slate-50 dark:bg-slate-900/50">
                             <tr>
@@ -4260,9 +4274,13 @@ export default function BrowserPage() {
                             {!objectsLoading && bucketName && !objectsError && listItems.length === 0 && (
                               <TableEmptyState colSpan={5} message="No objects found for this path." />
                             )}
-                            {listItems.map((item) => (
+                            {listItems.map((item) => {
+                              const isFocused = inspectedItem?.id === item.id;
+                              const isSelected = selectedSet.has(item.id);
+                              return (
                               <tr
                                 key={item.id}
+                                data-browser-item
                                 onClick={(event) => {
                                   const target = event.target as HTMLElement;
                                   if (target.closest("button, a, input, textarea, select, label")) {
@@ -4276,15 +4294,17 @@ export default function BrowserPage() {
                                 }}
                                 onContextMenu={(event) => handleItemContextMenu(event, item)}
                                 className={`${rowHeightClasses} transition-colors ${
-                                  selectedSet.has(item.id)
+                                  isSelected
                                     ? "bg-primary-100/80 hover:bg-primary-100 dark:bg-primary-500/30 dark:hover:bg-primary-500/40"
-                                    : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                                    : isFocused
+                                      ? "bg-primary-50/70 hover:bg-primary-50 dark:bg-primary-500/15 dark:hover:bg-primary-500/20"
+                                      : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
                                 }`}
                               >
                                 <td className={`w-9 px-2 ${rowCellClasses} !align-middle`}>
                                   <input
                                     type="checkbox"
-                                    checked={selectedSet.has(item.id)}
+                                    checked={isSelected}
                                     onChange={() => toggleSelection(item.id)}
                                     aria-label={`Select ${item.name}`}
                                     className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
@@ -4400,12 +4420,16 @@ export default function BrowserPage() {
                                   </div>
                                 </td>
                               </tr>
-                            ))}
+                            );
+                            })}
                           </tbody>
                         </table>
                       </div>
                     ) : (
-                      <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                      <div
+                        className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+                        onClick={handleListBackgroundClick}
+                      >
                         {objectsLoading && (
                           <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             Loading objects...
@@ -4431,6 +4455,7 @@ export default function BrowserPage() {
                           return (
                             <div
                               key={item.id}
+                              data-browser-item
                               className={`group relative flex ${gridCardGapClasses} ${gridCardHeightClasses} flex-col overflow-hidden rounded-2xl border p-4 shadow-sm transition ${
                                 selected
                                   ? "border-primary-200 bg-primary-50/60 shadow-[0_12px_24px_-16px_rgba(79,70,229,0.45)] dark:border-primary-700/60 dark:bg-primary-500/20"
@@ -4719,110 +4744,6 @@ export default function BrowserPage() {
                                   </button>
                                 </div>
                               </div>
-                              {selectedCount > 0 && (
-                                <div>
-                                  <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Bulk actions</p>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {canSelectionDownloadFolder && selectionPrimary && (
-                                      <button
-                                        type="button"
-                                        className={bulkActionClasses}
-                                        onClick={() => handleDownloadFolder(selectionPrimary)}
-                                        disabled={!bucketName || !hasS3AccountContext}
-                                      >
-                                        <DownloadIcon className="h-3.5 w-3.5" />
-                                        Download folder
-                                      </button>
-                                    )}
-                                    {!canSelectionDownloadFolder && canSelectionDownloadFiles && (
-                                      <button
-                                        type="button"
-                                        className={bulkActionClasses}
-                                        onClick={() => handleDownloadItems(selectionFiles)}
-                                        disabled={!bucketName || !hasS3AccountContext}
-                                      >
-                                        <DownloadIcon className="h-3.5 w-3.5" />
-                                        Download
-                                      </button>
-                                    )}
-                                    {canSelectionOpen && selectionPrimary && (
-                                      <button
-                                        type="button"
-                                        className={bulkActionClasses}
-                                        onClick={() => handleOpenItem(selectionPrimary)}
-                                      >
-                                        <OpenIcon className="h-3.5 w-3.5" />
-                                        Open
-                                      </button>
-                                    )}
-                                    {canSelectionCopyUrl && selectionPrimary && (
-                                      <button
-                                        type="button"
-                                        className={bulkActionClasses}
-                                        onClick={() => handleCopyUrl(selectionPrimary)}
-                                        disabled={!hasS3AccountContext}
-                                      >
-                                        <LinkIcon className="h-3.5 w-3.5" />
-                                        Copy URL
-                                      </button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => handleCopyItems(selectionItems)}
-                                      disabled={!canSelectionActions}
-                                    >
-                                      <CopyIcon className="h-3.5 w-3.5" />
-                                      Copy
-                                    </button>
-                                    {selectionIsSingle && selectionPrimary && (
-                                      <button
-                                        type="button"
-                                        className={bulkActionClasses}
-                                        onClick={() => handleCopyPath(`${bucketName}/${selectionPrimary.key}`)}
-                                      >
-                                        <CopyIcon className="h-3.5 w-3.5" />
-                                        Copy path
-                                      </button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => openBulkAttributesModal(selectionItems)}
-                                    >
-                                      <SlidersIcon className="h-3.5 w-3.5" />
-                                      Bulk attributes
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={bulkActionClasses}
-                                      onClick={() => openBulkRestoreModal(selectionItems)}
-                                    >
-                                      <HistoryIcon className="h-3.5 w-3.5" />
-                                      Restore to date
-                                    </button>
-                                    {canSelectionAdvanced && (
-                                      <button
-                                        type="button"
-                                        className={bulkActionClasses}
-                                        onClick={() => setShowAdvancedModal(true)}
-                                      >
-                                        <SettingsIcon className="h-3.5 w-3.5" />
-                                        Advanced
-                                      </button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className={bulkDangerClasses}
-                                      onClick={() => handleDeleteItems(selectionItems)}
-                                      disabled={!hasS3AccountContext}
-                                    >
-                                      <TrashIcon className="h-3.5 w-3.5" />
-                                      Delete
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
                               <div>
                                 <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Prefix summary</p>
                                 <div className="mt-2 grid gap-2">
@@ -4945,104 +4866,114 @@ export default function BrowserPage() {
                                 </button>
                               )}
                             </div>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {canSelectionDownloadFolder && selectionPrimary && (
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => handleDownloadFolder(selectionPrimary)}
-                                  disabled={!bucketName || !hasS3AccountContext}
-                                >
-                                  <DownloadIcon className="h-3.5 w-3.5" />
-                                  Download folder
-                                </button>
-                              )}
-                              {!canSelectionDownloadFolder && canSelectionDownloadFiles && (
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => handleDownloadItems(selectionFiles)}
-                                  disabled={!bucketName || !hasS3AccountContext}
-                                >
-                                  <DownloadIcon className="h-3.5 w-3.5" />
-                                  Download
-                                </button>
-                              )}
-                              {canSelectionOpen && selectionPrimary && (
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => handleOpenItem(selectionPrimary)}
-                                >
-                                  <OpenIcon className="h-3.5 w-3.5" />
-                                  Open
-                                </button>
-                              )}
-                              {canSelectionCopyUrl && selectionPrimary && (
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => handleCopyUrl(selectionPrimary)}
-                                  disabled={!hasS3AccountContext}
-                                >
-                                  <LinkIcon className="h-3.5 w-3.5" />
-                                  Copy URL
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                className={bulkActionClasses}
-                                onClick={() => handleCopyItems(selectionItems)}
-                                disabled={!canSelectionActions}
-                              >
-                                <CopyIcon className="h-3.5 w-3.5" />
-                                Copy
-                              </button>
-                              <button
-                                type="button"
-                                className={bulkDangerClasses}
-                                onClick={() => handleDeleteItems(selectionItems)}
-                                disabled={!hasS3AccountContext}
-                              >
-                                <TrashIcon className="h-3.5 w-3.5" />
-                                Delete
-                              </button>
-                              {selectionIsSingle && selectionPrimary && (
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => handleCopyPath(`${bucketName}/${selectionPrimary.key}`)}
-                                >
-                                  <CopyIcon className="h-3.5 w-3.5" />
-                                  Copy path
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                className={bulkActionClasses}
-                                onClick={() => openBulkAttributesModal(selectionItems)}
-                              >
-                                <SlidersIcon className="h-3.5 w-3.5" />
-                                Bulk attributes
-                              </button>
-                              <button
-                                type="button"
-                                className={bulkActionClasses}
-                                onClick={() => openBulkRestoreModal(selectionItems)}
-                              >
-                                <HistoryIcon className="h-3.5 w-3.5" />
-                                Restore to date
-                              </button>
-                              {canSelectionAdvanced && (
-                                <button
-                                  type="button"
-                                  className={bulkActionClasses}
-                                  onClick={() => setShowAdvancedModal(true)}
-                                >
-                                  <SettingsIcon className="h-3.5 w-3.5" />
-                                  Advanced
-                                </button>
-                              )}
+                            <div className="mt-2 space-y-3">
+                              <div>
+                                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Actions</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {canSelectionDownloadFolder && selectionPrimary && (
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => handleDownloadFolder(selectionPrimary)}
+                                      disabled={!bucketName || !hasS3AccountContext}
+                                    >
+                                      <DownloadIcon className="h-3.5 w-3.5" />
+                                      Download folder
+                                    </button>
+                                  )}
+                                  {!canSelectionDownloadFolder && canSelectionDownloadFiles && (
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => handleDownloadItems(selectionFiles)}
+                                      disabled={!bucketName || !hasS3AccountContext}
+                                    >
+                                      <DownloadIcon className="h-3.5 w-3.5" />
+                                      Download
+                                    </button>
+                                  )}
+                                  {canSelectionOpen && selectionPrimary && (
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => handleOpenItem(selectionPrimary)}
+                                    >
+                                      <OpenIcon className="h-3.5 w-3.5" />
+                                      Open
+                                    </button>
+                                  )}
+                                  {canSelectionCopyUrl && selectionPrimary && (
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => handleCopyUrl(selectionPrimary)}
+                                      disabled={!hasS3AccountContext}
+                                    >
+                                      <LinkIcon className="h-3.5 w-3.5" />
+                                      Copy URL
+                                    </button>
+                                  )}
+                                  {selectionIsSingle && selectionPrimary && (
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => handleCopyPath(`${bucketName}/${selectionPrimary.key}`)}
+                                    >
+                                      <CopyIcon className="h-3.5 w-3.5" />
+                                      Copy path
+                                    </button>
+                                  )}
+                                  {canSelectionAdvanced && (
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => setShowAdvancedModal(true)}
+                                    >
+                                      <SettingsIcon className="h-3.5 w-3.5" />
+                                      Advanced
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Bulk Actions</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={() => handleCopyItems(selectionItems)}
+                                    disabled={!canSelectionActions}
+                                  >
+                                    <CopyIcon className="h-3.5 w-3.5" />
+                                    Copy
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={() => openBulkAttributesModal(selectionItems)}
+                                  >
+                                    <SlidersIcon className="h-3.5 w-3.5" />
+                                    Bulk attributes
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={() => openBulkRestoreModal(selectionItems)}
+                                  >
+                                    <HistoryIcon className="h-3.5 w-3.5" />
+                                    Restore to date
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={bulkDangerClasses}
+                                    onClick={() => handleDeleteItems(selectionItems)}
+                                    disabled={!hasS3AccountContext}
+                                  >
+                                    <TrashIcon className="h-3.5 w-3.5" />
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                             <div className="rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/40">
                               <div className="flex items-center justify-between gap-2">
