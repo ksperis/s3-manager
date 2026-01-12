@@ -38,6 +38,7 @@ import ManagerMetricsPage from "./features/manager/ManagerMetricsPage";
 import TopicsPage from "./features/manager/TopicsPage";
 import PortalLayout from "./features/portal/PortalLayout";
 import PortalDashboard from "./features/portal/PortalDashboard";
+import PortalManagePage from "./features/portal/PortalManagePage";
 import BrowserLayout from "./features/browser/BrowserLayout";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
 
@@ -236,6 +237,7 @@ export default function AppRouter() {
                 element={<PortalLayout />}
               >
                 <Route index element={<PortalDashboard />} />
+                <Route path="manage" element={<PortalManagePage />} />
               </Route>
             </Route>
           </Route>

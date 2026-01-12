@@ -59,15 +59,18 @@ function PortalShell() {
   const navSections: SidebarSection[] = [
     {
       label: "Portail",
-      links: [{ to: "/portal", label: "Accueil", end: true }],
+      links: [
+        { to: "/portal", label: "Accueil", end: true },
+        { to: "/portal/manage", label: "Gestion" },
+      ],
     },
   ];
 
   return (
     <Layout
+      headerTitle="Portail"
       navSections={navSections}
       sidebarTitle="PORTAL"
-      hideSidebar
       hideHeader
       topbarContent={
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">

@@ -10,16 +10,9 @@ import {
   deletePortalAccessKey,
   fetchPortalState,
   PortalAccessKey,
-  PortalAccountRole,
   PortalState,
   PortalUserSummary,
   listPortalUsers,
-  addPortalUser,
-  updatePortalUserRole,
-  deletePortalUser,
-  listPortalUserBuckets,
-  grantPortalUserBucket,
-  revokePortalUserBucket,
   updatePortalAccessKeyStatus,
   rotatePortalAccessKey,
   fetchPortalActiveKey,
@@ -133,23 +126,8 @@ export default function PortalDashboard() {
   const [selectedBucket, setSelectedBucket] = useState<Bucket | null>(null);
   const [newBucketName, setNewBucketName] = useState("");
   const [portalUsers, setPortalUsers] = useState<PortalUserSummary[]>([]);
-  const [newUserEmail, setNewUserEmail] = useState("");
-  const [userActionError, setUserActionError] = useState<string | null>(null);
-  const [userActionMessage, setUserActionMessage] = useState<string | null>(null);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [updatingUserId, setUpdatingUserId] = useState<number | null>(null);
   const [showKeysModal, setShowKeysModal] = useState(false);
-  const [showUsersModal, setShowUsersModal] = useState(false);
-  const [focusedUserKey, setFocusedUserKey] = useState<string | null>(null);
-  const [showEditPortalUserModal, setShowEditPortalUserModal] = useState(false);
-  const [editPortalUser, setEditPortalUser] = useState<PortalUserSummary | null>(null);
-  const [editPortalBuckets, setEditPortalBuckets] = useState<string[]>([]);
-  const [editPortalSelectedBucket, setEditPortalSelectedBucket] = useState("");
-  const [editPortalError, setEditPortalError] = useState<string | null>(null);
-  const [editPortalMessage, setEditPortalMessage] = useState<string | null>(null);
-  const [editPortalLoading, setEditPortalLoading] = useState(false);
-  const [editPortalSaving, setEditPortalSaving] = useState(false);
-  const [editPortalRemovingBucket, setEditPortalRemovingBucket] = useState<string | null>(null);
   const [portalSettings, setPortalSettings] = useState<{ allow_portal_key: boolean; allow_portal_user_bucket_create: boolean }>({
     allow_portal_key: false,
     allow_portal_user_bucket_create: false,
@@ -221,28 +199,24 @@ export default function PortalDashboard() {
   );
   const hasTrafficSparkline = trafficSparkline.length > 0;
 
-  const { userRole, userEmail } = useMemo(() => {
+  const userEmail = useMemo(() => {
     if (typeof window === "undefined") return null;
     const raw = localStorage.getItem("user");
     if (!raw) return null;
     try {
-      const parsed = JSON.parse(raw) as { role?: string | null; email?: string | null };
-      return { userRole: parsed.role ?? null, userEmail: parsed.email ?? null };
+      const parsed = JSON.parse(raw) as { email?: string | null };
+      return parsed.email ?? null;
     } catch {
       return null;
     }
   }, []);
 
-  const isAccountAdmin = useMemo(() => Boolean(state?.can_manage_portal_users), [state?.can_manage_portal_users]);
-
   const canManageBuckets = Boolean(state?.can_manage_buckets);
   const allowPortalUserBucketCreate = Boolean(portalSettings.allow_portal_user_bucket_create && state?.account_role === "portal_user");
   const canCreateBuckets = canManageBuckets || allowPortalUserBucketCreate;
-  const canManagePortalUsers = Boolean(state?.can_manage_portal_users || isAccountAdmin);
-  const canViewPortalUsers = canManagePortalUsers;
+  const canViewPortalUsers = Boolean(state?.can_manage_portal_users);
   const assignedPortalUsers = useMemo(() => portalUsers.filter((u) => !u.iam_only), [portalUsers]);
-  const iamOnlyUsers = useMemo(() => portalUsers.filter((u) => u.iam_only), [portalUsers]);
-  const portalUsersCount = canViewPortalUsers ? assignedPortalUsers.length : "-";
+  const portalUsersCount = canViewPortalUsers ? (loadingUsers ? "…" : assignedPortalUsers.length) : "-";
   const clampRatio = (used?: number | null, quota?: number | null) => {
     if (used == null || quota == null || quota <= 0) return null;
     return Math.min(100, Math.max(0, (used / quota) * 100));
@@ -314,8 +288,14 @@ export default function PortalDashboard() {
       : size === "sm"
       ? "h-12 w-12"
       : "h-14 w-14";
-    const labelText = compact ? "ui-caption" : size === "lg" ? "ui-caption" : size === "sm" ? "ui-caption" : "ui-caption";
-    const valueText = compact ? "ui-caption" : size === "lg" ? "ui-caption" : "ui-caption";
+    const labelText = compact
+      ? "text-[0.55rem] leading-[0.65rem] tracking-tight"
+      : size === "lg"
+      ? "ui-caption"
+      : size === "sm"
+      ? "ui-caption"
+      : "ui-caption";
+    const valueText = compact ? "text-[0.55rem] leading-[0.65rem]" : size === "lg" ? "ui-caption" : "ui-caption";
     const widthClass = size === "lg" ? "min-w-[180px]" : size === "sm" ? "min-w-[120px]" : "min-w-[150px]";
     const wrapperClasses = bare
       ? "flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300"
@@ -519,11 +499,11 @@ export default function PortalDashboard() {
     const loadUsers = async () => {
       if (!canViewPortalUsers || !accountIdForApi) {
         setPortalUsers([]);
+        setLoadingUsers(false);
         return;
       }
       try {
         setLoadingUsers(true);
-        setUserActionError(null);
         const data = await listPortalUsers(accountIdForApi);
         if (!cancelled) {
           setPortalUsers(data);
@@ -531,7 +511,7 @@ export default function PortalDashboard() {
       } catch (err) {
         console.error(err);
         if (!cancelled) {
-          setUserActionError("Impossible de charger les utilisateurs du portail.");
+          setPortalUsers([]);
         }
       } finally {
         if (!cancelled) {
@@ -733,168 +713,11 @@ export default function PortalDashboard() {
     }
   };
 
-  const resetEditPortalUser = () => {
-    setEditPortalUser(null);
-    setEditPortalBuckets([]);
-    setEditPortalSelectedBucket("");
-    setEditPortalError(null);
-    setEditPortalMessage(null);
-    setEditPortalLoading(false);
-    setEditPortalSaving(false);
-    setEditPortalRemovingBucket(null);
-  };
-
-  const openEditPortalUser = (user: PortalUserSummary) => {
-    if (!user.id || user.iam_only) return;
-    setShowUsersModal(false);
-    setEditPortalUser(user);
-    setShowEditPortalUserModal(true);
-    setEditPortalError(null);
-    setEditPortalMessage(null);
-    setEditPortalLoading(true);
-    if (!accountIdForApi) {
-      setEditPortalError("Sélectionnez un compte pour gérer les accès.");
-      setEditPortalLoading(false);
-      return;
-    }
-    listPortalUserBuckets(accountIdForApi, user.id)
-      .then((resp) => {
-        const buckets = resp.buckets || [];
-        setEditPortalBuckets(buckets);
-        const available = (state?.buckets || []).map((b) => b.name);
-        const next = available.find((b) => !buckets.includes(b));
-        setEditPortalSelectedBucket(next || "");
-      })
-      .catch(() => {
-        setEditPortalError("Impossible de charger les autorisations de bucket.");
-      })
-      .finally(() => setEditPortalLoading(false));
-  };
-
-  const closeEditPortalUser = () => {
-    setShowEditPortalUserModal(false);
-    resetEditPortalUser();
-  };
-
-  const handleGrantPortalBucket = async () => {
-    if (!accountIdForApi || !editPortalUser || !editPortalUser.id || !editPortalSelectedBucket) return;
-    setEditPortalSaving(true);
-    setEditPortalError(null);
-    setEditPortalMessage(null);
-    try {
-      const resp = await grantPortalUserBucket(accountIdForApi, editPortalUser.id, editPortalSelectedBucket);
-      const buckets = resp.buckets || [];
-      setEditPortalBuckets(buckets);
-      const available = (state?.buckets || []).map((b) => b.name);
-      const next = available.find((b) => !buckets.includes(b));
-      setEditPortalSelectedBucket(next || "");
-      setEditPortalMessage(`Accès ajouté au bucket ${editPortalSelectedBucket}.`);
-    } catch (err) {
-      console.error(err);
-      setEditPortalError("Ajout impossible. Vérifiez vos droits ou le nom du bucket.");
-    } finally {
-      setEditPortalSaving(false);
-    }
-  };
-
-  const handleRevokePortalBucket = async (bucketName: string) => {
-    if (!accountIdForApi || !editPortalUser || !editPortalUser.id || !bucketName) return;
-    setEditPortalRemovingBucket(bucketName);
-    setEditPortalError(null);
-    setEditPortalMessage(null);
-    try {
-      const resp = await revokePortalUserBucket(accountIdForApi, editPortalUser.id, bucketName);
-      const buckets = resp.buckets || [];
-      setEditPortalBuckets(buckets);
-      const available = (state?.buckets || []).map((b) => b.name);
-      const next = available.find((b) => !buckets.includes(b));
-      setEditPortalSelectedBucket(next || "");
-      setEditPortalMessage(`Accès retiré du bucket ${bucketName}.`);
-    } catch (err) {
-      console.error(err);
-      setEditPortalError("Retrait impossible. Vérifiez vos droits ou le nom du bucket.");
-    } finally {
-      setEditPortalRemovingBucket(null);
-    }
-  };
-
-  const handleAddPortalUser = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!isAccountAdmin || !accountIdForApi || !newUserEmail.trim()) return;
-    setUserActionError(null);
-    setUserActionMessage(null);
-    try {
-        const created = await addPortalUser(accountIdForApi, newUserEmail.trim());
-        setPortalUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
-        setUserActionMessage("Utilisateur ajouté au portail.");
-        setNewUserEmail("");
-    } catch (err) {
-      console.error(err);
-      setUserActionError("Ajout impossible. Vérifiez l'email et les droits.");
-    }
-  };
-
-  const handleRemovePortalUser = async (userId: number) => {
-    if (!isAccountAdmin || !accountIdForApi) return;
-    setUserActionError(null);
-    setUserActionMessage(null);
-    setUpdatingUserId(userId);
-    try {
-      await deletePortalUser(accountIdForApi, userId);
-      setPortalUsers((prev) => prev.filter((u) => u.id !== userId));
-      setUserActionMessage("Utilisateur retiré du portail.");
-    } catch (err) {
-      console.error(err);
-      setUserActionError("Suppression impossible. Vérifiez vos droits.");
-    } finally {
-      setUpdatingUserId(null);
-    }
-  };
-
-  const portalRoleLabel = (role?: string | null) => {
-    if (role === "portal_manager") return "Portal manager";
-    if (role === "portal_user") return "Portal user";
-    if (role === "portal_none") return "No portal";
-    return role || "Portal user";
-  };
-
-  const portalRoleTone = (role?: string | null): "emerald" | "sky" | "slate" => {
-    if (role === "portal_manager") return "emerald";
-    if (role === "portal_user" || !role) return "sky";
-    return "slate";
-  };
-
   useEffect(() => {
     fetchPortalPublicSettings()
       .then((data) => setPortalSettings(data))
       .catch(() => setPortalSettings({ allow_portal_key: false }));
   }, []);
-
-  const handleChangePortalUserRole = async (userId: number, nextRole: PortalAccountRole) => {
-    if (!accountIdForApi || !canManagePortalUsers) return;
-    const selfDemote = nextRole === "portal_user" && userId === portalUsers.find((u) => u.email === userEmail)?.id;
-    if (selfDemote) {
-      setUserActionError("Vous ne pouvez pas retirer vos propres droits de manager.");
-      return;
-    }
-    setUserActionError(null);
-    setUserActionMessage(null);
-    setUpdatingUserId(userId);
-    try {
-      const updated = await updatePortalUserRole(accountIdForApi, userId, nextRole);
-      setPortalUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: updated.role ?? nextRole } : u)));
-      setUserActionMessage(
-        nextRole === "portal_manager"
-          ? "Utilisateur promu manager du portail."
-          : "Rôle portail mis à jour."
-      );
-    } catch (err) {
-      console.error(err);
-      setUserActionError("Mise à jour impossible. Vérifiez vos droits.");
-    } finally {
-      setUpdatingUserId(null);
-    }
-  };
 
   if (accountLoading) {
     return <EmptyState title="Chargement..." description="Récupération des comptes et du contexte portail." />;
@@ -1258,238 +1081,6 @@ export default function PortalDashboard() {
               </div>
             </Modal>
           )}
-          {showUsersModal && (
-            <Modal
-              title="Utilisateurs portail"
-              onClose={() => {
-                setShowUsersModal(false);
-                setFocusedUserKey(null);
-              }}
-            >
-              <div className="space-y-3">
-                {canManagePortalUsers && (
-                  <form onSubmit={handleAddPortalUser} className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="email"
-                      value={newUserEmail}
-                      onChange={(e) => setNewUserEmail(e.target.value)}
-                      className="w-64 rounded-full border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      placeholder="email de l'utilisateur"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!newUserEmail.trim()}
-                      className="rounded-full bg-slate-900 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-                    >
-                      Ajouter
-                    </button>
-                  </form>
-                )}
-                {userActionError && (
-                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
-                    {userActionError}
-                  </div>
-                )}
-                {userActionMessage && (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-800 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
-                    {userActionMessage}
-                  </div>
-                )}
-                <div className="space-y-2">
-                  {loadingUsers ? (
-                    <div className="ui-body text-slate-500 dark:text-slate-300">Chargement…</div>
-                  ) : portalUsers.length ? (
-                    [...assignedPortalUsers, ...iamOnlyUsers].map((u) => {
-                      const role = u.role || "portal_user";
-                      const busy = updatingUserId === u.id;
-                      const isSelf = userEmail && u.email === userEmail;
-                      const isIamOnly = Boolean(u.iam_only);
-                      const entryKey = u.id != null ? String(u.id) : u.email ?? "";
-                      const isFocused = focusedUserKey && focusedUserKey === entryKey;
-                      return (
-                        <div
-                          key={u.id ?? `${u.email}-iam-only`}
-                          className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 ui-body shadow-sm ${
-                            isIamOnly
-                              ? "border-slate-200 bg-slate-50 opacity-70 dark:border-slate-700 dark:bg-slate-800/70"
-                              : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/70"
-                          } ${isFocused ? "ring-2 ring-primary/60" : ""}`}
-                        >
-                          <div>
-                            <div className="font-medium text-slate-800 dark:text-slate-100">{u.email}</div>
-                            <div className="ui-caption font-mono text-slate-500 dark:text-slate-400">
-                              IAM: {u.iam_username || "—"}
-                            </div>
-                            <div className="mt-1 flex items-center gap-2">
-                              <Badge label={isIamOnly ? "IAM (hors portail)" : portalRoleLabel(role)} tone={isIamOnly ? "slate" : portalRoleTone(role)} />
-                            </div>
-                          </div>
-                          {canManagePortalUsers && !isIamOnly && (
-                            <div className="flex flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setShowUsersModal(false);
-                                  openEditPortalUser(u);
-                                }}
-                                className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700"
-                              >
-                                Éditer
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleChangePortalUserRole(u.id, "portal_user")}
-                                disabled={busy || role === "portal_user" || Boolean(isSelf)}
-                                className="rounded-full border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700"
-                              >
-                                Portal user
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleChangePortalUserRole(u.id, "portal_manager")}
-                                disabled={busy || role === "portal_manager"}
-                                className="rounded-full bg-emerald-600 px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400"
-                              >
-                                Promouvoir manager
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePortalUser(u.id)}
-                                disabled={busy || Boolean(isSelf)}
-                                className="rounded-full border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60 dark:border-rose-800 dark:text-rose-200 dark:hover:bg-rose-900/40"
-                              >
-                                Retirer
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="ui-body text-slate-500 dark:text-slate-300">Aucun utilisateur portail pour ce compte.</div>
-                  )}
-                </div>
-              </div>
-            </Modal>
-          )}
-
-          {showEditPortalUserModal && editPortalUser && (
-            <Modal title={`Éditer ${editPortalUser.email}`} onClose={closeEditPortalUser}>
-              <div className="space-y-4">
-                {editPortalError && (
-                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
-                    {editPortalError}
-                  </div>
-                )}
-                {editPortalMessage && (
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-800 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
-                    {editPortalMessage}
-                  </div>
-                )}
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-800/70">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 ui-body text-white shadow-sm dark:bg-white dark:text-slate-900">
-                      <span aria-hidden>👤</span>
-                    </div>
-                    <div>
-                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Email</p>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">{editPortalUser.email}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-800/70">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 ui-body text-white shadow-sm dark:bg-white dark:text-slate-900">
-                      <span aria-hidden>🏷️</span>
-                    </div>
-                    <div>
-                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Rôle</p>
-                      <div className="mt-1">
-                        <Badge label={portalRoleLabel(editPortalUser.role)} tone={portalRoleTone(editPortalUser.role)} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-800/70">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 ui-body text-white shadow-sm dark:bg-white dark:text-slate-900">
-                      <span aria-hidden>🔗</span>
-                    </div>
-                    <div>
-                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">IAM user</p>
-                      <p className="ui-body font-mono text-slate-700 dark:text-slate-200">{editPortalUser.iam_username || "—"}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span aria-hidden>🪣</span>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Accès buckets</p>
-                    </div>
-                    <span className="ui-caption text-slate-400 dark:text-slate-500">
-                      {editPortalBuckets.length} autorisé(s)
-                    </span>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                    <div>
-                      <label className="ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Ajouter</label>
-                      <select
-                        value={editPortalSelectedBucket}
-                        onChange={(e) => setEditPortalSelectedBucket(e.target.value)}
-                        disabled={editPortalLoading || editPortalSaving || Boolean(editPortalRemovingBucket) || (state?.buckets || []).length === 0}
-                        className="mt-1 w-full rounded-full border border-slate-200 bg-white px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      >
-                        <option value="">Sélectionnez un bucket</option>
-                        {(state?.buckets || []).map((b) => (
-                          <option key={b.name} value={b.name} disabled={editPortalBuckets.includes(b.name)}>
-                            {b.name} {editPortalBuckets.includes(b.name) ? "(déjà autorisé)" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleGrantPortalBucket}
-                      disabled={editPortalLoading || editPortalSaving || Boolean(editPortalRemovingBucket) || !editPortalSelectedBucket}
-                      className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                    >
-                      <span aria-hidden>{editPortalSaving ? "…" : "➕"}</span>
-                      {editPortalSaving ? "Ajout..." : "Autoriser"}
-                    </button>
-                  </div>
-                  <div className="mt-3">
-                    {editPortalLoading ? (
-                      <div className="ui-body text-slate-500 dark:text-slate-400">Chargement…</div>
-                    ) : editPortalBuckets.length === 0 ? (
-                      <p className="ui-body text-slate-500 dark:text-slate-400">Aucun bucket autorisé pour cet utilisateur.</p>
-                    ) : (
-                      <div className="divide-y divide-slate-200 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-                        {editPortalBuckets.map((name) => {
-                          const removing = editPortalRemovingBucket === name;
-                          return (
-                            <div key={name} className="flex items-center justify-between gap-3 px-3 py-2 ui-body">
-                              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                                <span aria-hidden>🪣</span>
-                                <span className="font-mono">{name}</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRevokePortalBucket(name)}
-                                disabled={editPortalSaving || Boolean(editPortalRemovingBucket)}
-                                aria-label={`Retirer l'accès au bucket ${name}`}
-                                title={`Retirer l'accès au bucket ${name}`}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600"
-                              >
-                                <span aria-hidden>{removing ? "…" : "✕"}</span>
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Modal>
-          )}
           {showBucketModal && selectedBucket && (
             <PortalBucketModal
               bucket={selectedBucket}
@@ -1498,65 +1089,6 @@ export default function PortalDashboard() {
               accountUsedObjects={bucketTotalsObjects}
               onClose={closeBucketModal}
             />
-          )}
-
-          {canViewPortalUsers && (
-            <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Users</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFocusedUserKey(null);
-                    setShowUsersModal(true);
-                  }}
-                  className="rounded-full bg-slate-900 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-                >
-                  Gérer les utilisateurs
-                </button>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-3 justify-start">
-                {loadingUsers ? (
-                  <div className="ui-body text-slate-500 dark:text-slate-300">Chargement…</div>
-                ) : portalUsers.length ? (
-                  [...assignedPortalUsers, ...iamOnlyUsers].map((u) => {
-                    const role = u.role || "portal_user";
-                    const isIamOnly = Boolean(u.iam_only);
-                    return (
-                      <div
-                        key={u.id ?? `${u.email}-iam-only-card`}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => openEditPortalUser(u)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            openEditPortalUser(u);
-                          }
-                        }}
-                        className={`w-full max-w-xs cursor-pointer rounded-xl border px-3 py-2 ui-body shadow-sm transition hover:-translate-y-0.5 hover:border-primary hover:shadow ${
-                          isIamOnly
-                            ? "border-slate-200 bg-slate-50 opacity-70 dark:border-slate-700 dark:bg-slate-800/70"
-                            : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/70"
-                        }`}
-                      >
-                        <div className="font-semibold text-slate-800 dark:text-slate-100">{u.email}</div>
-                        <div className="ui-caption font-mono text-slate-500 dark:text-slate-400">
-                          IAM: {u.iam_username || "—"}
-                        </div>
-                        <div className="mt-1">
-                          <Badge label={isIamOnly ? "IAM (hors portail)" : portalRoleLabel(role)} tone={isIamOnly ? "slate" : portalRoleTone(role)} />
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="ui-body text-slate-500 dark:text-slate-300">Aucun utilisateur portail pour ce compte.</div>
-                )}
-              </div>
-            </div>
           )}
 
           <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
