@@ -9,6 +9,29 @@ import { SidebarSection } from "../../components/Sidebar";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 
+type StoredUser = {
+  account_links?: { account_id: number; account_role?: string | null }[] | null;
+};
+
+function getStoredUser(): StoredUser | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem("user");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StoredUser;
+  } catch {
+    return null;
+  }
+}
+
+function resolvePortalRole(user: StoredUser | null, accountId: string | null): string | null {
+  if (!user || !accountId) return null;
+  const numericId = Number(accountId);
+  if (!Number.isFinite(numericId)) return null;
+  const link = (user.account_links ?? []).find((entry) => Number(entry.account_id) === numericId);
+  return link?.account_role ?? null;
+}
+
 function AccountSelector() {
   const { accounts, selectedAccountId, setSelectedAccountId, selectedAccount, loading, error } = usePortalAccountContext();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
@@ -56,6 +79,9 @@ function AccountSelector() {
 }
 
 function PortalShell() {
+  const { selectedAccountId } = usePortalAccountContext();
+  const accountRole = resolvePortalRole(getStoredUser(), selectedAccountId);
+  const hideSidebar = accountRole === "portal_user";
   const navSections: SidebarSection[] = [
     {
       label: "Portail",
@@ -72,6 +98,7 @@ function PortalShell() {
       headerTitle="Portail"
       navSections={navSections}
       sidebarTitle="PORTAL"
+      hideSidebar={hideSidebar}
       hideHeader
       topbarContent={
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">

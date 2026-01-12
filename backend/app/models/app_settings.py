@@ -19,7 +19,7 @@ def _default_portal_manager_actions() -> list[str]:
 
 
 def _default_portal_user_actions() -> list[str]:
-    return ["s3:ListAllMyBuckets"]
+    return ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
 
 
 def _default_portal_bucket_access_actions() -> list[str]:
@@ -31,6 +31,7 @@ def _default_portal_bucket_access_actions() -> list[str]:
         "s3:GetObject",
         "s3:GetObjectVersion",
         "s3:GetObjectTagging",
+        "s3:GetObjectVersionTagging",
         "s3:PutObject",
         "s3:DeleteObject",
         "s3:AbortMultipartUpload",
@@ -40,7 +41,6 @@ def _default_portal_bucket_access_actions() -> list[str]:
         "s3:GetBucketAcl",
         "s3:GetBucketPolicy",
         "s3:GetLifecycleConfiguration",
-        "sts:GetSessionToken",
     ]
 
 
@@ -136,7 +136,7 @@ class LoginSettings(BaseModel):
 
 class PortalSettings(BaseModel):
     allow_portal_key: bool = False
-    allow_portal_user_bucket_create: bool = False
+    allow_portal_user_bucket_create: bool = True
     iam_group_manager_policy: PortalIAMPolicySettings = Field(
         default_factory=lambda: PortalIAMPolicySettings(actions=_default_portal_manager_actions())
     )
