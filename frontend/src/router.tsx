@@ -16,7 +16,7 @@ import S3UsersPage from "./features/admin/S3UsersPage";
 import S3UserKeysPage from "./features/admin/S3UserKeysPage";
 import GeneralSettingsPage from "./features/admin/GeneralSettingsPage";
 import ManagerSettingsPage from "./features/admin/ManagerSettingsPage";
-import PortalSettingsPage from "./features/admin/PortalSettingsPage";
+import AdminPortalSettingsPage from "./features/admin/PortalSettingsPage";
 import BrowserSettingsPage from "./features/admin/BrowserSettingsPage";
 import FeatureDisabledPage from "./features/shared/FeatureDisabledPage";
 import BucketsPage from "./features/manager/BucketsPage";
@@ -39,6 +39,7 @@ import TopicsPage from "./features/manager/TopicsPage";
 import PortalLayout from "./features/portal/PortalLayout";
 import PortalDashboard from "./features/portal/PortalDashboard";
 import PortalManagePage from "./features/portal/PortalManagePage";
+import PortalSettingsPage from "./features/portal/PortalSettingsPage";
 import BrowserLayout from "./features/browser/BrowserLayout";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
 
@@ -192,7 +193,7 @@ export default function AppRouter() {
               <Route path="metrics" element={<AdminMetricsPage />} />
               <Route path="general-settings" element={<GeneralSettingsPage />} />
               <Route path="manager-settings" element={<ManagerSettingsPage />} />
-              {generalSettings.portal_enabled && <Route path="portal-settings" element={<PortalSettingsPage />} />}
+              {generalSettings.portal_enabled && <Route path="portal-settings" element={<AdminPortalSettingsPage />} />}
               <Route path="browser-settings" element={<BrowserSettingsPage />} />
             </Route>
           </Route>
@@ -232,13 +233,14 @@ export default function AppRouter() {
 
           <Route element={<RequireRole roles={[ADMIN_ROLE, USER_ROLE]} />}>
             <Route element={<RequireFeature feature="portal" />}>
-              <Route
-                path="/portal"
-                element={<PortalLayout />}
-              >
-                <Route index element={<PortalDashboard />} />
-                <Route path="manage" element={<PortalManagePage />} />
-              </Route>
+                <Route
+                  path="/portal"
+                  element={<PortalLayout />}
+                >
+                  <Route index element={<PortalDashboard />} />
+                  <Route path="manage" element={<PortalManagePage />} />
+                  <Route path="settings" element={<PortalSettingsPage />} />
+                </Route>
             </Route>
           </Route>
         </Route>

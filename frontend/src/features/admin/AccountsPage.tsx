@@ -11,23 +11,51 @@ import {
   S3AccountSummary,
   createS3Account,
   deleteS3Account,
+  fetchAccountPortalSettings,
   getS3Account,
   importS3Accounts,
   listMinimalS3Accounts,
   updateS3Account,
+  updateAccountPortalSettings,
 } from "../../api/accounts";
+import { PortalSettingsOverride } from "../../api/appSettings";
+import { PortalAccountSettings } from "../../api/portal";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import PaginationControls from "../../components/PaginationControls";
+import { PortalSettingsItem, PortalSettingsSection } from "../../components/PortalSettingsLayout";
 import StorageUsageCard from "../../components/StorageUsageCard";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { useAdminAccountStats } from "./useAdminAccountStats";
+import { confirmAction } from "../../utils/confirm";
 
 type SortField = "name" | "rgw_account_id";
+type TriState = "inherit" | "enabled" | "disabled";
+type PolicyMode = "inherit" | "actions";
+type EditTab = "general" | "portal";
+
+const hasOwn = (value: Record<string, unknown> | null | undefined, key: string) =>
+  Boolean(value && Object.prototype.hasOwnProperty.call(value, key));
+
+const normalizeListInput = (value: string): string[] =>
+  value
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+const resolveTriState = (value?: boolean | null): TriState => {
+  if (value == null) return "inherit";
+  return value ? "enabled" : "disabled";
+};
+
+const toOverrideValue = (value: TriState): boolean | undefined => {
+  if (value === "inherit") return undefined;
+  return value === "enabled";
+};
 
 export default function S3AccountsPage() {
   const { generalSettings } = useGeneralSettings();
@@ -80,6 +108,25 @@ export default function S3AccountsPage() {
     quota_max_objects: "",
     user_links: [] as AccountUserLink[],
   });
+  const [editTab, setEditTab] = useState<EditTab>("general");
+  const [portalAccountSettings, setPortalAccountSettings] = useState<PortalAccountSettings | null>(null);
+  const [portalSettingsLoading, setPortalSettingsLoading] = useState(false);
+  const [portalSettingsError, setPortalSettingsError] = useState<string | null>(null);
+  const [portalSettingsSaving, setPortalSettingsSaving] = useState(false);
+  const [portalSettingsMessage, setPortalSettingsMessage] = useState<string | null>(null);
+  const [adminPortalKeyOverride, setAdminPortalKeyOverride] = useState<TriState>("inherit");
+  const [adminPortalBucketCreateOverride, setAdminPortalBucketCreateOverride] = useState<TriState>("inherit");
+  const [adminBucketVersioningOverride, setAdminBucketVersioningOverride] = useState<TriState>("inherit");
+  const [adminBucketLifecycleOverride, setAdminBucketLifecycleOverride] = useState<TriState>("inherit");
+  const [adminBucketCorsOverride, setAdminBucketCorsOverride] = useState<TriState>("inherit");
+  const [adminBucketCorsOriginsOverride, setAdminBucketCorsOriginsOverride] = useState(false);
+  const [adminBucketCorsOriginsText, setAdminBucketCorsOriginsText] = useState("");
+  const [adminManagerPolicyMode, setAdminManagerPolicyMode] = useState<PolicyMode>("inherit");
+  const [adminManagerPolicyActionsText, setAdminManagerPolicyActionsText] = useState("");
+  const [adminUserPolicyMode, setAdminUserPolicyMode] = useState<PolicyMode>("inherit");
+  const [adminUserPolicyActionsText, setAdminUserPolicyActionsText] = useState("");
+  const [adminBucketPolicyMode, setAdminBucketPolicyMode] = useState<PolicyMode>("inherit");
+  const [adminBucketPolicyActionsText, setAdminBucketPolicyActionsText] = useState("");
   const [deletingS3AccountId, setDeletingS3AccountId] = useState<number | null>(null);
   const [accountToDelete, setS3AccountToDelete] = useState<S3Account | null>(null);
   const [deleteFromRgw, setDeleteFromRgw] = useState(false);
@@ -100,6 +147,40 @@ export default function S3AccountsPage() {
   }, []);
   const isSuperAdmin = currentUser?.role === "ui_admin";
   const editingAccountId = editingS3Account?.db_id ?? null;
+  const effectivePortalSettings = portalAccountSettings?.effective ?? null;
+  const adminOverride = portalAccountSettings?.admin_override ?? null;
+  const portalManagerOverride = portalAccountSettings?.portal_manager_override ?? null;
+  const showGeneralTab = !portalEnabled || editTab === "general";
+  const showPortalTab = portalEnabled && editTab === "portal";
+  const hasPortalManagerOverrides = useMemo(() => {
+    if (!portalManagerOverride) return false;
+    if (portalManagerOverride.allow_portal_key != null || portalManagerOverride.allow_portal_user_bucket_create != null) {
+      return true;
+    }
+    if (portalManagerOverride.bucket_defaults) {
+      if (
+        portalManagerOverride.bucket_defaults.versioning != null ||
+        portalManagerOverride.bucket_defaults.enable_cors != null ||
+        portalManagerOverride.bucket_defaults.enable_lifecycle != null ||
+        portalManagerOverride.bucket_defaults.cors_allowed_origins != null
+      ) {
+        return true;
+      }
+    }
+    const managerPolicy = portalManagerOverride.iam_group_manager_policy;
+    if (hasOwn(managerPolicy as Record<string, unknown> | null, "actions") || hasOwn(managerPolicy as Record<string, unknown> | null, "advanced_policy")) {
+      return true;
+    }
+    const userPolicy = portalManagerOverride.iam_group_user_policy;
+    if (hasOwn(userPolicy as Record<string, unknown> | null, "actions") || hasOwn(userPolicy as Record<string, unknown> | null, "advanced_policy")) {
+      return true;
+    }
+    const bucketPolicy = portalManagerOverride.bucket_access_policy;
+    if (hasOwn(bucketPolicy as Record<string, unknown> | null, "actions") || hasOwn(bucketPolicy as Record<string, unknown> | null, "advanced_policy")) {
+      return true;
+    }
+    return false;
+  }, [portalManagerOverride]);
   const {
     stats: editingUsageStats,
     loading: editingUsageLoading,
@@ -239,6 +320,78 @@ export default function S3AccountsPage() {
       setPage(totalPages);
     }
   }, [page, pageSize, totalAccounts]);
+
+  useEffect(() => {
+    setPortalAccountSettings(null);
+    setPortalSettingsError(null);
+    setPortalSettingsMessage(null);
+    setPortalSettingsLoading(false);
+    if (!editingAccountId || !portalEnabled) return;
+    setPortalSettingsLoading(true);
+    fetchAccountPortalSettings(editingAccountId)
+      .then((data) => setPortalAccountSettings(data))
+      .catch((err) => {
+        console.error(err);
+        setPortalSettingsError("Unable to load portal overrides.");
+      })
+      .finally(() => setPortalSettingsLoading(false));
+  }, [editingAccountId, portalEnabled]);
+
+  useEffect(() => {
+    if (!portalEnabled && editTab === "portal") {
+      setEditTab("general");
+    }
+  }, [editTab, portalEnabled]);
+
+  useEffect(() => {
+    if (!portalAccountSettings) {
+      setAdminPortalKeyOverride("inherit");
+      setAdminPortalBucketCreateOverride("inherit");
+      setAdminBucketVersioningOverride("inherit");
+      setAdminBucketLifecycleOverride("inherit");
+      setAdminBucketCorsOverride("inherit");
+      setAdminBucketCorsOriginsOverride(false);
+      setAdminBucketCorsOriginsText("");
+      setAdminManagerPolicyMode("inherit");
+      setAdminManagerPolicyActionsText("");
+      setAdminUserPolicyMode("inherit");
+      setAdminUserPolicyActionsText("");
+      setAdminBucketPolicyMode("inherit");
+      setAdminBucketPolicyActionsText("");
+      return;
+    }
+    const override = portalAccountSettings.admin_override;
+    const effective = portalAccountSettings.effective;
+    setAdminPortalKeyOverride(resolveTriState(override.allow_portal_key));
+    setAdminPortalBucketCreateOverride(resolveTriState(override.allow_portal_user_bucket_create));
+
+    const bucketDefaultsOverride = override.bucket_defaults;
+    setAdminBucketVersioningOverride(resolveTriState(bucketDefaultsOverride?.versioning));
+    setAdminBucketLifecycleOverride(resolveTriState(bucketDefaultsOverride?.enable_lifecycle));
+    setAdminBucketCorsOverride(resolveTriState(bucketDefaultsOverride?.enable_cors));
+    if (bucketDefaultsOverride && bucketDefaultsOverride.cors_allowed_origins != null) {
+      setAdminBucketCorsOriginsOverride(true);
+      setAdminBucketCorsOriginsText(bucketDefaultsOverride.cors_allowed_origins.join("\n"));
+    } else {
+      setAdminBucketCorsOriginsOverride(false);
+      setAdminBucketCorsOriginsText((effective.bucket_defaults.cors_allowed_origins || []).join("\n"));
+    }
+
+    const managerOverride = override.iam_group_manager_policy;
+    const managerHasActions = hasOwn(managerOverride as Record<string, unknown> | null, "actions");
+    setAdminManagerPolicyMode(managerHasActions ? "actions" : "inherit");
+    setAdminManagerPolicyActionsText((managerOverride?.actions ?? (effective.iam_group_manager_policy.actions || [])).join("\n"));
+
+    const userOverride = override.iam_group_user_policy;
+    const userHasActions = hasOwn(userOverride as Record<string, unknown> | null, "actions");
+    setAdminUserPolicyMode(userHasActions ? "actions" : "inherit");
+    setAdminUserPolicyActionsText((userOverride?.actions ?? (effective.iam_group_user_policy.actions || [])).join("\n"));
+
+    const bucketOverride = override.bucket_access_policy;
+    const bucketHasActions = hasOwn(bucketOverride as Record<string, unknown> | null, "actions");
+    setAdminBucketPolicyMode(bucketHasActions ? "actions" : "inherit");
+    setAdminBucketPolicyActionsText((bucketOverride?.actions ?? (effective.bucket_access_policy.actions || [])).join("\n"));
+  }, [portalAccountSettings]);
 
   const toggleSort = (field: SortField) => {
     setSort((prev) => {
@@ -442,6 +595,7 @@ export default function S3AccountsPage() {
     setUserSearch("");
     setShowUserPanel(false);
     setUserSelections([]);
+    setEditTab("general");
   };
 
   const submitEditS3Account = async (e: FormEvent) => {
@@ -472,6 +626,84 @@ export default function S3AccountsPage() {
       setActionMessage("S3Account updated");
     } catch (err) {
       setActionError(extractError(err));
+    }
+  };
+
+  const handleSaveAdminOverrides = async () => {
+    if (!editingAccountId || !portalAccountSettings || portalSettingsSaving) return;
+    setPortalSettingsSaving(true);
+    setPortalSettingsError(null);
+    setPortalSettingsMessage(null);
+
+    const payload: PortalSettingsOverride = {};
+    const allowPortalKeyValue = toOverrideValue(adminPortalKeyOverride);
+    if (allowPortalKeyValue !== undefined) {
+      payload.allow_portal_key = allowPortalKeyValue;
+    }
+    const allowBucketCreateValue = toOverrideValue(adminPortalBucketCreateOverride);
+    if (allowBucketCreateValue !== undefined) {
+      payload.allow_portal_user_bucket_create = allowBucketCreateValue;
+    }
+
+    const bucketDefaults: NonNullable<PortalSettingsOverride["bucket_defaults"]> = {};
+    const versioningValue = toOverrideValue(adminBucketVersioningOverride);
+    if (versioningValue !== undefined) {
+      bucketDefaults.versioning = versioningValue;
+    }
+    const lifecycleValue = toOverrideValue(adminBucketLifecycleOverride);
+    if (lifecycleValue !== undefined) {
+      bucketDefaults.enable_lifecycle = lifecycleValue;
+    }
+    const corsValue = toOverrideValue(adminBucketCorsOverride);
+    if (corsValue !== undefined) {
+      bucketDefaults.enable_cors = corsValue;
+    }
+    if (adminBucketCorsOriginsOverride) {
+      bucketDefaults.cors_allowed_origins = normalizeListInput(adminBucketCorsOriginsText);
+    }
+    if (Object.keys(bucketDefaults).length > 0) {
+      payload.bucket_defaults = bucketDefaults;
+    }
+
+    if (adminManagerPolicyMode === "actions") {
+      payload.iam_group_manager_policy = { actions: normalizeListInput(adminManagerPolicyActionsText) };
+    }
+
+    if (adminUserPolicyMode === "actions") {
+      payload.iam_group_user_policy = { actions: normalizeListInput(adminUserPolicyActionsText) };
+    }
+
+    if (adminBucketPolicyMode === "actions") {
+      payload.bucket_access_policy = { actions: normalizeListInput(adminBucketPolicyActionsText) };
+    }
+
+    try {
+      const updated = await updateAccountPortalSettings(editingAccountId, payload);
+      setPortalAccountSettings(updated);
+      setPortalSettingsMessage("Portal overrides saved.");
+    } catch (err) {
+      console.error(err);
+      setPortalSettingsError("Unable to save portal overrides.");
+    } finally {
+      setPortalSettingsSaving(false);
+    }
+  };
+
+  const handleResetAdminOverrides = async () => {
+    if (!editingAccountId || portalSettingsSaving) return;
+    if (!confirmAction("Reset portal overrides for this account?")) return;
+    setPortalSettingsSaving(true);
+    setPortalSettingsError(null);
+    setPortalSettingsMessage(null);
+    try {
+      const updated = await updateAccountPortalSettings(editingAccountId, {});
+      setPortalAccountSettings(updated);
+      setPortalSettingsMessage("Portal overrides reset.");
+    } catch (err) {
+      console.error(err);
+      setPortalSettingsError("Unable to reset portal overrides.");
+    } finally {
+      setPortalSettingsSaving(false);
     }
   };
 
@@ -1007,309 +1239,606 @@ export default function S3AccountsPage() {
             </span>
           </div>
           <div className="space-y-4">
-            <StorageUsageCard
-              accountName={editingS3Account.name}
-              storage={{
-                used: editingUsageStats?.total_bytes ?? null,
-                quotaBytes:
-                  editingS3Account.quota_max_size_gb != null ? editingS3Account.quota_max_size_gb * 1024 ** 3 : null,
-              }}
-              objects={{
-                used: editingUsageStats?.total_objects ?? null,
-                quota: editingS3Account.quota_max_objects ?? null,
-              }}
-              bucketOverview={editingUsageStats?.bucket_overview}
-              loading={editingUsageLoading}
-              metricsDisabled={false}
-              errorMessage={editingUsageError}
-            />
-            <form onSubmit={submitEditS3Account} className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Max quota</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      min={0}
-                      step="any"
-                      className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      value={editForm.quota_max_size_gb}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
-                      placeholder="Leave empty to disable"
-                    />
-                    <select
-                      className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      value={editForm.quota_max_size_unit}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
-                    >
-                      <option value="MiB">MiB</option>
-                      <option value="GiB">GiB</option>
-                      <option value="TiB">TiB</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Object quota</label>
-                  <input
-                    type="number"
-                    min={0}
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={editForm.quota_max_objects}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
-                    placeholder="Leave empty to disable"
-                  />
-                </div>
+            {portalEnabled && (
+              <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
+                <button
+                  type="button"
+                  onClick={() => setEditTab("general")}
+                  className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                    editTab === "general"
+                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                  }`}
+                >
+                  Account
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditTab("portal")}
+                  className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                    editTab === "portal"
+                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                  }`}
+                >
+                  Portal
+                </button>
               </div>
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
-                    <span className="ui-caption text-slate-500 dark:text-slate-400">
-                      {assignedUsers.length} linked{loadingUsers ? " · loading..." : ""}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowUserPanel((prev) => !prev)}
-                    className={tableActionButtonClasses}
-                  >
-                    {showUserPanel ? "Close" : "Add UI users"}
-                  </button>
-                </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
-                      <tr>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          User
-                        </th>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          {portalEnabled ? "Portal role" : "Portal access"}
-                        </th>
-                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Admin
-                        </th>
-                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {assignedUsers.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
-                            No linked users yet.
-                          </td>
-                        </tr>
-                      ) : (
-                        assignedUsers.map((u) => (
-                          <tr key={u.id}>
-                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{u.label}</td>
-                            <td className="px-3 py-2">
-                              {portalEnabled ? (
-                                <select
-                                  className="w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                                  value={u.role}
-                                  onChange={(e) =>
-                                    setEditForm((prev) => ({
-                                      ...prev,
-                                      user_links: prev.user_links.map((link) =>
-                                        link.user_id === u.id
-                                          ? { ...link, account_role: e.target.value }
-                                          : link
-                                      ),
-                                    }))
-                                  }
-                                >
-                                  <option value="portal_user">Portal user</option>
-                                  <option value="portal_manager">Portal manager</option>
-                                  <option value="portal_none">Portal none</option>
-                                </select>
-                              ) : null}
-                            </td>
-                            <td className="px-3 py-2">
-                              {portalEnabled ? (
-                                <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                                  <input
-                                    type="checkbox"
-                                    checked={u.account_admin}
-                                    onChange={(e) =>
-                                      setEditForm((prev) => ({
-                                        ...prev,
-                                        user_links: prev.user_links.map((link) =>
-                                          link.user_id === u.id ? { ...link, account_admin: e.target.checked } : link
-                                        ),
-                                      }))
-                                    }
-                                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                  />
-                                  Admin
-                                </label>
-                              ) : (
-                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                  Admin
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    user_links: prev.user_links.filter((link) => link.user_id !== u.id),
-                                  }))
-                                }
-                                className={tableDeleteActionClasses}
-                              >
-                                Remove
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                {showUserPanel && (
-                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI users</label>
-                        <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
+            )}
+            {showGeneralTab && (
+              <StorageUsageCard
+                accountName={editingS3Account.name}
+                storage={{
+                  used: editingUsageStats?.total_bytes ?? null,
+                  quotaBytes:
+                    editingS3Account.quota_max_size_gb != null ? editingS3Account.quota_max_size_gb * 1024 ** 3 : null,
+                }}
+                objects={{
+                  used: editingUsageStats?.total_objects ?? null,
+                  quota: editingS3Account.quota_max_objects ?? null,
+                }}
+                bucketOverview={editingUsageStats?.bucket_overview}
+                loading={editingUsageLoading}
+                metricsDisabled={false}
+                errorMessage={editingUsageError}
+              />
+            )}
+            <form onSubmit={submitEditS3Account} className="space-y-4">
+              {showGeneralTab && (
+                <>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Max quota</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          value={editForm.quota_max_size_gb}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
+                          placeholder="Leave empty to disable"
+                        />
+                        <select
+                          className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          value={editForm.quota_max_size_unit}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
+                        >
+                          <option value="MiB">MiB</option>
+                          <option value="GiB">GiB</option>
+                          <option value="TiB">TiB</option>
+                        </select>
                       </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Object quota</label>
                       <input
-                        type="text"
-                        value={userSearch}
-                        onChange={(e) => setUserSearch(e.target.value)}
-                        placeholder="Search..."
-                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        type="number"
+                        min={0}
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        value={editForm.quota_max_objects}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
+                        placeholder="Leave empty to disable"
                       />
                     </div>
-                    <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                      {availableUsers.length === 0 && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                      )}
-                      {visibleAvailableUsers.map((u) => {
-                        const isSelected = userSelections.includes(u.id);
-                        const role = portalEnabled ? userRoleChoice[u.id] ?? "portal_none" : "portal_none";
-                        const adminChecked = portalEnabled ? userAdminChoice[u.id] ?? role === "portal_manager" : true;
-                        return (
-                          <div
-                            key={u.id}
-                            className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
-                              isSelected
-                                ? "bg-slate-50 dark:bg-slate-800/60"
-                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                            }`}
-                          >
-                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleUserSelection(u.id)}
-                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                              />
-                              <span>{u.label}</span>
-                            </label>
-                            <div className="flex items-center gap-2">
-                              {portalEnabled ? (
-                                <select
-                                  className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                                  value={role}
-                                  onChange={(e) => {
-                                    const nextRole = e.target.value as AccountUserLink["account_role"];
-                                    setUserRoleChoice((prev) => ({
-                                      ...prev,
-                                      [u.id]: nextRole,
-                                    }));
-                                    setUserAdminChoice((prev) => ({
-                                      ...prev,
-                                      [u.id]: prev[u.id] ?? nextRole === "portal_manager",
-                                    }));
-                                  }}
-                                >
-                                  <option value="portal_user">Portal user</option>
-                                  <option value="portal_manager">Portal manager</option>
-                                  <option value="portal_none">Portal none</option>
-                                </select>
-                              ) : null}
-                              {portalEnabled ? (
-                                <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(adminChecked)}
-                                    onChange={(e) =>
-                                      setUserAdminChoice((prev) => ({
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">
+                          {assignedUsers.length} linked{loadingUsers ? " · loading..." : ""}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowUserPanel((prev) => !prev)}
+                        className={tableActionButtonClasses}
+                      >
+                        {showUserPanel ? "Close" : "Add UI users"}
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                      <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                        <thead className="bg-slate-50 dark:bg-slate-900/50">
+                          <tr>
+                            <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              User
+                            </th>
+                            <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              {portalEnabled ? "Portal role" : "Portal access"}
+                            </th>
+                            <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Admin
+                            </th>
+                            <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                          {assignedUsers.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                                No linked users yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            assignedUsers.map((u) => (
+                              <tr key={u.id}>
+                                <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{u.label}</td>
+                                <td className="px-3 py-2">
+                                  {portalEnabled ? (
+                                    <select
+                                      className="w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                      value={u.role}
+                                      onChange={(e) =>
+                                        setEditForm((prev) => ({
+                                          ...prev,
+                                          user_links: prev.user_links.map((link) =>
+                                            link.user_id === u.id
+                                              ? { ...link, account_role: e.target.value }
+                                              : link
+                                          ),
+                                        }))
+                                      }
+                                    >
+                                      <option value="portal_user">Portal user</option>
+                                      <option value="portal_manager">Portal manager</option>
+                                      <option value="portal_none">Portal none</option>
+                                    </select>
+                                  ) : null}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {portalEnabled ? (
+                                    <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                      <input
+                                        type="checkbox"
+                                        checked={u.account_admin}
+                                        onChange={(e) =>
+                                          setEditForm((prev) => ({
+                                            ...prev,
+                                            user_links: prev.user_links.map((link) =>
+                                              link.user_id === u.id ? { ...link, account_admin: e.target.checked } : link
+                                            ),
+                                          }))
+                                        }
+                                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                      />
+                                      Admin
+                                    </label>
+                                  ) : (
+                                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                                      Admin
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setEditForm((prev) => ({
                                         ...prev,
-                                        [u.id]: e.target.checked,
+                                        user_links: prev.user_links.filter((link) => link.user_id !== u.id),
                                       }))
                                     }
+                                    className={tableDeleteActionClasses}
+                                  >
+                                    Remove
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    {showUserPanel && (
+                      <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI users</label>
+                            <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={userSearch}
+                            onChange={(e) => setUserSearch(e.target.value)}
+                            placeholder="Search..."
+                            className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          />
+                        </div>
+                        <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                          {availableUsers.length === 0 && (
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                          )}
+                          {visibleAvailableUsers.map((u) => {
+                            const isSelected = userSelections.includes(u.id);
+                            const role = portalEnabled ? userRoleChoice[u.id] ?? "portal_none" : "portal_none";
+                            const adminChecked = portalEnabled ? userAdminChoice[u.id] ?? role === "portal_manager" : true;
+                            return (
+                              <div
+                                key={u.id}
+                                className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
+                                  isSelected
+                                    ? "bg-slate-50 dark:bg-slate-800/60"
+                                    : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                                }`}
+                              >
+                                <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleUserSelection(u.id)}
                                     className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
                                   />
-                                  Admin
+                                  <span>{u.label}</span>
                                 </label>
-                              ) : (
-                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                  Admin
-                                </span>
-                              )}
-                            </div>
+                                <div className="flex items-center gap-2">
+                                  {portalEnabled ? (
+                                    <select
+                                      className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                      value={role}
+                                      onChange={(e) => {
+                                        const nextRole = e.target.value as AccountUserLink["account_role"];
+                                        setUserRoleChoice((prev) => ({
+                                          ...prev,
+                                          [u.id]: nextRole,
+                                        }));
+                                        setUserAdminChoice((prev) => ({
+                                          ...prev,
+                                          [u.id]: prev[u.id] ?? nextRole === "portal_manager",
+                                        }));
+                                      }}
+                                    >
+                                      <option value="portal_user">Portal user</option>
+                                      <option value="portal_manager">Portal manager</option>
+                                      <option value="portal_none">Portal none</option>
+                                    </select>
+                                  ) : null}
+                                  {portalEnabled ? (
+                                    <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(adminChecked)}
+                                        onChange={(e) =>
+                                          setUserAdminChoice((prev) => ({
+                                            ...prev,
+                                            [u.id]: e.target.checked,
+                                          }))
+                                        }
+                                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                      />
+                                      Admin
+                                    </label>
+                                  ) : (
+                                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                                      Admin
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {availableUsers.length > MAX_LINK_OPTIONS && (
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">
+                              Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="ui-caption text-slate-500 dark:text-slate-400">
+                            {userSelections.length} selected
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowUserPanel(false);
+                                setUserSelections([]);
+                                setUserSearch("");
+                              }}
+                              className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={userSelections.length === 0}
+                              onClick={() => {
+                                if (userSelections.length === 0) return;
+                                const toAdd = userSelections.map((id) => {
+                                  const role = portalEnabled ? userRoleChoice[id] ?? "portal_none" : "portal_none";
+                                  return {
+                                    user_id: id,
+                                    account_role: role,
+                                    account_admin: portalEnabled ? userAdminChoice[id] ?? role === "portal_manager" : true,
+                                  };
+                                });
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  user_links: [...prev.user_links, ...toAdd],
+                                }));
+                                setShowUserPanel(false);
+                                setUserSelections([]);
+                                setUserSearch("");
+                              }}
+                              className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                            >
+                              Add selected
+                            </button>
                           </div>
-                        );
-                      })}
-                      {availableUsers.length > MAX_LINK_OPTIONS && (
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Showing first {MAX_LINK_OPTIONS} matches. Refine your search to see more.
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">
-                        {userSelections.length} selected
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowUserPanel(false);
-                            setUserSelections([]);
-                            setUserSearch("");
-                          }}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={userSelections.length === 0}
-                          onClick={() => {
-                            if (userSelections.length === 0) return;
-                            const toAdd = userSelections.map((id) => {
-                              const role = portalEnabled ? userRoleChoice[id] ?? "portal_none" : "portal_none";
-                              return {
-                                user_id: id,
-                                account_role: role,
-                                account_admin: portalEnabled ? userAdminChoice[id] ?? role === "portal_manager" : true,
-                              };
-                            });
-                            setEditForm((prev) => ({
-                              ...prev,
-                              user_links: [...prev.user_links, ...toAdd],
-                            }));
-                            setShowUserPanel(false);
-                            setUserSelections([]);
-                            setUserSearch("");
-                          }}
-                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
-                        >
-                          Add selected
-                        </button>
+                        </div>
                       </div>
+                    )}
+                  </div>
+                </>
+              )}
+              {showPortalTab && (
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Portal overrides</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        Force settings for this account (overrides portal_manager values).
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleResetAdminOverrides}
+                        disabled={!portalAccountSettings || portalSettingsSaving}
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200"
+                      >
+                        Reset overrides
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveAdminOverrides}
+                        disabled={!portalAccountSettings || portalSettingsSaving}
+                        className="rounded-md bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                      >
+                        {portalSettingsSaving ? "Saving..." : "Save overrides"}
+                      </button>
                     </div>
                   </div>
-                )}
-              </div>
+                  <div className="mt-3 space-y-3">
+                    {portalSettingsError && <PageBanner tone="error">{portalSettingsError}</PageBanner>}
+                    {portalSettingsMessage && <PageBanner tone="success">{portalSettingsMessage}</PageBanner>}
+                    {portalSettingsLoading && !portalSettingsError && (
+                      <PageBanner tone="info">Loading portal settings...</PageBanner>
+                    )}
+                    {hasPortalManagerOverrides && (
+                      <PageBanner tone="warning">Portal manager overrides are active for this account.</PageBanner>
+                    )}
+                    {portalAccountSettings && effectivePortalSettings && (
+                      <div className="space-y-4">
+                        <PortalSettingsSection title="UI" layout="grid">
+                          <PortalSettingsItem
+                            title="Portal key"
+                            description={`Effective: ${effectivePortalSettings.allow_portal_key ? "enabled" : "disabled"}`}
+                            action={
+                              <select
+                                value={adminPortalKeyOverride}
+                                onChange={(e) => setAdminPortalKeyOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="Bucket creation"
+                            description={`Effective: ${
+                              effectivePortalSettings.allow_portal_user_bucket_create ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminPortalBucketCreateOverride}
+                                onChange={(e) => setAdminPortalBucketCreateOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                        </PortalSettingsSection>
+
+                        <PortalSettingsSection title="IAM POLICIES" layout="stack">
+                          <PortalSettingsItem
+                            title="Policy portal-manager"
+                            description={`Mode: ${adminManagerPolicyMode === "inherit" ? "inherit" : adminManagerPolicyMode}`}
+                            action={
+                              <select
+                                value={adminManagerPolicyMode}
+                                onChange={(e) => {
+                                  const mode = e.target.value as PolicyMode;
+                                  setAdminManagerPolicyMode(mode);
+                                  if (mode === "actions" && !adminManagerPolicyActionsText) {
+                                    setAdminManagerPolicyActionsText(
+                                      (effectivePortalSettings.iam_group_manager_policy.actions || []).join("\n")
+                                    );
+                                  }
+                                }}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="actions">Actions</option>
+                              </select>
+                            }
+                          >
+                            {adminManagerPolicyMode === "actions" && (
+                              <textarea
+                                value={adminManagerPolicyActionsText}
+                                onChange={(e) => setAdminManagerPolicyActionsText(e.target.value)}
+                                className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                rows={4}
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              />
+                            )}
+                          </PortalSettingsItem>
+
+                          <PortalSettingsItem
+                            title="Policy portal-user"
+                            description={`Mode: ${adminUserPolicyMode === "inherit" ? "inherit" : adminUserPolicyMode}`}
+                            action={
+                              <select
+                                value={adminUserPolicyMode}
+                                onChange={(e) => {
+                                  const mode = e.target.value as PolicyMode;
+                                  setAdminUserPolicyMode(mode);
+                                  if (mode === "actions" && !adminUserPolicyActionsText) {
+                                    setAdminUserPolicyActionsText(
+                                      (effectivePortalSettings.iam_group_user_policy.actions || []).join("\n")
+                                    );
+                                  }
+                                }}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="actions">Actions</option>
+                              </select>
+                            }
+                          >
+                            {adminUserPolicyMode === "actions" && (
+                              <textarea
+                                value={adminUserPolicyActionsText}
+                                onChange={(e) => setAdminUserPolicyActionsText(e.target.value)}
+                                className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                rows={4}
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              />
+                            )}
+                          </PortalSettingsItem>
+
+                          <PortalSettingsItem
+                            title="Policy bucket access"
+                            description={`Mode: ${adminBucketPolicyMode === "inherit" ? "inherit" : adminBucketPolicyMode}`}
+                            action={
+                              <select
+                                value={adminBucketPolicyMode}
+                                onChange={(e) => {
+                                  const mode = e.target.value as PolicyMode;
+                                  setAdminBucketPolicyMode(mode);
+                                  if (mode === "actions" && !adminBucketPolicyActionsText) {
+                                    setAdminBucketPolicyActionsText(
+                                      (effectivePortalSettings.bucket_access_policy.actions || []).join("\n")
+                                    );
+                                  }
+                                }}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="actions">Actions</option>
+                              </select>
+                            }
+                          >
+                            {adminBucketPolicyMode === "actions" && (
+                              <textarea
+                                value={adminBucketPolicyActionsText}
+                                onChange={(e) => setAdminBucketPolicyActionsText(e.target.value)}
+                                className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                rows={4}
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              />
+                            )}
+                          </PortalSettingsItem>
+                        </PortalSettingsSection>
+
+                        <PortalSettingsSection title="BUCKET DEFAULTS" layout="grid">
+                          <PortalSettingsItem
+                            title="Versioning"
+                            description={`Effective: ${effectivePortalSettings.bucket_defaults.versioning ? "enabled" : "disabled"}`}
+                            action={
+                              <select
+                                value={adminBucketVersioningOverride}
+                                onChange={(e) => setAdminBucketVersioningOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="Lifecycle"
+                            description={`Effective: ${
+                              effectivePortalSettings.bucket_defaults.enable_lifecycle ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminBucketLifecycleOverride}
+                                onChange={(e) => setAdminBucketLifecycleOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="CORS"
+                            description={`Effective: ${
+                              effectivePortalSettings.bucket_defaults.enable_cors ? "enabled" : "disabled"
+                            }`}
+                            action={
+                              <select
+                                value={adminBucketCorsOverride}
+                                onChange={(e) => setAdminBucketCorsOverride(e.target.value as TriState)}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                disabled={portalSettingsLoading || portalSettingsSaving}
+                              >
+                                <option value="inherit">Inherit</option>
+                                <option value="enabled">Enable</option>
+                                <option value="disabled">Disable</option>
+                              </select>
+                            }
+                          />
+                          <PortalSettingsItem
+                            title="CORS origins"
+                            description={adminBucketCorsOriginsOverride ? "Override active" : "Inherits defaults"}
+                            className="md:col-span-2"
+                            action={
+                              <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                                <input
+                                  type="checkbox"
+                                  checked={adminBucketCorsOriginsOverride}
+                                  onChange={(e) => setAdminBucketCorsOriginsOverride(e.target.checked)}
+                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                                  disabled={portalSettingsLoading || portalSettingsSaving}
+                                />
+                                <span>Override</span>
+                              </label>
+                            }
+                          >
+                            <textarea
+                              value={adminBucketCorsOriginsText}
+                              onChange={(e) => setAdminBucketCorsOriginsText(e.target.value)}
+                              className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              rows={3}
+                              placeholder="https://portal.example.com"
+                              disabled={!adminBucketCorsOriginsOverride || portalSettingsLoading || portalSettingsSaving}
+                            />
+                          </PortalSettingsItem>
+                        </PortalSettingsSection>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-end gap-3">
                 <button
                   type="button"

@@ -6,6 +6,7 @@ import client from "./client";
 import { Bucket } from "./buckets";
 import { S3Account } from "./accounts";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
+import { PortalSettings, PortalSettingsOverride, PortalSettingsOverridePolicy } from "./appSettings";
 
 export type PortalAccountRole = "portal_user" | "portal_manager" | "portal_none";
 
@@ -60,6 +61,24 @@ export type PortalUserSummary = {
 
 export type PortalUserBuckets = {
   buckets: string[];
+};
+
+export type PortalIamComplianceIssue = {
+  scope: string;
+  subject: string;
+  message: string;
+};
+
+export type PortalIamComplianceReport = {
+  ok: boolean;
+  issues: PortalIamComplianceIssue[];
+};
+
+export type PortalAccountSettings = {
+  effective: PortalSettings;
+  admin_override: PortalSettingsOverride;
+  portal_manager_override: PortalSettingsOverride;
+  override_policy: PortalSettingsOverridePolicy;
 };
 
 export type PortalBucketStats = {
@@ -236,7 +255,42 @@ export async function fetchPortalActiveKey(accountId: S3AccountSelector): Promis
   return data;
 }
 
-export async function fetchPortalPublicSettings(): Promise<{ allow_portal_key: boolean; allow_portal_user_bucket_create: boolean }> {
-  const { data } = await client.get<{ allow_portal_key: boolean; allow_portal_user_bucket_create: boolean }>("/portal/settings");
+export async function fetchPortalSettings(accountId: S3AccountSelector): Promise<PortalSettings> {
+  const { data } = await client.get<PortalSettings>("/portal/settings", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function fetchPortalAccountSettings(accountId: S3AccountSelector): Promise<PortalAccountSettings> {
+  const { data } = await client.get<PortalAccountSettings>("/portal/account-settings", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function updatePortalAccountSettings(
+  accountId: S3AccountSelector,
+  payload: PortalSettingsOverride
+): Promise<PortalAccountSettings> {
+  const { data } = await client.put<PortalAccountSettings>("/portal/account-settings", payload, {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function fetchPortalIamCompliance(accountId: S3AccountSelector): Promise<PortalIamComplianceReport> {
+  const { data } = await client.get<PortalIamComplianceReport>("/portal/iam-compliance", {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
+}
+
+export async function applyPortalIamCompliance(accountId: S3AccountSelector): Promise<PortalIamComplianceReport> {
+  const { data } = await client.post<PortalIamComplianceReport>(
+    "/portal/iam-compliance/apply",
+    undefined,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
   return data;
 }

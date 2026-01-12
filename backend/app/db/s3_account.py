@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -23,6 +23,7 @@ class S3Account(Base):
     rgw_user_uid = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
+    portal_settings_override = Column(Text, nullable=True)
 
     storage_endpoint = relationship("StorageEndpoint", lazy="joined")
 

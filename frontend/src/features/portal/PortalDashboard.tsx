@@ -4,6 +4,7 @@
  */
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bucket } from "../../api/buckets";
+import { PortalSettings } from "../../api/appSettings";
 import {
   createPortalAccessKey,
   createPortalBucket,
@@ -16,7 +17,7 @@ import {
   updatePortalAccessKeyStatus,
   rotatePortalAccessKey,
   fetchPortalActiveKey,
-  fetchPortalPublicSettings,
+  fetchPortalSettings,
   fetchPortalTraffic,
   fetchPortalBucketStats,
   fetchPortalUsage,
@@ -128,10 +129,7 @@ export default function PortalDashboard() {
   const [portalUsers, setPortalUsers] = useState<PortalUserSummary[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showKeysModal, setShowKeysModal] = useState(false);
-  const [portalSettings, setPortalSettings] = useState<{ allow_portal_key: boolean; allow_portal_user_bucket_create: boolean }>({
-    allow_portal_key: false,
-    allow_portal_user_bucket_create: false,
-  });
+  const [portalSettings, setPortalSettings] = useState<PortalSettings | null>(null);
   const [trafficSparkline, setTrafficSparkline] = useState<{ timestamp: number; total: number; ops: number }[]>([]);
   const [trafficOps24h, setTrafficOps24h] = useState(0);
   const [trafficLoading, setTrafficLoading] = useState(false);
@@ -212,7 +210,9 @@ export default function PortalDashboard() {
   }, []);
 
   const canManageBuckets = Boolean(state?.can_manage_buckets);
-  const allowPortalUserBucketCreate = Boolean(portalSettings.allow_portal_user_bucket_create && state?.account_role === "portal_user");
+  const allowPortalUserBucketCreate = Boolean(
+    portalSettings?.allow_portal_user_bucket_create && state?.account_role === "portal_user"
+  );
   const canCreateBuckets = canManageBuckets || allowPortalUserBucketCreate;
   const canViewPortalUsers = Boolean(state?.can_manage_portal_users);
   const assignedPortalUsers = useMemo(() => portalUsers.filter((u) => !u.iam_only), [portalUsers]);
@@ -714,10 +714,14 @@ export default function PortalDashboard() {
   };
 
   useEffect(() => {
-    fetchPortalPublicSettings()
+    if (!accountIdForApi) {
+      setPortalSettings(null);
+      return;
+    }
+    fetchPortalSettings(accountIdForApi)
       .then((data) => setPortalSettings(data))
-      .catch(() => setPortalSettings({ allow_portal_key: false }));
-  }, []);
+      .catch(() => setPortalSettings(null));
+  }, [accountIdForApi]);
 
   if (accountLoading) {
     return <EmptyState title="Chargement..." description="Récupération des comptes et du contexte portail." />;
@@ -912,7 +916,7 @@ export default function PortalDashboard() {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {portalSettings.allow_portal_key && (
+                    {portalSettings?.allow_portal_key && (
                       <button
                         type="button"
                         onClick={handleRenewPortalKey}
@@ -1030,7 +1034,7 @@ export default function PortalDashboard() {
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
-                                {k.is_portal && portalSettings.allow_portal_key && (
+                                {k.is_portal && portalSettings?.allow_portal_key && (
                                   <button
                                     type="button"
                                     onClick={() => {

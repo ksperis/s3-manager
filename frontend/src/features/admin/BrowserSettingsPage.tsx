@@ -5,7 +5,8 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
-import { AppSettings, fetchAppSettings, updateAppSettings } from "../../api/appSettings";
+import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
+import { confirmAction } from "../../utils/confirm";
 
 const PARALLELISM_MIN = 1;
 const PARALLELISM_MAX = 20;
@@ -20,6 +21,7 @@ export default function BrowserSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     fetchAppSettings()
@@ -75,6 +77,23 @@ export default function BrowserSettingsPage() {
       setError("Unable to save.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResetDefaults = async () => {
+    if (!settings) return;
+    if (!confirmAction("Reset browser settings to defaults? Save changes to apply.")) return;
+    setResetting(true);
+    setError(null);
+    setSavedMessage(null);
+    try {
+      const defaults = await fetchDefaultAppSettings();
+      setSettings((prev) => (prev ? { ...prev, browser: defaults.browser } : defaults));
+    } catch (err) {
+      console.error(err);
+      setError("Unable to load default settings.");
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -218,8 +237,16 @@ export default function BrowserSettingsPage() {
         )}
         <div className="flex items-center justify-end gap-3">
           <button
+            type="button"
+            onClick={handleResetDefaults}
+            disabled={!settings || saving || resetting}
+            className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-600 shadow-sm transition hover:border-slate-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200"
+          >
+            {resetting ? "Resetting..." : "Reset to defaults"}
+          </button>
+          <button
             type="submit"
-            disabled={!settings || saving}
+            disabled={!settings || saving || resetting}
             className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
           >
             {saving ? "Saving..." : "Save changes"}

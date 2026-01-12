@@ -5,10 +5,13 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   PortalAccountRole,
+  PortalIamComplianceReport,
   PortalState,
   PortalUserSummary,
   addPortalUser,
+  applyPortalIamCompliance,
   deletePortalUser,
+  fetchPortalIamCompliance,
   fetchPortalState,
   grantPortalUserBucket,
   listPortalUserBuckets,
@@ -31,6 +34,7 @@ type SortState = {
   field: SortField;
   direction: "asc" | "desc";
 };
+
 
 const userTableColumns: { label: string; field?: SortField | null; align?: "left" | "right" }[] = [
   { label: "Email", field: "email" },
@@ -82,6 +86,10 @@ export default function PortalManagePage() {
   const [usersError, setUsersError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [iamReport, setIamReport] = useState<PortalIamComplianceReport | null>(null);
+  const [iamLoading, setIamLoading] = useState(false);
+  const [iamApplying, setIamApplying] = useState(false);
+  const [iamError, setIamError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creatingUser, setCreatingUser] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState("");
@@ -144,6 +152,10 @@ export default function PortalManagePage() {
   useEffect(() => {
     setActionError(null);
     setActionMessage(null);
+    setIamReport(null);
+    setIamError(null);
+    setIamLoading(false);
+    setIamApplying(false);
     setShowCreateModal(false);
     setShowEditModal(false);
     setEditingUser(null);
@@ -343,6 +355,39 @@ export default function PortalManagePage() {
     }
   };
 
+  const handleCheckIamCompliance = async () => {
+    if (!accountIdForApi || !canManagePortalUsers) return;
+    setIamLoading(true);
+    setIamError(null);
+    try {
+      const report = await fetchPortalIamCompliance(accountIdForApi);
+      setIamReport(report);
+    } catch (err) {
+      console.error(err);
+      setIamError("Impossible de verifier la conformite IAM.");
+      setIamReport(null);
+    } finally {
+      setIamLoading(false);
+    }
+  };
+
+  const handleApplyIamCompliance = async () => {
+    if (!accountIdForApi || !canManagePortalUsers || !iamReport || iamReport.ok) return;
+    if (!confirmAction("Reappliquer les droits IAM selon les settings du portail ?")) return;
+    setIamApplying(true);
+    setIamError(null);
+    try {
+      const report = await applyPortalIamCompliance(accountIdForApi);
+      setIamReport(report);
+      setActionMessage("Droits IAM reappliques.");
+    } catch (err) {
+      console.error(err);
+      setIamError("Impossible de reappliquer les droits IAM.");
+    } finally {
+      setIamApplying(false);
+    }
+  };
+
   const pageDescription = selectedAccount
     ? `Gerez les utilisateurs et leurs droits buckets pour ${accountName}.`
     : "Gerez les utilisateurs et leurs droits buckets du portail.";
@@ -372,6 +417,69 @@ export default function PortalManagePage() {
       )}
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
+
+
+      {hasAccountContext && canManagePortalUsers && (
+        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Conformite IAM portail</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  Compare les droits IAM existants avec les settings du portail.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCheckIamCompliance}
+                  disabled={!accountIdForApi || iamLoading || iamApplying}
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200"
+                >
+                  {iamLoading ? "Verification..." : "Verifier"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyIamCompliance}
+                  disabled={!iamReport || iamReport.ok || iamLoading || iamApplying}
+                  className="rounded-md bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                >
+                  {iamApplying ? "Reapplication..." : "Reappliquer"}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="px-4 py-4">
+            {iamError && <PageBanner tone="error">{iamError}</PageBanner>}
+            {!iamError && iamLoading && <PageBanner tone="info">Verification en cours...</PageBanner>}
+            {!iamError && !iamLoading && iamReport && iamReport.ok && (
+              <PageBanner tone="success">Aucune divergence detectee.</PageBanner>
+            )}
+            {!iamError && !iamLoading && iamReport && !iamReport.ok && (
+              <div className="space-y-3">
+                <PageBanner tone="warning">{iamReport.issues.length} divergence(s) detectee(s).</PageBanner>
+                <div className="space-y-2">
+                  {iamReport.issues.map((issue, index) => (
+                    <div
+                      key={`${issue.scope}-${issue.subject}-${index}`}
+                      className="rounded-lg border border-slate-200/80 px-3 py-2 dark:border-slate-700"
+                    >
+                      <div className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        {issue.scope === "group" ? "Groupe" : "Utilisateur"}
+                      </div>
+                      <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">{issue.subject}</div>
+                      <div className="ui-caption text-slate-600 dark:text-slate-300">{issue.message}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {!iamError && !iamLoading && !iamReport && (
+              <PageBanner tone="info">Lancez une verification pour detecter les divergences IAM.</PageBanner>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
@@ -504,28 +612,6 @@ export default function PortalManagePage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Configuration du portail</p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Parametres specifiques a ce compte (a venir).
-              </p>
-            </div>
-            <button
-              type="button"
-              className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-400"
-              disabled
-            >
-              Configurer
-            </button>
-          </div>
-        </div>
-        <div className="px-4 py-4">
-          <PageBanner tone="info">Cette section sera disponible dans un second temps.</PageBanner>
-        </div>
-      </div>
 
       {showCreateModal && (
         <Modal title="Ajouter un utilisateur" onClose={() => setShowCreateModal(false)}>

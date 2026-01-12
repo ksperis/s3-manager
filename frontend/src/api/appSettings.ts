@@ -11,6 +11,7 @@ export type PortalSettings = {
   iam_group_user_policy: PortalIAMPolicySettings;
   bucket_access_policy: PortalIAMPolicySettings;
   bucket_defaults: PortalBucketDefaults;
+  override_policy: PortalSettingsOverridePolicy;
 };
 
 export type GeneralSettings = {
@@ -27,11 +28,53 @@ export type PortalIAMPolicySettings = {
   advanced_policy?: Record<string, unknown> | null;
 };
 
+export type PortalIAMPolicyOverridePolicy = {
+  actions: boolean;
+  advanced_policy: boolean;
+};
+
+export type PortalBucketDefaultsOverridePolicy = {
+  versioning: boolean;
+  enable_cors: boolean;
+  enable_lifecycle: boolean;
+  cors_allowed_origins: boolean;
+};
+
+export type PortalSettingsOverridePolicy = {
+  allow_portal_key: boolean;
+  allow_portal_user_bucket_create: boolean;
+  iam_group_manager_policy: PortalIAMPolicyOverridePolicy;
+  iam_group_user_policy: PortalIAMPolicyOverridePolicy;
+  bucket_access_policy: PortalIAMPolicyOverridePolicy;
+  bucket_defaults: PortalBucketDefaultsOverridePolicy;
+};
+
 export type PortalBucketDefaults = {
   versioning: boolean;
   enable_cors: boolean;
   enable_lifecycle: boolean;
   cors_allowed_origins: string[];
+};
+
+export type PortalIAMPolicyOverride = {
+  actions?: string[] | null;
+  advanced_policy?: Record<string, unknown> | null;
+};
+
+export type PortalBucketDefaultsOverride = {
+  versioning?: boolean | null;
+  enable_cors?: boolean | null;
+  enable_lifecycle?: boolean | null;
+  cors_allowed_origins?: string[] | null;
+};
+
+export type PortalSettingsOverride = {
+  allow_portal_key?: boolean | null;
+  allow_portal_user_bucket_create?: boolean | null;
+  iam_group_manager_policy?: PortalIAMPolicyOverride | null;
+  iam_group_user_policy?: PortalIAMPolicyOverride | null;
+  bucket_access_policy?: PortalIAMPolicyOverride | null;
+  bucket_defaults?: PortalBucketDefaultsOverride | null;
 };
 
 export type ManagerSettings = {
@@ -71,6 +114,11 @@ export type LoginSettings = {
 
 export async function fetchAppSettings(): Promise<AppSettings> {
   const { data } = await client.get<AppSettings>("/admin/settings");
+  return data;
+}
+
+export async function fetchDefaultAppSettings(): Promise<AppSettings> {
+  const { data } = await client.get<AppSettings>("/admin/settings/defaults");
   return data;
 }
 

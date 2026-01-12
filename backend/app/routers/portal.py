@@ -9,7 +9,16 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import AccountIAMUser, AccountRole, S3Account, User, UserS3Account
 from app.models.bucket import Bucket, BucketCreate
-from app.models.portal import PortalAccessKey, PortalAccessKeyStatusChange, PortalState, PortalUsage, PortalUserCard
+from app.models.app_settings import PortalSettingsOverride, PortalSettings
+from app.models.portal import (
+    PortalAccessKey,
+    PortalAccessKeyStatusChange,
+    PortalAccountSettings,
+    PortalIamComplianceReport,
+    PortalState,
+    PortalUsage,
+    PortalUserCard,
+)
 from app.models.s3_account import S3Account as S3AccountSchema
 from app.routers.dependencies import (
     AccountAccess,
@@ -34,7 +43,6 @@ from app.utils.s3_endpoint import resolve_s3_endpoint
 from app.services.traffic_service import TrafficService, TrafficWindow, WINDOW_RESOLUTION_LABELS, WINDOW_DELTAS
 from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
-from app.services.app_settings_service import load_app_settings
 from app.db import UserRole
 from pydantic import BaseModel
 
@@ -168,7 +176,7 @@ def create_portal_bucket(
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    portal_settings = load_app_settings().portal
+    portal_settings = service.get_effective_portal_settings(access.account)
     allow_portal_user_create = portal_settings.allow_portal_user_bucket_create
     is_manager = access.capabilities.can_manage_buckets
     is_portal_user = access.role == AccountRole.PORTAL_USER.value
@@ -355,9 +363,69 @@ def portal_traffic(
         raise HTTPException(status_code=502, detail=f"Unable to fetch traffic logs: {exc}") from exc
 
 
-@router.get("/settings", response_model=dict)
-def portal_public_settings(_: User = Depends(get_current_account_user)) -> dict:
-    return load_app_settings().portal.model_dump()
+@router.get("/settings", response_model=PortalSettings)
+def portal_public_settings(
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalSettings:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    return service.get_effective_portal_settings(access.account)
+
+
+@router.get("/account-settings", response_model=PortalAccountSettings, response_model_exclude_unset=True)
+def portal_account_settings(
+    access: AccountAccess = Depends(require_portal_manager),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalAccountSettings:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    return service.get_portal_account_settings(access.account)
+
+
+@router.put("/account-settings", response_model=PortalAccountSettings, response_model_exclude_unset=True)
+def update_portal_account_settings(
+    payload: PortalSettingsOverride,
+    access: AccountAccess = Depends(require_portal_manager),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalAccountSettings:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.update_portal_manager_override(access.account, payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.get("/iam-compliance", response_model=PortalIamComplianceReport)
+def portal_iam_compliance(
+    access: AccountAccess = Depends(require_portal_manager),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalIamComplianceReport:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.check_iam_compliance(access.account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/iam-compliance/apply", response_model=PortalIamComplianceReport)
+def portal_apply_iam_compliance(
+    access: AccountAccess = Depends(require_portal_manager),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalIamComplianceReport:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        return service.apply_iam_compliance(access.account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.get("/users", response_model=list[PortalUserCard])

@@ -5,6 +5,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.models.app_settings import PortalSettings, PortalSettingsOverride, PortalSettingsOverridePolicy
+
 from app.models.bucket import Bucket
 
 
@@ -59,3 +61,21 @@ class PortalUserCard(BaseModel):
     role: Optional[str] = None
     iam_username: Optional[str] = None
     iam_only: bool = False
+
+
+class PortalIamComplianceIssue(BaseModel):
+    scope: str
+    subject: str
+    message: str
+
+
+class PortalIamComplianceReport(BaseModel):
+    ok: bool
+    issues: list[PortalIamComplianceIssue]
+
+
+class PortalAccountSettings(BaseModel):
+    effective: PortalSettings
+    admin_override: PortalSettingsOverride
+    portal_manager_override: PortalSettingsOverride
+    override_policy: PortalSettingsOverridePolicy

@@ -62,6 +62,7 @@ function PortalShell() {
       links: [
         { to: "/portal", label: "Accueil", end: true },
         { to: "/portal/manage", label: "Gestion" },
+        { to: "/portal/settings", label: "Configuration" },
       ],
     },
   ];

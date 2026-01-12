@@ -14,6 +14,11 @@ def get_settings(_: None = Depends(get_current_super_admin)) -> AppSettings:
     return load_app_settings()
 
 
+@router.get("/defaults", response_model=AppSettings)
+def get_default_settings(_: None = Depends(get_current_super_admin)) -> AppSettings:
+    return AppSettings()
+
+
 @router.put("", response_model=AppSettings)
 def update_settings(payload: AppSettings, _: None = Depends(get_current_super_admin)) -> AppSettings:
     return save_app_settings(payload)

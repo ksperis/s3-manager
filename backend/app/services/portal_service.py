@@ -1,19 +1,37 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import copy
+import json
 import logging
 from datetime import datetime
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import Any, Optional, Tuple, TYPE_CHECKING
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db import AccountIAMUser, AccountRole, S3Account, StorageEndpoint, User
-from app.models.app_settings import PortalSettings
+from app.db import AccountIAMUser, AccountRole, S3Account, StorageEndpoint, User, UserRole, UserS3Account
+from app.models.app_settings import (
+    PortalBucketDefaults,
+    PortalBucketDefaultsOverride,
+    PortalBucketDefaultsOverridePolicy,
+    PortalIAMPolicyOverride,
+    PortalIAMPolicySettings,
+    PortalSettings,
+    PortalSettingsOverride,
+    PortalSettingsOverridePolicy,
+)
 from app.models.bucket import Bucket
 from app.models.iam import AccessKey as ModelAccessKey, IAMUser
-from app.models.portal import PortalAccessKey, PortalIAMUser, PortalState, PortalUsage
+from app.models.portal import (
+    PortalAccessKey,
+    PortalAccountSettings,
+    PortalIAMUser,
+    PortalIamComplianceIssue,
+    PortalIamComplianceReport,
+    PortalState,
+    PortalUsage,
+)
 from app.services.app_settings_service import load_app_settings
 from app.services import s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
@@ -45,11 +63,385 @@ class PortalService:
     def _portal_settings(self) -> PortalSettings:
         return load_app_settings().portal
 
+    def _load_portal_settings_overrides(
+        self,
+        account: S3Account,
+    ) -> tuple[PortalSettingsOverride, PortalSettingsOverride]:
+        raw = account.portal_settings_override
+        if not raw:
+            return PortalSettingsOverride(), PortalSettingsOverride()
+        try:
+            payload = json.loads(raw)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Unable to parse portal settings overrides for account %s: %s", account.id, exc)
+            return PortalSettingsOverride(), PortalSettingsOverride()
+        if not isinstance(payload, dict):
+            return PortalSettingsOverride(), PortalSettingsOverride()
+        admin_payload = payload.get("admin")
+        portal_payload = payload.get("portal_manager")
+        if not isinstance(admin_payload, dict):
+            admin_payload = {}
+        if not isinstance(portal_payload, dict):
+            portal_payload = {}
+        try:
+            admin_override = PortalSettingsOverride.model_validate(admin_payload)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Invalid admin portal settings override for account %s: %s", account.id, exc)
+            admin_override = PortalSettingsOverride()
+        try:
+            portal_override = PortalSettingsOverride.model_validate(portal_payload)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Invalid portal manager settings override for account %s: %s", account.id, exc)
+            portal_override = PortalSettingsOverride()
+        return admin_override, portal_override
+
+    def _override_payload(self, override: PortalSettingsOverride) -> dict:
+        return override.model_dump(exclude_unset=True, exclude_none=False)
+
+    def _persist_portal_settings_overrides(
+        self,
+        account: S3Account,
+        admin_override: PortalSettingsOverride,
+        portal_override: PortalSettingsOverride,
+    ) -> None:
+        payload: dict[str, Any] = {}
+        admin_payload = self._override_payload(admin_override)
+        if admin_payload:
+            payload["admin"] = admin_payload
+        portal_payload = self._override_payload(portal_override)
+        if portal_payload:
+            payload["portal_manager"] = portal_payload
+        account.portal_settings_override = json.dumps(payload) if payload else None
+        self.db.add(account)
+        self.db.commit()
+        self.db.refresh(account)
+
+    def _policy_override_flags(self, override: Optional[PortalIAMPolicyOverride]) -> tuple[bool, bool]:
+        if not override:
+            return False, False
+        fields_set = override.model_fields_set
+        return "actions" in fields_set, "advanced_policy" in fields_set
+
+    def _apply_policy_override(
+        self,
+        target: PortalIAMPolicySettings,
+        override: Optional[PortalIAMPolicyOverride],
+        allow_actions: bool,
+        allow_advanced: bool,
+        lock_actions: bool,
+        lock_advanced: bool,
+    ) -> None:
+        if not override:
+            return
+        actions_set, advanced_set = self._policy_override_flags(override)
+        if actions_set and allow_actions and not lock_actions:
+            target.actions = override.actions or []
+            if not advanced_set:
+                target.advanced_policy = None
+        if advanced_set and allow_advanced and not lock_advanced:
+            target.advanced_policy = override.advanced_policy
+
+    def _apply_bucket_defaults_override(
+        self,
+        target: PortalBucketDefaults,
+        override: Optional[PortalBucketDefaultsOverride],
+        policy: PortalBucketDefaultsOverridePolicy,
+        lock: Optional[PortalBucketDefaultsOverride] = None,
+    ) -> None:
+        if not override:
+            return
+        if override.versioning is not None and policy.versioning and not (lock and lock.versioning is not None):
+            target.versioning = override.versioning
+        if override.enable_cors is not None and policy.enable_cors and not (lock and lock.enable_cors is not None):
+            target.enable_cors = override.enable_cors
+        if override.enable_lifecycle is not None and policy.enable_lifecycle and not (lock and lock.enable_lifecycle is not None):
+            target.enable_lifecycle = override.enable_lifecycle
+        if override.cors_allowed_origins is not None and policy.cors_allowed_origins and not (
+            lock and lock.cors_allowed_origins is not None
+        ):
+            target.cors_allowed_origins = override.cors_allowed_origins
+
+    def _apply_admin_overrides(
+        self,
+        portal_settings: PortalSettings,
+        override: PortalSettingsOverride,
+    ) -> None:
+        if override.allow_portal_key is not None:
+            portal_settings.allow_portal_key = override.allow_portal_key
+        if override.allow_portal_user_bucket_create is not None:
+            portal_settings.allow_portal_user_bucket_create = override.allow_portal_user_bucket_create
+        self._apply_policy_override(
+            portal_settings.iam_group_manager_policy,
+            override.iam_group_manager_policy,
+            allow_actions=True,
+            allow_advanced=True,
+            lock_actions=False,
+            lock_advanced=False,
+        )
+        self._apply_policy_override(
+            portal_settings.iam_group_user_policy,
+            override.iam_group_user_policy,
+            allow_actions=True,
+            allow_advanced=True,
+            lock_actions=False,
+            lock_advanced=False,
+        )
+        self._apply_policy_override(
+            portal_settings.bucket_access_policy,
+            override.bucket_access_policy,
+            allow_actions=True,
+            allow_advanced=True,
+            lock_actions=False,
+            lock_advanced=False,
+        )
+        if override.bucket_defaults:
+            self._apply_bucket_defaults_override(
+                portal_settings.bucket_defaults,
+                override.bucket_defaults,
+                policy=PortalBucketDefaultsOverridePolicy(),
+                lock=None,
+            )
+
+    def _apply_portal_manager_overrides(
+        self,
+        portal_settings: PortalSettings,
+        override: PortalSettingsOverride,
+        policy: PortalSettingsOverridePolicy,
+        admin_override: PortalSettingsOverride,
+    ) -> None:
+        if override.allow_portal_key is not None and policy.allow_portal_key and admin_override.allow_portal_key is None:
+            portal_settings.allow_portal_key = override.allow_portal_key
+        if (
+            override.allow_portal_user_bucket_create is not None
+            and policy.allow_portal_user_bucket_create
+            and admin_override.allow_portal_user_bucket_create is None
+        ):
+            portal_settings.allow_portal_user_bucket_create = override.allow_portal_user_bucket_create
+
+        admin_manager_actions, admin_manager_advanced = self._policy_override_flags(admin_override.iam_group_manager_policy)
+        admin_user_actions, admin_user_advanced = self._policy_override_flags(admin_override.iam_group_user_policy)
+        admin_bucket_actions, admin_bucket_advanced = self._policy_override_flags(admin_override.bucket_access_policy)
+
+        self._apply_policy_override(
+            portal_settings.iam_group_manager_policy,
+            override.iam_group_manager_policy,
+            allow_actions=policy.iam_group_manager_policy.actions,
+            allow_advanced=policy.iam_group_manager_policy.advanced_policy,
+            lock_actions=admin_manager_actions,
+            lock_advanced=admin_manager_advanced,
+        )
+        self._apply_policy_override(
+            portal_settings.iam_group_user_policy,
+            override.iam_group_user_policy,
+            allow_actions=policy.iam_group_user_policy.actions,
+            allow_advanced=policy.iam_group_user_policy.advanced_policy,
+            lock_actions=admin_user_actions,
+            lock_advanced=admin_user_advanced,
+        )
+        self._apply_policy_override(
+            portal_settings.bucket_access_policy,
+            override.bucket_access_policy,
+            allow_actions=policy.bucket_access_policy.actions,
+            allow_advanced=policy.bucket_access_policy.advanced_policy,
+            lock_actions=admin_bucket_actions,
+            lock_advanced=admin_bucket_advanced,
+        )
+        self._apply_bucket_defaults_override(
+            portal_settings.bucket_defaults,
+            override.bucket_defaults,
+            policy=policy.bucket_defaults,
+            lock=admin_override.bucket_defaults,
+        )
+
+    def _effective_portal_settings(self, account: S3Account, base_settings: Optional[PortalSettings] = None) -> PortalSettings:
+        base = base_settings or self._portal_settings()
+        admin_override, portal_override = self._load_portal_settings_overrides(account)
+        effective = base.model_copy(deep=True)
+        self._apply_admin_overrides(effective, admin_override)
+        self._apply_portal_manager_overrides(effective, portal_override, base.override_policy, admin_override)
+        return effective
+
+    def _validate_portal_manager_override(
+        self,
+        override: PortalSettingsOverride,
+        policy: PortalSettingsOverridePolicy,
+        admin_override: PortalSettingsOverride,
+    ) -> list[str]:
+        issues: list[str] = []
+        if override.allow_portal_key is not None:
+            if not policy.allow_portal_key:
+                issues.append("Override non autorise pour la cle portail.")
+            if admin_override.allow_portal_key is not None:
+                issues.append("Override verrouille par l'admin pour la cle portail.")
+        if override.allow_portal_user_bucket_create is not None:
+            if not policy.allow_portal_user_bucket_create:
+                issues.append("Override non autorise pour la creation de bucket portail.")
+            if admin_override.allow_portal_user_bucket_create is not None:
+                issues.append("Override verrouille par l'admin pour la creation de bucket portail.")
+
+        admin_manager_actions, admin_manager_advanced = self._policy_override_flags(admin_override.iam_group_manager_policy)
+        admin_user_actions, admin_user_advanced = self._policy_override_flags(admin_override.iam_group_user_policy)
+        admin_bucket_actions, admin_bucket_advanced = self._policy_override_flags(admin_override.bucket_access_policy)
+
+        if override.iam_group_manager_policy:
+            actions_set, advanced_set = self._policy_override_flags(override.iam_group_manager_policy)
+            if actions_set:
+                if not policy.iam_group_manager_policy.actions:
+                    issues.append("Override actions non autorise pour la policy portal-manager.")
+                if admin_manager_actions:
+                    issues.append("Override actions verrouille par l'admin pour la policy portal-manager.")
+            if advanced_set:
+                if not policy.iam_group_manager_policy.advanced_policy:
+                    issues.append("Override policy avancee non autorise pour la policy portal-manager.")
+                if admin_manager_advanced:
+                    issues.append("Override policy avancee verrouille par l'admin pour la policy portal-manager.")
+
+        if override.iam_group_user_policy:
+            actions_set, advanced_set = self._policy_override_flags(override.iam_group_user_policy)
+            if actions_set:
+                if not policy.iam_group_user_policy.actions:
+                    issues.append("Override actions non autorise pour la policy portal-user.")
+                if admin_user_actions:
+                    issues.append("Override actions verrouille par l'admin pour la policy portal-user.")
+            if advanced_set:
+                if not policy.iam_group_user_policy.advanced_policy:
+                    issues.append("Override policy avancee non autorise pour la policy portal-user.")
+                if admin_user_advanced:
+                    issues.append("Override policy avancee verrouille par l'admin pour la policy portal-user.")
+
+        if override.bucket_access_policy:
+            actions_set, advanced_set = self._policy_override_flags(override.bucket_access_policy)
+            if actions_set:
+                if not policy.bucket_access_policy.actions:
+                    issues.append("Override actions non autorise pour la policy bucket access.")
+                if admin_bucket_actions:
+                    issues.append("Override actions verrouille par l'admin pour la policy bucket access.")
+            if advanced_set:
+                if not policy.bucket_access_policy.advanced_policy:
+                    issues.append("Override policy avancee non autorise pour la policy bucket access.")
+                if admin_bucket_advanced:
+                    issues.append("Override policy avancee verrouille par l'admin pour la policy bucket access.")
+
+        if override.bucket_defaults:
+            admin_bucket_defaults = admin_override.bucket_defaults
+            if override.bucket_defaults.versioning is not None:
+                if not policy.bucket_defaults.versioning:
+                    issues.append("Override non autorise pour le versioning.")
+                if admin_bucket_defaults and admin_bucket_defaults.versioning is not None:
+                    issues.append("Override verrouille par l'admin pour le versioning.")
+            if override.bucket_defaults.enable_cors is not None:
+                if not policy.bucket_defaults.enable_cors:
+                    issues.append("Override non autorise pour le CORS.")
+                if admin_bucket_defaults and admin_bucket_defaults.enable_cors is not None:
+                    issues.append("Override verrouille par l'admin pour le CORS.")
+            if override.bucket_defaults.enable_lifecycle is not None:
+                if not policy.bucket_defaults.enable_lifecycle:
+                    issues.append("Override non autorise pour le lifecycle.")
+                if admin_bucket_defaults and admin_bucket_defaults.enable_lifecycle is not None:
+                    issues.append("Override verrouille par l'admin pour le lifecycle.")
+            if override.bucket_defaults.cors_allowed_origins is not None:
+                if not policy.bucket_defaults.cors_allowed_origins:
+                    issues.append("Override non autorise pour les origins CORS.")
+                if admin_bucket_defaults and admin_bucket_defaults.cors_allowed_origins is not None:
+                    issues.append("Override verrouille par l'admin pour les origins CORS.")
+        return issues
+
+    def get_effective_portal_settings(self, account: S3Account) -> PortalSettings:
+        return self._effective_portal_settings(account)
+
+    def get_portal_account_settings(self, account: S3Account) -> PortalAccountSettings:
+        base = self._portal_settings()
+        admin_override, portal_override = self._load_portal_settings_overrides(account)
+        effective = base.model_copy(deep=True)
+        self._apply_admin_overrides(effective, admin_override)
+        self._apply_portal_manager_overrides(effective, portal_override, base.override_policy, admin_override)
+        return PortalAccountSettings(
+            effective=effective,
+            admin_override=admin_override,
+            portal_manager_override=portal_override,
+            override_policy=base.override_policy,
+        )
+
+    def update_admin_portal_settings_override(
+        self,
+        account: S3Account,
+        override: PortalSettingsOverride,
+    ) -> PortalAccountSettings:
+        _, portal_override = self._load_portal_settings_overrides(account)
+        payload = override.model_dump(exclude_unset=True, exclude_none=False)
+        admin_override = PortalSettingsOverride.model_validate(payload)
+        self._persist_portal_settings_overrides(account, admin_override, portal_override)
+        return self.get_portal_account_settings(account)
+
+    def update_portal_manager_override(
+        self,
+        account: S3Account,
+        override: PortalSettingsOverride,
+    ) -> PortalAccountSettings:
+        base = self._portal_settings()
+        admin_override, _ = self._load_portal_settings_overrides(account)
+        payload = override.model_dump(exclude_unset=True, exclude_none=False)
+        portal_override = PortalSettingsOverride.model_validate(payload)
+        issues = self._validate_portal_manager_override(portal_override, base.override_policy, admin_override)
+        if issues:
+            raise RuntimeError("; ".join(issues))
+        self._persist_portal_settings_overrides(account, admin_override, portal_override)
+        return self.get_portal_account_settings(account)
+
     def _normalize_actions(self, actions: Optional[list[str]]) -> list[str]:
         return normalize_string_list(actions)
 
     def _normalize_origins(self, origins: Optional[list[str]]) -> list[str]:
         return normalize_string_list(origins)
+
+    def _normalize_policy_value(self, value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: self._normalize_policy_value(value[key]) for key in sorted(value)}
+        if isinstance(value, list):
+            normalized = [self._normalize_policy_value(item) for item in value]
+            if all(isinstance(item, dict) for item in normalized):
+                return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True))
+            if all(isinstance(item, (str, int, float, bool, type(None))) for item in normalized):
+                return sorted(normalized, key=lambda item: str(item))
+            return normalized
+        return value
+
+    def _normalize_policy_document(self, policy: Optional[dict]) -> Optional[dict]:
+        if policy is None or not isinstance(policy, dict):
+            return None
+        return self._normalize_policy_value(policy)
+
+    def _policy_statements(self, policy: Optional[dict]) -> list[dict]:
+        if not policy or not isinstance(policy, dict):
+            return []
+        statements = policy.get("Statement") or []
+        if not isinstance(statements, list):
+            statements = [statements]
+        return [stmt for stmt in statements if isinstance(stmt, dict)]
+
+    def _find_statement(self, statements: list[dict], sid: str) -> Optional[dict]:
+        for stmt in statements:
+            if stmt.get("Sid") == sid:
+                return stmt
+        return None
+
+    def _action_set(self, value: Any) -> set[str]:
+        if value is None:
+            return set()
+        if isinstance(value, str):
+            return {value}
+        if isinstance(value, list):
+            return {item for item in value if isinstance(item, str)}
+        return set()
+
+    def _expected_bucket_action_set(self, portal_settings: PortalSettings) -> set[str]:
+        advanced = portal_settings.bucket_access_policy.advanced_policy
+        if isinstance(advanced, dict):
+            statements = self._policy_statements(advanced)
+            bucket_stmt = self._find_statement(statements, self._bucket_access_sid)
+            if bucket_stmt and "Action" in bucket_stmt:
+                return self._action_set(bucket_stmt.get("Action"))
+        return set(self._bucket_access_actions(portal_settings))
 
     def _resolve_group_policy(
         self,
@@ -373,6 +765,7 @@ class PortalService:
         iam_service: RGWIAMService,
         iam_username: Optional[str],
         account_role: Optional[str],
+        portal_settings: Optional[PortalSettings] = None,
     ) -> None:
         if not iam_username:
             raise RuntimeError("IAM username missing for this portal user")
@@ -384,8 +777,8 @@ class PortalService:
                     logger.warning("Unable to remove %s from %s: %s", iam_username, group, exc)
             return
 
-        portal_settings = self._portal_settings()
-        self._ensure_portal_groups(iam_service, portal_settings)
+        settings = portal_settings or self._portal_settings()
+        self._ensure_portal_groups(iam_service, settings)
         target_group = self._manager_group_name if account_role == AccountRole.PORTAL_MANAGER.value else self._user_group_name
         other_group = self._user_group_name if target_group == self._manager_group_name else self._manager_group_name
 
@@ -418,7 +811,8 @@ class PortalService:
         """Expose portal IAM credentials for manager access."""
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(user, account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, account_role)
+        portal_settings = self._effective_portal_settings(account)
+        self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
         return self._active_credentials(link, iam_service)
 
     def _account_usage(
@@ -623,10 +1017,182 @@ class PortalService:
                 return sorted(set(buckets))
         return []
 
+    def _portal_user_rows(self, account: S3Account) -> list[tuple[User, Optional[str], Optional[str]]]:
+        roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value]
+        return (
+            self.db.query(User, UserS3Account.account_role, AccountIAMUser.iam_username)
+            .join(UserS3Account, UserS3Account.user_id == User.id)
+            .outerjoin(
+                AccountIAMUser,
+                (AccountIAMUser.user_id == User.id) & (AccountIAMUser.account_id == account.id),
+            )
+            .filter(UserS3Account.account_id == account.id)
+            .filter(User.role.in_(roles))
+            .all()
+        )
+
+    def check_iam_compliance(self, account: S3Account) -> PortalIamComplianceReport:
+        iam_service = self._get_iam_service(account)
+        portal_settings = self._effective_portal_settings(account)
+        issues: list[PortalIamComplianceIssue] = []
+
+        groups = {group.name for group in iam_service.list_groups()}
+        for group_key, group_name, policy_name in (
+            ("manager", self._manager_group_name, self._manager_group_policy_name),
+            ("user", self._user_group_name, self._inline_policy_name),
+        ):
+            if group_name not in groups:
+                issues.append(
+                    PortalIamComplianceIssue(
+                        scope="group",
+                        subject=group_name,
+                        message="Groupe IAM introuvable.",
+                    )
+                )
+                continue
+            attached = iam_service.list_group_policies(group_name)
+            if attached:
+                issues.append(
+                    PortalIamComplianceIssue(
+                        scope="group",
+                        subject=group_name,
+                        message=f"Policies attachees detectees ({len(attached)}).",
+                    )
+                )
+            expected_policy = self._resolve_group_policy(portal_settings, group_key)
+            actual_policy = iam_service.get_group_inline_policy(group_name, policy_name)
+            expected_normalized = self._normalize_policy_document(expected_policy)
+            actual_normalized = self._normalize_policy_document(actual_policy)
+            if expected_policy is None:
+                if actual_policy:
+                    issues.append(
+                        PortalIamComplianceIssue(
+                            scope="group",
+                            subject=group_name,
+                            message="Policy inline presente mais aucune n'est attendue.",
+                        )
+                    )
+            else:
+                if actual_policy is None:
+                    issues.append(
+                        PortalIamComplianceIssue(
+                            scope="group",
+                            subject=group_name,
+                            message="Policy inline manquante.",
+                        )
+                    )
+                elif expected_normalized != actual_normalized:
+                    issues.append(
+                        PortalIamComplianceIssue(
+                            scope="group",
+                            subject=group_name,
+                            message="Policy inline divergente des settings du portail.",
+                        )
+                    )
+
+        portal_users = self._portal_user_rows(account)
+        for user_obj, account_role, iam_username in portal_users:
+            expected_group = (
+                self._manager_group_name
+                if account_role == AccountRole.PORTAL_MANAGER.value
+                else self._user_group_name
+            )
+            subject = user_obj.email
+            if not iam_username:
+                issues.append(
+                    PortalIamComplianceIssue(
+                        scope="user",
+                        subject=subject,
+                        message="IAM user manquant pour ce compte.",
+                    )
+                )
+                continue
+            subject = f"{user_obj.email} ({iam_username})"
+            groups_for_user = iam_service.list_groups_for_user(iam_username)
+            portal_groups = [
+                g.name
+                for g in groups_for_user
+                if g.name in {self._manager_group_name, self._user_group_name}
+            ]
+            if expected_group not in portal_groups:
+                current = ", ".join(portal_groups) if portal_groups else "aucun"
+                issues.append(
+                    PortalIamComplianceIssue(
+                        scope="user",
+                        subject=subject,
+                        message=f"Groupe attendu '{expected_group}' absent (actuels: {current}).",
+                    )
+                )
+            if len(portal_groups) > 1:
+                issues.append(
+                    PortalIamComplianceIssue(
+                        scope="user",
+                        subject=subject,
+                        message="Appartient aux deux groupes portail (manager/user).",
+                    )
+                )
+            policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name)
+            if not policy:
+                continue
+            statements = self._policy_statements(policy)
+            bucket_stmt = self._find_statement(statements, self._bucket_access_sid)
+            if not bucket_stmt:
+                issues.append(
+                    PortalIamComplianceIssue(
+                        scope="user",
+                        subject=subject,
+                        message="Policy portal-user-buckets sans statement PortalUserBuckets.",
+                    )
+                )
+            else:
+                expected_actions = self._expected_bucket_action_set(portal_settings)
+                actual_actions = self._action_set(bucket_stmt.get("Action"))
+                missing = sorted(expected_actions - actual_actions)
+                extra = sorted(actual_actions - expected_actions)
+                if missing or extra:
+                    parts = []
+                    if missing:
+                        parts.append(f"manquantes: {', '.join(missing)}")
+                    if extra:
+                        parts.append(f"en trop: {', '.join(extra)}")
+                    issues.append(
+                        PortalIamComplianceIssue(
+                            scope="user",
+                            subject=subject,
+                            message=f"Actions bucket divergentes ({'; '.join(parts)}).",
+                        )
+                    )
+
+        return PortalIamComplianceReport(ok=len(issues) == 0, issues=issues)
+
+    def apply_iam_compliance(self, account: S3Account) -> PortalIamComplianceReport:
+        iam_service = self._get_iam_service(account)
+        portal_settings = self._effective_portal_settings(account)
+        self._ensure_portal_groups(iam_service, portal_settings)
+        portal_users = self._portal_user_rows(account)
+        for _, account_role, iam_username in portal_users:
+            if not iam_username:
+                continue
+            role = account_role or AccountRole.PORTAL_USER.value
+            self._sync_user_group_membership(iam_service, iam_username, role, portal_settings=portal_settings)
+            policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name)
+            if not policy:
+                continue
+            buckets = self._extract_bucket_access(policy)
+            for bucket in buckets:
+                self._ensure_user_bucket_policy(
+                    iam_service,
+                    iam_username,
+                    bucket,
+                    portal_settings=portal_settings,
+                )
+        return self.check_iam_compliance(account)
+
     def list_user_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, account_role)
+        portal_settings = self._effective_portal_settings(account)
+        self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
         policy = iam_service.get_user_inline_policy(link.iam_username, self._bucket_access_policy_name)
         return self._extract_bucket_access(policy)
 
@@ -635,13 +1201,14 @@ class PortalService:
             raise RuntimeError("Bucket name requis.")
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, account_role)
+        portal_settings = self._effective_portal_settings(account)
+        self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
         access_key, secret_key = self._account_credentials(account)
         endpoint = resolve_s3_endpoint(account)
         buckets = s3_client.list_buckets(access_key=access_key, secret_key=secret_key, endpoint=endpoint)
         if bucket_name not in [b.get("name") for b in buckets]:
             raise RuntimeError("Bucket introuvable pour ce compte.")
-        self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name)
+        self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name, portal_settings=portal_settings)
         policy = iam_service.get_user_inline_policy(link.iam_username, self._bucket_access_policy_name)
         return self._extract_bucket_access(policy)
 
@@ -650,8 +1217,8 @@ class PortalService:
             raise RuntimeError("Bucket name requis.")
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, account_role)
-        portal_settings = self._portal_settings()
+        portal_settings = self._effective_portal_settings(account)
+        self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
         bucket_actions = self._bucket_access_actions(portal_settings)
         policy = iam_service.get_user_inline_policy(link.iam_username, self._bucket_access_policy_name) or {}
         statements = policy.get("Statement") or []
@@ -693,7 +1260,8 @@ class PortalService:
         account = access.account
         iam_service = self._get_iam_service(account)
         link, iam_user, created = self._ensure_portal_user(user, account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role)
+        portal_settings = self._effective_portal_settings(account)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         self._ensure_policy_and_key(link, iam_service)
         portal_key = self._ensure_active_key(link, iam_service)
         portal_key.secret_access_key = None
@@ -805,14 +1373,16 @@ class PortalService:
     def list_access_keys(self, user: User, access: "AccountAccess") -> list[PortalAccessKey]:
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role)
+        portal_settings = self._effective_portal_settings(access.account)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         self._ensure_policy_and_key(link, iam_service)
         return self._list_access_keys(link, iam_service, include_portal=False)
 
     def create_access_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role)
+        portal_settings = self._effective_portal_settings(access.account)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
         new_key = iam_service.create_access_key(link.iam_username)
@@ -829,13 +1399,15 @@ class PortalService:
     def get_portal_access_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role)
+        portal_settings = self._effective_portal_settings(access.account)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         return self._ensure_active_key(link, iam_service)
 
     def rotate_portal_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role)
+        portal_settings = self._effective_portal_settings(access.account)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
         new_key = iam_service.create_access_key(link.iam_username)
@@ -852,7 +1424,8 @@ class PortalService:
     def update_access_key_status(self, user: User, access: "AccountAccess", access_key_id: str, active: bool) -> PortalAccessKey:
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role)
+        portal_settings = self._effective_portal_settings(access.account)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if not link.iam_username:
             raise RuntimeError("IAM username missing for this portal user")
         if access_key_id == link.active_access_key and not active:
@@ -875,7 +1448,8 @@ class PortalService:
     def delete_access_key(self, user: User, access: "AccountAccess", access_key_id: str) -> None:
         iam_service = self._get_iam_service(access.account)
         link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role)
+        portal_settings = self._effective_portal_settings(access.account)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
         if access_key_id == link.active_access_key:
             raise RuntimeError("Cannot delete the portal access key")
         if not link.iam_username:
@@ -895,11 +1469,11 @@ class PortalService:
         portal_settings: Optional[PortalSettings] = None,
     ) -> Bucket:
         account = access.account
-        portal_defaults = portal_settings or self._portal_settings()
+        portal_defaults = portal_settings or self._effective_portal_settings(account)
         versioning_flag = portal_defaults.bucket_defaults.versioning if versioning is None else versioning
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(user, account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_defaults)
         if use_root:
             active_key_id, active_secret = self._account_credentials(account)
         else:
@@ -946,7 +1520,8 @@ class PortalService:
         """Create/sync IAM user and group membership immediately when roles change."""
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
-        self._sync_user_group_membership(iam_service, link.iam_username, account_role)
+        portal_settings = self._effective_portal_settings(account)
+        self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
         if account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
             self._ensure_active_key(link, iam_service)
             return
