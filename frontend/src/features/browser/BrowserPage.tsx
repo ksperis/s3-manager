@@ -521,7 +521,7 @@ export default function BrowserPage() {
         label: "Proxy",
         title: "Backend proxy transfers are active.",
         className:
-          "border-rose-100/40 bg-rose-50/30 text-rose-500/60 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200/70",
+          "border-rose-200/70 bg-rose-200/60 text-rose-600/70 dark:border-rose-400/40 dark:bg-rose-400/25 dark:text-rose-200/90",
       };
     }
     if (stsCredentials) {
@@ -529,14 +529,14 @@ export default function BrowserPage() {
         label: "STS",
         title: stsExpirationLabel ? `STS expires at ${stsExpirationLabel}` : "STS credentials are active.",
         className:
-          "border-emerald-100/40 bg-emerald-50/30 text-emerald-500/60 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200/70",
+          "border-emerald-200/70 bg-emerald-200/60 text-emerald-600/70 dark:border-emerald-400/40 dark:bg-emerald-400/25 dark:text-emerald-200/90",
       };
     }
     return {
       label: "Presign",
       title: "Presigned URLs are active.",
       className:
-        "border-amber-100/40 bg-amber-50/30 text-amber-500/60 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200/70",
+        "border-amber-200/70 bg-amber-200/60 text-amber-600/70 dark:border-amber-400/40 dark:bg-amber-400/25 dark:text-amber-200/90",
     };
   }, [hasS3AccountContext, stsCredentials, stsExpirationLabel, useProxyTransfers]);
 
@@ -3892,15 +3892,14 @@ export default function BrowserPage() {
       </button>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
-          <div className="flex flex-col items-start gap-0.5">
+          <div className="flex items-center gap-1.5">
             <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Browser</span>
             {accessBadge && (
               <span
-                className={`rounded-full border px-1 py-0 text-[8px] font-semibold uppercase leading-none tracking-wide ${accessBadge.className}`}
-                title={accessBadge.title}
-              >
-                {accessBadge.label}
-              </span>
+                className={`inline-flex h-3 w-3 rounded-full border shadow-sm ${accessBadge.className}`}
+                title={`Mode: ${accessBadge.label} — ${accessBadge.title}`}
+                aria-label={`Mode: ${accessBadge.label} — ${accessBadge.title}`}
+              />
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
