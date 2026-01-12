@@ -15,7 +15,7 @@ def _default_portal_cors_origins() -> list[str]:
 
 
 def _default_portal_manager_actions() -> list[str]:
-    return ["iam:*", "s3:*"]
+    return ["iam:*", "s3:*", "sts:*"]
 
 
 def _default_portal_user_actions() -> list[str]:
@@ -40,6 +40,7 @@ def _default_portal_bucket_access_actions() -> list[str]:
         "s3:GetBucketAcl",
         "s3:GetBucketPolicy",
         "s3:GetLifecycleConfiguration",
+        "sts:GetSessionToken",
     ]
 
 
