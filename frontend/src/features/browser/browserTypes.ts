@@ -127,6 +127,7 @@ export type ContextMenuState = {
 export type ClipboardState = {
   items: BrowserItem[];
   sourceBucket: string;
+  mode: "copy" | "move";
 };
 
 export type WebkitEntry = {

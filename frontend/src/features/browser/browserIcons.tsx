@@ -109,6 +109,15 @@ export const CopyIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   </svg>
 );
 
+export const CutIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
+  <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
+    <circle cx="6" cy="6" r="2.2" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="6" cy="14" r="2.2" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M7.5 7.5 16 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M7.5 12.5 16 16" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
 export const LinkIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
     <path

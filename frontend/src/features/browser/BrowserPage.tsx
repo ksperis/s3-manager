@@ -21,6 +21,7 @@ import {
   StsCredentials,
   StsStatus,
   copyObject,
+  cleanupObjectVersions,
   createFolder,
   deleteObjects,
   fetchObjectMetadata,
@@ -49,6 +50,7 @@ import {
 import { useS3AccountContext } from "../manager/S3AccountContext";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
+import BrowserCleanupModal from "./BrowserCleanupModal";
 import BrowserContextMenu from "./BrowserContextMenu";
 import BrowserOperationsModal from "./BrowserOperationsModal";
 import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
@@ -60,6 +62,7 @@ import {
   ChevronDownIcon,
   CompactIcon,
   CopyIcon,
+  CutIcon,
   DownloadIcon,
   EyeIcon,
   FileIcon,
@@ -300,6 +303,13 @@ export default function BrowserPage() {
   const [bulkRestoreLoading, setBulkRestoreLoading] = useState(false);
   const [bulkRestoreError, setBulkRestoreError] = useState<string | null>(null);
   const [bulkRestoreSummary, setBulkRestoreSummary] = useState<string | null>(null);
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
+  const [cleanupKeepLast, setCleanupKeepLast] = useState("");
+  const [cleanupOlderThanDays, setCleanupOlderThanDays] = useState("");
+  const [cleanupDeleteOrphanMarkers, setCleanupDeleteOrphanMarkers] = useState(false);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [cleanupError, setCleanupError] = useState<string | null>(null);
+  const [cleanupSummary, setCleanupSummary] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
@@ -3295,10 +3305,61 @@ export default function BrowserPage() {
     }
   };
 
+  const openCleanupModal = () => {
+    setCleanupError(null);
+    setCleanupSummary(null);
+    setShowCleanupModal(true);
+  };
+
+  const handleCleanupApply = async () => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const keepLast = Number.parseInt(cleanupKeepLast, 10);
+    const olderThan = Number.parseInt(cleanupOlderThanDays, 10);
+    const keepLastValue = Number.isNaN(keepLast) ? undefined : keepLast;
+    const olderThanValue = Number.isNaN(olderThan) ? undefined : olderThan;
+    if (!keepLastValue && !olderThanValue && !cleanupDeleteOrphanMarkers) {
+      setCleanupError("Select at least one cleanup rule.");
+      return;
+    }
+    if (keepLastValue !== undefined && keepLastValue < 1) {
+      setCleanupError("Keep last versions must be at least 1.");
+      return;
+    }
+    if (olderThanValue !== undefined && olderThanValue < 1) {
+      setCleanupError("Older than days must be at least 1.");
+      return;
+    }
+    setCleanupLoading(true);
+    setCleanupError(null);
+    setCleanupSummary(null);
+    try {
+      const result = await cleanupObjectVersions(accountIdForApi, bucketName, {
+        prefix: normalizedPrefix,
+        keep_last_n: keepLastValue,
+        older_than_days: olderThanValue,
+        delete_orphan_markers: cleanupDeleteOrphanMarkers,
+      });
+      const summary = `Removed ${result.deleted_versions} version(s) and ${result.deleted_delete_markers} delete marker(s).`;
+      setCleanupSummary(summary);
+      setStatusMessage(summary);
+      requestObjectsRefresh(prefix);
+    } catch (err) {
+      setCleanupError("Unable to clean versions for this prefix.");
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
   const handleCopyItems = (items: BrowserItem[]) => {
     if (!bucketName || items.length === 0) return;
-    setClipboard({ items, sourceBucket: bucketName });
+    setClipboard({ items, sourceBucket: bucketName, mode: "copy" });
     setStatusMessage("Items copied.");
+  };
+
+  const handleCutItems = (items: BrowserItem[]) => {
+    if (!bucketName || items.length === 0) return;
+    setClipboard({ items, sourceBucket: bucketName, mode: "move" });
+    setStatusMessage("Items ready to move.");
   };
 
   const handlePasteItems = async () => {
@@ -3306,7 +3367,8 @@ export default function BrowserPage() {
     setWarningMessage(null);
     const destinationBucket = bucketName;
     const destinationPrefix = normalizedPrefix;
-    const { items, sourceBucket } = clipboard;
+    const { items, sourceBucket, mode } = clipboard;
+    const isMove = mode === "move";
     const copyTasks: Array<{
       sourceBucket: string;
       sourceKey: string;
@@ -3386,7 +3448,7 @@ export default function BrowserPage() {
 
     const operationId = startOperation(
       "copying",
-      "Copying items",
+      isMove ? "Moving items" : "Copying items",
       destinationPrefix ? `${destinationBucket}/${destinationPrefix}` : destinationBucket,
       { kind: "copy" },
       0
@@ -3415,6 +3477,7 @@ export default function BrowserPage() {
               source_bucket: task.sourceBucket,
               source_key: task.sourceKey,
               destination_key: task.destinationKey,
+              move: isMove,
             });
             updateCopyDetailStatus(operationId, task.detailId, "done");
           } catch (err) {
@@ -3429,9 +3492,12 @@ export default function BrowserPage() {
       await Promise.all(workers);
 
       completeOperation(operationId, failures > 0 ? "failed" : "done");
-      const summary = `Copied ${total - failures} of ${total} item(s).`;
+      const summary = `${isMove ? "Moved" : "Copied"} ${total - failures} of ${total} item(s).`;
       setStatusMessage(summary);
       requestObjectsRefresh(prefix);
+      if (isMove && failures === 0) {
+        setClipboard(null);
+      }
     } catch (err) {
       completeOperation(operationId, "failed");
       setStatusMessage("Unable to paste items.");
@@ -3709,6 +3775,7 @@ export default function BrowserPage() {
     () => copyGroups.reduce((sum, group) => sum + group.counts.queued, 0),
     [copyGroups]
   );
+  const pasteLabel = clipboard?.mode === "move" ? "Paste (Move)" : "Paste";
   const totalOperationsCount =
     activeOperations.length + uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount;
   const completedUploadCount = useMemo(
@@ -4778,7 +4845,7 @@ export default function BrowserPage() {
                                     disabled={!clipboard || !bucketName || !hasS3AccountContext}
                                   >
                                     <PasteIcon className="h-3.5 w-3.5" />
-                                    Paste
+                                    {pasteLabel}
                                   </button>
                                   <button
                                     type="button"
@@ -4788,6 +4855,15 @@ export default function BrowserPage() {
                                   >
                                     <ListIcon className="h-3.5 w-3.5" />
                                     Versions
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={openCleanupModal}
+                                    disabled={!bucketName || !hasS3AccountContext}
+                                  >
+                                    <TrashIcon className="h-3.5 w-3.5" />
+                                    Clean versions
                                   </button>
                                   <button
                                     type="button"
@@ -5002,6 +5078,15 @@ export default function BrowserPage() {
                                   >
                                     <CopyIcon className="h-3.5 w-3.5" />
                                     Copy
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={() => handleCutItems(selectionItems)}
+                                    disabled={!canSelectionActions}
+                                  >
+                                    <CutIcon className="h-3.5 w-3.5" />
+                                    Cut
                                   </button>
                                   <button
                                     type="button"
@@ -5285,10 +5370,12 @@ export default function BrowserPage() {
         onPasteItems={handlePasteItems}
         onCopyPath={handleCopyPath}
         onOpenPrefixVersions={() => setShowPrefixVersions(true)}
+        onOpenCleanupVersions={openCleanupModal}
         onDownloadTarget={handleDownloadTarget}
         onPreviewItem={handlePreviewItem}
         onCopyUrl={handleCopyUrl}
         onCopyItems={handleCopyItems}
+        onCutItems={handleCutItems}
         onOpenBulkAttributes={openBulkAttributesModal}
         onOpenBulkRestore={openBulkRestoreModal}
         onOpenAdvanced={openAdvancedForItem}
@@ -5390,6 +5477,22 @@ export default function BrowserPage() {
           bulkRestoreLoading={bulkRestoreLoading}
           onApply={handleBulkRestoreApply}
           onClose={() => setShowBulkRestoreModal(false)}
+        />
+      )}
+      {showCleanupModal && (
+        <BrowserCleanupModal
+          currentPath={currentPath}
+          cleanupKeepLast={cleanupKeepLast}
+          setCleanupKeepLast={setCleanupKeepLast}
+          cleanupOlderThanDays={cleanupOlderThanDays}
+          setCleanupOlderThanDays={setCleanupOlderThanDays}
+          cleanupDeleteOrphanMarkers={cleanupDeleteOrphanMarkers}
+          setCleanupDeleteOrphanMarkers={setCleanupDeleteOrphanMarkers}
+          cleanupError={cleanupError}
+          cleanupSummary={cleanupSummary}
+          cleanupLoading={cleanupLoading}
+          onApply={handleCleanupApply}
+          onClose={() => setShowCleanupModal(false)}
         />
       )}
       {showOperationsModal && (

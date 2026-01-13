@@ -219,6 +219,21 @@ class DeleteObjectsPayload(BaseModel):
     objects: list[DeleteObjectEntry]
 
 
+class CleanupObjectVersionsPayload(BaseModel):
+    prefix: Optional[str] = None
+    keep_last_n: Optional[int] = Field(default=None, ge=1)
+    older_than_days: Optional[int] = Field(default=None, ge=1)
+    delete_orphan_markers: bool = False
+
+
+class CleanupObjectVersionsResponse(BaseModel):
+    prefix: Optional[str] = None
+    deleted_versions: int = 0
+    deleted_delete_markers: int = 0
+    scanned_versions: int = 0
+    scanned_delete_markers: int = 0
+
+
 class BucketCorsRule(BaseModel):
     allowed_origins: list[str] = Field(default_factory=list)
     allowed_methods: list[str] = Field(default_factory=list)

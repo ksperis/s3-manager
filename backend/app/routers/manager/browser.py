@@ -33,6 +33,8 @@ from app.models.browser import (
     BucketCorsStatus,
     StsStatus,
     BrowserStsCredentials,
+    CleanupObjectVersionsPayload,
+    CleanupObjectVersionsResponse,
 )
 from app.models.browser import BrowserBucket
 from app.services.audit_service import AuditService
@@ -562,6 +564,40 @@ def delete_objects(
             metadata={"count": deleted, "bucket": bucket_name},
         )
         return {"deleted": deleted}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/buckets/{bucket_name}/versions/cleanup", response_model=CleanupObjectVersionsResponse)
+def cleanup_object_versions(
+    bucket_name: str,
+    payload: CleanupObjectVersionsPayload,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> CleanupObjectVersionsResponse:
+    try:
+        result = service.cleanup_object_versions(bucket_name, account, payload)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="cleanup_object_versions",
+            entity_type="object_prefix",
+            entity_id=payload.prefix or "",
+            account=account,
+            metadata={
+                "bucket": bucket_name,
+                "keep_last_n": payload.keep_last_n,
+                "older_than_days": payload.older_than_days,
+                "delete_orphan_markers": payload.delete_orphan_markers,
+                "deleted_versions": result.deleted_versions,
+                "deleted_delete_markers": result.deleted_delete_markers,
+            },
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

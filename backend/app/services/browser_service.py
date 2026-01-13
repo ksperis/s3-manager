@@ -17,6 +17,8 @@ from app.models.browser import (
     BrowserObjectVersion,
     BucketCorsRule,
     BucketCorsStatus,
+    CleanupObjectVersionsPayload,
+    CleanupObjectVersionsResponse,
     CompleteMultipartUploadRequest,
     CopyObjectPayload,
     DeleteObjectsPayload,
@@ -620,6 +622,134 @@ class BrowserService:
             next_version_id_marker=resp.get("NextVersionIdMarker"),
         )
 
+    def cleanup_object_versions(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        payload: CleanupObjectVersionsPayload,
+    ) -> CleanupObjectVersionsResponse:
+        if not (payload.keep_last_n or payload.older_than_days or payload.delete_orphan_markers):
+            raise ValueError("No cleanup criteria provided.")
+        client = self._client(account)
+        prefix = payload.prefix or ""
+        cutoff = None
+        if payload.older_than_days:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=payload.older_than_days)
+
+        def normalize(value: Optional[datetime]) -> Optional[datetime]:
+            if not value:
+                return None
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
+
+        try:
+            versions_by_key: dict[str, list[dict]] = {}
+            scanned_versions = 0
+            scanned_delete_markers = 0
+            key_marker = None
+            version_marker = None
+            while True:
+                list_kwargs = {"Bucket": bucket_name, "Prefix": prefix}
+                if key_marker:
+                    list_kwargs["KeyMarker"] = key_marker
+                if version_marker:
+                    list_kwargs["VersionIdMarker"] = version_marker
+                resp = client.list_object_versions(**list_kwargs)
+                for version in resp.get("Versions", []) or []:
+                    key = version.get("Key")
+                    version_id = version.get("VersionId")
+                    if not key or not version_id:
+                        continue
+                    scanned_versions += 1
+                    versions_by_key.setdefault(key, []).append(
+                        {
+                            "version_id": version_id,
+                            "last_modified": normalize(version.get("LastModified")),
+                            "is_latest": bool(version.get("IsLatest")),
+                        }
+                    )
+                for marker in resp.get("DeleteMarkers", []) or []:
+                    key = marker.get("Key")
+                    version_id = marker.get("VersionId")
+                    if not key or not version_id:
+                        continue
+                    scanned_delete_markers += 1
+                key_marker = resp.get("NextKeyMarker")
+                version_marker = resp.get("NextVersionIdMarker")
+                if not key_marker and not version_marker:
+                    break
+
+            versions_to_delete: list[dict] = []
+            if payload.keep_last_n or cutoff:
+                for key, versions in versions_by_key.items():
+                    if not versions:
+                        continue
+                    ordered = sorted(
+                        versions,
+                        key=lambda entry: (
+                            1 if entry.get("is_latest") else 0,
+                            entry.get("last_modified") or datetime.min.replace(tzinfo=timezone.utc),
+                        ),
+                        reverse=True,
+                    )
+                    for index, entry in enumerate(ordered):
+                        if entry.get("is_latest"):
+                            continue
+                        delete_for_count = payload.keep_last_n is not None and index >= payload.keep_last_n
+                        last_modified = entry.get("last_modified")
+                        delete_for_age = bool(cutoff and last_modified and last_modified < cutoff)
+                        if delete_for_count or delete_for_age:
+                            versions_to_delete.append({"Key": key, "VersionId": entry["version_id"]})
+
+            deleted_versions = 0
+            if versions_to_delete:
+                _delete_objects(client, bucket_name, versions_to_delete)
+                deleted_versions = len(versions_to_delete)
+
+            deleted_delete_markers = 0
+            if payload.delete_orphan_markers:
+                keys_with_versions: set[str] = set()
+                delete_markers: list[dict] = []
+                key_marker = None
+                version_marker = None
+                while True:
+                    list_kwargs = {"Bucket": bucket_name, "Prefix": prefix}
+                    if key_marker:
+                        list_kwargs["KeyMarker"] = key_marker
+                    if version_marker:
+                        list_kwargs["VersionIdMarker"] = version_marker
+                    resp = client.list_object_versions(**list_kwargs)
+                    for version in resp.get("Versions", []) or []:
+                        key = version.get("Key")
+                        if key:
+                            keys_with_versions.add(key)
+                    for marker in resp.get("DeleteMarkers", []) or []:
+                        key = marker.get("Key")
+                        version_id = marker.get("VersionId")
+                        if not key or not version_id:
+                            continue
+                        delete_markers.append({"Key": key, "VersionId": version_id})
+                    key_marker = resp.get("NextKeyMarker")
+                    version_marker = resp.get("NextVersionIdMarker")
+                    if not key_marker and not version_marker:
+                        break
+
+                markers_to_delete = [marker for marker in delete_markers if marker["Key"] not in keys_with_versions]
+                if markers_to_delete:
+                    _delete_objects(client, bucket_name, markers_to_delete)
+                    deleted_delete_markers = len(markers_to_delete)
+
+            return CleanupObjectVersionsResponse(
+                prefix=prefix or None,
+                deleted_versions=deleted_versions,
+                deleted_delete_markers=deleted_delete_markers,
+                scanned_versions=scanned_versions,
+                scanned_delete_markers=scanned_delete_markers,
+            )
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to clean versions for '{bucket_name}': {exc}") from exc
+
     def head_object(
         self,
         bucket_name: str,
@@ -1015,8 +1145,27 @@ class BrowserService:
         if payload.acl:
             kwargs["ACL"] = payload.acl
         try:
-            client.copy_object(**kwargs)
+            resp = client.copy_object(**kwargs)
             if payload.move:
+                source_head_kwargs = {"Bucket": source_bucket, "Key": payload.source_key}
+                if payload.source_version_id:
+                    source_head_kwargs["VersionId"] = payload.source_version_id
+                source_head = client.head_object(**source_head_kwargs)
+                destination_head_kwargs = {"Bucket": bucket_name, "Key": payload.destination_key}
+                destination_version_id = resp.get("VersionId")
+                if destination_version_id:
+                    destination_head_kwargs["VersionId"] = destination_version_id
+                destination_head = client.head_object(**destination_head_kwargs)
+                source_etag = self._clean_etag(source_head.get("ETag"))
+                destination_etag = self._clean_etag(destination_head.get("ETag"))
+                source_size = int(source_head.get("ContentLength") or 0)
+                destination_size = int(destination_head.get("ContentLength") or 0)
+                if source_size != destination_size:
+                    raise RuntimeError("Copy verification failed (size mismatch).")
+                if not source_etag or not destination_etag:
+                    raise RuntimeError("Copy verification failed (missing ETag).")
+                if source_etag != destination_etag:
+                    raise RuntimeError("Copy verification failed (ETag mismatch).")
                 delete_kwargs = {"Bucket": source_bucket, "Key": payload.source_key}
                 if payload.source_version_id:
                     delete_kwargs["VersionId"] = payload.source_version_id

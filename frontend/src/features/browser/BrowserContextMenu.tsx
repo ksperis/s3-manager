@@ -10,6 +10,7 @@ import {
   contextMenuSeparatorClasses,
 } from "./browserConstants";
 import {
+  CutIcon,
   CopyIcon,
   DownloadIcon,
   EyeIcon,
@@ -43,10 +44,12 @@ type BrowserContextMenuProps = {
   onPasteItems: () => void;
   onCopyPath: (path: string) => void;
   onOpenPrefixVersions: () => void;
+  onOpenCleanupVersions: () => void;
   onDownloadTarget: (item: BrowserItem) => void;
   onPreviewItem: (item: BrowserItem) => void;
   onCopyUrl: (item: BrowserItem | null) => void;
   onCopyItems: (items: BrowserItem[]) => void;
+  onCutItems: (items: BrowserItem[]) => void;
   onOpenBulkAttributes: (items: BrowserItem[]) => void;
   onOpenBulkRestore: (items: BrowserItem[]) => void;
   onOpenAdvanced: (item: BrowserItem) => void;
@@ -71,10 +74,12 @@ export default function BrowserContextMenu({
   onPasteItems,
   onCopyPath,
   onOpenPrefixVersions,
+  onOpenCleanupVersions,
   onDownloadTarget,
   onPreviewItem,
   onCopyUrl,
   onCopyItems,
+  onCutItems,
   onOpenBulkAttributes,
   onOpenBulkRestore,
   onOpenAdvanced,
@@ -90,6 +95,7 @@ export default function BrowserContextMenu({
   const contextSelectionInfo = contextMenu.kind === "selection"
     ? getSelectionInfo(contextMenu.items ?? [])
     : null;
+  const pasteLabel = clipboard?.mode === "move" ? "Paste (Move)" : "Paste";
 
   return (
     <div
@@ -146,7 +152,7 @@ export default function BrowserContextMenu({
             disabled={!clipboard || !bucketName || !hasS3AccountContext}
           >
             <PasteIcon className="h-3.5 w-3.5" />
-            Paste
+            {pasteLabel}
           </button>
           <button
             type="button"
@@ -159,6 +165,18 @@ export default function BrowserContextMenu({
           >
             <ListIcon className="h-3.5 w-3.5" />
             Versions
+          </button>
+          <button
+            type="button"
+            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+            onClick={() => {
+              onClose();
+              onOpenCleanupVersions();
+            }}
+            disabled={!bucketName || !hasS3AccountContext}
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+            Clean versions
           </button>
           <button
             type="button"
@@ -262,6 +280,18 @@ export default function BrowserContextMenu({
           >
             <CopyIcon className="h-3.5 w-3.5" />
             Copy
+          </button>
+          <button
+            type="button"
+            className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
+            onClick={() => {
+              onClose();
+              onCutItems([contextItem]);
+            }}
+            disabled={!bucketName}
+          >
+            <CutIcon className="h-3.5 w-3.5" />
+            Cut
           </button>
           <div className={contextMenuSeparatorClasses} />
           <button
@@ -385,6 +415,18 @@ export default function BrowserContextMenu({
           >
             <CopyIcon className="h-3.5 w-3.5" />
             Copy
+          </button>
+          <button
+            type="button"
+            className={`${contextMenuItemClasses} ${!bucketName || contextSelectionInfo.items.length === 0 ? contextMenuItemDisabledClasses : ""}`}
+            onClick={() => {
+              onClose();
+              onCutItems(contextSelectionInfo.items);
+            }}
+            disabled={!bucketName || contextSelectionInfo.items.length === 0}
+          >
+            <CutIcon className="h-3.5 w-3.5" />
+            Cut
           </button>
           <div className={contextMenuSeparatorClasses} />
           {contextSelectionInfo.isSingle && contextSelectionInfo.primary && (

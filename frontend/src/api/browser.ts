@@ -225,6 +225,21 @@ export type DeleteObjectEntry = {
   version_id?: string | null;
 };
 
+export type CleanupObjectVersionsPayload = {
+  prefix?: string;
+  keep_last_n?: number;
+  older_than_days?: number;
+  delete_orphan_markers?: boolean;
+};
+
+export type CleanupObjectVersionsResponse = {
+  prefix?: string | null;
+  deleted_versions: number;
+  deleted_delete_markers: number;
+  scanned_versions: number;
+  scanned_delete_markers: number;
+};
+
 export type BucketCorsRule = {
   allowed_origins: string[];
   allowed_methods: string[];
@@ -528,6 +543,19 @@ export async function deleteObjects(
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data.deleted;
+}
+
+export async function cleanupObjectVersions(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  payload: CleanupObjectVersionsPayload
+): Promise<CleanupObjectVersionsResponse> {
+  const { data } = await client.post<CleanupObjectVersionsResponse>(
+    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/versions/cleanup`,
+    payload,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
 }
 
 export async function createFolder(accountId: S3AccountSelector, bucketName: string, prefix: string): Promise<void> {
