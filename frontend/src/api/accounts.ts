@@ -21,6 +21,7 @@ export type S3Account = {
   quota_max_objects?: number | null;
   rgw_account_id?: string;
   rgw_user_uid?: string | null;
+  is_s3_user?: boolean | null;
   root_user_email?: string | null;
   root_user_id?: number | null;
   email?: string | null;
@@ -43,6 +44,7 @@ export type S3AccountSummary = {
   db_id?: number | null;
   name: string;
   rgw_account_id?: string | null;
+  is_s3_user?: boolean | null;
   user_ids?: number[] | null;
   user_links?: AccountUserLink[] | null;
   storage_endpoint_id?: number | null;

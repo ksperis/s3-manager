@@ -76,7 +76,6 @@ export default function S3AccountsPage() {
   const [importKeysForm, setImportKeysForm] = useState({
     name: "",
     email: "",
-    rgw_account_id: "",
     access_key: "",
     secret_key: "",
   });
@@ -147,6 +146,17 @@ export default function S3AccountsPage() {
   }, []);
   const isSuperAdmin = currentUser?.role === "ui_admin";
   const editingAccountId = editingS3Account?.db_id ?? null;
+  const editingEndpoint = useMemo(() => {
+    if (!editingS3Account?.storage_endpoint_id) return null;
+    return storageEndpoints.find((endpoint) => endpoint.id === editingS3Account.storage_endpoint_id) ?? null;
+  }, [editingS3Account?.storage_endpoint_id, storageEndpoints]);
+  const editingCapabilities =
+    editingS3Account?.storage_endpoint_capabilities ?? editingEndpoint?.capabilities ?? null;
+  const usageEnabled = Boolean(editingCapabilities?.usage);
+  const adminEnabled = Boolean(editingCapabilities?.admin);
+  const hasUsageIdentity = Boolean(editingS3Account?.rgw_account_id || editingS3Account?.rgw_user_uid);
+  const allowUsageStats = usageEnabled && hasUsageIdentity;
+  const allowQuotaUpdates = adminEnabled && Boolean(editingS3Account?.rgw_account_id);
   const effectivePortalSettings = portalAccountSettings?.effective ?? null;
   const adminOverride = portalAccountSettings?.admin_override ?? null;
   const portalManagerOverride = portalAccountSettings?.portal_manager_override ?? null;
@@ -185,7 +195,7 @@ export default function S3AccountsPage() {
     stats: editingUsageStats,
     loading: editingUsageLoading,
     error: editingUsageError,
-  } = useAdminAccountStats(editingAccountId, Boolean(editingAccountId && isSuperAdmin));
+  } = useAdminAccountStats(editingAccountId, Boolean(editingAccountId && isSuperAdmin && allowUsageStats));
   const toggleUserSelection = (userId: number) => {
     setUserSelections((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
@@ -198,8 +208,13 @@ export default function S3AccountsPage() {
   );
 
   const resolveS3AccountType = (
-    account: Pick<S3Account, "rgw_account_id" | "rgw_user_uid"> | (S3AccountSummary & { rgw_user_uid?: string | null })
+    account:
+      | Pick<S3Account, "rgw_account_id" | "rgw_user_uid" | "is_s3_user">
+      | (S3AccountSummary & { rgw_user_uid?: string | null })
   ): "tenant" | "rgw_user" => {
+    if (typeof account.is_s3_user === "boolean") {
+      return account.is_s3_user ? "rgw_user" : "tenant";
+    }
     if (account.rgw_account_id) {
       return "tenant";
     }
@@ -612,12 +627,17 @@ export default function S3AccountsPage() {
       const userLinksPayload = portalEnabled
         ? editForm.user_links
         : editForm.user_links.map((link) => ({ ...link, account_role: null, account_admin: true }));
-      await updateS3Account(targetId, {
-        quota_max_size_gb: editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null,
-        quota_max_size_unit: editForm.quota_max_size_gb !== "" ? editForm.quota_max_size_unit : null,
-        quota_max_objects: editForm.quota_max_objects !== "" ? Number(editForm.quota_max_objects) : null,
+      const payload = {
         user_links: userLinksPayload,
-      });
+        ...(allowQuotaUpdates
+          ? {
+              quota_max_size_gb: editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null,
+              quota_max_size_unit: editForm.quota_max_size_gb !== "" ? editForm.quota_max_size_unit : null,
+              quota_max_objects: editForm.quota_max_objects !== "" ? Number(editForm.quota_max_objects) : null,
+            }
+          : {}),
+      };
+      await updateS3Account(targetId, payload);
       setEditingS3Account(null);
       setUserSearch("");
       setShowUserPanel(false);
@@ -1009,7 +1029,7 @@ export default function S3AccountsPage() {
           <p className="mb-3 ui-body text-slate-500">
             {importMode === "tenant"
               ? "Enter RGW tenant IDs (RGWXXXXXXXXXXXXXXX) one per line. The platform will ensure a root user exists and retrieve keys."
-              : "Use this mode when the Ceph admin API is unavailable but you already have the account credentials. Tenant ID remains optional."}
+              : "Use this mode when the Ceph admin API is unavailable but you already have the account credentials."}
           </p>
           {importError && (
             <PageBanner tone="error" className="mb-3">
@@ -1060,15 +1080,6 @@ export default function S3AccountsPage() {
                   onChange={(e) => setImportKeysForm((prev) => ({ ...prev, name: e.target.value }))}
                   placeholder="Customer account name"
                   required
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">RGW tenant ID (optional)</label>
-                <input
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={importKeysForm.rgw_account_id}
-                  onChange={(e) => setImportKeysForm((prev) => ({ ...prev, rgw_account_id: e.target.value }))}
-                  placeholder="RGW00000000000000001"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -1172,7 +1183,6 @@ export default function S3AccountsPage() {
                 const name = importKeysForm.name.trim();
                 const accessKey = importKeysForm.access_key.trim();
                 const secretKey = importKeysForm.secret_key.trim();
-                const rgwAccountId = importKeysForm.rgw_account_id.trim();
                 const email = importKeysForm.email.trim();
                 if (!name || !accessKey || !secretKey) {
                   setImportError("Name, access key, and secret key are required.");
@@ -1182,7 +1192,6 @@ export default function S3AccountsPage() {
                 const payload: ImportS3AccountPayload[] = [
                   {
                     name,
-                    rgw_account_id: rgwAccountId || undefined,
                     email: email || undefined,
                     access_key: accessKey,
                     secret_key: secretKey,
@@ -1198,7 +1207,6 @@ export default function S3AccountsPage() {
                   setImportKeysForm({
                     name: "",
                     email: "",
-                    rgw_account_id: "",
                     access_key: "",
                     secret_key: "",
                   });
@@ -1279,13 +1287,18 @@ export default function S3AccountsPage() {
                 }}
                 bucketOverview={editingUsageStats?.bucket_overview}
                 loading={editingUsageLoading}
-                metricsDisabled={false}
+                metricsDisabled={!allowUsageStats}
                 errorMessage={editingUsageError}
               />
             )}
             <form onSubmit={submitEditS3Account} className="space-y-4">
               {showGeneralTab && (
                 <>
+                  {!allowQuotaUpdates && (
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Quota updates are disabled for endpoints without admin support.
+                    </p>
+                  )}
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="flex flex-col gap-1">
                       <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Max quota</label>
@@ -1296,12 +1309,14 @@ export default function S3AccountsPage() {
                           step="any"
                           className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           value={editForm.quota_max_size_gb}
+                          disabled={!allowQuotaUpdates}
                           onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
                           placeholder="Leave empty to disable"
                         />
                         <select
                           className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           value={editForm.quota_max_size_unit}
+                          disabled={!allowQuotaUpdates}
                           onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
                         >
                           <option value="MiB">MiB</option>
@@ -1317,6 +1332,7 @@ export default function S3AccountsPage() {
                         min={0}
                         className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         value={editForm.quota_max_objects}
+                        disabled={!allowQuotaUpdates}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
                         placeholder="Leave empty to disable"
                       />

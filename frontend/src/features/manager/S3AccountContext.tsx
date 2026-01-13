@@ -49,6 +49,12 @@ type SessionInfo = {
 
 function deriveS3AccountType(account: S3Account | null | undefined): string | null {
   if (!account) return null;
+  if (account.is_s3_user != null) {
+    return account.is_s3_user ? "s3_user" : "tenant";
+  }
+  if (account.id.startsWith("s3u-")) {
+    return "s3_user";
+  }
   return account.rgw_account_id ? "tenant" : "s3_user";
 }
 

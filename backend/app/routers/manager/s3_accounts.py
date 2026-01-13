@@ -124,6 +124,7 @@ def list_manager_accounts(
                 name=s3_user.name,
                 rgw_account_id=None,
                 rgw_user_uid=s3_user.rgw_user_uid,
+                is_s3_user=True,
                 email=s3_user.email,
                 quota_max_size_gb=quota_max_size_gb,
                 quota_max_objects=quota_max_objects,

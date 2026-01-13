@@ -525,8 +525,11 @@ class S3UsersService:
         if payload.email is not None:
             s3_user.email = payload.email
         if payload.storage_endpoint_id is not None:
-            endpoint = self._resolve_endpoint(payload.storage_endpoint_id)
-            s3_user.storage_endpoint_id = endpoint.id
+            if s3_user.storage_endpoint_id and payload.storage_endpoint_id != s3_user.storage_endpoint_id:
+                raise ValueError("Storage endpoint cannot be changed for an existing S3 user.")
+            if s3_user.storage_endpoint_id is None:
+                endpoint = self._resolve_endpoint(payload.storage_endpoint_id)
+                s3_user.storage_endpoint_id = endpoint.id
         if payload.user_ids is not None:
             self._ensure_links(s3_user, payload.user_ids)
 

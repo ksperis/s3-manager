@@ -592,13 +592,6 @@ class S3AccountsService:
         name = (item.name or "").strip()
         if not name:
             raise ValueError("Account name is required when importing with access_key/secret_key")
-        if item.rgw_account_id:
-            existing_by_id = (
-                self.db.query(S3Account).filter(S3Account.rgw_account_id == item.rgw_account_id).first()
-            )
-            if existing_by_id:
-                logger.debug("Skipping account %s: already imported", item.rgw_account_id)
-                return None
         existing_by_name = self.db.query(S3Account).filter(S3Account.name == name).first()
         if existing_by_name:
             logger.debug("Skipping account %s: name already imported", name)
@@ -606,7 +599,7 @@ class S3AccountsService:
 
         account = S3Account(
             name=name,
-            rgw_account_id=item.rgw_account_id or None,
+            rgw_account_id=None,
             rgw_access_key=item.access_key,
             rgw_secret_key=item.secret_key,
             rgw_user_uid=None,
@@ -840,12 +833,26 @@ class S3AccountsService:
             account.storage_endpoint_id = endpoint.id
 
         if {"quota_max_size_gb", "quota_max_objects"} & payload.model_fields_set:
-            self._apply_account_quota(
-                account,
-                payload.quota_max_size_gb,
-                payload.quota_max_objects,
-                payload.quota_max_size_unit,
-            )
+            quota_requested = payload.quota_max_size_gb is not None or payload.quota_max_objects is not None
+            if quota_requested:
+                self._apply_account_quota(
+                    account,
+                    payload.quota_max_size_gb,
+                    payload.quota_max_objects,
+                    payload.quota_max_size_unit,
+                )
+            elif account.rgw_account_id:
+                endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
+                if (
+                    StorageProvider(str(endpoint.provider)) == StorageProvider.CEPH
+                    and resolve_feature_flags(endpoint).admin_enabled
+                ):
+                    self._apply_account_quota(
+                        account,
+                        payload.quota_max_size_gb,
+                        payload.quota_max_objects,
+                        payload.quota_max_size_unit,
+                    )
 
         # Update UI user associations (non-root links only)
         if payload.user_links is not None or payload.user_ids is not None:

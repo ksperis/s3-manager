@@ -68,6 +68,7 @@ export function formatAccountLabel(
   defaultEndpointName: string | null,
   includeS3UserBadge = true
 ): string {
-  const base = `${account.name}${includeS3UserBadge && !account.rgw_account_id ? " · S3 user" : ""}`;
+  const isS3User = account.is_s3_user ?? account.id.startsWith("s3u-");
+  const base = `${account.name}${includeS3UserBadge && isS3User ? " · S3 user" : ""}`;
   return `${base}${getStorageSuffix(account, defaultEndpointId, defaultEndpointName)}`;
 }

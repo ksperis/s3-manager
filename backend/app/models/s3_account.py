@@ -19,6 +19,7 @@ class S3Account(BaseModel):
     name: str
     rgw_account_id: Optional[str] = None
     rgw_user_uid: Optional[str] = None
+    is_s3_user: bool = False
     quota_max_size_gb: Optional[float] = None
     quota_max_objects: Optional[int] = None
     root_user_email: Optional[str] = None
@@ -87,6 +88,7 @@ class S3AccountSummary(BaseModel):
     db_id: Optional[int] = None
     name: str
     rgw_account_id: Optional[str] = None
+    is_s3_user: bool = False
     user_ids: Optional[list[int]] = None
     user_links: Optional[list[AccountUserLink]] = None
     storage_endpoint_id: Optional[int] = None

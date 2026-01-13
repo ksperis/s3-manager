@@ -228,8 +228,8 @@ export default function S3UsersPage() {
   const submitEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    if (!editForm.storage_endpoint_id) {
-      setEditError("Select a Ceph endpoint.");
+    if (!editingUser.storage_endpoint_id) {
+      setEditError("Storage endpoint is missing for this user.");
       return;
     }
     setEditBusy(true);
@@ -242,7 +242,6 @@ export default function S3UsersPage() {
         quota_max_size_gb: editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null,
         quota_max_size_unit: editForm.quota_max_size_gb !== "" ? editForm.quota_max_size_unit : null,
         quota_max_objects: editForm.quota_max_objects !== "" ? Number(editForm.quota_max_objects) : null,
-        storage_endpoint_id: editForm.storage_endpoint_id ? Number(editForm.storage_endpoint_id) : undefined,
       });
       await fetchUsers();
       setEditingUser(null);
@@ -719,12 +718,12 @@ export default function S3UsersPage() {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Ceph endpoint *</label>
+              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Ceph endpoint (locked)</label>
               <select
                 className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={editForm.storage_endpoint_id}
                 onChange={(e) => setEditForm((prev) => ({ ...prev, storage_endpoint_id: e.target.value }))}
-                disabled={loadingEndpoints || cephEndpoints.length === 0}
+                disabled
                 required
               >
                 <option value="" disabled>

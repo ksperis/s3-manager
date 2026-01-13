@@ -162,8 +162,8 @@ export default function PortalSettingsPage() {
     );
   };
 
-  const handleSave = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const handleSave = async (event?: React.FormEvent | React.MouseEvent) => {
+    event?.preventDefault();
     if (!settings) return;
     setSaving(true);
     setError(null);
@@ -241,9 +241,30 @@ export default function PortalSettingsPage() {
           { label: "Portal" },
           { label: "Settings" },
         ]}
+        rightContent={
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleResetDefaults}
+              disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
+              className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:pointer-events-none disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+            >
+              {resetting ? "Resetting..." : "Reset to defaults"}
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
+              className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:pointer-events-none disabled:opacity-60"
+            >
+              {saving ? "Saving..." : "Save changes"}
+            </button>
+          </div>
+        }
       />
       <form className="space-y-4" onSubmit={handleSave}>
         {error && <PageBanner tone="error">{error}</PageBanner>}
+        {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <PortalSettingsSection title="UI" description="Portal UI switches and per-account override permissions." layout="grid">
             <PortalSettingsItem
@@ -525,24 +546,6 @@ export default function PortalSettingsPage() {
               />
             </PortalSettingsItem>
           </PortalSettingsSection>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleResetDefaults}
-            disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-            className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200"
-          >
-            {resetting ? "Resetting..." : "Reset to defaults"}
-          </button>
-          <button
-            type="submit"
-            disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-            className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
-          {savedMessage && <span className="ui-caption text-emerald-600 dark:text-emerald-300">{savedMessage}</span>}
         </div>
       </form>
     </div>
