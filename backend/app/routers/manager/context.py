@@ -18,6 +18,7 @@ router = APIRouter(prefix="/manager", tags=["manager-context"])
 
 class ManagerContext(BaseModel):
     access_mode: str
+    context_kind: str = "account"
     iam_identity: Optional[str] = None
     can_switch_access: bool = False
     manager_stats_enabled: bool = False
@@ -48,10 +49,13 @@ def get_manager_context(
     db: Session = Depends(get_db),
 ) -> ManagerContext:
     s3_user_id = getattr(account, "s3_user_id", None)
+    s3_connection_id = getattr(account, "s3_connection_id", None)
     caps = getattr(account, "_manager_capabilities", None)
     access_mode = "portal"
     if isinstance(actor, ManagerSessionPrincipal):
         access_mode = "session"
+    elif s3_connection_id is not None:
+        access_mode = "connection"
     elif s3_user_id is not None or (hasattr(account, "id") and getattr(account, "id") < 0):
         access_mode = "s3_user"
     elif caps and getattr(caps, "using_root_key", False):
@@ -74,6 +78,10 @@ def get_manager_context(
         iam_identity = actor.user_uid or actor.account_id or actor.account_name
     elif access_mode == "s3_user":
         iam_identity = getattr(account, "rgw_user_uid", None)
+    elif access_mode == "connection":
+        # For external platforms we generally do not have an IAM identity to show,
+        # so we expose the access key id as a stable identifier.
+        iam_identity = getattr(account, "rgw_access_key", None)
 
     if isinstance(actor, User) and access_mode in {"admin", "portal"}:
         account_id = getattr(account, "id", None)
@@ -89,6 +97,7 @@ def get_manager_context(
 
     return ManagerContext(
         access_mode=access_mode,
+        context_kind=("connection" if access_mode == "connection" else "account"),
         iam_identity=iam_identity,
         can_switch_access=can_switch_access,
         manager_stats_enabled=_manager_stats_enabled(account, actor),

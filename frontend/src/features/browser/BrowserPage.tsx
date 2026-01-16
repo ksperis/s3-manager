@@ -47,7 +47,7 @@ import {
   completeMultipartUpload,
   abortMultipartUpload,
 } from "../../api/browser";
-import { useS3AccountContext } from "../manager/S3AccountContext";
+import { useBrowserContext } from "./BrowserContext";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
@@ -174,7 +174,9 @@ import type {
 } from "./browserTypes";
 
 export default function BrowserPage() {
-  const { accountIdForApi, hasS3AccountContext, accounts, selectedS3AccountId, accessMode } = useS3AccountContext();
+  const { selectorForApi: accountIdForApi, hasContext: hasS3AccountContext } = useBrowserContext();
+  // /browser is credential-first: no root/portal switching in step 2.
+  const accessMode = null;
   const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
   const [bucketName, setBucketName] = useState("");
   const [showBucketMenu, setShowBucketMenu] = useState(false);
@@ -332,13 +334,7 @@ export default function BrowserPage() {
   const operationIdsRef = useRef(new Set<string>());
   const bucketNameRef = useRef(bucketName);
   const prefixRef = useRef(prefix);
-  const selectedAccount = useMemo(() => {
-    if (selectedS3AccountId) {
-      return accounts.find((account) => account.id === selectedS3AccountId) ?? null;
-    }
-    return accounts.length === 1 ? accounts[0] : null;
-  }, [accounts, selectedS3AccountId]);
-  const stsEnabled = selectedAccount?.storage_endpoint_capabilities?.sts ?? false;
+  const stsEnabled = false;
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   useEffect(() => {

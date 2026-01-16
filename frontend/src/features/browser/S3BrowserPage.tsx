@@ -29,7 +29,7 @@ import {
   PresignRequest,
   PresignedUrl,
 } from "../../api/browser";
-import { useS3AccountContext } from "../manager/S3AccountContext";
+import { useBrowserContext } from "./BrowserContext";
 
 type SelectionItem = {
   key: string;
@@ -90,7 +90,7 @@ function makeId() {
 }
 
 export default function S3BrowserPage() {
-  const { accountIdForApi, hasS3AccountContext } = useS3AccountContext();
+  const { selectorForApi: accountIdForApi, hasContext: hasS3AccountContext } = useBrowserContext();
   const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
   const [bucket, setBucket] = useState<string | null>(null);
   const [loadingBuckets, setLoadingBuckets] = useState(false);

@@ -269,14 +269,14 @@ export type StsCredentials = {
 };
 
 export async function listBrowserBuckets(accountId: S3AccountSelector): Promise<BrowserBucket[]> {
-  const { data } = await client.get<BrowserBucket[]>("/manager/browser/buckets", {
+  const { data } = await client.get<BrowserBucket[]>("/browser/buckets", {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
 }
 
 export async function fetchBrowserSettings(accountId: S3AccountSelector): Promise<BrowserSettings> {
-  const { data } = await client.get<BrowserSettings>("/manager/browser/settings", {
+  const { data } = await client.get<BrowserSettings>("/browser/settings", {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
@@ -300,7 +300,7 @@ export async function listBrowserObjects(
     accountId
   );
   const { data } = await client.get<ListBrowserObjectsResponse>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/objects`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/objects`,
     { params }
   );
   return data;
@@ -313,7 +313,7 @@ export async function getBucketCorsStatus(
 ): Promise<BucketCorsStatus> {
   const params = withS3AccountParam(origin ? { origin } : undefined, accountId);
   const { data } = await client.get<BucketCorsStatus>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/cors`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/cors`,
     { params }
   );
   return data;
@@ -325,7 +325,7 @@ export async function ensureBucketCors(
   origin: string
 ): Promise<BucketCorsStatus> {
   const { data } = await client.post<BucketCorsStatus>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/cors/ensure`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/cors/ensure`,
     { origin },
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -333,14 +333,14 @@ export async function ensureBucketCors(
 }
 
 export async function getStsStatus(accountId: S3AccountSelector): Promise<StsStatus> {
-  const { data } = await client.get<StsStatus>("/manager/browser/sts", {
+  const { data } = await client.get<StsStatus>("/browser/sts", {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
 }
 
 export async function getStsCredentials(accountId: S3AccountSelector): Promise<StsCredentials> {
-  const { data } = await client.get<StsCredentials>("/manager/browser/sts/credentials", {
+  const { data } = await client.get<StsCredentials>("/browser/sts/credentials", {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
@@ -368,7 +368,7 @@ export async function listObjectVersions(
     accountId
   );
   const { data } = await client.get<ListObjectVersionsResponse>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/versions`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/versions`,
     { params }
   );
   return data;
@@ -382,7 +382,7 @@ export async function fetchObjectMetadata(
 ): Promise<ObjectMetadata> {
   const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
   const { data } = await client.get<ObjectMetadata>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-meta`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/object-meta`,
     { params }
   );
   return data;
@@ -396,7 +396,7 @@ export async function getObjectTags(
 ): Promise<ObjectTags> {
   const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
   const { data } = await client.get<ObjectTags>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-tags`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/object-tags`,
     { params }
   );
   return data;
@@ -408,7 +408,7 @@ export async function updateObjectTags(
   payload: ObjectTags
 ): Promise<ObjectTags> {
   const { data } = await client.put<ObjectTags>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-tags`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/object-tags`,
     payload,
     {
       params: withS3AccountParam(undefined, accountId),
@@ -423,7 +423,7 @@ export async function updateObjectMetadata(
   payload: ObjectMetadataUpdate
 ): Promise<ObjectMetadata> {
   const { data } = await client.put<ObjectMetadata>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-meta`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/object-meta`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -436,7 +436,7 @@ export async function updateObjectAcl(
   payload: ObjectAcl
 ): Promise<ObjectAcl> {
   const { data } = await client.put<ObjectAcl>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-acl`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/object-acl`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -451,7 +451,7 @@ export async function getObjectLegalHold(
 ): Promise<ObjectLegalHold> {
   const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
   const { data } = await client.get<ObjectLegalHold>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-legal-hold`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/object-legal-hold`,
     { params }
   );
   return data;
@@ -463,7 +463,7 @@ export async function updateObjectLegalHold(
   payload: ObjectLegalHold
 ): Promise<ObjectLegalHold> {
   const { data } = await client.put<ObjectLegalHold>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-legal-hold`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/object-legal-hold`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -478,7 +478,7 @@ export async function getObjectRetention(
 ): Promise<ObjectRetention> {
   const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
   const { data } = await client.get<ObjectRetention>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-retention`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/object-retention`,
     { params }
   );
   return data;
@@ -490,7 +490,7 @@ export async function updateObjectRetention(
   payload: ObjectRetention
 ): Promise<ObjectRetention> {
   const { data } = await client.put<ObjectRetention>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-retention`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/object-retention`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -503,7 +503,7 @@ export async function restoreObject(
   payload: ObjectRestoreRequest
 ): Promise<void> {
   await client.post(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/object-restore`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/object-restore`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -515,7 +515,7 @@ export async function presignObject(
   payload: PresignRequest
 ): Promise<PresignedUrl> {
   const { data } = await client.post<PresignedUrl>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/presign`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/presign`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -527,7 +527,7 @@ export async function copyObject(
   bucketName: string,
   payload: CopyObjectPayload
 ): Promise<void> {
-  await client.post(`/manager/browser/buckets/${encodeURIComponent(bucketName)}/copy`, payload, {
+  await client.post(`/browser/buckets/${encodeURIComponent(bucketName)}/copy`, payload, {
     params: withS3AccountParam(undefined, accountId),
   });
 }
@@ -538,7 +538,7 @@ export async function deleteObjects(
   objects: DeleteObjectEntry[]
 ): Promise<number> {
   const { data } = await client.post<{ deleted: number }>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/delete`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/delete`,
     { objects },
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -551,7 +551,7 @@ export async function cleanupObjectVersions(
   payload: CleanupObjectVersionsPayload
 ): Promise<CleanupObjectVersionsResponse> {
   const { data } = await client.post<CleanupObjectVersionsResponse>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/versions/cleanup`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/versions/cleanup`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -560,7 +560,7 @@ export async function cleanupObjectVersions(
 
 export async function createFolder(accountId: S3AccountSelector, bucketName: string, prefix: string): Promise<void> {
   await client.post(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/folders`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/folders`,
     { prefix },
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -577,7 +577,7 @@ export async function proxyUpload(
   const form = new FormData();
   form.append("key", key);
   form.append("file", file);
-  await client.post(`/manager/browser/buckets/${encodeURIComponent(bucketName)}/proxy-upload`, form, {
+  await client.post(`/browser/buckets/${encodeURIComponent(bucketName)}/proxy-upload`, form, {
     params: withS3AccountParam(undefined, accountId),
     onUploadProgress,
     signal,
@@ -590,7 +590,7 @@ export async function proxyDownload(
   key: string,
   signal?: AbortSignal
 ): Promise<Blob> {
-  const { data } = await client.get(`/manager/browser/buckets/${encodeURIComponent(bucketName)}/proxy-download`, {
+  const { data } = await client.get(`/browser/buckets/${encodeURIComponent(bucketName)}/proxy-download`, {
     params: withS3AccountParam({ key }, accountId),
     responseType: "blob",
     signal,
@@ -604,7 +604,7 @@ export async function initiateMultipartUpload(
   payload: MultipartUploadInitRequest
 ): Promise<MultipartUploadInitResponse> {
   const { data } = await client.post<MultipartUploadInitResponse>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart/initiate`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/initiate`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -626,7 +626,7 @@ export async function listMultipartUploads(
     accountId
   );
   const { data } = await client.get<ListMultipartUploadsResponse>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/multipart`,
     { params }
   );
   return data;
@@ -648,7 +648,7 @@ export async function listParts(
     accountId
   );
   const { data } = await client.get<ListPartsResponse>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/parts`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/parts`,
     { params }
   );
   return data;
@@ -661,7 +661,7 @@ export async function presignPart(
   payload: PresignPartRequest
 ): Promise<PresignPartResponse> {
   const { data } = await client.post<PresignPartResponse>(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/presign`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/presign`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -676,7 +676,7 @@ export async function completeMultipartUpload(
   payload: CompleteMultipartUploadRequest
 ): Promise<void> {
   await client.post(
-    `/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/complete`,
+    `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/complete`,
     payload,
     {
       params: withS3AccountParam({ key }, accountId),
@@ -690,7 +690,7 @@ export async function abortMultipartUpload(
   uploadId: string,
   key: string
 ): Promise<void> {
-  await client.delete(`/manager/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}`, {
+  await client.delete(`/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}`, {
     params: withS3AccountParam({ key }, accountId),
   });
 }

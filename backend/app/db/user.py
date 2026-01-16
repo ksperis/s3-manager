@@ -60,3 +60,11 @@ class User(Base):
         back_populates="user",
         overlaps="accounts,account_links",
     )
+
+    # User-scoped S3 connections (credential-first).
+    s3_connections = relationship(
+        "S3Connection",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        overlaps="owner",
+    )
