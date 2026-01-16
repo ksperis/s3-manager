@@ -6,12 +6,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, S3User, User, UserS3Account, UserS3User, UserRole
+from app.db import S3Account, S3Connection, S3User, User, UserS3Account, UserS3Connection, UserS3User, UserRole
 from app.models.s3_account import S3Account as S3AccountSchema
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_current_account_admin
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_users_service import get_s3_users_service
+from app.utils.s3_connection_endpoint import resolve_connection_details
 from app.utils.storage_endpoint_features import features_to_capabilities, normalize_features_config
 
 router = APIRouter(prefix="/manager/accounts", tags=["manager-accounts"])
@@ -82,6 +83,21 @@ def list_manager_accounts(
         else []
     )
 
+    # User-scoped S3 connections (credential-first) used for the daily /manager S3 configuration console.
+    # These are intentionally not part of the platform account model; we expose them here only so the
+    # manager can switch context.
+    connections = (
+        db.query(S3Connection)
+        .outerjoin(UserS3Connection, UserS3Connection.s3_connection_id == S3Connection.id)
+        .filter(
+            (S3Connection.is_public.is_(True))
+            | (S3Connection.owner_user_id == user.id)
+            | (UserS3Connection.user_id == user.id)
+        )
+        .distinct()
+        .all()
+    )
+
     results: list[S3AccountSchema] = []
     for acc in accounts:
         endpoint = acc.storage_endpoint
@@ -136,6 +152,33 @@ def list_manager_accounts(
                     if endpoint
                     else None
                 ),
+            )
+        )
+
+    for conn in connections:
+        details = resolve_connection_details(conn)
+        # We reuse the S3Account schema for the manager selector by using a dedicated id prefix.
+        # Capabilities are intentionally minimal and disable platform-only features (usage/metrics/admin).
+        results.append(
+            S3AccountSchema(
+                id=f"conn-{conn.id}",
+                name=conn.name,
+                rgw_account_id=None,
+                rgw_user_uid=None,
+                is_s3_user=False,
+                email=None,
+                quota_max_size_gb=None,
+                quota_max_objects=None,
+                storage_endpoint_id=None,
+                storage_endpoint_name=(details.endpoint_name or details.provider or "Custom endpoint"),
+                storage_endpoint_url=details.endpoint_url,
+                storage_endpoint_capabilities={
+                    "admin": False,
+                    "sts": False,
+                    "usage": False,
+                    "metrics": False,
+                    "static_website": False,
+                },
             )
         )
     return results

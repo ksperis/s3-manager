@@ -42,6 +42,8 @@ function isDefaultStorageEndpoint(
   defaultEndpointId: number | null,
   defaultEndpointName: string | null
 ): boolean {
+  // User-scoped connections are always explicit targets and should display their endpoint.
+  if (account.id.startsWith("conn-")) return false;
   if (account.storage_endpoint_id == null) return true;
   if (defaultEndpointId !== null) {
     return Number(account.storage_endpoint_id) === defaultEndpointId;
@@ -69,6 +71,14 @@ export function formatAccountLabel(
   includeS3UserBadge = true
 ): string {
   const isS3User = account.is_s3_user ?? account.id.startsWith("s3u-");
-  const base = `${account.name}${includeS3UserBadge && isS3User ? " · S3 user" : ""}`;
+  const isConnection = account.id.startsWith("conn-");
+  const badge = includeS3UserBadge
+    ? isConnection
+      ? " · Connection"
+      : isS3User
+        ? " · S3 user"
+        : ""
+    : "";
+  const base = `${account.name}${badge}`;
   return `${base}${getStorageSuffix(account, defaultEndpointId, defaultEndpointName)}`;
 }

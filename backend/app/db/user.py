@@ -68,3 +68,16 @@ class User(Base):
         cascade="all, delete-orphan",
         overlaps="owner",
     )
+
+    # Connections explicitly shared with the user (UI access control).
+    shared_s3_connections = relationship(
+        "S3Connection",
+        secondary="user_s3_connections",
+        back_populates="users",
+        overlaps="s3_connections,owner,user_links,connection_links",
+    )
+    s3_connection_links = relationship(
+        "UserS3Connection",
+        back_populates="user",
+        overlaps="shared_s3_connections,s3_connections",
+    )

@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler as fastapi_http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from botocore.exceptions import ClientError
 
 from app.core.config import get_settings
 from app.core.database import engine, SessionLocal
@@ -17,6 +18,7 @@ from app.routers.admin import audit as admin_audit
 from app.routers.admin import stats as admin_stats
 from app.routers.admin import users as admin_users
 from app.routers.admin import s3_users as admin_s3_users
+from app.routers.admin import s3_connections as admin_s3_connections
 from app.routers.admin import storage_endpoints as admin_storage_endpoints
 from app.routers.admin import settings as admin_settings
 from app.routers.manager import s3_accounts as manager_accounts
@@ -75,6 +77,7 @@ app.include_router(portal.router, prefix=settings.api_v1_prefix, dependencies=[D
 app.include_router(public_settings.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_s3_accounts.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_s3_users.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_s3_connections.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_audit.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_stats.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_users.router, prefix=settings.api_v1_prefix)
@@ -150,12 +153,27 @@ app.include_router(
 @app.exception_handler(StarletteHTTPException)
 async def log_http_exceptions(request: Request, exc: StarletteHTTPException):
     if exc.status_code >= 500:
-        logger.error(
-            "Request %s %s responded with %s: %s",
-            request.method,
-            request.url.path,
-            exc.status_code,
-            exc.detail,
-            exc_info=exc.__cause__ or exc,
-        )
+        cause = exc.__cause__
+        while cause and not isinstance(cause, ClientError):
+            cause = cause.__cause__
+        error_code = None
+        if isinstance(cause, ClientError):
+            error_code = cause.response.get("Error", {}).get("Code")
+        if error_code == "AccessDenied":
+            logger.error(
+                "Request %s %s responded with %s: %s",
+                request.method,
+                request.url.path,
+                exc.status_code,
+                exc.detail,
+            )
+        else:
+            logger.error(
+                "Request %s %s responded with %s: %s",
+                request.method,
+                request.url.path,
+                exc.status_code,
+                exc.detail,
+                exc_info=exc.__cause__ or exc,
+            )
     return await fastapi_http_exception_handler(request, exc)

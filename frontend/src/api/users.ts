@@ -19,6 +19,8 @@ export type User = {
   account_links?: AccountMembership[];
   s3_users?: number[];
   s3_user_details?: { id: number; name: string }[];
+  s3_connections?: number[];
+  s3_connection_details?: { id: number; name: string }[];
   is_active?: boolean;
   is_root?: boolean;
   has_rgw_credentials?: boolean;
@@ -46,6 +48,7 @@ export type UpdateUserPayload = {
   rgw_access_key?: string | null;
   rgw_secret_key?: string | null;
   s3_user_ids?: number[] | null;
+  s3_connection_ids?: number[] | null;
 };
 
 export type PaginatedUsersResponse = PaginatedResponse<User>;

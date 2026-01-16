@@ -14,6 +14,7 @@ from app.models.portal import (
     PortalAccessKey,
     PortalAccessKeyStatusChange,
     PortalAccountSettings,
+    PortalEligibility,
     PortalIamComplianceReport,
     PortalState,
     PortalUsage,
@@ -70,6 +71,11 @@ def list_portal_accounts(
     results: list[S3AccountSchema] = []
     for acc in accounts:
         endpoint = acc.storage_endpoint
+        # Only show accounts eligible for portal workflows.
+        if not acc.rgw_account_id:
+            continue
+        if endpoint and not resolve_feature_flags(endpoint).iam_enabled:
+            continue
         root_link = (
             db.query(UserS3Account)
             .filter(
@@ -103,6 +109,18 @@ def list_portal_accounts(
     return results
 
 
+@router.get("/eligibility", response_model=PortalEligibility)
+def portal_eligibility(
+    access: AccountAccess = Depends(get_portal_account_access),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalEligibility:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    eligible, reasons = service.check_eligibility(actor, access)
+    return PortalEligibility(eligible=eligible, reasons=reasons)
+
+
 @router.get("/state", response_model=PortalState)
 def portal_state(
     access: AccountAccess = Depends(get_portal_account_access),
@@ -111,6 +129,9 @@ def portal_state(
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    eligible, reasons = service.check_eligibility(actor, access)
+    if not eligible:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="; ".join(reasons) or "Portal not available")
     try:
         return service.get_state(actor, access)
     except RuntimeError as exc:

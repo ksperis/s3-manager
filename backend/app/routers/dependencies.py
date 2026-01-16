@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import decode_token
-from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, StorageProvider, User, UserS3Account, UserS3User, UserRole
+from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, StorageProvider, User, UserS3Account, UserS3Connection, UserS3User, UserRole
 from app.models.session import ManagerSessionPrincipal
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.app_settings_service import load_app_settings
@@ -21,6 +21,7 @@ from app.services.session_service import SessionService
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.rgw import has_supervision_credentials
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
+from app.utils.s3_connection_endpoint import resolve_connection_endpoint
 from app.utils.s3_endpoint import normalize_s3_endpoint
 
 settings = get_settings()
@@ -143,22 +144,48 @@ def _build_s3_connection_account(conn: S3Connection) -> S3Account:
     account.id = -(1_000_000 + conn.id)
     account.rgw_access_key = conn.access_key_id
     account.rgw_secret_key = conn.secret_access_key
-    account.storage_endpoint_id = None
+    account.storage_endpoint_id = conn.storage_endpoint_id
     # Let resolve_s3_endpoint() pick it up.
-    account.storage_endpoint_url = conn.endpoint_url  # type: ignore[attr-defined]
+    endpoint_url, _, _, _ = resolve_connection_endpoint(conn)
+    account.storage_endpoint_url = endpoint_url  # type: ignore[attr-defined]
     account.s3_connection_id = conn.id  # type: ignore[attr-defined]
     account._session_token = conn.session_token  # type: ignore[attr-defined]
     return account
 
 
-def _resolve_connection_context(db: Session, user: User, connection_id: int) -> S3Account:
-    conn = (
-        db.query(S3Connection)
-        .filter(S3Connection.id == connection_id, S3Connection.owner_user_id == user.id)
-        .first()
-    )
+def _resolve_connection_context(db: Session, user: User, connection_id: int, *, surface: str) -> S3Account:
+    """Resolve an S3Connection context.
+
+    Access is granted if:
+    - user is the owner, or
+    - the connection is public, or
+    - the user is explicitly linked.
+    """
+    conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
+    if not conn.is_public and conn.owner_user_id != user.id:
+        link = (
+            db.query(UserS3Connection)
+            .filter(
+                UserS3Connection.user_id == user.id,
+                UserS3Connection.s3_connection_id == conn.id,
+            )
+            .first()
+        )
+        if not link:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this connection")
+
+    # Keep a minimal usage signal for UX (recently used sorting / hints).
+    try:
+        from datetime import datetime
+
+        now = datetime.utcnow()
+        conn.last_used_at = now
+        conn.updated_at = now
+        db.commit()
+    except Exception:
+        db.rollback()
     account = _build_s3_connection_account(conn)
     account.set_session_credentials(conn.access_key_id, conn.secret_access_key)
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
@@ -340,7 +367,8 @@ def get_account_context(
             requested_endpoint = None
     if isinstance(actor, User):
         if connection_id is not None:
-            return _resolve_connection_context(db, actor, connection_id)
+            surface = "browser" if request and "/browser" in str(request.url.path) else "manager"
+            return _resolve_connection_context(db, actor, connection_id, surface=surface)
         if s3_user_id is not None:
             return _resolve_s3_user_context(db, actor, s3_user_id)
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
@@ -401,6 +429,14 @@ def get_portal_account_access(
     if s3_user_id is not None or connection_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
     account, link = _resolve_user_account_link(db, user, account_id, allow_default=True)
+    # Portal is restricted to RGW accounts with IAM support.
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires a storage endpoint")
+    if not account.rgw_account_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal requires an RGW account")
+    if not resolve_feature_flags(endpoint).iam_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal is disabled for this endpoint")
     role, capabilities = _portal_membership_capabilities(link)
     if role == AccountRole.PORTAL_NONE.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")

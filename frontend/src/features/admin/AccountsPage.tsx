@@ -206,6 +206,10 @@ export default function S3AccountsPage() {
     () => storageEndpoints.filter((ep) => ep.provider === "ceph"),
     [storageEndpoints]
   );
+  const adminCephEndpoints = useMemo(
+    () => cephEndpoints.filter((ep) => Boolean(ep.capabilities?.admin)),
+    [cephEndpoints]
+  );
 
   const resolveS3AccountType = (
     account:
@@ -474,7 +478,7 @@ export default function S3AccountsPage() {
 
   useEffect(() => {
     if (storageEndpoints.length === 0) return;
-    const defaultCeph = cephEndpoints.find((ep) => ep.is_default) || cephEndpoints[0];
+    const defaultCeph = adminCephEndpoints.find((ep) => ep.is_default) || adminCephEndpoints[0];
     const firstCephId = defaultCeph ? String(defaultCeph.id) : "";
     const defaultAny = storageEndpoints.find((ep) => ep.is_default) || storageEndpoints[0];
     const firstAnyId = defaultAny ? String(defaultAny.id) : "";
@@ -485,7 +489,7 @@ export default function S3AccountsPage() {
     }));
     setImportTenantEndpointId((prev) => prev || firstCephId);
     setImportKeysEndpointId((prev) => prev || firstAnyId);
-  }, [storageEndpoints, cephEndpoints]);
+  }, [storageEndpoints, adminCephEndpoints]);
 
   const loadAccountDetail = useCallback(
     async (account: S3AccountSummary, options?: { includeUsage?: boolean }) => {
@@ -515,6 +519,10 @@ export default function S3AccountsPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!canProvisionAccounts) {
+      setActionError("Admin is disabled for all Ceph endpoints.");
+      return;
+    }
     if (!form.name) {
       setActionError("S3Account name is required");
       return;
@@ -581,10 +589,12 @@ export default function S3AccountsPage() {
       (accountToDelete.rgw_topic_count ?? 0) > 0);
   const deleteModalHasResources = deleteModalUnknownResources || deleteModalHasLinkedResources;
   const deleteModalBusy = accountToDelete ? deletingS3AccountId === accountDbId(accountToDelete) : false;
+  const canProvisionAccounts = adminCephEndpoints.length > 0;
+  const canImportTenants = adminCephEndpoints.length > 0;
   const importDisabled =
     importBusy ||
     (importMode === "tenant"
-      ? !importText.trim() || !importTenantEndpointId
+      ? !canImportTenants || !importText.trim() || !importTenantEndpointId
       : !importKeysForm.name.trim() || !importKeysForm.access_key.trim() || !importKeysForm.secret_key.trim() || !importKeysEndpointId);
 
   const startEditS3Account = async (account: S3AccountSummary) => {
@@ -770,30 +780,39 @@ export default function S3AccountsPage() {
         title="Accounts"
         description="Provision Ceph RGW accounts (tenants), quotas, and root users."
         breadcrumbs={[{ label: "Admin" }, { label: "Accounts" }]}
-        actions={
-          isSuperAdmin
-            ? [
-                {
-                  label: "Import",
-                  onClick: () => {
-                    setImportText("");
-                    setImportError(null);
-                    setImportMessage(null);
-                    setImportMode("tenant");
-                    setImportKeysForm({
-                      name: "",
-                      email: "",
-                      rgw_account_id: "",
-                      access_key: "",
-                      secret_key: "",
-                    });
-                    setShowImportModal(true);
-                  },
-                  variant: "ghost",
-                },
-                { label: "Create account", onClick: () => setShowCreateModal(true) },
-              ]
-            : []
+        rightContent={
+          isSuperAdmin ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setImportText("");
+                  setImportError(null);
+                  setImportMessage(null);
+                  setImportMode("tenant");
+                  setImportKeysForm({
+                    name: "",
+                    email: "",
+                    rgw_account_id: "",
+                    access_key: "",
+                    secret_key: "",
+                  });
+                  setShowImportModal(true);
+                }}
+                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+              >
+                Import
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
+                disabled={!canProvisionAccounts}
+                className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Create account
+              </button>
+            </div>
+          ) : null
         }
       />
 
@@ -802,6 +821,11 @@ export default function S3AccountsPage() {
           <p className="mb-3 ui-body text-slate-500">
             Super-admin only. Provision an RGW account (server-side generated <code>account_id</code>) with optional quotas.
           </p>
+          {!canProvisionAccounts && (
+            <PageBanner tone="warning" className="mb-3">
+              Admin is disabled for all Ceph endpoints. Enable admin features before provisioning accounts.
+            </PageBanner>
+          )}
           {actionError && (
             <PageBanner tone="error" className="mb-3">
               {actionError}
@@ -839,12 +863,12 @@ export default function S3AccountsPage() {
                 value={form.storage_endpoint_id}
                 onChange={(e) => setForm((f) => ({ ...f, storage_endpoint_id: e.target.value }))}
                 required
-                disabled={loadingEndpoints || cephEndpoints.length === 0}
+                disabled={loadingEndpoints || adminCephEndpoints.length === 0}
               >
                 <option value="" disabled>
-                  {loadingEndpoints ? "Loading..." : "No Ceph endpoint"}
+                  {loadingEndpoints ? "Loading..." : "No admin-enabled Ceph endpoint"}
                 </option>
-                {cephEndpoints.map((ep) => (
+                {adminCephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
                     {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
@@ -895,7 +919,7 @@ export default function S3AccountsPage() {
               </button>
               <button
                 type="submit"
-                disabled={creating}
+                disabled={creating || !canProvisionAccounts}
                 className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
               >
                 {creating ? "Creating..." : "Create account"}
@@ -1031,6 +1055,11 @@ export default function S3AccountsPage() {
               ? "Enter RGW tenant IDs (RGWXXXXXXXXXXXXXXX) one per line. The platform will ensure a root user exists and retrieve keys."
               : "Use this mode when the Ceph admin API is unavailable but you already have the account credentials."}
           </p>
+          {importMode === "tenant" && !canImportTenants && (
+            <PageBanner tone="warning" className="mb-3">
+              Admin is disabled for all Ceph endpoints. Tenant import requires admin access.
+            </PageBanner>
+          )}
           {importError && (
             <PageBanner tone="error" className="mb-3">
               {importError}
@@ -1056,13 +1085,13 @@ export default function S3AccountsPage() {
                   className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   value={importTenantEndpointId}
                   onChange={(e) => setImportTenantEndpointId(e.target.value)}
-                  disabled={cephEndpoints.length === 0}
+                  disabled={adminCephEndpoints.length === 0}
                   required
                 >
                   <option value="" disabled>
-                    {cephEndpoints.length === 0 ? "No Ceph endpoint" : "Select"}
+                    {adminCephEndpoints.length === 0 ? "No admin-enabled Ceph endpoint" : "Select"}
                   </option>
-                  {cephEndpoints.map((ep) => (
+                  {adminCephEndpoints.map((ep) => (
                     <option key={ep.id} value={ep.id}>
                       {ep.name} {ep.is_default ? "(default)" : ""}
                     </option>

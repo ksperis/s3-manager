@@ -7,6 +7,8 @@ import client from "./client";
 export type S3Connection = {
   id: number;
   name: string;
+  storage_endpoint_id?: number | null;
+  is_public?: boolean | null;
   endpoint_url: string;
   region?: string | null;
   provider_hint?: string | null;

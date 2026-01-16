@@ -190,16 +190,20 @@ export default function S3UsersPage() {
     [availablePortalUsers]
   );
   const cephEndpoints = useMemo(() => storageEndpoints.filter((ep) => ep.provider === "ceph"), [storageEndpoints]);
+  const adminCephEndpoints = useMemo(
+    () => cephEndpoints.filter((ep) => Boolean(ep.capabilities?.admin)),
+    [cephEndpoints]
+  );
 
   useEffect(() => {
-    const defaultCeph = cephEndpoints.find((ep) => ep.is_default) || cephEndpoints[0];
+    const defaultCeph = adminCephEndpoints.find((ep) => ep.is_default) || adminCephEndpoints[0];
     const firstCephId = defaultCeph ? String(defaultCeph.id) : "";
     setCreateForm((prev) => ({ ...prev, storage_endpoint_id: prev.storage_endpoint_id || firstCephId }));
     setImportEndpointId((prev) => prev || firstCephId);
     if (!editForm.storage_endpoint_id && firstCephId) {
       setEditForm((prev) => ({ ...prev, storage_endpoint_id: firstCephId }));
     }
-  }, [cephEndpoints, editForm.storage_endpoint_id]);
+  }, [adminCephEndpoints, editForm.storage_endpoint_id]);
 
   const toggleEditPortalUserSelection = (userId: number) => {
     setEditPortalUserSelections((prev) =>
@@ -258,6 +262,10 @@ export default function S3UsersPage() {
 
   const submitCreate = async (e: FormEvent) => {
     e.preventDefault();
+    if (!canProvisionUsers) {
+      setCreateError("Admin is disabled for all Ceph endpoints.");
+      return;
+    }
     if (!createForm.name.trim()) {
       setCreateError("Name is required");
       return;
@@ -297,6 +305,11 @@ export default function S3UsersPage() {
   };
 
   const submitImport = async () => {
+    if (!canProvisionUsers) {
+      setImportError("Admin is disabled for all Ceph endpoints.");
+      setImportMessage(null);
+      return;
+    }
     const entries = importText
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -357,6 +370,7 @@ export default function S3UsersPage() {
   };
 
   const deleteModalBusy = userToDelete ? deleteBusyId === userToDelete.id : false;
+  const canProvisionUsers = adminCephEndpoints.length > 0;
 
   const confirmDeleteUser = async () => {
     if (!userToDelete) return;
@@ -382,10 +396,26 @@ export default function S3UsersPage() {
         title="Users"
         description="Persist RGW standalone users for direct manager access (no IAM)."
         breadcrumbs={[{ label: "Admin" }, { label: "Users" }]}
-        actions={[
-          { label: "Import", onClick: () => setShowImportModal(true), variant: "ghost" },
-          { label: "Create user", onClick: () => setShowCreateModal(true) },
-        ]}
+        rightContent={
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              disabled={!canProvisionUsers}
+              className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+            >
+              Import
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              disabled={!canProvisionUsers}
+              className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Create user
+            </button>
+          </div>
+        }
       />
 
       {error && <PageBanner tone="warning">{error}</PageBanner>}
@@ -495,6 +525,11 @@ export default function S3UsersPage() {
 
       {showCreateModal && (
         <Modal title="Create user" onClose={() => setShowCreateModal(false)}>
+          {!canProvisionUsers && (
+            <PageBanner tone="warning" className="mb-3">
+              Admin is disabled for all Ceph endpoints. Enable admin features before provisioning users.
+            </PageBanner>
+          )}
           {createError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {createError}
@@ -525,13 +560,13 @@ export default function S3UsersPage() {
                 className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={createForm.storage_endpoint_id}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, storage_endpoint_id: e.target.value }))}
-                disabled={loadingEndpoints || cephEndpoints.length === 0}
+                disabled={loadingEndpoints || adminCephEndpoints.length === 0}
                 required
               >
                 <option value="" disabled>
-                  {loadingEndpoints ? "Loading..." : cephEndpoints.length === 0 ? "No Ceph endpoint" : "Select"}
+                  {loadingEndpoints ? "Loading..." : adminCephEndpoints.length === 0 ? "No admin-enabled Ceph endpoint" : "Select"}
                 </option>
-                {cephEndpoints.map((ep) => (
+                {adminCephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
                     {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
@@ -598,7 +633,7 @@ export default function S3UsersPage() {
               </button>
               <button
                 type="submit"
-                disabled={creating}
+                disabled={creating || !canProvisionUsers}
                 className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
               >
                 {creating ? "Creating..." : "Create user"}
@@ -611,6 +646,11 @@ export default function S3UsersPage() {
       {showImportModal && (
         <Modal title="Import users" onClose={() => setShowImportModal(false)}>
           <p className="mb-3 ui-body text-slate-500">Enter RGW user IDs, one per line. The platform will fetch or generate keys.</p>
+          {!canProvisionUsers && (
+            <PageBanner tone="warning" className="mb-3">
+              Admin is disabled for all Ceph endpoints. User import requires admin access.
+            </PageBanner>
+          )}
           {importError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {importError}
@@ -634,13 +674,13 @@ export default function S3UsersPage() {
               className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               value={importEndpointId}
               onChange={(e) => setImportEndpointId(e.target.value)}
-              disabled={loadingEndpoints || cephEndpoints.length === 0}
+              disabled={loadingEndpoints || adminCephEndpoints.length === 0}
               required
             >
               <option value="" disabled>
-                {loadingEndpoints ? "Loading..." : cephEndpoints.length === 0 ? "No Ceph endpoint" : "Select"}
+                {loadingEndpoints ? "Loading..." : adminCephEndpoints.length === 0 ? "No admin-enabled Ceph endpoint" : "Select"}
               </option>
-              {cephEndpoints.map((ep) => (
+              {adminCephEndpoints.map((ep) => (
                 <option key={ep.id} value={ep.id}>
                   {ep.name} {ep.is_default ? "(default)" : ""}
                 </option>
@@ -657,7 +697,7 @@ export default function S3UsersPage() {
             </button>
             <button
               type="button"
-              disabled={importBusy || !importText.trim() || !importEndpointId}
+              disabled={importBusy || !canProvisionUsers || !importText.trim() || !importEndpointId}
               onClick={submitImport}
               className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
             >

@@ -14,6 +14,7 @@ import AdminDashboard from "./features/admin/AdminDashboard";
 import AdminMetricsPage from "./features/admin/AdminMetricsPage";
 import S3UsersPage from "./features/admin/S3UsersPage";
 import S3UserKeysPage from "./features/admin/S3UserKeysPage";
+import S3ConnectionsPage from "./features/admin/S3ConnectionsPage";
 import GeneralSettingsPage from "./features/admin/GeneralSettingsPage";
 import ManagerSettingsPage from "./features/admin/ManagerSettingsPage";
 import AdminPortalSettingsPage from "./features/admin/PortalSettingsPage";
@@ -86,8 +87,9 @@ const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean) => {
       label: "Storage",
       links: [
         { to: "/admin/storage-endpoints", label: "Endpoints" },
-        { to: "/admin/s3-accounts", label: "Accounts" },
-        { to: "/admin/s3-users", label: "Users" },
+        { to: "/admin/s3-accounts", label: "Accounts (RGW)" },
+        { to: "/admin/s3-users", label: "Users (RGW)" },
+        { to: "/admin/s3-connections", label: "Connections" },
       ],
     },
     {
@@ -186,6 +188,7 @@ export default function AppRouter() {
               <Route path="s3-accounts" element={<S3AccountsPage />} />
               <Route path="accounts" element={<Navigate to="/admin/s3-accounts" replace />} />
               <Route path="s3-users" element={<S3UsersPage />} />
+              <Route path="s3-connections" element={<S3ConnectionsPage />} />
               <Route path="s3-users/:userId/keys" element={<S3UserKeysPage />} />
               <Route path="storage-endpoints" element={<StorageEndpointsPage />} />
               <Route path="users" element={<UsersPage />} />

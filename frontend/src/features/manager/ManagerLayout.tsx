@@ -52,6 +52,7 @@ function ManagerShell() {
     accessMode,
     setAccessMode,
     canSwitchAccess,
+    managerStatsEnabled,
   } = useS3AccountContext();
   const navigate = useNavigate();
   const selected = accounts.find((a) => a.id === selectedS3AccountId);
@@ -65,16 +66,19 @@ function ManagerShell() {
     can_view_traffic: true,
   };
   const isS3User = selectedS3AccountType === "s3_user";
+  const isConnection = selectedS3AccountType === "connection";
   const canManageBuckets = capabilities.can_manage_buckets !== false;
-  const canManageIam = !isS3User && capabilities.can_manage_iam !== false;
+  const canManageIam = !isS3User && !isConnection && capabilities.can_manage_iam !== false;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
   const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
   const metricsFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
-  const canViewMetricsMenu = usageFeatureEnabled || metricsFeatureEnabled;
+  const canViewMetricsMenu = Boolean(managerStatsEnabled) && (usageFeatureEnabled || metricsFeatureEnabled);
   const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
   const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
   const identityLabel = iamIdentity
-    ? `Identité IAM: ${iamIdentity}`
+    ? accessMode === "connection"
+      ? `Identité S3: ${iamIdentity}`
+      : `Identité IAM: ${iamIdentity}`
     : selectedS3AccountType === "s3_user" && sessionS3AccountName
       ? `Compte utilisateur S3: ${sessionS3AccountName}`
       : "Identité non disponible";
@@ -96,7 +100,7 @@ function ManagerShell() {
   const inlineAction = (
     <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-4">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Account</span>
+        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Context</span>
         {requiresS3AccountSelection ? (
           showSelector ? (
             <div className="relative">
@@ -204,10 +208,13 @@ function ManagerShell() {
         { to: "/manager/buckets", label: "Buckets" },
       ],
     });
-    navSections.push({
-      label: "Events",
-      links: [{ to: "/manager/topics", label: "SNS Topics" }],
-    });
+    // Events (SNS Topics) are currently a Ceph RGW oriented feature.
+    if (!isS3User && !isConnection) {
+      navSections.push({
+        label: "Events",
+        links: [{ to: "/manager/topics", label: "SNS Topics" }],
+      });
+    }
   }
 
   if (canManageIam) {

@@ -19,6 +19,7 @@ class StorageEndpointFeatures(BaseModel):
     usage: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     metrics: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     static_website: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
+    iam: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
 
 
 class StorageEndpointBase(BaseModel):

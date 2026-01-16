@@ -8,7 +8,17 @@ from typing import Dict, Iterable, Optional, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db import S3Account, S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account, UserS3User
+from app.db import (
+    S3Account,
+    S3Connection,
+    S3User,
+    StorageEndpoint,
+    StorageProvider,
+    User,
+    UserRole,
+    UserS3Account,
+    UserS3User,
+)
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import (
     TrafficWindow,
@@ -93,6 +103,7 @@ class AdminMetricsService:
             .scalar()
             or 0
         )
+        total_connections = db.query(func.count(S3Connection.id)).scalar() or 0
         return {
             "total_accounts": total_accounts,
             "total_users": total_managers,
@@ -107,6 +118,7 @@ class AdminMetricsService:
             "total_endpoints": total_ceph_endpoints + total_other_endpoints,
             "total_ceph_endpoints": total_ceph_endpoints,
             "total_other_endpoints": total_other_endpoints,
+            "total_connections": total_connections,
         }
 
     def storage(self) -> dict:

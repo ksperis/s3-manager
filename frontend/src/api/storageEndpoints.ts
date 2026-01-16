@@ -17,6 +17,7 @@ export type StorageEndpointFeatures = {
   usage: StorageEndpointFeature;
   metrics: StorageEndpointFeature;
   static_website: StorageEndpointFeature;
+  iam: StorageEndpointFeature;
 };
 
 export type StorageEndpoint = {

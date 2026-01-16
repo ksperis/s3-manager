@@ -38,6 +38,12 @@ export default function AdminDashboard() {
               to: "/admin/users",
             },
             {
+              label: "Endpoints",
+              value: summary.total_endpoints ?? 0,
+              hint: `Ceph: ${summary.total_ceph_endpoints ?? 0} | Other: ${summary.total_other_endpoints ?? 0}`,
+              to: "/admin/storage-endpoints",
+            },
+            {
               label: "Accounts",
               value: summary.total_accounts,
               hint: `Assigned: ${summary.assigned_accounts ?? 0} | Unassigned: ${summary.unassigned_accounts ?? 0}`,
@@ -50,10 +56,10 @@ export default function AdminDashboard() {
               to: "/admin/s3-users",
             },
             {
-              label: "Endpoints",
-              value: summary.total_endpoints ?? 0,
-              hint: `Ceph: ${summary.total_ceph_endpoints ?? 0} | Other: ${summary.total_other_endpoints ?? 0}`,
-              to: "/admin/storage-endpoints",
+              label: "Connections",
+              value: summary.total_connections ?? 0,
+              hint: "Credentialed access entries",
+              to: "/admin/s3-connections",
             },
           ]
         : [],

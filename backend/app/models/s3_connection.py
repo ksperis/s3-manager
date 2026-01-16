@@ -13,6 +13,8 @@ class S3Connection(BaseModel):
     id: int
     name: str
     provider_hint: Optional[str] = None
+    storage_endpoint_id: Optional[int] = None
+    is_public: bool = False
     endpoint_url: str
     region: Optional[str] = None
     access_key_id: str
@@ -27,7 +29,9 @@ class S3Connection(BaseModel):
 class S3ConnectionCreate(BaseModel):
     name: str
     provider_hint: Optional[str] = None
-    endpoint_url: str
+    storage_endpoint_id: Optional[int] = None
+    is_public: Optional[bool] = False
+    endpoint_url: Optional[str] = None
     region: Optional[str] = None
     access_key_id: str
     secret_access_key: str
@@ -38,12 +42,24 @@ class S3ConnectionCreate(BaseModel):
 class S3ConnectionUpdate(BaseModel):
     name: Optional[str] = None
     provider_hint: Optional[str] = None
+    storage_endpoint_id: Optional[int] = None
+    is_public: Optional[bool] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
     force_path_style: Optional[bool] = None
     verify_tls: Optional[bool] = None
+
+
+class S3ConnectionCredentialsUpdate(BaseModel):
+    """Write-only credential rotation payload.
+
+    The API never returns secrets back to the client.
+    """
+
+    access_key_id: str
+    secret_access_key: str
 
 
 class PaginatedS3ConnectionsResponse(PaginatedResponse):

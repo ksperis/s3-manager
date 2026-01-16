@@ -610,6 +610,38 @@ class PortalService:
         access_key, secret_key = self._account_credentials(account)
         return get_iam_service(access_key, secret_key, endpoint=resolve_s3_endpoint(account))
 
+    def check_eligibility(self, user: User, access: "AccountAccess") -> tuple[bool, list[str]]:
+        """Return whether the portal can be used for this account context.
+
+        Portal is intended for RGW accounts exposing IAM semantics. We keep this
+        check conservative and side-effect free (no user creation).
+        """
+        reasons: list[str] = []
+        account = access.account
+        endpoint = getattr(account, "storage_endpoint", None)
+        if endpoint is None:
+            reasons.append("Storage endpoint missing")
+            return False, reasons
+
+        flags = resolve_feature_flags(endpoint)
+        if not flags.iam_enabled:
+            reasons.append("IAM is not enabled for this endpoint")
+
+        if not account.rgw_account_id:
+            reasons.append("Portal requires an RGW account")
+
+        if reasons:
+            return False, reasons
+
+        try:
+            iam_service = self._get_iam_service(account)
+            # Probe a minimal IAM call without enumerating all resources.
+            iam_service.client.list_users(MaxItems=1)
+        except Exception:
+            reasons.append("IAM API is not reachable or not authorized")
+
+        return (len(reasons) == 0), reasons
+
     def _generate_username(self, account: S3Account, user: User) -> str:
         base = f"portal-{account.id}-{user.id}"
         return base[:63]

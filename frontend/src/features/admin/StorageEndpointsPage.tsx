@@ -29,7 +29,7 @@ type FormState = {
   features: FeaturesState;
 };
 
-type FeatureKey = "admin" | "sts" | "usage" | "metrics" | "static_website";
+type FeatureKey = "admin" | "sts" | "usage" | "metrics" | "static_website" | "iam";
 
 type FeatureState = {
   enabled: boolean;
@@ -38,7 +38,7 @@ type FeatureState = {
 
 type FeaturesState = Record<FeatureKey, FeatureState>;
 
-const FEATURE_KEYS: FeatureKey[] = ["admin", "sts", "usage", "metrics", "static_website"];
+const FEATURE_KEYS: FeatureKey[] = ["admin", "sts", "usage", "metrics", "static_website", "iam"];
 
 function createEmptyFeatures(): FeaturesState {
   return {
@@ -47,6 +47,28 @@ function createEmptyFeatures(): FeaturesState {
     usage: { enabled: false, endpoint: "" },
     metrics: { enabled: false, endpoint: "" },
     static_website: { enabled: false, endpoint: "" },
+    iam: { enabled: false, endpoint: "" },
+  };
+}
+
+function defaultFeaturesForProvider(provider: StorageProvider): FeaturesState {
+  const base = createEmptyFeatures();
+  if (provider === "ceph") {
+    return {
+      ...base,
+      admin: { ...base.admin, enabled: true },
+      usage: { ...base.usage, enabled: true },
+      metrics: { ...base.metrics, enabled: true },
+      sts: { ...base.sts, enabled: true },
+      static_website: { ...base.static_website, enabled: true },
+      iam: { ...base.iam, enabled: true },
+    };
+  }
+  return {
+    ...base,
+    sts: { ...base.sts, enabled: true },
+    static_website: { ...base.static_website, enabled: true },
+    iam: { ...base.iam, enabled: true },
   };
 }
 
@@ -57,6 +79,7 @@ function applyFeatureConstraints(features: FeaturesState, provider: StorageProvi
     usage: { ...features.usage },
     metrics: { ...features.metrics },
     static_website: { ...features.static_website },
+    iam: { ...features.iam },
   };
   if (provider !== "ceph") {
     next.admin.enabled = false;
@@ -65,8 +88,6 @@ function applyFeatureConstraints(features: FeaturesState, provider: StorageProvi
   }
   if (!next.admin.enabled) {
     next.admin.endpoint = "";
-    next.usage.enabled = false;
-    next.metrics.enabled = false;
   }
   if (!next.sts.enabled) {
     next.sts.endpoint = "";
@@ -88,7 +109,7 @@ function buildFeaturesYaml(features: FeaturesState): string {
 }
 
 function createEmptyForm(): FormState {
-  const features = createEmptyFeatures();
+  const features = defaultFeaturesForProvider("ceph");
   return {
     name: "",
     endpoint_url: "",
@@ -179,6 +200,10 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
           enabled: Boolean(endpoint.features.static_website?.enabled),
           endpoint: "",
         },
+        iam: {
+          enabled: Boolean(endpoint.features.iam?.enabled),
+          endpoint: "",
+        },
       },
       provider
     );
@@ -189,6 +214,7 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
     usage: { enabled: resolveCapability(endpoint, "usage"), endpoint: "" },
     metrics: { enabled: resolveCapability(endpoint, "metrics"), endpoint: "" },
     static_website: { enabled: resolveCapability(endpoint, "static_website"), endpoint: "" },
+    iam: { enabled: resolveCapability(endpoint, "iam"), endpoint: "" },
   };
   return applyFeatureConstraints(fallback, provider);
 }
@@ -252,7 +278,8 @@ export default function StorageEndpointsPage() {
 
   const handleProviderChange = (provider: StorageProvider) => {
     setForm((prev) => {
-      const constrained = applyFeatureConstraints(prev.features, provider);
+      const defaultFeatures = defaultFeaturesForProvider(provider);
+      const constrained = applyFeatureConstraints(defaultFeatures, provider);
       return {
         ...prev,
         provider,
@@ -334,6 +361,8 @@ export default function StorageEndpointsPage() {
     const trimmedSupervisionSecret = form.supervision_secret_key.trim();
     const constrainedFeatures = applyFeatureConstraints(form.features, form.provider);
     const featuresConfig = buildFeaturesYaml(constrainedFeatures);
+    const adminEnabled = constrainedFeatures.admin.enabled;
+    const usageMetricsEnabled = constrainedFeatures.usage.enabled || constrainedFeatures.metrics.enabled;
 
     if (!trimmedName) {
       setFormError("Storage name is required.");
@@ -353,7 +382,14 @@ export default function StorageEndpointsPage() {
     };
 
     if (form.provider === "ceph") {
-      const adminEnabled = constrainedFeatures.admin.enabled;
+      if (adminEnabled && !trimmedAdminAccess) {
+        setFormError("Admin access key is required when admin is enabled.");
+        return null;
+      }
+      if (usageMetricsEnabled && !trimmedSupervisionAccess) {
+        setFormError("Supervision access key is required when usage or metrics is enabled.");
+        return null;
+      }
       if (editingId) {
         if (trimmedAdminAccess) {
           payload.admin_access_key = trimmedAdminAccess;
@@ -376,6 +412,10 @@ export default function StorageEndpointsPage() {
         payload.supervision_secret_key = trimmedSupervisionSecret || null;
         if (adminEnabled && (!payload.admin_access_key || !payload.admin_secret_key)) {
           setFormError("Admin credentials are required for a Ceph endpoint.");
+          return null;
+        }
+        if (usageMetricsEnabled && (!payload.supervision_access_key || !payload.supervision_secret_key)) {
+          setFormError("Supervision credentials are required for usage/metrics on a Ceph endpoint.");
           return null;
         }
       }
@@ -416,6 +456,7 @@ export default function StorageEndpointsPage() {
     const usageEnabled = features.usage.enabled;
     const metricsEnabled = features.metrics.enabled;
     const staticWebsiteEnabled = features.static_website.enabled;
+    const iamEnabled = features.iam.enabled;
     const settingDefault = defaultBusyId === endpoint.id;
     const adminEndpointOverride = features.admin.endpoint.trim();
     const stsEndpointOverride = features.sts.endpoint.trim();
@@ -545,15 +586,6 @@ export default function StorageEndpointsPage() {
               </span>
               <span
                 className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
-                  stsEnabled
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                }`}
-              >
-                STS {stsEnabled ? "on" : "off"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
                   usageEnabled
                     ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
                     : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
@@ -572,12 +604,30 @@ export default function StorageEndpointsPage() {
               </span>
               <span
                 className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  stsEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                STS {stsEnabled ? "on" : "off"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
                   staticWebsiteEnabled
                     ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
                     : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
                 }`}
               >
                 Static website {staticWebsiteEnabled ? "on" : "off"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  iamEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                IAM {iamEnabled ? "on" : "off"}
               </span>
             </div>
           </div>
@@ -695,7 +745,7 @@ export default function StorageEndpointsPage() {
                         onChange={(e) => setForm((prev) => ({ ...prev, admin_access_key: e.target.value }))}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="Access key admin"
-                        required={!editingId && form.features.admin.enabled}
+                        required={form.features.admin.enabled}
                       />
                       <input
                         type="password"
@@ -719,6 +769,7 @@ export default function StorageEndpointsPage() {
                         onChange={(e) => setForm((prev) => ({ ...prev, supervision_access_key: e.target.value }))}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="Access key supervision"
+                        required={form.features.usage.enabled || form.features.metrics.enabled}
                       />
                       <input
                         type="password"
@@ -726,6 +777,7 @@ export default function StorageEndpointsPage() {
                         onChange={(e) => setForm((prev) => ({ ...prev, supervision_secret_key: e.target.value }))}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                         placeholder="Secret key supervision"
+                        required={!editingId && (form.features.usage.enabled || form.features.metrics.enabled)}
                       />
                     </div>
                     <p className="ui-caption font-normal text-slate-500 dark:text-slate-400">
@@ -739,84 +791,110 @@ export default function StorageEndpointsPage() {
             <div className="space-y-4">
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                    Admin enabled
-                    <input
-                      type="checkbox"
-                      checked={form.features.admin.enabled}
-                      onChange={(e) =>
-                        updateFeatures((current) => ({
-                          ...current,
-                          admin: { ...current.admin, enabled: e.target.checked },
-                        }))
-                      }
+                <div className="mt-3 space-y-4">
+                  {cephMode && (
+                    <div className="space-y-2">
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ceph</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        Admin enabled
+                        <input
+                          type="checkbox"
+                          checked={form.features.admin.enabled}
+                          onChange={(e) =>
+                            updateFeatures((current) => ({
+                              ...current,
+                              admin: { ...current.admin, enabled: e.target.checked },
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
+                          disabled={!cephMode}
+                        />
+                      </label>
+                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        Usage enabled
+                        <input
+                          type="checkbox"
+                          checked={form.features.usage.enabled}
+                          onChange={(e) =>
+                            updateFeatures((current) => ({
+                              ...current,
+                              usage: { ...current.usage, enabled: e.target.checked },
+                            }))
+                          }
                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
                       disabled={!cephMode}
                     />
                   </label>
                   <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                    STS enabled
-                    <input
-                      type="checkbox"
-                      checked={form.features.sts.enabled}
-                      onChange={(e) =>
-                        updateFeatures((current) => ({
-                          ...current,
-                          sts: { ...current.sts, enabled: e.target.checked },
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                    />
-                  </label>
-                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                    Usage enabled
-                    <input
-                      type="checkbox"
-                      checked={form.features.usage.enabled}
-                      onChange={(e) =>
-                        updateFeatures((current) => ({
-                          ...current,
-                          usage: { ...current.usage, enabled: e.target.checked },
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
-                      disabled={!cephMode || !form.features.admin.enabled}
-                    />
-                  </label>
-                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                     Metrics enabled
-                    <input
-                      type="checkbox"
-                      checked={form.features.metrics.enabled}
-                      onChange={(e) =>
-                        updateFeatures((current) => ({
-                          ...current,
-                          metrics: { ...current.metrics, enabled: e.target.checked },
-                        }))
-                      }
+                        <input
+                          type="checkbox"
+                          checked={form.features.metrics.enabled}
+                          onChange={(e) =>
+                            updateFeatures((current) => ({
+                              ...current,
+                              metrics: { ...current.metrics, enabled: e.target.checked },
+                            }))
+                          }
                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
-                      disabled={!cephMode || !form.features.admin.enabled}
-                    />
-                  </label>
-                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                    Static website enabled
-                    <input
-                      type="checkbox"
-                      checked={form.features.static_website.enabled}
-                      onChange={(e) =>
-                        updateFeatures((current) => ({
-                          ...current,
-                          static_website: { ...current.static_website, enabled: e.target.checked },
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      disabled={!cephMode}
                     />
                   </label>
                 </div>
-                <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                  Admin, usage, and metrics require a Ceph endpoint. Usage/metrics require admin.
-                </p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Admin, usage, and metrics require a Ceph endpoint. Usage/metrics require supervision credentials.
+                    </p>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">S3</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        STS enabled
+                        <input
+                          type="checkbox"
+                          checked={form.features.sts.enabled}
+                          onChange={(e) =>
+                            updateFeatures((current) => ({
+                              ...current,
+                              sts: { ...current.sts, enabled: e.target.checked },
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        Static website enabled
+                        <input
+                          type="checkbox"
+                          checked={form.features.static_website.enabled}
+                          onChange={(e) =>
+                            updateFeatures((current) => ({
+                              ...current,
+                              static_website: { ...current.static_website, enabled: e.target.checked },
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        IAM enabled
+                        <input
+                          type="checkbox"
+                          checked={form.features.iam.enabled}
+                          onChange={(e) =>
+                            updateFeatures((current) => ({
+                              ...current,
+                              iam: { ...current.iam, enabled: e.target.checked },
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
                     Admin endpoint override (optional)

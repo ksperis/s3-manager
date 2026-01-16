@@ -36,22 +36,25 @@ export default function ManagerDashboard() {
     hasS3AccountContext,
     accountIdForApi,
     accessMode,
+    managerStatsEnabled,
   } = useS3AccountContext();
   const capabilities = getCapabilities();
   const isS3User = selectedS3AccountType === "s3_user";
+  const isConnection = selectedS3AccountType === "connection";
   const selected = useMemo(
     () => accounts.find((a) => a.id === selectedS3AccountId),
     [accounts, selectedS3AccountId]
   );
   const hasContext = hasS3AccountContext;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
-  const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
+  // Usage/traffic stats are a platform/RGW feature. We only enable the widgets when the backend says it is allowed.
+  const usageFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.usage !== false : true);
   const { stats, loading, error } = useManagerStats(
     accountIdForApi,
     usageFeatureEnabled && hasContext,
     accessMode ?? "default"
   );
-  const canManageIam = !isS3User;
+  const canManageIam = !isS3User && !isConnection;
   const { overview: iamOverview, loading: iamLoading, error: iamError } = useIamOverview(
     accountIdForApi,
     canManageIam,
@@ -59,7 +62,7 @@ export default function ManagerDashboard() {
     accessMode ?? "default"
   );
   const accountLabel = selected?.name ?? sessionS3AccountName ?? "RGW session";
-  const iamDisabled = isS3User;
+  const iamDisabled = isS3User || isConnection;
 
   return (
     <div className="space-y-4">
@@ -82,6 +85,12 @@ export default function ManagerDashboard() {
       {isS3User && (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
           Autonomous S3 users: IAM widgets are disabled. Usage and traffic insights depend on the storage endpoint features (usage/metrics) and your profile permissions.
+        </div>
+      )}
+
+      {isConnection && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+          Connection context: IAM widgets are disabled for now. Usage and traffic insights are available only for platform accounts with supervision enabled.
         </div>
       )}
 

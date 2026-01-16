@@ -12,6 +12,11 @@ class LinkedS3User(BaseModel):
     name: str
 
 
+class LinkedS3Connection(BaseModel):
+    id: int
+    name: str
+
+
 class AccountMembership(BaseModel):
     account_id: int
     account_role: Optional[str] = None
@@ -57,6 +62,7 @@ class UserUpdate(BaseModel):
     rgw_access_key: Optional[str] = None
     rgw_secret_key: Optional[str] = None
     s3_user_ids: Optional[list[int]] = None
+    s3_connection_ids: Optional[list[int]] = None
 
 
 class UserAssignS3Account(BaseModel):
@@ -81,6 +87,8 @@ class UserOut(BaseModel):
     has_rgw_credentials: bool = False
     s3_users: list[int] = []
     s3_user_details: list[LinkedS3User] = []
+    s3_connections: list[int] = []
+    s3_connection_details: list[LinkedS3Connection] = []
     auth_provider: Optional[str] = None
     last_login_at: Optional[datetime] = None
 

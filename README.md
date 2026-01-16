@@ -43,7 +43,11 @@ A single UI user may manage:
 - multiple S3 accounts
 - multiple storage/RGW backends
 
-Une authentification basée sur access_key/secret_key permet néanmoins d'accéder aux vues management et browser (option à activer).
+In addition, s3-manager can be used in a **credential-first** mode for day-to-day administration:
+- UI admins can create **S3 Connections** (endpoint + access_key + secret_key)
+- Then attach UI users to those connections to grant access to **Manager** and **Browser**
+
+This enables using s3-manager across multiple platforms (AWS, Ceph RGW, Scality, MinIO, etc.) without requiring an RGW account concept.
 
 ### Storage Authorization
 
@@ -79,7 +83,10 @@ It does not grant storage permissions.
 Responsibilities:
 - UI configuration and global options
 - Storage endpoints management
-- Association between UI users and S3 accounts
+- Association between UI users and S3 identities:
+  - **S3 Accounts** (RGW account-centric)
+  - **S3 Users** (legacy / non-IAM backends)
+  - **S3 Connections** (credential-first)
 - Authentication and portal options
 
 ![Admin dashboard](docs/screenshots/admin-dashboard.png)
@@ -93,11 +100,19 @@ The **Manager** surface acts as a **thin, IAM-native configuration explorer**.
 Its purpose is to expose the **actual S3 and IAM configuration as-is**, without
 opinionated abstraction.
 
+Manager can be accessed through:
+- an **RGW account** context (account-centric), or
+- an **S3 Connection** (credential-first) for AWS/Scality/MinIO/Ceph, depending on the effective IAM permissions.
+
 Responsibilities:
 - Buckets management (creation, versioning, object lock, tags)
 - IAM management (users, groups, roles, policies)
 - Visibility into bucket policies and access rules
 - Account-level usage statistics and traffic
+
+Access modes:
+- **Account-centric** (Ceph RGW): UI users are linked to an RGW account (with optional portal roles)
+- **Credential-first** (S3 Connection): UI users are linked to an S3 connection; the manager operates strictly with the provided S3 credentials
 
 Authorization model:
 - Direct mapping to native S3 and IAM APIs
@@ -114,6 +129,8 @@ Authorization model:
 
 The **Browser** surface provides a **direct, storage-centric view of S3 objects**.
 It represents the **data plane** of the platform.
+
+Browser can be used with RGW accounts, legacy S3 users (when explicitly linked), or S3 Connections.
 
 ### Purpose
 - Browse buckets and objects hierarchically
@@ -133,6 +150,11 @@ It represents the **data plane** of the platform.
 - All operations are authorized using **effective S3 permissions**
 - No additional authorization logic is introduced
 - Errors are surfaced transparently if an operation is denied
+
+Access modes:
+- **RGW account-centric** (memberships)
+- **Legacy S3 users** (explicitly linked)
+- **S3 Connections** (credential-first), when a UI user is attached to the connection
 
 ### Relationship with Other Surfaces
 - **Manager** focuses on configuration and IAM
@@ -156,6 +178,10 @@ object storage workflows.
 Its goal is to simplify day-to-day operations while enforcing best practices.
 
 The portal feature is disabled by default; enable `portal_enabled` in the general settings to expose it.
+
+Portal restrictions:
+- Portal is available only for **RGW accounts with IAM support** (Ceph Squid/Tentacle+ with IAM enabled)
+- It is intentionally not exposed for legacy S3 users nor for credential-first connections
 
 Responsibilities:
 - Managed workflows for common use cases

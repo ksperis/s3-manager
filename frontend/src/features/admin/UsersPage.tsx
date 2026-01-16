@@ -16,6 +16,7 @@ import {
 } from "../../api/users";
 import { S3AccountSummary, listMinimalS3Accounts, updateS3Account } from "../../api/accounts";
 import { S3UserSummary, listMinimalS3Users } from "../../api/s3Users";
+import { S3ConnectionSummary, listMinimalS3Connections } from "../../api/s3ConnectionsAdmin";
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -35,6 +36,9 @@ export default function UsersPage() {
   const [s3Users, setS3Users] = useState<S3UserSummary[]>([]);
   const [s3UsersLoaded, setS3UsersLoaded] = useState(false);
   const [s3UsersLoading, setS3UsersLoading] = useState(false);
+  const [s3Connections, setS3Connections] = useState<S3ConnectionSummary[]>([]);
+  const [s3ConnectionsLoaded, setS3ConnectionsLoaded] = useState(false);
+  const [s3ConnectionsLoading, setS3ConnectionsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -59,15 +63,19 @@ export default function UsersPage() {
   const [editUseCustomKeys, setEditUseCustomKeys] = useState(false);
   const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<{ id: number; role: string; account_admin?: boolean }[]>([]);
   const [editSelectedS3Users, setEditSelectedS3Users] = useState<number[]>([]);
+  const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
   const [editAccountRoleChoice, setEditAccountRoleChoice] = useState<Record<number, string>>({});
   const [editAccountAdminChoice, setEditAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [editS3AccountSearch, setEditS3AccountSearch] = useState("");
   const [editS3Search, setEditS3Search] = useState("");
-  const [editAssociationsTab, setEditAssociationsTab] = useState<"accounts" | "s3_users">("accounts");
+  const [editConnectionSearch, setEditConnectionSearch] = useState("");
+  const [editAssociationsTab, setEditAssociationsTab] = useState<"accounts" | "s3_users" | "connections">("accounts");
   const [showEditAccountPanel, setShowEditAccountPanel] = useState(false);
   const [editAccountSelections, setEditAccountSelections] = useState<number[]>([]);
   const [showEditS3UserPanel, setShowEditS3UserPanel] = useState(false);
   const [editS3UserSelections, setEditS3UserSelections] = useState<number[]>([]);
+  const [showEditConnectionPanel, setShowEditConnectionPanel] = useState(false);
+  const [editConnectionSelections, setEditConnectionSelections] = useState<number[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -103,6 +111,20 @@ export default function UsersPage() {
     s3Users.forEach((u) => map.set(u.id, u.name));
     return map;
   }, [s3Users]);
+  const s3ConnectionOptions = useMemo(
+    () =>
+      s3Connections.map((conn) => ({
+        id: conn.id,
+        label: conn.name,
+        owner_user_id: conn.owner_user_id ?? null,
+      })),
+    [s3Connections]
+  );
+  const s3ConnectionLabelById = useMemo(() => {
+    const map = new Map<number, string>();
+    s3Connections.forEach((conn) => map.set(conn.id, conn.name));
+    return map;
+  }, [s3Connections]);
   const availableCreateS3Accounts = useMemo(() => {
     const query = createS3AccountSearch.trim().toLowerCase();
     const selectedIds = new Set(createSelectedS3Accounts.map((a) => Number(a.id)));
@@ -129,11 +151,21 @@ export default function UsersPage() {
       (opt) => !editSelectedS3Users.includes(opt.id) && (!query || opt.label.toLowerCase().includes(query))
     );
   }, [s3UserOptions, editSelectedS3Users, editS3Search]);
+  const availableEditS3Connections = useMemo(() => {
+    const query = editConnectionSearch.trim().toLowerCase();
+    return s3ConnectionOptions.filter(
+      (opt) =>
+        !editSelectedS3Connections.includes(opt.id) &&
+        (!editingUser || opt.owner_user_id !== editingUser.id) &&
+        (!query || opt.label.toLowerCase().includes(query))
+    );
+  }, [s3ConnectionOptions, editSelectedS3Connections, editConnectionSearch, editingUser]);
   const limitedOptions = <T,>(options: T[]) => options.slice(0, MAX_VISIBLE_OPTIONS);
   const visibleCreateS3Accounts = limitedOptions(availableCreateS3Accounts);
   const visibleEditS3Accounts = limitedOptions(availableEditS3Accounts);
   const visibleCreateS3Users = limitedOptions(availableCreateS3Users);
   const visibleEditS3Users = limitedOptions(availableEditS3Users);
+  const visibleEditS3Connections = limitedOptions(availableEditS3Connections);
   const normalizeUiRoleValue = (role?: string | null): string => {
     const value = (role || "").toLowerCase();
     if (value === "ui_admin" || value === "super_admin" || value === "account_admin") return "ui_admin";
@@ -168,6 +200,49 @@ export default function UsersPage() {
       );
     },
     [s3UserLabelById]
+  );
+  const renderS3ConnectionChips = useCallback(
+    (user: User) => {
+      const linkedIds = (user.s3_connections ?? []).map((id) => Number(id));
+      const linkedLabels =
+        user.s3_connection_details && user.s3_connection_details.length > 0
+          ? user.s3_connection_details.map((entry) => ({
+              id: entry.id,
+              label: entry.name || `Connection #${entry.id}`,
+            }))
+          : linkedIds.map((id) => ({
+              id,
+              label: s3ConnectionLabelById.get(Number(id)) ?? `Connection #${id}`,
+            }));
+      const linkedIdSet = new Set(linkedIds);
+      const ownedConnections = s3Connections.filter((conn) => conn.owner_user_id === user.id);
+      const ownedLabels = ownedConnections
+        .filter((conn) => !linkedIdSet.has(conn.id))
+        .map((conn) => ({ id: conn.id, label: conn.name || `Connection #${conn.id}` }));
+      if (linkedLabels.length === 0 && ownedLabels.length === 0) return null;
+      return (
+        <div className="flex flex-wrap gap-2">
+          {ownedLabels.map((entry) => (
+            <span
+              key={`owned-${entry.id}`}
+              className="inline-flex items-center gap-2 rounded-full bg-sky-100 px-2 py-0.5 ui-caption font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-100"
+              title="Owner"
+            >
+              {entry.label}
+            </span>
+          ))}
+          {linkedLabels.map((entry) => (
+            <span
+              key={`linked-${entry.id}`}
+              className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+            >
+              {entry.label}
+            </span>
+          ))}
+        </div>
+      );
+    },
+    [s3ConnectionLabelById, s3Connections]
   );
   const editRoleValue = editForm.role ?? editingUser?.role ?? "ui_user";
 
@@ -228,38 +303,44 @@ export default function UsersPage() {
   const renderAssociationSummary = (user: User) => {
     const hasAccounts = Boolean(user.accounts && user.accounts.length > 0);
     const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
-    if (!hasAccounts && !hasS3Users) {
+    const hasOwnedConnections = s3Connections.some((conn) => conn.owner_user_id === user.id);
+    const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0) || hasOwnedConnections;
+    if (!hasAccounts && !hasS3Users && !hasConnections) {
       return <span className="ui-caption text-slate-500 dark:text-slate-400">-</span>;
     }
     const accountChips = hasAccounts ? renderAccountChips(user) : null;
-    const s3UserChips = renderS3UserChips(user);
-    if (hasAccounts && hasS3Users) {
+    const s3UserChips = hasS3Users ? renderS3UserChips(user) : null;
+    const connectionChips = hasConnections ? renderS3ConnectionChips(user) : null;
+    const sections = [
+      { label: "Accounts", value: accountChips ?? "-" },
+      { label: "Users", value: s3UserChips ?? "-" },
+      { label: "Connections", value: connectionChips ?? "-" },
+    ].filter((section) => {
+      if (section.label === "Accounts") return hasAccounts;
+      if (section.label === "Users") return hasS3Users;
+      return hasConnections;
+    });
+    if (sections.length > 1) {
       return (
         <div className="space-y-1">
-          <div>
-            <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-              Accounts
+          {sections.map((section) => (
+            <div key={section.label}>
+              <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                {section.label}
+              </div>
+              <div className="ui-caption text-slate-600 dark:text-slate-300">{section.value}</div>
             </div>
-            <div className="ui-caption text-slate-600 dark:text-slate-300">{accountChips ?? "-"}</div>
-          </div>
-          <div>
-            <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-              Users
-            </div>
-            <div className="ui-caption text-slate-600 dark:text-slate-300">{s3UserChips ?? "-"}</div>
-          </div>
+          ))}
         </div>
       );
     }
-    const isAccountsOnly = hasAccounts;
-    const label = isAccountsOnly ? "Accounts" : "Users";
-    const value = isAccountsOnly ? accountChips : s3UserChips || "-";
+    const single = sections[0];
     return (
       <div>
         <div className="ui-badge font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-          {label}
+          {single.label}
         </div>
-        <div className="ui-caption text-slate-600 dark:text-slate-300">{value}</div>
+        <div className="ui-caption text-slate-600 dark:text-slate-300">{single.value}</div>
       </div>
     );
   };
@@ -348,21 +429,44 @@ export default function UsersPage() {
     }
   }, []);
 
+  const fetchS3Connections = useCallback(async () => {
+    setS3ConnectionsLoading(true);
+    try {
+      const data = await listMinimalS3Connections();
+      setS3Connections(data);
+      setS3ConnectionsLoaded(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setS3ConnectionsLoading(false);
+    }
+  }, []);
+
   const ensureS3Users = useCallback(async () => {
     if (s3UsersLoaded || s3UsersLoading) return;
     await fetchS3Users();
   }, [s3UsersLoaded, s3UsersLoading, fetchS3Users]);
 
+  const ensureS3Connections = useCallback(async () => {
+    if (s3ConnectionsLoaded || s3ConnectionsLoading) return;
+    await fetchS3Connections();
+  }, [s3ConnectionsLoaded, s3ConnectionsLoading, fetchS3Connections]);
+
   useEffect(() => {
     fetchUsers();
     fetchS3Accounts();
-  }, [fetchUsers, fetchS3Accounts]);
+    fetchS3Connections();
+  }, [fetchUsers, fetchS3Accounts, fetchS3Connections]);
 
   useEffect(() => {
     if (showCreateModal || showEditModal) {
       ensureS3Users();
+      if (showEditModal) {
+        ensureS3Connections();
+      }
     }
-  }, [showCreateModal, showEditModal, ensureS3Users]);
+  }, [showCreateModal, showEditModal, ensureS3Users, ensureS3Connections]);
+
 
   const toggleEditAccountSelection = (accountId: number) => {
     setEditAccountSelections((prev) =>
@@ -375,6 +479,13 @@ export default function UsersPage() {
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
   };
+
+  const toggleEditConnectionSelection = (connectionId: number) => {
+    setEditConnectionSelections((prev) =>
+      prev.includes(connectionId) ? prev.filter((id) => id !== connectionId) : [...prev, connectionId]
+    );
+  };
+
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -455,15 +566,28 @@ export default function UsersPage() {
       })) ?? [];
     setEditSelectedS3Accounts(selectedAccounts);
     setEditSelectedS3Users(user.s3_users ? user.s3_users.map((id) => Number(id)) : []);
+    setEditSelectedS3Connections(user.s3_connections ? user.s3_connections.map((id) => Number(id)) : []);
     setEditS3AccountSearch("");
     setEditS3Search("");
+    setEditConnectionSearch("");
     const hasAccounts = selectedAccounts.length > 0;
     const hasS3Users = Boolean(user.s3_users && user.s3_users.length > 0);
-    setEditAssociationsTab(hasAccounts || !hasS3Users ? "accounts" : "s3_users");
+    const hasConnections = Boolean(user.s3_connections && user.s3_connections.length > 0);
+    if (hasAccounts) {
+      setEditAssociationsTab("accounts");
+    } else if (hasS3Users) {
+      setEditAssociationsTab("s3_users");
+    } else if (hasConnections) {
+      setEditAssociationsTab("connections");
+    } else {
+      setEditAssociationsTab("accounts");
+    }
     setShowEditAccountPanel(false);
     setShowEditS3UserPanel(false);
+    setShowEditConnectionPanel(false);
     setEditAccountSelections([]);
     setEditS3UserSelections([]);
+    setEditConnectionSelections([]);
     setActionError(null);
     setActionMessage(null);
     setShowEditModal(true);
@@ -510,6 +634,7 @@ export default function UsersPage() {
         }
       }
       payload.s3_user_ids = editSelectedS3Users;
+      payload.s3_connection_ids = editSelectedS3Connections;
       await updateUser(editingUser.id, payload);
       const existing = editingUser.accounts ? editingUser.accounts.map((id) => Number(id)) : [];
       const existingRoleById = new Map<number, string | null>(
@@ -568,14 +693,18 @@ export default function UsersPage() {
       setEditForm({});
       setEditSelectedS3Accounts([]);
       setEditSelectedS3Users([]);
+      setEditSelectedS3Connections([]);
       setEditS3AccountSearch("");
       setEditS3Search("");
+      setEditConnectionSearch("");
       setEditUseCustomKeys(false);
       setEditAssociationsTab("accounts");
       setShowEditAccountPanel(false);
       setShowEditS3UserPanel(false);
+      setShowEditConnectionPanel(false);
       setEditAccountSelections([]);
       setEditS3UserSelections([]);
+      setEditConnectionSelections([]);
       setShowEditModal(false);
       await fetchUsers();
       await fetchS3Accounts();
@@ -603,9 +732,9 @@ export default function UsersPage() {
     }
   };
 
-  const usersDescription = "Create, edit, delete, and link UI users to RGW accounts and S3 users.";
-  const associationLabel = "S3Accounts / Users";
-  const filterPlaceholder = "Search by email, role, account, or user";
+  const usersDescription = "Create, edit, delete, and link UI users to RGW accounts, S3 users, and S3 connections.";
+  const associationLabel = "S3 Accounts / Users / Connections";
+  const filterPlaceholder = "Search by email, role, account, user, or connection";
 
   return (
     <div className="space-y-4">
@@ -1117,12 +1246,16 @@ export default function UsersPage() {
             setEditS3AccountSearch("");
             setEditSelectedS3Users([]);
             setEditS3Search("");
+            setEditSelectedS3Connections([]);
+            setEditConnectionSearch("");
             setEditUseCustomKeys(false);
             setEditAssociationsTab("accounts");
             setShowEditAccountPanel(false);
             setShowEditS3UserPanel(false);
+            setShowEditConnectionPanel(false);
             setEditAccountSelections([]);
             setEditS3UserSelections([]);
+            setEditConnectionSelections([]);
             setEditForm({});
           }}
         >
@@ -1233,11 +1366,11 @@ export default function UsersPage() {
               </div>
             )}
             <div className="md:col-span-2 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <label className="ui-body font-medium text-slate-700">Associations</label>
                   <span className="ui-caption text-slate-500">
-                    {editSelectedS3Accounts.length + editSelectedS3Users.length} total
+                    {editSelectedS3Accounts.length + editSelectedS3Users.length + editSelectedS3Connections.length} total
                   </span>
                 </div>
               </div>
@@ -1634,13 +1767,159 @@ export default function UsersPage() {
                       </div>
                     ),
                   },
+                  {
+                    id: "connections",
+                    label: `Connections (${editSelectedS3Connections.length})`,
+                    content: (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="ui-body font-medium text-slate-700">Linked connections</span>
+                            <span className="ui-caption text-slate-500">{editSelectedS3Connections.length} linked</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowEditConnectionPanel((prev) => !prev)}
+                            className={tableActionButtonClasses}
+                          >
+                            {showEditConnectionPanel ? "Close" : "Add connections"}
+                          </button>
+                        </div>
+                        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                            <thead className="bg-slate-50 dark:bg-slate-900/50">
+                              <tr>
+                                <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  Connection
+                                </th>
+                                <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  Actions
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                              {editSelectedS3Connections.length === 0 ? (
+                                <tr>
+                                  <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                                    No connection linked yet.
+                                  </td>
+                                </tr>
+                              ) : (
+                                editSelectedS3Connections.map((id) => (
+                                  <tr key={id}>
+                                    <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
+                                      {s3ConnectionLabelById.get(id) ?? `Connection #${id}`}
+                                    </td>
+                                    <td className="px-3 py-2 text-right">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setEditSelectedS3Connections((prev) => prev.filter((connId) => connId !== id))
+                                        }
+                                        className={tableDeleteActionClasses}
+                                      >
+                                        Remove
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        {showEditConnectionPanel && (
+                          <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="ui-body font-medium text-slate-700">Add connections</span>
+                                <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
+                              </div>
+                              <input
+                                type="text"
+                                value={editConnectionSearch}
+                                onChange={(e) => setEditConnectionSearch(e.target.value)}
+                                placeholder="Search..."
+                                className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              />
+                            </div>
+                            <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
+                              {availableEditS3Connections.length === 0 && (
+                                <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                              )}
+                              {visibleEditS3Connections.map((opt) => {
+                                const isSelected = editConnectionSelections.includes(opt.id);
+                                return (
+                                  <div
+                                    key={opt.id}
+                                    className={`flex items-center justify-between rounded-md px-2 py-1 ${
+                                      isSelected
+                                        ? "bg-slate-50 dark:bg-slate-800/60"
+                                        : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                                    }`}
+                                  >
+                                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => toggleEditConnectionSelection(opt.id)}
+                                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                      />
+                                      <span>{opt.label}</span>
+                                    </label>
+                                  </div>
+                                );
+                              })}
+                              {availableEditS3Connections.length > MAX_VISIBLE_OPTIONS && (
+                                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                  Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="ui-caption text-slate-500 dark:text-slate-400">
+                                {editConnectionSelections.length} selected
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowEditConnectionPanel(false);
+                                    setEditConnectionSelections([]);
+                                    setEditConnectionSearch("");
+                                  }}
+                                  className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={editConnectionSelections.length === 0}
+                                  onClick={() => {
+                                    if (editConnectionSelections.length === 0) return;
+                                    setEditSelectedS3Connections((prev) => [...prev, ...editConnectionSelections]);
+                                    setEditConnectionSelections([]);
+                                    setEditConnectionSearch("");
+                                    setShowEditConnectionPanel(false);
+                                  }}
+                                  className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                                >
+                                  Add selected
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ),
+                  },
                 ]}
                 activeTab={editAssociationsTab}
                 onChange={(id) => {
-                  const nextTab = id === "s3_users" ? "s3_users" : "accounts";
+                  const nextTab = id === "s3_users" ? "s3_users" : id === "connections" ? "connections" : "accounts";
                   setEditAssociationsTab(nextTab);
                   setShowEditAccountPanel(false);
                   setShowEditS3UserPanel(false);
+                  setShowEditConnectionPanel(false);
                 }}
               />
             </div>
@@ -1654,12 +1933,16 @@ export default function UsersPage() {
                   setEditS3AccountSearch("");
                   setEditSelectedS3Users([]);
                   setEditS3Search("");
+                  setEditSelectedS3Connections([]);
+                  setEditConnectionSearch("");
                   setEditUseCustomKeys(false);
                   setEditAssociationsTab("accounts");
                   setShowEditAccountPanel(false);
                   setShowEditS3UserPanel(false);
+                  setShowEditConnectionPanel(false);
                   setEditAccountSelections([]);
                   setEditS3UserSelections([]);
+                  setEditConnectionSelections([]);
                   setEditForm({});
                 }}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50"

@@ -21,28 +21,24 @@ class S3Connection(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # Owner (private-by-default)
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # Owner (creator). Public connections have no owner.
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     # Friendly name (e.g. "AWS-prod-admin")
     name = Column(String, nullable=False)
 
-    # Optional hint for UX / compatibility (aws, ceph, scality, minio, other)
-    provider_hint = Column(String, nullable=True)
+    # Visibility
+    is_public = Column(Boolean, nullable=False, default=False, server_default="0")
 
     # S3 target
-    endpoint_url = Column(String, nullable=False)
-    region = Column(String, nullable=True)
+    storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True, index=True)
+    custom_endpoint_config = Column(Text, nullable=True)
 
     # Credentials (session_token/expires_at reserved for future STS support)
     access_key_id = Column(String, nullable=False)
     secret_access_key = Column(EncryptedString, nullable=False)
     session_token = Column(EncryptedString, nullable=True)
     expires_at = Column(DateTime, nullable=True)
-
-    # Optional connection options
-    force_path_style = Column(Boolean, nullable=False, default=False, server_default="0")
-    verify_tls = Column(Boolean, nullable=False, default=True, server_default="1")
 
     # Cached capability profile (JSON) computed from probes (optional)
     capabilities_json = Column(Text, nullable=True)
@@ -52,6 +48,44 @@ class S3Connection(Base):
     last_used_at = Column(DateTime, nullable=True)
 
     owner = relationship("User", back_populates="s3_connections", overlaps="s3_connections")
+    storage_endpoint = relationship("StorageEndpoint")
+
+    users = relationship(
+        "User",
+        secondary="user_s3_connections",
+        back_populates="shared_s3_connections",
+        overlaps="user_links,connection_links,owner",
+    )
+    user_links = relationship(
+        "UserS3Connection",
+        back_populates="connection",
+        overlaps="users,shared_s3_connections,connection_links,owner",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserS3Connection(Base):
+    __tablename__ = "user_s3_connections"
+    __table_args__ = (UniqueConstraint("user_id", "s3_connection_id", name="uq_user_s3_connection"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    s3_connection_id = Column(Integer, ForeignKey("s3_connections.id"), nullable=False)
+    can_browser = Column(Boolean, nullable=False, default=True, server_default="1")
+    can_manager = Column(Boolean, nullable=False, default=True, server_default="1")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship(
+        "User",
+        back_populates="s3_connection_links",
+        overlaps="shared_s3_connections,s3_connections",
+    )
+    connection = relationship(
+        "S3Connection",
+        back_populates="user_links",
+        overlaps="users,shared_s3_connections,owner",
+    )
 
 
 # If you later need sharing, introduce a link table (user_s3_connections)

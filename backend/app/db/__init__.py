@@ -8,7 +8,7 @@ from .user import User
 from .audit import AuditLog
 from .session import RgwSession
 from .s3_user import S3User, UserS3User
-from .s3_connection import S3Connection
+from .s3_connection import S3Connection, UserS3Connection
 from .oidc import OidcLoginState
 
 __all__ = [
@@ -26,5 +26,6 @@ __all__ = [
     "S3User",
     "UserS3User",
     "S3Connection",
+    "UserS3Connection",
     "OidcLoginState",
 ]

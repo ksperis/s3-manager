@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.app_settings import PortalSettings, PortalSettingsOverride, PortalSettingsOverridePolicy
 
@@ -79,3 +79,8 @@ class PortalAccountSettings(BaseModel):
     admin_override: PortalSettingsOverride
     portal_manager_override: PortalSettingsOverride
     override_policy: PortalSettingsOverridePolicy
+
+
+class PortalEligibility(BaseModel):
+    eligible: bool
+    reasons: list[str] = Field(default_factory=list)

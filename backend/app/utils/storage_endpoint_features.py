@@ -11,7 +11,7 @@ from app.db import StorageEndpoint, StorageProvider
 from app.utils.normalize import normalize_storage_provider
 
 
-FEATURE_KEYS: tuple[str, ...] = ("admin", "sts", "usage", "metrics", "static_website")
+FEATURE_KEYS: tuple[str, ...] = ("admin", "sts", "usage", "metrics", "static_website", "iam")
 
 DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
     StorageProvider.CEPH: {
@@ -20,6 +20,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "usage": {"enabled": False, "endpoint": None},
         "metrics": {"enabled": False, "endpoint": None},
         "static_website": {"enabled": False, "endpoint": None},
+        "iam": {"enabled": False, "endpoint": None},
     },
     StorageProvider.OTHER: {
         "admin": {"enabled": False, "endpoint": None},
@@ -27,6 +28,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "usage": {"enabled": False, "endpoint": None},
         "metrics": {"enabled": False, "endpoint": None},
         "static_website": {"enabled": False, "endpoint": None},
+        "iam": {"enabled": False, "endpoint": None},
     },
 }
 
@@ -40,6 +42,7 @@ class EndpointFeatureFlags:
     usage_enabled: bool
     metrics_enabled: bool
     static_website_enabled: bool
+    iam_enabled: bool
 
 
 def _normalize_url(value: Optional[str]) -> Optional[str]:
@@ -101,9 +104,6 @@ def normalize_features_config(
                     f"Feature '{key}' is only available for Ceph endpoints."
                 )
 
-    if (features["usage"]["enabled"] or features["metrics"]["enabled"]) and not features["admin"]["enabled"]:
-        raise ValueError("Usage/metrics features require admin to be enabled.")
-
     return features
 
 
@@ -129,6 +129,7 @@ def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
         usage_enabled=bool(features["usage"]["enabled"]),
         metrics_enabled=bool(features["metrics"]["enabled"]),
         static_website_enabled=bool(features["static_website"]["enabled"]),
+        iam_enabled=bool(features.get("iam", {}).get("enabled")),
     )
 
 
@@ -153,4 +154,5 @@ def features_to_capabilities(features: dict[str, dict[str, Any]]) -> dict[str, b
         "usage": bool(features.get("usage", {}).get("enabled")),
         "metrics": bool(features.get("metrics", {}).get("enabled")),
         "static_website": bool(features.get("static_website", {}).get("enabled")),
+        "iam": bool(features.get("iam", {}).get("enabled")),
     }

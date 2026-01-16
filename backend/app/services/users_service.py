@@ -5,12 +5,12 @@ from typing import Optional
 import logging
 
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core.security import get_password_hash, verify_password
-from app.db import AccountIAMUser, AccountRole, S3Account, User, UserS3Account, UserRole, S3User, UserS3User
-from app.models.user import AccountMembership, LinkedS3User, UserCreate, UserOut, UserUpdate, UserSummary
+from app.db import AccountIAMUser, AccountRole, S3Account, S3Connection, User, UserS3Account, UserS3Connection, UserRole, S3User, UserS3User
+from app.models.user import AccountMembership, LinkedS3Connection, LinkedS3User, UserCreate, UserOut, UserUpdate, UserSummary
 from app.services.app_settings_service import load_app_settings
 
 logger = logging.getLogger(__name__)
@@ -110,6 +110,8 @@ class UsersService:
                 user.rgw_secret_key = secret_key
         if payload.s3_user_ids is not None:
             self._set_s3_user_links(user, payload.s3_user_ids)
+        if payload.s3_connection_ids is not None:
+            self._set_s3_connection_links(user, payload.s3_connection_ids)
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
@@ -136,6 +138,11 @@ class UsersService:
             .filter(UserS3User.user_id == user.id)
             .delete(synchronize_session=False)
         )
+        (
+            self.db.query(UserS3Connection)
+            .filter(UserS3Connection.user_id == user.id)
+            .delete(synchronize_session=False)
+        )
         self.db.delete(user)
         self.db.commit()
         logger.debug("Deleted user id=%s email=%s", user.id, user.email)
@@ -153,6 +160,12 @@ class UsersService:
         rows = self.db.query(S3User.id, S3User.name).filter(S3User.id.in_(ids)).all()
         return {row[0]: row[1] for row in rows}
 
+    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, str]:
+        if not ids:
+            return {}
+        rows = self.db.query(S3Connection.id, S3Connection.name).filter(S3Connection.id.in_(ids)).all()
+        return {row[0]: row[1] for row in rows}
+
     def paginate_users(
         self,
         page: int,
@@ -164,12 +177,17 @@ class UsersService:
         query = self.db.query(User)
         search_value = search.strip() if isinstance(search, str) else ""
         if search_value:
+            linked_connection = aliased(S3Connection)
+            owned_connection = aliased(S3Connection)
             pattern = f"%{search_value}%"
             query = (
                 query.outerjoin(UserS3Account, User.id == UserS3Account.user_id)
                 .outerjoin(S3Account, UserS3Account.account_id == S3Account.id)
                 .outerjoin(UserS3User, User.id == UserS3User.user_id)
                 .outerjoin(S3User, UserS3User.s3_user_id == S3User.id)
+                .outerjoin(UserS3Connection, User.id == UserS3Connection.user_id)
+                .outerjoin(linked_connection, UserS3Connection.s3_connection_id == linked_connection.id)
+                .outerjoin(owned_connection, owned_connection.owner_user_id == User.id)
             )
             query = query.filter(
                 or_(
@@ -179,6 +197,8 @@ class UsersService:
                     func.coalesce(S3Account.rgw_account_id, "").ilike(pattern),
                     func.coalesce(S3User.name, "").ilike(pattern),
                     func.coalesce(S3User.rgw_user_uid, "").ilike(pattern),
+                    func.coalesce(linked_connection.name, "").ilike(pattern),
+                    func.coalesce(owned_connection.name, "").ilike(pattern),
                 )
             )
             query = query.distinct()
@@ -210,8 +230,25 @@ class UsersService:
             s3_links.setdefault(user_id, []).append(s3_user_id)
             s3_ids.add(s3_user_id)
         s3_labels = self._load_s3_user_names(sorted(s3_ids))
+        connection_links_rows = (
+            self.db.query(UserS3Connection.user_id, UserS3Connection.s3_connection_id)
+            .filter(UserS3Connection.user_id.in_(user_ids))
+            .all()
+        )
+        connection_links: dict[int, list[int]] = {}
+        connection_ids: set[int] = set()
+        for user_id, connection_id in connection_links_rows:
+            connection_links.setdefault(user_id, []).append(connection_id)
+            connection_ids.add(connection_id)
+        connection_labels = self._load_s3_connection_names(sorted(connection_ids))
         outputs = [
-            self.user_to_out(user, s3_user_labels=s3_labels, preloaded_s3_links=s3_links)
+            self.user_to_out(
+                user,
+                s3_user_labels=s3_labels,
+                preloaded_s3_links=s3_links,
+                s3_connection_labels=connection_labels,
+                preloaded_connection_links=connection_links,
+            )
             for user in rows
         ]
         return outputs, total
@@ -298,10 +335,13 @@ class UsersService:
         *,
         s3_user_labels: Optional[dict[int, str]] = None,
         preloaded_s3_links: Optional[dict[int, list[int]]] = None,
+        s3_connection_labels: Optional[dict[int, str]] = None,
+        preloaded_connection_links: Optional[dict[int, list[int]]] = None,
     ) -> UserOut:
         account_ids: list[int] = []
         account_links: list[AccountMembership] = []
         s3_user_ids: list[int] = []
+        s3_connection_ids: list[int] = []
         try:
             if hasattr(user, "account_links") and user.account_links is not None:
                 account_links = [
@@ -331,16 +371,35 @@ class UsersService:
                 row[0]
                 for row in self.db.query(UserS3User.s3_user_id).filter(UserS3User.user_id == user.id).all()
             ]
+        try:
+            if hasattr(user, "s3_connection_links") and user.s3_connection_links is not None:
+                s3_connection_ids = [link.s3_connection_id for link in user.s3_connection_links]
+        except DetachedInstanceError:
+            s3_connection_ids = [
+                row[0]
+                for row in self.db.query(UserS3Connection.s3_connection_id).filter(UserS3Connection.user_id == user.id).all()
+            ]
         if preloaded_s3_links is not None and user.id in preloaded_s3_links:
             s3_user_ids = preloaded_s3_links[user.id]
+        if preloaded_connection_links is not None and user.id in preloaded_connection_links:
+            s3_connection_ids = preloaded_connection_links[user.id]
         s3_user_names: dict[int, str]
         if s3_user_labels is not None:
             s3_user_names = s3_user_labels
         else:
             s3_user_names = self._load_s3_user_names(s3_user_ids)
+        s3_connection_names: dict[int, str]
+        if s3_connection_labels is not None:
+            s3_connection_names = s3_connection_labels
+        else:
+            s3_connection_names = self._load_s3_connection_names(s3_connection_ids)
         s3_user_details = [
             LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")
             for s3_id in s3_user_ids
+        ]
+        s3_connection_details = [
+            LinkedS3Connection(id=conn_id, name=s3_connection_names.get(conn_id) or f"Connection #{conn_id}")
+            for conn_id in s3_connection_ids
         ]
         return UserOut(
             id=user.id,
@@ -357,6 +416,8 @@ class UsersService:
             has_rgw_credentials=bool(user.rgw_access_key and user.rgw_secret_key),
             s3_users=s3_user_ids,
             s3_user_details=s3_user_details,
+            s3_connections=s3_connection_ids,
+            s3_connection_details=s3_connection_details,
             auth_provider=user.auth_provider,
             last_login_at=user.last_login_at,
         )
@@ -419,6 +480,45 @@ class UsersService:
                 raise ValueError(f"S3 users not found: {missing_str}")
             for s3_user in s3_users:
                 self.db.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
+
+    def _set_s3_connection_links(self, user: User, target_ids: list[int]) -> None:
+        cleaned_ids = sorted({int(conn_id) for conn_id in target_ids if conn_id is not None})
+        existing_links = (
+            self.db.query(UserS3Connection)
+            .filter(UserS3Connection.user_id == user.id)
+            .all()
+        )
+        existing_ids = {link.s3_connection_id for link in existing_links}
+        desired_ids = set(cleaned_ids)
+        if desired_ids:
+            connections = self.db.query(S3Connection).filter(S3Connection.id.in_(desired_ids)).all()
+            found_ids = {conn.id for conn in connections}
+            missing = desired_ids - found_ids
+            if missing:
+                missing_str = ", ".join(str(mid) for mid in sorted(missing))
+                raise ValueError(f"S3 connections not found: {missing_str}")
+            owned_ids = {conn.id for conn in connections if conn.owner_user_id == user.id}
+            desired_ids -= owned_ids
+        to_remove = existing_ids - desired_ids
+        to_add = desired_ids - existing_ids
+        if to_remove:
+            (
+                self.db.query(UserS3Connection)
+                .filter(
+                    UserS3Connection.user_id == user.id,
+                    UserS3Connection.s3_connection_id.in_(to_remove),
+                )
+                .delete(synchronize_session=False)
+            )
+        for connection_id in to_add:
+            self.db.add(
+                UserS3Connection(
+                    user_id=user.id,
+                    s3_connection_id=connection_id,
+                    can_browser=True,
+                    can_manager=True,
+                )
+            )
 
     def get_or_create_oidc_user(
         self,

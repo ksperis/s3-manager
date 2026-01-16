@@ -19,8 +19,10 @@ export default function ManagerMetricsPage() {
     hasS3AccountContext,
     accountIdForApi,
     accessMode,
+    managerStatsEnabled,
   } = useS3AccountContext();
   const isS3User = selectedS3AccountType === "s3_user";
+  const isConnection = selectedS3AccountType === "connection";
 
   const selected = useMemo(
     () => accounts.find((a) => a.id === selectedS3AccountId),
@@ -28,8 +30,8 @@ export default function ManagerMetricsPage() {
   );
   const hasContext = hasS3AccountContext;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
-  const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
-  const metricsFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
+  const usageFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.usage !== false : true);
+  const metricsFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.metrics !== false : true);
   const showUsageBreakdowns = usageFeatureEnabled && hasContext;
   const showTrafficAnalytics = metricsFeatureEnabled && hasContext;
   const showMetricsDisabledBanner = !usageFeatureEnabled && !metricsFeatureEnabled;
@@ -58,6 +60,12 @@ export default function ManagerMetricsPage() {
       {isS3User && (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
           Autonomous S3 users: IAM features are disabled. Storage and traffic insights depend on the storage endpoint features (usage/metrics) and your profile permissions.
+        </div>
+      )}
+
+      {isConnection && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+          Connection context: platform metrics are disabled. Use a platform account with supervision enabled to access usage and traffic analytics.
         </div>
       )}
 
