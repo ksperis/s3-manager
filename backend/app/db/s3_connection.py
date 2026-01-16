@@ -71,8 +71,6 @@ class UserS3Connection(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     s3_connection_id = Column(Integer, ForeignKey("s3_connections.id"), nullable=False)
-    can_browser = Column(Boolean, nullable=False, default=True, server_default="1")
-    can_manager = Column(Boolean, nullable=False, default=True, server_default="1")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

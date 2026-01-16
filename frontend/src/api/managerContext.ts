@@ -5,7 +5,7 @@
 import client from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 
-export type ManagerAccessMode = "admin" | "portal" | "session" | "s3_user";
+export type ManagerAccessMode = "admin" | "portal" | "session" | "s3_user" | "connection";
 
 export type ManagerContext = {
   access_mode: ManagerAccessMode;

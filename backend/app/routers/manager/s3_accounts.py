@@ -86,15 +86,17 @@ def list_manager_accounts(
     # User-scoped S3 connections (credential-first) used for the daily /manager S3 configuration console.
     # These are intentionally not part of the platform account model; we expose them here only so the
     # manager can switch context.
+    user_connection_ids = (
+        db.query(UserS3Connection.s3_connection_id)
+        .filter(UserS3Connection.user_id == user.id)
+    )
     connections = (
         db.query(S3Connection)
-        .outerjoin(UserS3Connection, UserS3Connection.s3_connection_id == S3Connection.id)
         .filter(
             (S3Connection.is_public.is_(True))
             | (S3Connection.owner_user_id == user.id)
-            | (UserS3Connection.user_id == user.id)
+            | (S3Connection.id.in_(user_connection_ids))
         )
-        .distinct()
         .all()
     )
 

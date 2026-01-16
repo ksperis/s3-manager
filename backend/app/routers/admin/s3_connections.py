@@ -453,8 +453,6 @@ def list_connection_users(
             user_id=user.id,
             email=user.email,
             full_name=user.full_name,
-            can_browser=bool(link.can_browser),
-            can_manager=bool(link.can_manager),
             created_at=link.created_at,
             updated_at=link.updated_at,
         )
@@ -486,8 +484,6 @@ def add_connection_user(
     )
     now = datetime.utcnow()
     if existing:
-        existing.can_browser = bool(payload.can_browser)
-        existing.can_manager = bool(payload.can_manager)
         existing.updated_at = now
         link = existing
         action = "connection.user.update"
@@ -495,8 +491,6 @@ def add_connection_user(
         link = UserS3Connection(
             user_id=payload.user_id,
             s3_connection_id=connection_id,
-            can_browser=bool(payload.can_browser),
-            can_manager=bool(payload.can_manager),
             created_at=now,
             updated_at=now,
         )
@@ -510,14 +504,12 @@ def add_connection_user(
         action=action,
         entity_type="s3_connection",
         entity_id=str(connection_id),
-        metadata={"user_id": payload.user_id, "can_browser": bool(link.can_browser), "can_manager": bool(link.can_manager)},
+        metadata={"user_id": payload.user_id},
     )
     return S3ConnectionUserLink(
         user_id=user.id,
         email=user.email,
         full_name=user.full_name,
-        can_browser=bool(link.can_browser),
-        can_manager=bool(link.can_manager),
         created_at=link.created_at,
         updated_at=link.updated_at,
     )
@@ -548,8 +540,6 @@ def update_connection_user(
     )
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
-    link.can_browser = bool(payload.can_browser)
-    link.can_manager = bool(payload.can_manager)
     link.updated_at = datetime.utcnow()
     db.commit()
     audit.record_action(
@@ -558,14 +548,12 @@ def update_connection_user(
         action="connection.user.update",
         entity_type="s3_connection",
         entity_id=str(connection_id),
-        metadata={"user_id": user_id, "can_browser": bool(link.can_browser), "can_manager": bool(link.can_manager)},
+        metadata={"user_id": user_id},
     )
     return S3ConnectionUserLink(
         user_id=user.id,
         email=user.email,
         full_name=user.full_name,
-        can_browser=bool(link.can_browser),
-        can_manager=bool(link.can_manager),
         created_at=link.created_at,
         updated_at=link.updated_at,
     )

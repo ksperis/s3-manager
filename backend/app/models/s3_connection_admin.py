@@ -49,13 +49,9 @@ class S3ConnectionUserLink(BaseModel):
     user_id: int
     email: Optional[str] = None
     full_name: Optional[str] = None
-    can_browser: bool = True
-    can_manager: bool = True
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
 
 class S3ConnectionUserLinkUpsert(BaseModel):
     user_id: int
-    can_browser: bool = True
-    can_manager: bool = True

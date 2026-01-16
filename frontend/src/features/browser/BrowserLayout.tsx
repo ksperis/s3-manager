@@ -2,10 +2,11 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ChangeEvent } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { BrowserContextProvider, useBrowserContext } from "./BrowserContext";
+import { fetchManagerContext, type ManagerAccessMode } from "../../api/managerContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 
 function BrowserShell() {
@@ -16,14 +17,43 @@ function BrowserShell() {
     selectedKind,
     accessError,
   } = useBrowserContext();
+  const [iamIdentity, setIamIdentity] = useState<string | null>(null);
+  const [identityAccessMode, setIdentityAccessMode] = useState<ManagerAccessMode | null>(null);
   const selected = contexts.find((a) => a.id === selectedContextId);
   const showSelector = contexts.length > 1;
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
-  const identityLabel = selected?.endpoint ? `Endpoint: ${selected.endpoint}` : "Endpoint non disponible";
+  const identityLabel = iamIdentity
+    ? identityAccessMode === "connection"
+      ? `Identité S3: ${iamIdentity}`
+      : `Identité IAM: ${iamIdentity}`
+    : null;
   const baseControlClasses =
     "w-64 rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
   const selectClasses = `appearance-none pr-8 ${baseControlClasses}`;
   const pillClasses = `${baseControlClasses} ${selected ? "" : "text-slate-500 dark:text-slate-400"}`;
+
+  useEffect(() => {
+    if (!selectedContextId) {
+      setIamIdentity(null);
+      setIdentityAccessMode(null);
+      return;
+    }
+    let isMounted = true;
+    fetchManagerContext(selectedContextId)
+      .then((data) => {
+        if (!isMounted) return;
+        setIamIdentity(data.iam_identity ?? null);
+        setIdentityAccessMode(data.access_mode);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setIamIdentity(null);
+        setIdentityAccessMode(null);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedContextId]);
 
   const handleS3AccountChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value || null;
@@ -36,50 +66,43 @@ function BrowserShell() {
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
         <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Contexte</span>
         {showSelector ? (
-            <div className="relative">
-              <select
-                className={selectClasses}
-                value={selectedContextId ?? ""}
-                onChange={handleS3AccountChange}
-              >
-                {!selected && (
-                  <option value="">
-                    No account selected
-                  </option>
-                )}
-                {contexts.map((ctx) => (
-                  <option key={ctx.id} value={ctx.id} title={ctx.endpoint || undefined}>
-                    {ctx.kind === "connection"
-                      ? `Connection: ${ctx.name}`
-                      : ctx.raw
-                        ? formatAccountLabel(ctx.raw as any, defaultEndpointId, defaultEndpointName)
-                        : ctx.name}
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center ui-caption text-slate-500 dark:text-slate-300">
-                ▼
-              </div>
+          <div className="relative">
+            <select
+              className={selectClasses}
+              value={selectedContextId ?? ""}
+              onChange={handleS3AccountChange}
+              title={identityLabel ?? undefined}
+            >
+              {!selected && (
+                <option value="">
+                  No account selected
+                </option>
+              )}
+              {contexts.map((ctx) => (
+                <option key={ctx.id} value={ctx.id} title={ctx.endpoint || undefined}>
+                  {ctx.kind === "connection"
+                    ? `Connection: ${ctx.name}`
+                    : ctx.raw
+                      ? formatAccountLabel(ctx.raw as any, defaultEndpointId, defaultEndpointName)
+                      : ctx.name}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center ui-caption text-slate-500 dark:text-slate-300">
+              ▼
             </div>
-          ) : (
-            <div className={pillClasses} title={selected?.endpoint || undefined}>
-              {selected ? (selected.kind === "connection" ? `Connection: ${selected.name}` : selected.name) : "No context selected"}
-            </div>
-          )}
+          </div>
+        ) : (
+          <div className={pillClasses} title={identityLabel ?? undefined}>
+            {selected ? (selected.kind === "connection" ? `Connection: ${selected.name}` : selected.name) : "No context selected"}
+          </div>
+        )}
         {selectedKind === "s3_user" && (
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
             S3 user context
           </span>
         )}
       </div>
-      <span
-        role="img"
-        aria-label={identityLabel}
-        title={identityLabel}
-        className="flex h-6 w-6 items-center justify-center rounded-full ui-caption text-primary opacity-30 transition hover:bg-slate-200/70 hover:text-sky-600 hover:opacity-80 dark:hover:bg-slate-800/60"
-      >
-        ℹ️
-      </span>
     </div>
   );
 

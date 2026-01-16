@@ -515,8 +515,6 @@ class UsersService:
                 UserS3Connection(
                     user_id=user.id,
                     s3_connection_id=connection_id,
-                    can_browser=True,
-                    can_manager=True,
                 )
             )
 

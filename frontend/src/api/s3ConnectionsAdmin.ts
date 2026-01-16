@@ -74,16 +74,12 @@ export type S3ConnectionUserLink = {
   user_id: number;
   email?: string | null;
   full_name?: string | null;
-  can_browser: boolean;
-  can_manager: boolean;
   created_at?: string | null;
   updated_at?: string | null;
 };
 
 export type UpsertS3ConnectionUserLinkPayload = {
   user_id: number;
-  can_browser: boolean;
-  can_manager: boolean;
 };
 
 export async function listAdminS3Connections(params?: ListS3ConnectionsParams): Promise<PaginatedS3ConnectionsResponse> {

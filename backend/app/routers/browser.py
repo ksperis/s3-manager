@@ -14,7 +14,7 @@ The endpoints reuse the existing `account_id` selector and context resolution
 logic implemented in :func:`app.routers.dependencies.get_account_context`.
 """
 
-from typing import Optional
+from typing import Any, Optional, Union
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -50,13 +50,51 @@ from app.models.browser import (
     StsStatus,
     BrowserStsCredentials,
 )
-from app.routers.dependencies import get_account_context, get_audit_logger, get_current_account_user
+from app.models.session import ManagerSessionPrincipal
+from app.routers.dependencies import get_account_context, get_audit_logger, get_current_account_admin
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services.browser_service import BrowserService, get_browser_service
 
 
 router = APIRouter(prefix="/browser", tags=["browser"])
+
+BrowserActor = Union[User, ManagerSessionPrincipal]
+
+
+def _record_browser_action(
+    audit_service: AuditService,
+    actor: BrowserActor,
+    *,
+    action: str,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    account: Optional[S3Account] = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> None:
+    if isinstance(actor, User):
+        audit_service.record_action(
+            user=actor,
+            scope="browser",
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            account=account,
+            metadata=metadata,
+        )
+        return
+    user_email, user_role = actor.audit_fallbacks()
+    audit_service.record_action(
+        user=None,
+        user_email=user_email,
+        user_role=user_role,
+        scope="browser",
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        account=account,
+        metadata=metadata,
+    )
 
 
 class CreateFolderPayload(BaseModel):
@@ -73,7 +111,7 @@ class EnsureCorsPayload(BaseModel):
 
 
 @router.get("/settings", response_model=BrowserSettings)
-def get_browser_settings(_: User = Depends(get_current_account_user)) -> BrowserSettings:
+def get_browser_settings(_: BrowserActor = Depends(get_current_account_admin)) -> BrowserSettings:
     return load_app_settings().browser
 
 
@@ -81,7 +119,7 @@ def get_browser_settings(_: User = Depends(get_current_account_user)) -> Browser
 def list_buckets(
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> list[BrowserBucket]:
     try:
         return service.list_buckets(account)
@@ -101,7 +139,7 @@ def list_objects(
     recursive: bool = Query(default=False),
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ListBrowserObjectsResponse:
     try:
         return service.list_objects(
@@ -125,7 +163,7 @@ def get_bucket_cors(
     origin: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketCorsStatus:
     return service.get_bucket_cors_status(bucket_name, account, origin=origin)
 
@@ -136,16 +174,16 @@ def ensure_bucket_cors(
     payload: EnsureCorsPayload,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketCorsStatus:
     if not payload.origin:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing origin")
     try:
         status_result = service.ensure_bucket_cors(bucket_name, account, payload.origin)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="ensure_bucket_cors",
             entity_type="bucket",
             entity_id=bucket_name,
@@ -161,7 +199,7 @@ def ensure_bucket_cors(
 def get_sts_status(
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> StsStatus:
     return service.check_sts(account)
 
@@ -170,7 +208,7 @@ def get_sts_status(
 def get_sts_credentials(
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> BrowserStsCredentials:
     try:
         return service.get_sts_credentials(account)
@@ -188,7 +226,7 @@ def list_versions(
     max_keys: int = Query(default=1000, ge=1, le=1000),
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ListObjectVersionsResponse:
     try:
         return service.list_object_versions(
@@ -211,7 +249,7 @@ def head_object(
     version_id: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectMetadata:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
@@ -227,14 +265,14 @@ def update_object_metadata(
     payload: ObjectMetadataUpdate,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> ObjectMetadata:
     try:
         result = service.update_object_metadata(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="update_object_metadata",
             entity_type="object",
             entity_id=f"{bucket_name}/{payload.key}",
@@ -253,7 +291,7 @@ def get_object_tags(
     version_id: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectTags:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
@@ -269,14 +307,14 @@ def put_object_tags(
     payload: ObjectTags,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> ObjectTags:
     try:
         result = service.put_object_tags(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="put_object_tags",
             entity_type="object",
             entity_id=f"{bucket_name}/{payload.key}",
@@ -295,7 +333,7 @@ def get_object_acl(
     version_id: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectAcl:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
@@ -311,14 +349,14 @@ def put_object_acl(
     payload: ObjectAcl,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> ObjectAcl:
     try:
         result = service.put_object_acl(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="put_object_acl",
             entity_type="object",
             entity_id=f"{bucket_name}/{payload.key}",
@@ -337,7 +375,7 @@ def get_object_legal_hold(
     version_id: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectLegalHold:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
@@ -353,14 +391,14 @@ def put_object_legal_hold(
     payload: ObjectLegalHold,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> ObjectLegalHold:
     try:
         result = service.put_object_legal_hold(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="put_object_legal_hold",
             entity_type="object",
             entity_id=f"{bucket_name}/{payload.key}",
@@ -379,7 +417,7 @@ def get_object_retention(
     version_id: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ObjectRetention:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
@@ -395,14 +433,14 @@ def put_object_retention(
     payload: ObjectRetention,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> ObjectRetention:
     try:
         result = service.put_object_retention(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="put_object_retention",
             entity_type="object",
             entity_id=f"{bucket_name}/{payload.key}",
@@ -420,14 +458,14 @@ def delete_objects(
     payload: DeleteObjectsPayload,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict:
     try:
         result = service.delete_objects(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="delete_objects",
             entity_type="bucket",
             entity_id=bucket_name,
@@ -445,14 +483,14 @@ def copy_object(
     payload: CopyObjectPayload,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict:
     try:
         result = service.copy_object(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="copy_object",
             entity_type="object",
             entity_id=f"{bucket_name}/{payload.source_key}",
@@ -470,16 +508,16 @@ def create_folder(
     payload: CreateFolderPayload,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict:
     if not payload.prefix:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing prefix")
     try:
         result = service.create_folder(bucket_name, account, payload.prefix)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="create_folder",
             entity_type="bucket",
             entity_id=bucket_name,
@@ -499,16 +537,16 @@ def upload_via_proxy(
     content_type: Optional[str] = Form(default=None),
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> ProxyUploadResponse:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         service.upload_via_proxy(bucket_name, account, file, key=key, content_type=content_type)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="upload_via_proxy",
             entity_type="object",
             entity_id=f"{bucket_name}/{key}",
@@ -526,7 +564,7 @@ def download_object(
     version_id: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> StreamingResponse:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
@@ -546,7 +584,7 @@ def presign(
     payload: PresignRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> PresignedUrl:
     try:
         return service.presign(bucket_name, account, payload)
@@ -560,14 +598,14 @@ def multipart_init(
     payload: MultipartUploadInitRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> MultipartUploadInitResponse:
     try:
         result = service.multipart_init(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="multipart_init",
             entity_type="object",
             entity_id=f"{bucket_name}/{payload.key}",
@@ -587,7 +625,7 @@ def list_multipart_uploads(
     max_uploads: int = Query(default=1000, ge=1, le=1000),
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ListMultipartUploadsResponse:
     try:
         return service.list_multipart_uploads(
@@ -611,7 +649,7 @@ def list_parts(
     max_parts: int = Query(default=1000, ge=1, le=1000),
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> ListPartsResponse:
     try:
         return service.list_parts(
@@ -632,7 +670,7 @@ def presign_part(
     payload: PresignPartRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    _: User = Depends(get_current_account_user),
+    _: BrowserActor = Depends(get_current_account_admin),
 ) -> PresignPartResponse:
     try:
         return service.presign_part(bucket_name, account, payload)
@@ -646,14 +684,14 @@ def multipart_complete(
     payload: CompleteMultipartUploadRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict:
     try:
         result = service.multipart_complete(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="multipart_complete",
             entity_type="object",
             entity_id=f"{bucket_name}/{payload.key}",
@@ -670,14 +708,14 @@ def restore_object(
     payload: ObjectRestoreRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict:
     try:
         result = service.restore_object(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="restore_object",
             entity_type="object",
             entity_id=f"{bucket_name}/{payload.key}",
@@ -695,14 +733,14 @@ def cleanup_object_versions(
     payload: CleanupObjectVersionsPayload,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
-    current_user: User = Depends(get_current_account_user),
+    actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> CleanupObjectVersionsResponse:
     try:
         result = service.cleanup_object_versions(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
-            scope="browser",
+        _record_browser_action(
+            audit_service,
+            actor,
             action="cleanup_object_versions",
             entity_type="bucket",
             entity_id=bucket_name,

@@ -88,8 +88,11 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
           listConnections().catch(() => [] as S3Connection[]),
           listManagerS3Accounts().catch(() => [] as S3Account[]),
         ]);
+        const accountIds = new Set(accounts.map((account) => String(account.id)));
         const combined: BrowserContextItem[] = [
-          ...connections.map(normalizeConnectionToContextItem),
+          ...connections
+            .filter((conn) => !accountIds.has(`conn-${conn.id}`))
+            .map(normalizeConnectionToContextItem),
           ...accounts.map(normalizeAccountToContextItem),
         ];
         setContexts(combined);
