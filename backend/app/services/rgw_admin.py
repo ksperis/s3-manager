@@ -33,7 +33,7 @@ class RGWAdminClient:
         if not resolved_endpoint:
             raise RGWAdminError("RGW admin endpoint is not configured")
         self.endpoint = resolved_endpoint.rstrip("/") if resolved_endpoint else ""
-        self.region = region or settings.s3_region
+        self.region = region or settings.seed_s3_region
         self.access_key = access_key
         self.secret_key = secret_key
         if not self.access_key or not self.secret_key:

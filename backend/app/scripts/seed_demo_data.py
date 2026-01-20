@@ -603,7 +603,7 @@ def main() -> None:
     settings = get_settings()
     endpoint = configured_s3_endpoint()
     if not endpoint:
-        raise SystemExit("S3_ENDPOINT is required to seed demo data.")
+        raise SystemExit("SEED_S3_ENDPOINT is required to seed demo data.")
     logger.info(
         "Using endpoint %s with database %s",
         endpoint,

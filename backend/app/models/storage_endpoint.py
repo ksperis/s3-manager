@@ -90,3 +90,7 @@ class StorageEndpointPublic(BaseModel):
     name: str
     endpoint_url: str
     is_default: bool = False
+
+
+class StorageEndpointMeta(BaseModel):
+    managed_by_env: bool = False

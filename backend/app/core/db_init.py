@@ -33,18 +33,21 @@ def init_db(engine, session_factory) -> None:
     # Seed super-admin if missing
     db: Session = session_factory()
     try:
-        admin = db.query(User).filter(User.email == settings.super_admin_email).first()
+        admin = db.query(User).filter(User.email == settings.seed_super_admin_email).first()
         if not admin:
             admin_user = User(
-                email=settings.super_admin_email,
-                full_name=settings.super_admin_full_name,
-                hashed_password=get_password_hash(settings.super_admin_password),
+                email=settings.seed_super_admin_email,
+                full_name=settings.seed_super_admin_full_name,
+                hashed_password=get_password_hash(settings.seed_super_admin_password),
                 is_active=True,
                 role=UserRole.UI_ADMIN.value,
             )
             db.add(admin_user)
             db.commit()
-        # Ensure the environment-provided storage endpoint is registered
-        StorageEndpointsService(db).ensure_default_endpoint()
+        # Ensure env-managed endpoints or default endpoint are registered
+        storage_service = StorageEndpointsService(db)
+        storage_service.sync_env_endpoints()
+        if not storage_service.env_endpoints_locked():
+            storage_service.ensure_default_endpoint()
     finally:
         db.close()

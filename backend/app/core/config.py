@@ -62,24 +62,61 @@ class Settings(BaseSettings):
         description="Path to app_settings.json (defaults to backend/app/data/app_settings.json)",
     )
 
-    s3_endpoint: str = Field("http://localhost:9000", description="RGW/S3 endpoint")
-    s3_endpoint_features: Optional[str] = Field(
-        None,
-        description="Default endpoint features (YAML or JSON)",
+    seed_s3_endpoint: str = Field(
+        "http://localhost:9000",
+        description="Seed RGW/S3 endpoint",
     )
-    s3_access_key: str = Field("minio", description="Access key for RGW/S3")
-    s3_secret_key: str = Field("minio123", description="Secret key for RGW/S3")
-    s3_region: str = Field("us-east-1", description="Default S3 region")
+    seed_s3_endpoint_features: Optional[str] = Field(
+        None,
+        description="Seed default endpoint features (YAML or JSON)",
+    )
+    env_storage_endpoints: Optional[str] = Field(
+        None,
+        description="JSON array of storage endpoints managed by environment",
+    )
+    seed_s3_access_key: str = Field(
+        "minio",
+        description="Seed access key for RGW/S3",
+    )
+    seed_s3_secret_key: str = Field(
+        "minio123",
+        description="Seed secret key for RGW/S3",
+    )
+    seed_s3_region: str = Field(
+        "us-east-1",
+        description="Seed default S3 region",
+    )
 
-    rgw_admin_access_key: Optional[str] = Field(None, description="Admin ops access key (defaults to s3_access_key)")
-    rgw_admin_secret_key: Optional[str] = Field(None, description="Admin ops secret key (defaults to s3_secret_key)")
-    supervision_access_key: Optional[str] = Field(None, description="Access key dedicated to supervision usage stats")
-    supervision_secret_key: Optional[str] = Field(None, description="Secret key dedicated to supervision usage stats")
+    seed_rgw_admin_access_key: Optional[str] = Field(
+        None,
+        description="Seed admin ops access key (defaults to seed_s3_access_key)",
+    )
+    seed_rgw_admin_secret_key: Optional[str] = Field(
+        None,
+        description="Seed admin ops secret key (defaults to seed_s3_secret_key)",
+    )
+    seed_supervision_access_key: Optional[str] = Field(
+        None,
+        description="Seed access key dedicated to supervision usage stats",
+    )
+    seed_supervision_secret_key: Optional[str] = Field(
+        None,
+        description="Seed secret key dedicated to supervision usage stats",
+    )
 
     # Default super-admin seed
-    super_admin_email: str = Field("admin@example.com", description="Default super-admin login")
-    super_admin_password: str = Field("changeme", description="Default super-admin password")
-    super_admin_full_name: Optional[str] = Field("Admin", description="Default super-admin name")
+    seed_super_admin_email: str = Field(
+        "admin@example.com",
+        description="Seed default super-admin login",
+    )
+    seed_super_admin_password: str = Field(
+        "changeme",
+        description="Seed default super-admin password",
+    )
+    seed_super_admin_full_name: Optional[str] = Field(
+        "Admin",
+        description="Seed default super-admin name",
+    )
 
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     oidc_providers: dict[str, OIDCProviderSettings] = Field(default_factory=dict)

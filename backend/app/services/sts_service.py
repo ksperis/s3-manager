@@ -28,7 +28,7 @@ def get_sts_client(
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         aws_session_token=session_token,
-        region_name=settings.s3_region,
+        region_name=settings.seed_s3_region,
     )
     return client
 

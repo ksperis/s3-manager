@@ -1,8 +1,10 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import json
 import logging
 from typing import Optional
 
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -24,9 +26,58 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+class EnvStorageEndpoint(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    endpoint_url: str
+    region: Optional[str] = None
+    provider: Optional[StorageProvider] = None
+    admin_access_key: Optional[str] = None
+    admin_secret_key: Optional[str] = None
+    supervision_access_key: Optional[str] = None
+    supervision_secret_key: Optional[str] = None
+    features_config: Optional[str] = None
+    features: Optional[dict[str, dict[str, object]]] = None
+    is_default: bool = False
+
+    @field_validator("name", "endpoint_url", "region", mode="before")
+    @classmethod
+    def trim_strings(cls, value: Optional[str]) -> Optional[str]:
+        if isinstance(value, str):
+            value = value.strip()
+        return value or None
+
+
 class StorageEndpointsService:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def env_endpoints_locked(self) -> bool:
+        raw = settings.env_storage_endpoints
+        return bool(raw and raw.strip())
+
+    def _load_env_endpoints(self) -> list[EnvStorageEndpoint]:
+        raw = settings.env_storage_endpoints
+        if not raw or not raw.strip():
+            return []
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("ENV_STORAGE_ENDPOINTS must be valid JSON.") from exc
+        if not isinstance(payload, list):
+            raise ValueError("ENV_STORAGE_ENDPOINTS must be a JSON array.")
+        endpoints: list[EnvStorageEndpoint] = []
+        for index, entry in enumerate(payload):
+            try:
+                endpoints.append(EnvStorageEndpoint.model_validate(entry))
+            except ValidationError as exc:
+                raise ValueError(f"Invalid ENV_STORAGE_ENDPOINTS entry at index {index}.") from exc
+        return endpoints
+
+    def _ensure_env_editable(self) -> None:
+        if self.env_endpoints_locked():
+            raise ValueError("Storage endpoints are managed by ENV_STORAGE_ENDPOINTS.")
 
     def _normalize_url(self, value: Optional[str]) -> Optional[str]:
         if not value:
@@ -113,6 +164,120 @@ class StorageEndpointsService:
         # Provider is not Ceph: clear admin/supervision credentials
         return None, None, None, None
 
+    def sync_env_endpoints(self) -> list[StorageEndpointSchema]:
+        env_endpoints = self._load_env_endpoints()
+        if not env_endpoints:
+            return []
+
+        seen_urls: set[str] = set()
+        seen_names: set[str] = set()
+        default_count = 0
+        normalized_entries: list[tuple[EnvStorageEndpoint, str, str]] = []
+
+        for entry in env_endpoints:
+            name = self._normalize_name(entry.name, fallback="Endpoint")
+            endpoint_url = self._normalize_url(entry.endpoint_url)
+            if not endpoint_url:
+                raise ValueError("ENV_STORAGE_ENDPOINTS requires endpoint_url for each entry.")
+            if endpoint_url in seen_urls:
+                raise ValueError(f"ENV_STORAGE_ENDPOINTS contains duplicate endpoint_url: {endpoint_url}")
+            if name in seen_names:
+                raise ValueError(f"ENV_STORAGE_ENDPOINTS contains duplicate name: {name}")
+            seen_urls.add(endpoint_url)
+            seen_names.add(name)
+            if entry.is_default:
+                default_count += 1
+            normalized_entries.append((entry, name, endpoint_url))
+
+        if default_count > 1:
+            raise ValueError("ENV_STORAGE_ENDPOINTS can only define one default endpoint.")
+        if default_count == 0:
+            normalized_entries[0][0].is_default = True
+
+        existing = self.db.query(StorageEndpoint).all()
+        existing_by_url = {
+            self._normalize_url(endpoint.endpoint_url): endpoint
+            for endpoint in existing
+            if endpoint.endpoint_url
+        }
+
+        default_url: Optional[str] = None
+        for entry, name, endpoint_url in normalized_entries:
+            provider = self._normalize_provider(entry.provider)
+            region = self._clean_optional(entry.region)
+            admin_access = self._clean_optional(entry.admin_access_key)
+            admin_secret = self._clean_optional(entry.admin_secret_key)
+            supervision_access = self._clean_optional(entry.supervision_access_key)
+            supervision_secret = self._clean_optional(entry.supervision_secret_key)
+            raw_features = entry.features_config
+            if entry.features is not None:
+                raw_features = dump_features_config(entry.features)
+            features, features_config = self._normalize_features(provider, raw_features)
+            admin_endpoint = features.get("admin", {}).get("endpoint")
+
+            admin_access, admin_secret, supervision_access, supervision_secret = self._validate_credentials(
+                provider,
+                admin_access,
+                admin_secret,
+                supervision_access,
+                supervision_secret,
+                bool(features.get("admin", {}).get("enabled")),
+                bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
+            )
+
+            endpoint = existing_by_url.get(endpoint_url)
+            if endpoint:
+                self._ensure_unique_name(name, exclude_id=endpoint.id)
+                endpoint.name = name
+                endpoint.endpoint_url = endpoint_url
+                endpoint.admin_endpoint = admin_endpoint
+                endpoint.region = region
+                endpoint.provider = provider.value
+                endpoint.admin_access_key = admin_access
+                endpoint.admin_secret_key = admin_secret
+                endpoint.supervision_access_key = supervision_access
+                endpoint.supervision_secret_key = supervision_secret
+                endpoint.features_config = features_config
+                endpoint.is_default = bool(entry.is_default)
+                endpoint.is_editable = False
+                self.db.add(endpoint)
+            else:
+                self._ensure_unique_name(name)
+                self._ensure_unique_endpoint(endpoint_url)
+                endpoint = StorageEndpoint(
+                    name=name,
+                    endpoint_url=endpoint_url,
+                    admin_endpoint=admin_endpoint,
+                    region=region,
+                    provider=provider.value,
+                    admin_access_key=admin_access,
+                    admin_secret_key=admin_secret,
+                    supervision_access_key=supervision_access,
+                    supervision_secret_key=supervision_secret,
+                    features_config=features_config,
+                    is_default=bool(entry.is_default),
+                    is_editable=False,
+                )
+                self.db.add(endpoint)
+                existing_by_url[endpoint_url] = endpoint
+
+            if entry.is_default:
+                default_url = endpoint_url
+
+        if default_url:
+            for endpoint in self.db.query(StorageEndpoint).filter(StorageEndpoint.endpoint_url != default_url).all():
+                if endpoint.is_default:
+                    endpoint.is_default = False
+                    self.db.add(endpoint)
+
+        self.db.commit()
+        synced: list[StorageEndpointSchema] = []
+        for endpoint_url in seen_urls:
+            endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.endpoint_url == endpoint_url).first()
+            if endpoint:
+                synced.append(self._serialize(endpoint))
+        return synced
+
     def list_endpoints(self) -> list[StorageEndpointSchema]:
         endpoints = (
             self.db.query(StorageEndpoint)
@@ -138,6 +303,7 @@ class StorageEndpointsService:
         return self._serialize(endpoint)
 
     def create_endpoint(self, payload: StorageEndpointCreate) -> StorageEndpointSchema:
+        self._ensure_env_editable()
         name = self._normalize_name(payload.name, fallback="Endpoint")
         endpoint_url = self._normalize_url(payload.endpoint_url)
         region = self._clean_optional(payload.region)
@@ -183,6 +349,7 @@ class StorageEndpointsService:
         return self._serialize(entry)
 
     def update_endpoint(self, endpoint_id: int, payload: StorageEndpointUpdate) -> StorageEndpointSchema:
+        self._ensure_env_editable()
         endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:
             raise ValueError("Endpoint not found.")
@@ -262,6 +429,7 @@ class StorageEndpointsService:
         return self._serialize(endpoint)
 
     def delete_endpoint(self, endpoint_id: int) -> None:
+        self._ensure_env_editable()
         endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:
             raise ValueError("Endpoint not found.")
@@ -277,6 +445,7 @@ class StorageEndpointsService:
         self.db.commit()
 
     def set_default_endpoint(self, endpoint_id: int) -> StorageEndpointSchema:
+        self._ensure_env_editable()
         endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:
             raise ValueError("Endpoint not found.")
@@ -301,20 +470,23 @@ class StorageEndpointsService:
         return f"{candidate}-{suffix}"
 
     def ensure_default_endpoint(self) -> Optional[StorageEndpointSchema]:
+        if self.env_endpoints_locked():
+            self.sync_env_endpoints()
+            return None
         endpoint_url = configured_s3_endpoint()
         if not endpoint_url:
             return None
         if self.db.query(StorageEndpoint).count() > 0:
             return None
-        region = settings.s3_region
-        admin_access = settings.rgw_admin_access_key or settings.s3_access_key
-        admin_secret = settings.rgw_admin_secret_key or settings.s3_secret_key
-        supervision_access = settings.supervision_access_key
-        supervision_secret = settings.supervision_secret_key
+        region = settings.seed_s3_region
+        admin_access = settings.seed_rgw_admin_access_key or settings.seed_s3_access_key
+        admin_secret = settings.seed_rgw_admin_secret_key or settings.seed_s3_secret_key
+        supervision_access = settings.seed_supervision_access_key
+        supervision_secret = settings.seed_supervision_secret_key
         provider = (
             StorageProvider.CEPH if admin_access and admin_secret else StorageProvider.OTHER
         )
-        features, features_config = self._normalize_features(provider, settings.s3_endpoint_features)
+        features, features_config = self._normalize_features(provider, settings.seed_s3_endpoint_features)
         admin_endpoint = features.get("admin", {}).get("endpoint")
         name = self._env_endpoint_name()
         admin_access, admin_secret, supervision_access, supervision_secret = self._validate_credentials(

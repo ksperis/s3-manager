@@ -28,10 +28,10 @@ def get_s3_client(
     client = boto3.client(
         "s3",
         endpoint_url=endpoint,
-        aws_access_key_id=access_key or settings.s3_access_key,
-        aws_secret_access_key=secret_key or settings.s3_secret_key,
+        aws_access_key_id=access_key or settings.seed_s3_access_key,
+        aws_secret_access_key=secret_key or settings.seed_s3_secret_key,
         aws_session_token=session_token,
-        region_name=settings.s3_region,
+        region_name=settings.seed_s3_region,
         config=Config(signature_version="s3v4"),
     )
     return LoggedS3Client(client)
@@ -93,10 +93,10 @@ def create_bucket(
 ) -> None:
     client = get_s3_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
     try:
-        if settings.s3_region and settings.s3_region != "us-east-1":
+        if settings.seed_s3_region and settings.seed_s3_region != "us-east-1":
             client.create_bucket(
                 Bucket=bucket_name,
-                CreateBucketConfiguration={"LocationConstraint": settings.s3_region},
+                CreateBucketConfiguration={"LocationConstraint": settings.seed_s3_region},
             )
         else:
             client.create_bucket(Bucket=bucket_name)

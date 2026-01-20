@@ -40,6 +40,10 @@ export type StorageEndpoint = {
   updated_at: string;
 };
 
+export type StorageEndpointMeta = {
+  managed_by_env: boolean;
+};
+
 export type StorageEndpointPayload = {
   name: string;
   endpoint_url: string;
@@ -55,6 +59,11 @@ export type StorageEndpointPayload = {
 
 export async function listStorageEndpoints(): Promise<StorageEndpoint[]> {
   const { data } = await client.get<StorageEndpoint[]>("/admin/storage-endpoints");
+  return data;
+}
+
+export async function fetchStorageEndpointsMeta(): Promise<StorageEndpointMeta> {
+  const { data } = await client.get<StorageEndpointMeta>("/admin/storage-endpoints/meta");
   return data;
 }
 

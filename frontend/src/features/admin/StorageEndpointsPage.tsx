@@ -9,6 +9,7 @@ import {
   StorageProvider,
   createStorageEndpoint,
   deleteStorageEndpoint,
+  fetchStorageEndpointsMeta,
   listStorageEndpoints,
   setDefaultStorageEndpoint,
   updateStorageEndpoint,
@@ -221,6 +222,7 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
 
 export default function StorageEndpointsPage() {
   const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
+  const [envManaged, setEnvManaged] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -245,10 +247,12 @@ export default function StorageEndpointsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await listStorageEndpoints();
+      const [data, meta] = await Promise.all([listStorageEndpoints(), fetchStorageEndpointsMeta()]);
       setEndpoints(data);
+      setEnvManaged(Boolean(meta.managed_by_env));
     } catch (err) {
       setError(extractError(err));
+      setEnvManaged(false);
     } finally {
       setLoading(false);
     }
@@ -293,11 +297,13 @@ export default function StorageEndpointsPage() {
   };
 
   const startCreate = () => {
+    if (envManaged) return;
     resetForm();
     setShowForm(true);
   };
 
   const startEdit = (endpoint: StorageEndpoint) => {
+    if (envManaged) return;
     const features = resolveFeatureState(endpoint, endpoint.provider);
     setEditingId(endpoint.id);
     setForm({
@@ -321,6 +327,7 @@ export default function StorageEndpointsPage() {
   };
 
   const handleDelete = async () => {
+    if (envManaged) return;
     if (!deleteTarget) return;
     setDeleteBusy(true);
     setDeleteError(null);
@@ -337,6 +344,7 @@ export default function StorageEndpointsPage() {
   };
 
   const handleSetDefault = async (endpoint: StorageEndpoint) => {
+    if (envManaged) return;
     if (endpoint.is_default) return;
     setDefaultError(null);
     setDefaultBusyId(endpoint.id);
@@ -426,6 +434,7 @@ export default function StorageEndpointsPage() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (envManaged) return;
     setFormError(null);
     const payload = buildPayload();
     if (!payload) return;
@@ -468,6 +477,7 @@ export default function StorageEndpointsPage() {
       stsEnabled &&
       Boolean(stsEndpointOverride) &&
       stsEndpointOverride !== endpoint.endpoint_url;
+    const readOnly = envManaged || !endpoint.is_editable;
 
     return (
       <div
@@ -480,7 +490,8 @@ export default function StorageEndpointsPage() {
               <h3 className="ui-section font-semibold text-slate-900 dark:text-white">{endpoint.name}</h3>
               <ProviderBadge provider={endpoint.provider} />
               {endpoint.is_default && <StatusBadge label="Default" />}
-              {!endpoint.is_editable && <LockBadge label="Protected" />}
+              {envManaged && <LockBadge label="Env managed" />}
+              {!envManaged && !endpoint.is_editable && <LockBadge label="Protected" />}
             </div>
             <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
               <span className="font-semibold text-slate-700 dark:text-slate-100">Endpoint:</span>
@@ -511,12 +522,12 @@ export default function StorageEndpointsPage() {
                 className="rounded-lg border border-slate-200 px-3 py-1.5 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
                 onClick={() => handleSetDefault(endpoint)}
                 type="button"
-                disabled={Boolean(defaultBusyId)}
+                disabled={Boolean(defaultBusyId) || envManaged}
               >
                 {settingDefault ? "Setting..." : "Set as default"}
               </button>
             )}
-            {endpoint.is_editable ? (
+            {!readOnly ? (
               <>
                 <button
                   className="rounded-lg border border-slate-200 px-3 py-1.5 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
@@ -642,7 +653,7 @@ export default function StorageEndpointsPage() {
         title="Storage endpoints"
         description="Manage the S3/Ceph endpoints used by the console."
         breadcrumbs={[{ label: "Admin" }, { label: "Endpoints" }]}
-        actions={[{ label: "New endpoint", onClick: startCreate }]}
+        actions={envManaged ? [] : [{ label: "New endpoint", onClick: startCreate }]}
         inlineContent={
           endpoints.length > 0 ? (
             <span className="ui-body font-semibold text-slate-500 dark:text-slate-300">
@@ -652,6 +663,11 @@ export default function StorageEndpointsPage() {
         }
       />
 
+      {envManaged && (
+        <PageBanner tone="info">
+          Storage endpoints are managed by environment variables (ENV_STORAGE_ENDPOINTS). UI changes are disabled.
+        </PageBanner>
+      )}
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {defaultError && <PageBanner tone="error">{defaultError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}

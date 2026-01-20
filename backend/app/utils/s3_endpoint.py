@@ -15,9 +15,9 @@ def normalize_s3_endpoint(value: Optional[str]) -> Optional[str]:
 
 
 def configured_s3_endpoint() -> Optional[str]:
-    if "s3_endpoint" not in settings.model_fields_set:
+    if "seed_s3_endpoint" not in settings.model_fields_set:
         return None
-    return normalize_s3_endpoint(settings.s3_endpoint)
+    return normalize_s3_endpoint(settings.seed_s3_endpoint)
 
 
 def resolve_s3_endpoint(account: object) -> Optional[str]:

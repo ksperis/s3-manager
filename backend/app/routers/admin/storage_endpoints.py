@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.models.storage_endpoint import (
     StorageEndpoint,
     StorageEndpointCreate,
+    StorageEndpointMeta,
     StorageEndpointUpdate,
 )
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
@@ -32,6 +33,14 @@ def list_storage_endpoints(
     _: dict = Depends(get_current_super_admin),
 ) -> list[StorageEndpoint]:
     return service.list_endpoints()
+
+
+@router.get("/meta", response_model=StorageEndpointMeta)
+def get_storage_endpoints_meta(
+    service: StorageEndpointsService = Depends(get_service),
+    _: dict = Depends(get_current_super_admin),
+) -> StorageEndpointMeta:
+    return StorageEndpointMeta(managed_by_env=service.env_endpoints_locked())
 
 
 @router.get("/{endpoint_id}", response_model=StorageEndpoint)

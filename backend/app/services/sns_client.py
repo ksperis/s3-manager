@@ -24,9 +24,9 @@ def get_sns_client(
     return boto3.client(
         "sns",
         endpoint_url=endpoint,
-        aws_access_key_id=access_key or settings.s3_access_key,
-        aws_secret_access_key=secret_key or settings.s3_secret_key,
-        region_name=settings.s3_region,
+        aws_access_key_id=access_key or settings.seed_s3_access_key,
+        aws_secret_access_key=secret_key or settings.seed_s3_secret_key,
+        region_name=settings.seed_s3_region,
         config=Config(signature_version="s3v4"),
     )
 

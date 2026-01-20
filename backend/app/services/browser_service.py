@@ -400,7 +400,7 @@ class BrowserService:
                 session_token=cached.session_token,
                 expiration=_normalize_expiration(cached.expiration),
                 endpoint=_resolve_endpoint(account),
-                region=settings.s3_region,
+                region=settings.seed_s3_region,
             )
         try:
             session_name = f"browser-{account.id or access_key[:8]}"
@@ -429,7 +429,7 @@ class BrowserService:
             session_token=token,
             expiration=normalized_expiration,
             endpoint=_resolve_endpoint(account),
-            region=settings.s3_region,
+            region=settings.seed_s3_region,
         )
 
     def proxy_upload(self, bucket_name: str, account: S3Account, key: str, file_obj, content_type: Optional[str]) -> None:

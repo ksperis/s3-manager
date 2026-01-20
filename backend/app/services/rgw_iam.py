@@ -22,7 +22,7 @@ def get_iam_client(access_key: str, secret_key: str, endpoint: Optional[str] = N
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         config=Config(signature_version="s3v4"),
-        region_name=region or settings.s3_region,
+        region_name=region or settings.seed_s3_region,
     )
 
 
