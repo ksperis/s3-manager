@@ -127,6 +127,10 @@ def _record_sts_failure(cache_key: str) -> None:
 
 class BrowserService:
     def _sts_enabled(self, account: S3Account) -> bool:
+        if getattr(account, "s3_user_id", None) is not None:
+            return False
+        if getattr(account, "s3_connection_id", None) is not None:
+            return False
         endpoint = getattr(account, "storage_endpoint", None)
         if not endpoint:
             return False

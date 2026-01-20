@@ -373,7 +373,11 @@ export default function BrowserPage({
     return null;
   }, [selectedContext]);
   const effectiveCaps = storageEndpointCapabilities === undefined ? storageEndpointCaps : storageEndpointCapabilities;
-  const stsEnabled = Boolean(effectiveCaps?.sts);
+  const contextId = typeof accountIdForApi === "string" ? accountIdForApi : null;
+  const isLegacyS3UserContext = Boolean(contextId && contextId.startsWith("s3u-"));
+  const isLegacyConnectionContext = Boolean(contextId && contextId.startsWith("conn-"));
+  const isLegacyContext = isLegacyS3UserContext || isLegacyConnectionContext;
+  const stsEnabled = Boolean(effectiveCaps?.sts) && !isLegacyContext;
   const normalizeAccountId = useCallback((value: S3AccountSelector | null | undefined) => {
     if (value == null) return null;
     return String(value);
@@ -559,10 +563,20 @@ export default function BrowserPage({
     const stripTrailingPeriod = (value: string) => (value.endsWith(".") ? value.slice(0, -1) : value);
     const normalizeStsError = (value?: string | null) => {
       if (!value) return null;
+      if (value.includes("AccessDenied") && value.includes("GetSessionToken")) {
+        return "STS access denied. IAM credentials with sts:GetSessionToken are required.";
+      }
       if (value.includes("GetCallerIdentity")) return "STS is unavailable.";
       return value;
     };
     const stsError = normalizeStsError(stsStatus?.error) ?? "STS is not available for this account.";
+    if (isLegacyContext) {
+      items.push(
+        isLegacyConnectionContext
+          ? "STS is not available for legacy S3 connections. Presigned URLs are used instead."
+          : "STS is not available for legacy S3 users. Presigned URLs are used instead."
+      );
+    }
     if (useProxyTransfers) {
       const reasons: string[] = [];
       if (corsDisabled) {
@@ -589,6 +603,8 @@ export default function BrowserPage({
   }, [
     corsFixError,
     corsStatus,
+    isLegacyConnectionContext,
+    isLegacyContext,
     proxyAllowed,
     stsCredentialsError,
     stsStatus,
