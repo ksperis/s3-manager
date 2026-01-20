@@ -8,6 +8,7 @@ import Layout from "../../components/Layout";
 import { SidebarSection } from "../../components/Sidebar";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
 type StoredUser = {
   account_links?: { account_id: number; account_role?: string | null }[] | null;
@@ -80,6 +81,7 @@ function AccountSelector() {
 
 function PortalShell() {
   const { selectedAccountId } = usePortalAccountContext();
+  const { generalSettings } = useGeneralSettings();
   const accountRole = resolvePortalRole(getStoredUser(), selectedAccountId);
   const hideSidebar = accountRole === "portal_user";
   const navSections: SidebarSection[] = [
@@ -87,6 +89,7 @@ function PortalShell() {
       label: "Portail",
       links: [
         { to: "/portal", label: "Accueil", end: true },
+        ...(generalSettings.browser_enabled ? [{ to: "/portal/browser", label: "Browser" }] : []),
         { to: "/portal/manage", label: "Gestion" },
         { to: "/portal/settings", label: "Configuration" },
       ],

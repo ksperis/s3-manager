@@ -229,7 +229,7 @@ class BrowserService:
                 )
             )
         if origin and raw_rules:
-            required_methods = {"GET", "PUT", "HEAD"}
+            required_methods = {"GET", "PUT", "POST", "HEAD"}
 
             def matches_header(allowed_headers: list[str], header: str) -> bool:
                 header = header.lower()
@@ -272,9 +272,9 @@ class BrowserService:
             else:
                 raise RuntimeError(f"Unable to fetch CORS for '{bucket_name}': {exc}") from exc
 
-        desired_methods = {"GET", "PUT", "HEAD"}
+        desired_methods = {"GET", "PUT", "POST", "DELETE", "HEAD"}
         desired_headers = {"Content-Type", "x-amz-*"}
-        desired_expose = {"ETag"}
+        desired_expose = {"ETag", "x-amz-request-id", "x-amz-id-2"}
 
         def normalize(values: list[str]) -> list[str]:
             seen = set()
@@ -301,7 +301,10 @@ class BrowserService:
             if not allowed_headers:
                 rule["AllowedHeaders"] = sorted(desired_headers)
                 changed = True
-            elif "*" not in allowed_headers and not desired_headers.issubset(allowed_headers):
+            elif "*" in allowed_headers:
+                rule["AllowedHeaders"] = sorted(desired_headers)
+                changed = True
+            elif not desired_headers.issubset(allowed_headers):
                 merged_headers = normalize([*allowed_headers, *desired_headers])
                 rule["AllowedHeaders"] = merged_headers
                 changed = True

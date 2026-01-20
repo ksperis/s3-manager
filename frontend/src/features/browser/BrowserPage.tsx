@@ -8,6 +8,7 @@ import JSZip from "jszip";
 import axios from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
 import { formatBytes } from "../../utils/format";
+import type { S3AccountSelector } from "../../api/accountParams";
 import {
   BrowserBucket,
   BrowserObject,
@@ -173,8 +174,32 @@ import type {
   UploadQueueItem,
 } from "./browserTypes";
 
-export default function BrowserPage() {
-  const { selectorForApi: accountIdForApi, hasContext: hasS3AccountContext } = useBrowserContext();
+type BrowserPageProps = {
+  accountIdForApi?: S3AccountSelector;
+  hasContext?: boolean;
+  storageEndpointCapabilities?: Record<string, boolean> | null;
+  allowFoldersPanel?: boolean;
+  allowInspectorPanel?: boolean;
+  showPanelToggles?: boolean;
+  defaultShowFolders?: boolean;
+  defaultShowInspector?: boolean;
+};
+
+type OperationDetailsKind = "download" | "delete" | "copy" | "upload" | "other";
+
+export default function BrowserPage({
+  accountIdForApi: accountIdOverride,
+  hasContext: hasContextOverride,
+  storageEndpointCapabilities,
+  allowFoldersPanel = true,
+  allowInspectorPanel = true,
+  showPanelToggles = true,
+  defaultShowFolders = false,
+  defaultShowInspector = false,
+}: BrowserPageProps = {}) {
+  const browserContext = useBrowserContext();
+  const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
+  const hasS3AccountContext = hasContextOverride ?? browserContext.hasContext;
   // /browser is credential-first: no root/portal switching in step 2.
   const accessMode = null;
   const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
@@ -189,8 +214,8 @@ export default function BrowserPage() {
   const [objectsNextToken, setObjectsNextToken] = useState<string | null>(null);
   const [objectsIsTruncated, setObjectsIsTruncated] = useState(false);
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
-  const [showFolders, setShowFolders] = useState(false);
-  const [showInspector, setShowInspector] = useState(false);
+  const [showFolders, setShowFolders] = useState(Boolean(allowFoldersPanel && defaultShowFolders));
+  const [showInspector, setShowInspector] = useState(Boolean(allowInspectorPanel && defaultShowInspector));
   const [inspectorTab, setInspectorTab] = useState<"context" | "selection" | "details">("context");
   const [compactMode, setCompactMode] = useState(true);
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
@@ -244,9 +269,10 @@ export default function BrowserPage() {
   const downloadControllersRef = useRef(new Map<string, AbortController>());
   const stsCredentialsRef = useRef<StsCredentials | null>(null);
   const stsRefreshRef = useRef<Promise<StsCredentials | null> | null>(null);
-  const [showActiveOperations, setShowActiveOperations] = useState(true);
-  const [showQueuedOperations, setShowQueuedOperations] = useState(true);
+  const [showActiveOperations, setShowActiveOperations] = useState(false);
+  const [showQueuedOperations, setShowQueuedOperations] = useState(false);
   const [showCompletedOperations, setShowCompletedOperations] = useState(false);
+  const [showFailedOperations, setShowFailedOperations] = useState(false);
   const [expandedOperationGroups, setExpandedOperationGroups] = useState<Record<string, boolean>>({});
   const [queuedVisibleCountByGroup, setQueuedVisibleCountByGroup] = useState<Record<string, number>>({});
   const [completedOperations, setCompletedOperations] = useState<CompletedOperationItem[]>([]);
@@ -334,7 +360,58 @@ export default function BrowserPage() {
   const operationIdsRef = useRef(new Set<string>());
   const bucketNameRef = useRef(bucketName);
   const prefixRef = useRef(prefix);
-  const stsEnabled = false;
+  const selectedContext = useMemo(
+    () => browserContext.contexts.find((ctx) => ctx.id === browserContext.selectedContextId) ?? null,
+    [browserContext.contexts, browserContext.selectedContextId]
+  );
+  const storageEndpointCaps = useMemo(() => {
+    const raw = selectedContext?.raw;
+    if (!raw || typeof raw !== "object") return null;
+    if ("storage_endpoint_capabilities" in raw) {
+      return (raw as { storage_endpoint_capabilities?: Record<string, boolean> | null }).storage_endpoint_capabilities ?? null;
+    }
+    return null;
+  }, [selectedContext]);
+  const effectiveCaps = storageEndpointCapabilities === undefined ? storageEndpointCaps : storageEndpointCapabilities;
+  const stsEnabled = Boolean(effectiveCaps?.sts);
+  const normalizeAccountId = useCallback((value: S3AccountSelector | null | undefined) => {
+    if (value == null) return null;
+    return String(value);
+  }, []);
+  const currentAccountId = normalizeAccountId(accountIdForApi);
+  const clipboardAccountId = normalizeAccountId(clipboard?.sourceAccountId ?? null);
+  const clipboardMatchesContext = Boolean(clipboard && clipboardAccountId === currentAccountId);
+  const canPaste = Boolean(clipboard && bucketName && hasS3AccountContext && clipboardMatchesContext);
+
+  useEffect(() => {
+    if (!allowFoldersPanel && showFolders) {
+      setShowFolders(false);
+    }
+  }, [allowFoldersPanel, showFolders]);
+
+  useEffect(() => {
+    if (!allowInspectorPanel && showInspector) {
+      setShowInspector(false);
+    }
+  }, [allowInspectorPanel, showInspector]);
+
+  const toggleFoldersPanel = useCallback(() => {
+    if (!allowFoldersPanel) return;
+    setShowFolders((prev) => !prev);
+  }, [allowFoldersPanel]);
+
+  const toggleInspectorPanel = useCallback(() => {
+    if (!allowInspectorPanel) return;
+    setShowInspector((prev) => !prev);
+  }, [allowInspectorPanel]);
+
+  const setInspectorVisible = useCallback(
+    (next: boolean) => {
+      if (!allowInspectorPanel) return;
+      setShowInspector(next);
+    },
+    [allowInspectorPanel]
+  );
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   useEffect(() => {
@@ -419,6 +496,9 @@ export default function BrowserPage() {
   const stsReady = Boolean(stsEnabled && stsStatus?.available && !stsCredentialsError);
   const presignObjectRequest = useCallback(
     async (targetBucket: string, payload: PresignRequest) => {
+      if (payload.operation === "post_object") {
+        return presignObject(accountIdForApi, targetBucket, payload);
+      }
       if (stsReady) {
         const credentials = await ensureStsCredentials();
         if (credentials) {
@@ -1342,7 +1422,7 @@ export default function BrowserPage() {
   const openItemDetails = (item: BrowserItem) => {
     setActiveItem(item);
     setInspectorTab("details");
-    setShowInspector(true);
+    setInspectorVisible(true);
   };
 
   const openAdvancedForItem = (item: BrowserItem) => {
@@ -1373,7 +1453,7 @@ export default function BrowserPage() {
   const handlePreviewItem = (item: BrowserItem) => {
     if (item.type !== "file") return;
     setActiveItem(item);
-    setShowInspector(true);
+    setInspectorVisible(true);
     clearPreviewObjectUrl();
     setPreviewError(null);
     setPreviewUrl(null);
@@ -1589,7 +1669,7 @@ export default function BrowserPage() {
       const next = isSelected ? prev.filter((itemId) => itemId !== id) : [...prev, id];
       if (!isSelected) {
         setInspectorTab("selection");
-        setShowInspector(true);
+        setInspectorVisible(true);
       }
       return next;
     });
@@ -1601,7 +1681,7 @@ export default function BrowserPage() {
         return [];
       }
       setInspectorTab("selection");
-      setShowInspector(true);
+      setInspectorVisible(true);
       return [id];
     });
   };
@@ -1614,18 +1694,19 @@ export default function BrowserPage() {
     setSelectedIds(listItems.map((item) => item.id));
     if (listItems.length > 0) {
       setInspectorTab("selection");
-      setShowInspector(true);
+      setInspectorVisible(true);
     }
   };
 
   const toggleInspectorForItem = (item: BrowserItem) => {
+    if (!allowInspectorPanel) return;
     if (showInspector && inspectedItem?.id === item.id) {
-      setShowInspector(false);
+      setInspectorVisible(false);
       return;
     }
     setActiveItem(item);
     setInspectorTab("details");
-    setShowInspector(true);
+    setInspectorVisible(true);
   };
 
   const handleItemContextMenu = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
@@ -1668,7 +1749,7 @@ export default function BrowserPage() {
     setSelectedIds([]);
     setActiveItem(null);
     setInspectorTab("context");
-    setShowInspector(true);
+    setInspectorVisible(true);
   };
 
   const handleBucketChange = (value: string) => {
@@ -1940,6 +2021,117 @@ export default function BrowserPage() {
     ].slice(0, COMPLETED_OPERATIONS_LIMIT));
   };
 
+  const extractErrorDetails = (payload: unknown): { code?: string; message?: string } | null => {
+    if (!payload) return null;
+    if (typeof payload === "string") {
+      const trimmed = payload.trim();
+      if (!trimmed) return null;
+      if (trimmed.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(trimmed) as {
+            code?: unknown;
+            errorCode?: unknown;
+            error_code?: unknown;
+            message?: unknown;
+            detail?: unknown;
+            error?: unknown;
+          };
+          const code =
+            typeof parsed.code === "string"
+              ? parsed.code
+              : typeof parsed.errorCode === "string"
+                ? parsed.errorCode
+                : typeof parsed.error_code === "string"
+                  ? parsed.error_code
+                  : undefined;
+          const message =
+            typeof parsed.message === "string"
+              ? parsed.message
+              : typeof parsed.detail === "string"
+                ? parsed.detail
+                : typeof parsed.error === "string"
+                  ? parsed.error
+                  : undefined;
+          if (code || message) {
+            return { code, message };
+          }
+        } catch {
+          // fall through to XML/inline parsing
+        }
+      }
+      const codeMatch = trimmed.match(/<Code>([^<]+)<\/Code>/);
+      const messageMatch = trimmed.match(/<Message>([^<]+)<\/Message>/);
+      const code = codeMatch?.[1];
+      const message = messageMatch?.[1];
+      if (code || message) {
+        return { code, message };
+      }
+      return { message: trimmed.slice(0, 300) };
+    }
+    if (typeof payload === "object") {
+      const candidate = payload as {
+        code?: unknown;
+        errorCode?: unknown;
+        error_code?: unknown;
+        message?: unknown;
+        detail?: unknown;
+        error?: unknown;
+      };
+      const code =
+        typeof candidate.code === "string"
+          ? candidate.code
+          : typeof candidate.errorCode === "string"
+            ? candidate.errorCode
+            : typeof candidate.error_code === "string"
+              ? candidate.error_code
+              : undefined;
+      const message =
+        typeof candidate.message === "string"
+          ? candidate.message
+          : typeof candidate.detail === "string"
+            ? candidate.detail
+            : typeof candidate.error === "string"
+              ? candidate.error
+              : undefined;
+      if (code || message) {
+        return { code, message };
+      }
+    }
+    return null;
+  };
+
+  const formatOperationError = (err: unknown, fallback: string, context?: string) => {
+    let detail: string | undefined;
+    if (axios.isAxiosError(err)) {
+      const status = err.response?.status;
+      const statusText = err.response?.statusText;
+      const statusLabel = status ? `HTTP ${status}${statusText ? ` ${statusText}` : ""}` : "";
+      const parsed = extractErrorDetails(err.response?.data);
+      const message = parsed?.code && parsed?.message ? `${parsed.code}: ${parsed.message}` : parsed?.message || parsed?.code;
+      const parts = [statusLabel, message || err.message].filter(Boolean);
+      detail = parts.length > 0 ? parts.join(" - ") : undefined;
+    } else if (err instanceof Error && err.message) {
+      detail = err.message;
+    } else if (typeof err === "string" && err.trim()) {
+      detail = err;
+    } else if (err && typeof err === "object" && "message" in err) {
+      const message = (err as { message?: unknown }).message;
+      if (typeof message === "string" && message.trim()) {
+        detail = message;
+      }
+    }
+    const message = detail ?? fallback;
+    if (context) {
+      const normalize = (value: string) => value.trim().replace(/[.:]\s*$/, "");
+      const normalizedContext = normalize(context);
+      if (!detail && normalizedContext === normalize(fallback)) {
+        return fallback;
+      }
+      return `${normalizedContext}: ${message}`;
+    }
+    return message;
+  };
+
   const resetBulkAttributesDraft = () => {
     setBulkApplyMetadata(false);
     setBulkApplyTags(false);
@@ -2032,7 +2224,11 @@ export default function BrowserPage() {
     return operationId;
   };
 
-  const completeOperation = (operationId: string, status: OperationCompletionStatus = "done") => {
+  const completeOperation = (
+    operationId: string,
+    status: OperationCompletionStatus = "done",
+    errorMessage?: string
+  ) => {
     const completedAt = new Date().toLocaleTimeString();
     setOperations((prev) =>
       prev.map((op) =>
@@ -2043,6 +2239,7 @@ export default function BrowserPage() {
               cancelable: false,
               completedAt,
               completionStatus: status,
+              errorMessage: status === "failed" ? errorMessage ?? op.errorMessage : undefined,
             }
           : op
       )
@@ -2100,7 +2297,7 @@ export default function BrowserPage() {
       if (!items) return prev;
       const nextItems = items.map((item) =>
         item.status === "queued" || item.status === "downloading"
-          ? { ...item, status: "cancelled" }
+          ? { ...item, status: "cancelled", errorMessage: undefined }
           : item
       );
       return { ...prev, [operationId]: nextItems };
@@ -2190,12 +2387,20 @@ export default function BrowserPage() {
     }
     const presign = await presignObjectRequest(bucket, {
       key,
-      operation: "put_object",
+      operation: "post_object",
       content_type: file.type || undefined,
+      content_length: file.size,
       expires_in: 1800,
     });
-    await axios.put(presign.url, file, {
-      headers: { ...(presign.headers || {}), "Content-Type": file.type || "application/octet-stream" },
+    if (!presign.fields) {
+      throw new Error("Missing presigned POST fields.");
+    }
+    const formData = new FormData();
+    Object.entries(presign.fields).forEach(([field, value]) => {
+      formData.append(field, value);
+    });
+    formData.append("file", file);
+    await axios.post(presign.url, formData, {
       onUploadProgress: onProgress,
       signal: controller?.signal,
     });
@@ -2338,8 +2543,13 @@ export default function BrowserPage() {
         completeOperation(operationId, "cancelled");
         setStatusMessage(`Upload cancelled for ${relativePath}`);
       } else {
-        completeOperation(operationId, "failed");
-        setStatusMessage(`Upload failed for ${relativePath}`);
+        const completionError = formatOperationError(
+          err,
+          `Upload failed for ${relativePath}`,
+          `Upload failed for ${relativePath}`
+        );
+        completeOperation(operationId, "failed", completionError);
+        setStatusMessage(completionError);
         if (!useProxyTransfers && isLikelyCorsError(err)) {
           setWarningMessage(
             `Possible CORS or endpoint issue. Ensure bucket CORS allows origin ${window.location.origin} with PUT/GET/HEAD and headers like Content-Type or x-amz-*.`
@@ -2427,7 +2637,21 @@ export default function BrowserPage() {
       signal,
     });
     if (!response.ok) {
-      throw new Error(`Download failed for ${key}`);
+      let detail: string | undefined;
+      let code: string | undefined;
+      try {
+        const text = await response.text();
+        const parsed = extractErrorDetails(text);
+        code = parsed?.code;
+        detail = parsed?.message;
+      } catch {
+        // ignore body parsing failures
+      }
+      const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+      const detailLabel = code && detail ? `${code}: ${detail}` : detail || code;
+      const parts = [statusLabel, detailLabel].filter(Boolean);
+      const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
+      throw new Error(`Download failed for ${key}${suffix}`);
     }
     return response.blob();
   };
@@ -2525,12 +2749,24 @@ export default function BrowserPage() {
     });
   };
 
-  const updateDeleteDetailsStatus = (operationId: string, keys: string[], status: DeleteDetailStatus) => {
+  const updateDeleteDetailsStatus = (
+    operationId: string,
+    keys: string[],
+    status: DeleteDetailStatus,
+    errorMessage?: string
+  ) => {
     setDeleteDetails((prev) => {
       const items = prev[operationId];
       if (!items) return prev;
       const keySet = new Set(keys);
-      const nextItems = items.map((item) => (keySet.has(item.key) ? { ...item, status } : item));
+      const nextItems = items.map((item) => {
+        if (!keySet.has(item.key)) return item;
+        return {
+          ...item,
+          status,
+          errorMessage: status === "failed" ? errorMessage ?? item.errorMessage : undefined,
+        };
+      });
       return { ...prev, [operationId]: nextItems };
     });
   };
@@ -2568,7 +2804,7 @@ export default function BrowserPage() {
           onProgress?.(deletedCount, total);
         } catch (err) {
           if (detailOperationId) {
-            updateDeleteDetailsStatus(detailOperationId, chunk, "failed");
+            updateDeleteDetailsStatus(detailOperationId, chunk, "failed", formatOperationError(err, "Delete failed."));
           }
           hasError = err;
         }
@@ -2591,6 +2827,7 @@ export default function BrowserPage() {
       0
     );
     let completionStatus: OperationCompletionStatus = "done";
+    let completionError: string | undefined;
     try {
       const objects = await listAllObjectsForPrefix(folderPrefix);
       const keys = Array.from(new Set([...objects.map((obj) => obj.key), folderPrefix]));
@@ -2625,26 +2862,53 @@ export default function BrowserPage() {
       setStatusMessage(`Deleted folder ${folderItem.name}`);
     } catch (err) {
       completionStatus = "failed";
-      setStatusMessage("Unable to delete folder.");
+      completionError = formatOperationError(err, "Unable to delete folder.", "Unable to delete folder.");
+      setStatusMessage(completionError);
     } finally {
-      completeOperation(operationId, completionStatus);
+      completeOperation(operationId, completionStatus, completionError);
     }
   };
 
-  const updateDownloadDetail = (operationId: string, detailId: string, status: DownloadDetailStatus) => {
+  const updateDownloadDetail = (
+    operationId: string,
+    detailId: string,
+    status: DownloadDetailStatus,
+    errorMessage?: string
+  ) => {
     setDownloadDetails((prev) => {
       const items = prev[operationId];
       if (!items) return prev;
-      const nextItems = items.map((item) => (item.id === detailId ? { ...item, status } : item));
+      const nextItems = items.map((item) =>
+        item.id === detailId
+          ? {
+              ...item,
+              status,
+              errorMessage: status === "failed" ? errorMessage ?? item.errorMessage : undefined,
+            }
+          : item
+      );
       return { ...prev, [operationId]: nextItems };
     });
   };
 
-  const updateCopyDetailStatus = (operationId: string, detailId: string, status: CopyDetailStatus) => {
+  const updateCopyDetailStatus = (
+    operationId: string,
+    detailId: string,
+    status: CopyDetailStatus,
+    errorMessage?: string
+  ) => {
     setCopyDetails((prev) => {
       const items = prev[operationId];
       if (!items) return prev;
-      const nextItems = items.map((item) => (item.id === detailId ? { ...item, status } : item));
+      const nextItems = items.map((item) =>
+        item.id === detailId
+          ? {
+              ...item,
+              status,
+              errorMessage: status === "failed" ? errorMessage ?? item.errorMessage : undefined,
+            }
+          : item
+      );
       return { ...prev, [operationId]: nextItems };
     });
   };
@@ -2664,6 +2928,7 @@ export default function BrowserPage() {
     const controller = new AbortController();
     downloadControllersRef.current.set(operationId, controller);
     let completionStatus: OperationCompletionStatus = "done";
+    let completionError: string | undefined;
     try {
       const objects = await listAllObjectsForPrefix(folderPrefix);
       if (controller.signal.aborted) {
@@ -2734,7 +2999,7 @@ export default function BrowserPage() {
               return;
             }
             console.error(err);
-            updateDownloadDetail(operationId, obj.detailId, "failed");
+            updateDownloadDetail(operationId, obj.detailId, "failed", formatOperationError(err, "Download failed."));
             errors.push(obj.obj.key);
           } finally {
             completed += 1;
@@ -2776,7 +3041,8 @@ export default function BrowserPage() {
 
       if (errors.length > 0) {
         completionStatus = "failed";
-        setStatusMessage(`Downloaded ${folderLabel} with ${errors.length} failed file(s).`);
+        completionError = `Downloaded ${folderLabel} with ${errors.length} failed file(s).`;
+        setStatusMessage(completionError);
       } else {
         setStatusMessage(`Downloaded ${folderLabel}`);
       }
@@ -2787,11 +3053,12 @@ export default function BrowserPage() {
       } else {
         completionStatus = "failed";
         console.error(err);
-        setStatusMessage("Unable to download folder.");
+        completionError = formatOperationError(err, "Unable to download folder.", "Unable to download folder.");
+        setStatusMessage(completionError);
       }
     } finally {
       downloadControllersRef.current.delete(operationId);
-      completeOperation(operationId, completionStatus);
+      completeOperation(operationId, completionStatus, completionError);
     }
   };
 
@@ -2870,7 +3137,7 @@ export default function BrowserPage() {
               return;
             }
             console.error(err);
-            updateDownloadDetail(operationId, target.detailId, "failed");
+            updateDownloadDetail(operationId, target.detailId, "failed", formatOperationError(err, "Download failed."));
             failedCount += 1;
           } finally {
             completed += 1;
@@ -2890,6 +3157,8 @@ export default function BrowserPage() {
       setStatusMessage(`Downloaded ${files.length} files`);
       if (failedCount > 0) {
         completionStatus = "failed";
+        completionError = `Downloaded ${files.length - failedCount} of ${files.length} files.`;
+        setStatusMessage(completionError);
       }
     } catch (err) {
       if (isAbortError(err) || controller.signal.aborted) {
@@ -2897,11 +3166,12 @@ export default function BrowserPage() {
         setStatusMessage("Download cancelled.");
       } else {
         completionStatus = "failed";
-        setStatusMessage("Unable to download files.");
+        completionError = formatOperationError(err, "Unable to download files.", "Unable to download files.");
+        setStatusMessage(completionError);
       }
     } finally {
       downloadControllersRef.current.delete(operationId);
-      completeOperation(operationId, completionStatus);
+      completeOperation(operationId, completionStatus, completionError);
     }
   };
 
@@ -2968,6 +3238,7 @@ export default function BrowserPage() {
         const operationKind = fileTargets.length > 1 ? "delete" : "other";
         const operationId = startOperation("deleting", operationLabel, targetPath, { kind: operationKind }, 0);
         let completionStatus: OperationCompletionStatus = "done";
+        let completionError: string | undefined;
         try {
           if (fileTargets.length > 1) {
             setDeleteDetails((prev) => ({
@@ -2991,9 +3262,14 @@ export default function BrowserPage() {
           setStatusMessage(`Deleted ${fileTargets.length} object(s)`);
         } catch (err) {
           completionStatus = "failed";
-          setStatusMessage("Unable to delete selected objects.");
+          completionError = formatOperationError(
+            err,
+            "Unable to delete selected objects.",
+            "Unable to delete selected objects."
+          );
+          setStatusMessage(completionError);
         } finally {
-          completeOperation(operationId, completionStatus);
+          completeOperation(operationId, completionStatus, completionError);
         }
       }
       for (const folder of folderTargets) {
@@ -3139,7 +3415,8 @@ export default function BrowserPage() {
         }
       });
       await Promise.all(workers);
-      completeOperation(operationId, failures > 0 ? "failed" : "done");
+      const completionError = failures > 0 ? "Some objects failed to update attributes." : undefined;
+      completeOperation(operationId, failures > 0 ? "failed" : "done", completionError);
       const successCount = Math.max(0, total - failures);
       const summary = `Updated ${successCount} of ${total} object(s).`;
       setBulkAttributesSummary(summary);
@@ -3289,7 +3566,8 @@ export default function BrowserPage() {
       }
 
       const failures = restoreFailures + deleteFailures;
-      completeOperation(operationId, failures > 0 ? "failed" : "done");
+      const completionError = failures > 0 ? "Some objects failed to restore or delete." : undefined;
+      completeOperation(operationId, failures > 0 ? "failed" : "done", completionError);
       const summary = `Restored ${restoreList.length - restoreFailures} object(s), deleted ${deleteList.length - deleteFailures} object(s), unchanged ${unchangedCount} object(s).`;
       setBulkRestoreSummary(summary);
       setStatusMessage(summary);
@@ -3348,18 +3626,22 @@ export default function BrowserPage() {
 
   const handleCopyItems = (items: BrowserItem[]) => {
     if (!bucketName || items.length === 0) return;
-    setClipboard({ items, sourceBucket: bucketName, mode: "copy" });
+    setClipboard({ items, sourceBucket: bucketName, sourceAccountId: accountIdForApi ?? null, mode: "copy" });
     setStatusMessage("Items copied.");
   };
 
   const handleCutItems = (items: BrowserItem[]) => {
     if (!bucketName || items.length === 0) return;
-    setClipboard({ items, sourceBucket: bucketName, mode: "move" });
+    setClipboard({ items, sourceBucket: bucketName, sourceAccountId: accountIdForApi ?? null, mode: "move" });
     setStatusMessage("Items ready to move.");
   };
 
   const handlePasteItems = async () => {
     if (!clipboard || !bucketName || !hasS3AccountContext) return;
+    if (!clipboardMatchesContext) {
+      setWarningMessage("Paste between different accounts is blocked for security. Switch back to the source account.");
+      return;
+    }
     setWarningMessage(null);
     const destinationBucket = bucketName;
     const destinationPrefix = normalizedPrefix;
@@ -3477,7 +3759,7 @@ export default function BrowserPage() {
             });
             updateCopyDetailStatus(operationId, task.detailId, "done");
           } catch (err) {
-            updateCopyDetailStatus(operationId, task.detailId, "failed");
+            updateCopyDetailStatus(operationId, task.detailId, "failed", formatOperationError(err, "Copy failed."));
             failures += 1;
           } finally {
             completed += 1;
@@ -3487,7 +3769,8 @@ export default function BrowserPage() {
       });
       await Promise.all(workers);
 
-      completeOperation(operationId, failures > 0 ? "failed" : "done");
+      const completionError = failures > 0 ? "Some items failed to copy or move." : undefined;
+      completeOperation(operationId, failures > 0 ? "failed" : "done", completionError);
       const summary = `${isMove ? "Moved" : "Copied"} ${total - failures} of ${total} item(s).`;
       setStatusMessage(summary);
       requestObjectsRefresh(prefix);
@@ -3495,8 +3778,9 @@ export default function BrowserPage() {
         setClipboard(null);
       }
     } catch (err) {
-      completeOperation(operationId, "failed");
-      setStatusMessage("Unable to paste items.");
+      const completionError = formatOperationError(err, "Unable to paste items.", "Unable to paste items.");
+      completeOperation(operationId, "failed", completionError);
+      setStatusMessage(completionError);
     }
   };
 
@@ -3542,6 +3826,7 @@ export default function BrowserPage() {
     setWarningMessage(null);
     const operationId = startOperation("copying", "Restoring version", `${bucketName}/${item.key}`);
     let completionStatus: OperationCompletionStatus = "done";
+    let completionError: string | undefined;
     try {
       await copyObject(accountIdForApi, bucketName, {
         source_key: item.key,
@@ -3555,9 +3840,10 @@ export default function BrowserPage() {
       await refreshVersionsForKey(item.key);
     } catch (err) {
       completionStatus = "failed";
-      setStatusMessage("Unable to restore version.");
+      completionError = formatOperationError(err, "Unable to restore version.", "Unable to restore version.");
+      setStatusMessage(completionError);
     } finally {
-      completeOperation(operationId, completionStatus);
+      completeOperation(operationId, completionStatus, completionError);
     }
   };
 
@@ -3570,6 +3856,7 @@ export default function BrowserPage() {
     const operationLabel = item.is_delete_marker ? "Removing delete marker" : "Deleting version";
     const operationId = startOperation("deleting", operationLabel, `${bucketName}/${item.key}`);
     let completionStatus: OperationCompletionStatus = "done";
+    let completionError: string | undefined;
     try {
       await deleteObjects(accountIdForApi, bucketName, [{ key: item.key, version_id: item.version_id }]);
       setStatusMessage(item.is_delete_marker ? "Delete marker removed." : "Version deleted.");
@@ -3577,9 +3864,14 @@ export default function BrowserPage() {
       await refreshVersionsForKey(item.key);
     } catch (err) {
       completionStatus = "failed";
-      setWarningMessage(item.is_delete_marker ? "Unable to delete marker." : "Unable to delete version.");
+      completionError = formatOperationError(
+        err,
+        item.is_delete_marker ? "Unable to delete marker." : "Unable to delete version.",
+        item.is_delete_marker ? "Unable to delete marker." : "Unable to delete version."
+      );
+      setWarningMessage(completionError);
     } finally {
-      completeOperation(operationId, completionStatus);
+      completeOperation(operationId, completionStatus, completionError);
     }
   };
 
@@ -3771,11 +4063,75 @@ export default function BrowserPage() {
     () => copyGroups.reduce((sum, group) => sum + group.counts.queued, 0),
     [copyGroups]
   );
+  const hasFailedOperations = useMemo(() => {
+    if (operations.some((op) => op.completionStatus === "failed")) {
+      return true;
+    }
+    const hasFailedDownloadDetails = Object.values(downloadDetails).some((items) =>
+      items.some((item) => item.status === "failed")
+    );
+    if (hasFailedDownloadDetails) {
+      return true;
+    }
+    const hasFailedDeleteDetails = Object.values(deleteDetails).some((items) =>
+      items.some((item) => item.status === "failed")
+    );
+    if (hasFailedDeleteDetails) {
+      return true;
+    }
+    return Object.values(copyDetails).some((items) => items.some((item) => item.status === "failed"));
+  }, [operations, downloadDetails, deleteDetails, copyDetails]);
+  const failedUploadCount = useMemo(
+    () => operations.filter((op) => op.kind === "upload" && op.completionStatus === "failed").length,
+    [operations]
+  );
+  const failedDownloadCount = useMemo(
+    () =>
+      downloadGroups.reduce((sum, group) => {
+        const failedItems = group.items.filter((item) => item.status === "failed").length;
+        const fallback = failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
+        return sum + failedItems + fallback;
+      }, 0),
+    [downloadGroups]
+  );
+  const failedDeleteCount = useMemo(
+    () =>
+      deleteGroups.reduce((sum, group) => {
+        const failedItems = group.items.filter((item) => item.status === "failed").length;
+        const fallback = failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
+        return sum + failedItems + fallback;
+      }, 0),
+    [deleteGroups]
+  );
+  const failedCopyCount = useMemo(
+    () =>
+      copyGroups.reduce((sum, group) => {
+        const failedItems = group.items.filter((item) => item.status === "failed").length;
+        const fallback = failedItems === 0 && group.op.completionStatus === "failed" ? 1 : 0;
+        return sum + failedItems + fallback;
+      }, 0),
+    [copyGroups]
+  );
+  const failedOtherOperations = useMemo(
+    () =>
+      operations.filter(
+        (op) =>
+          op.kind !== "upload" &&
+          op.kind !== "download" &&
+          op.kind !== "delete" &&
+          op.kind !== "copy" &&
+          op.completionStatus === "failed"
+      ),
+    [operations]
+  );
   const pasteLabel = clipboard?.mode === "move" ? "Paste (Move)" : "Paste";
   const totalOperationsCount =
     activeOperations.length + uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount;
   const completedUploadCount = useMemo(
-    () => operations.filter((op) => op.kind === "upload" && op.completedAt).length,
+    () =>
+      operations.filter(
+        (op) => op.kind === "upload" && op.completedAt && op.completionStatus !== "failed"
+      ).length,
     [operations]
   );
   const completedDownloadCount = useMemo(
@@ -3783,9 +4139,10 @@ export default function BrowserPage() {
       downloadGroups.reduce(
         (sum, group) => {
           const completedItems = group.items.filter(
-            (item) => item.status === "done" || item.status === "failed" || item.status === "cancelled"
+            (item) => item.status === "done" || item.status === "cancelled"
           ).length;
-          const fallback = completedItems === 0 && group.op.completedAt ? 1 : 0;
+          const fallback =
+            completedItems === 0 && group.op.completedAt && group.op.completionStatus !== "failed" ? 1 : 0;
           return sum + completedItems + fallback;
         },
         0
@@ -3796,8 +4153,9 @@ export default function BrowserPage() {
     () =>
       deleteGroups.reduce(
         (sum, group) => {
-          const completedItems = group.items.filter((item) => item.status === "done" || item.status === "failed").length;
-          const fallback = completedItems === 0 && group.op.completedAt ? 1 : 0;
+          const completedItems = group.items.filter((item) => item.status === "done").length;
+          const fallback =
+            completedItems === 0 && group.op.completedAt && group.op.completionStatus !== "failed" ? 1 : 0;
           return sum + completedItems + fallback;
         },
         0
@@ -3808,8 +4166,9 @@ export default function BrowserPage() {
     () =>
       copyGroups.reduce(
         (sum, group) => {
-          const completedItems = group.items.filter((item) => item.status === "done" || item.status === "failed").length;
-          const fallback = completedItems === 0 && group.op.completedAt ? 1 : 0;
+          const completedItems = group.items.filter((item) => item.status === "done").length;
+          const fallback =
+            completedItems === 0 && group.op.completedAt && group.op.completionStatus !== "failed" ? 1 : 0;
           return sum + completedItems + fallback;
         },
         0
@@ -3824,10 +4183,13 @@ export default function BrowserPage() {
           op.kind !== "download" &&
           op.kind !== "delete" &&
           op.kind !== "copy" &&
-          op.completedAt
+          op.completedAt &&
+          op.completionStatus !== "failed"
       ),
     [operations]
   );
+  const failedOperationsCount =
+    failedUploadCount + failedDownloadCount + failedDeleteCount + failedCopyCount + failedOtherOperations.length;
   const completedOperationsCount =
     completedOperations.length +
     completedUploadCount +
@@ -3835,6 +4197,14 @@ export default function BrowserPage() {
     completedDeleteCount +
     completedCopyCount +
     completedOtherOperations.length;
+  const hasFinishedOperations = completedOperationsCount > 0 || failedOperationsCount > 0;
+  const filtersAllInactive =
+    !showActiveOperations && !showQueuedOperations && !showCompletedOperations && !showFailedOperations;
+  const showAllOperations = filtersAllInactive;
+  const showActiveFilter = showActiveOperations || showAllOperations;
+  const showQueuedFilter = showQueuedOperations || showAllOperations;
+  const showCompletedFilter = showCompletedOperations || showAllOperations;
+  const showFailedFilter = showFailedOperations || showAllOperations;
   const activeOtherOperations = useMemo(
     () =>
       activeOperations.filter(
@@ -3844,22 +4214,33 @@ export default function BrowserPage() {
   );
   const visibleOtherOperations = useMemo(() => {
     return [
-      ...(showActiveOperations ? activeOtherOperations : []),
-      ...(showCompletedOperations ? completedOtherOperations : []),
+      ...(showActiveFilter ? activeOtherOperations : []),
+      ...(showCompletedFilter ? completedOtherOperations : []),
+      ...(showFailedFilter ? failedOtherOperations : []),
     ];
-  }, [activeOtherOperations, completedOtherOperations, showActiveOperations, showCompletedOperations]);
+  }, [
+    activeOtherOperations,
+    completedOtherOperations,
+    failedOtherOperations,
+    showActiveOperations,
+    showQueuedOperations,
+    showCompletedOperations,
+    showFailedOperations,
+  ]);
   const visibleUploadGroups = useMemo(() => {
     return uploadGroups.filter((group) => {
       const hasActive = group.activeItems.length > 0;
       const hasQueued = group.queuedItems.length > 0;
-      const hasCompleted = group.completedItems.length > 0;
+      const hasCompleted = group.completedItems.some((item) => item.completionStatus !== "failed");
+      const hasFailed = group.completedItems.some((item) => item.completionStatus === "failed");
       return (
-        (showActiveOperations && hasActive) ||
-        (showQueuedOperations && hasQueued) ||
-        (showCompletedOperations && hasCompleted)
+        (showActiveFilter && hasActive) ||
+        (showQueuedFilter && hasQueued) ||
+        (showCompletedFilter && hasCompleted) ||
+        (showFailedFilter && hasFailed)
       );
     });
-  }, [uploadGroups, showActiveOperations, showQueuedOperations, showCompletedOperations]);
+  }, [uploadGroups, showActiveOperations, showQueuedOperations, showCompletedOperations, showFailedOperations]);
   const visibleDownloadGroups = useMemo(() => {
     return downloadGroups.filter((group) => {
       const hasActive =
@@ -3867,92 +4248,345 @@ export default function BrowserPage() {
         (group.op.status === "downloading" || group.items.some((item) => item.status === "downloading"));
       const hasQueued = group.items.some((item) => item.status === "queued");
       const hasCompleted = group.items.some(
-        (item) => item.status === "done" || item.status === "failed" || item.status === "cancelled"
+        (item) => item.status === "done" || item.status === "cancelled"
       );
+      const hasFailed =
+        group.items.some((item) => item.status === "failed") || group.op.completionStatus === "failed";
       return (
-        (showActiveOperations && hasActive) ||
-        (showQueuedOperations && hasQueued) ||
-        (showCompletedOperations && hasCompleted) ||
-        (showCompletedOperations && Boolean(group.op.completedAt))
+        (showActiveFilter && hasActive) ||
+        (showQueuedFilter && hasQueued) ||
+        (showCompletedFilter && hasCompleted) ||
+        (showCompletedFilter && Boolean(group.op.completedAt) && group.op.completionStatus !== "failed") ||
+        (showFailedFilter && hasFailed)
       );
     });
-  }, [downloadGroups, showActiveOperations, showQueuedOperations, showCompletedOperations]);
+  }, [downloadGroups, showActiveOperations, showQueuedOperations, showCompletedOperations, showFailedOperations]);
   const visibleDeleteGroups = useMemo(() => {
     return deleteGroups.filter((group) => {
       const hasActive =
         !group.op.completedAt &&
         (group.op.status === "deleting" || group.items.some((item) => item.status === "deleting"));
       const hasQueued = group.items.some((item) => item.status === "queued");
-      const hasCompleted = group.items.some((item) => item.status === "done" || item.status === "failed");
+      const hasCompleted = group.items.some((item) => item.status === "done");
+      const hasFailed =
+        group.items.some((item) => item.status === "failed") || group.op.completionStatus === "failed";
       return (
-        (showActiveOperations && hasActive) ||
-        (showQueuedOperations && hasQueued) ||
-        (showCompletedOperations && hasCompleted) ||
-        (showCompletedOperations && Boolean(group.op.completedAt))
+        (showActiveFilter && hasActive) ||
+        (showQueuedFilter && hasQueued) ||
+        (showCompletedFilter && hasCompleted) ||
+        (showCompletedFilter && Boolean(group.op.completedAt) && group.op.completionStatus !== "failed") ||
+        (showFailedFilter && hasFailed)
       );
     });
-  }, [deleteGroups, showActiveOperations, showQueuedOperations, showCompletedOperations]);
+  }, [deleteGroups, showActiveOperations, showQueuedOperations, showCompletedOperations, showFailedOperations]);
   const visibleCopyGroups = useMemo(() => {
     return copyGroups.filter((group) => {
       const hasActive =
         !group.op.completedAt &&
         (group.op.status === "copying" || group.items.some((item) => item.status === "copying"));
       const hasQueued = group.items.some((item) => item.status === "queued");
-      const hasCompleted = group.items.some((item) => item.status === "done" || item.status === "failed");
+      const hasCompleted = group.items.some((item) => item.status === "done");
+      const hasFailed =
+        group.items.some((item) => item.status === "failed") || group.op.completionStatus === "failed";
       return (
-        (showActiveOperations && hasActive) ||
-        (showQueuedOperations && hasQueued) ||
-        (showCompletedOperations && hasCompleted) ||
-        (showCompletedOperations && Boolean(group.op.completedAt))
+        (showActiveFilter && hasActive) ||
+        (showQueuedFilter && hasQueued) ||
+        (showCompletedFilter && hasCompleted) ||
+        (showCompletedFilter && Boolean(group.op.completedAt) && group.op.completionStatus !== "failed") ||
+        (showFailedFilter && hasFailed)
       );
     });
-  }, [copyGroups, showActiveOperations, showQueuedOperations, showCompletedOperations]);
+  }, [copyGroups, showActiveOperations, showQueuedOperations, showCompletedOperations, showFailedOperations]);
   const isGroupExpanded = (groupId: string) => Boolean(expandedOperationGroups[groupId]);
   const toggleGroupExpanded = (groupId: string) => {
     setExpandedOperationGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
   };
-  const getSectionVisibleCount = (groupId: string, section: "queued" | "completed") =>
+  const toggleOperationFilter = (filter: "active" | "queued" | "completed" | "failed") => {
+    setShowActiveOperations((prev) => (filter === "active" ? !prev : false));
+    setShowQueuedOperations((prev) => (filter === "queued" ? !prev : false));
+    setShowCompletedOperations((prev) => (filter === "completed" ? !prev : false));
+    setShowFailedOperations((prev) => (filter === "failed" ? !prev : false));
+  };
+  const getSectionVisibleCount = (groupId: string, section: "queued" | "completed" | "failed") =>
     queuedVisibleCountByGroup[`${groupId}:${section}`] ?? DEFAULT_QUEUED_VISIBLE_COUNT;
-  const showMoreSection = (groupId: string, section: "queued" | "completed") => {
+  const showMoreSection = (groupId: string, section: "queued" | "completed" | "failed") => {
     setQueuedVisibleCountByGroup((prev) => ({
       ...prev,
       [`${groupId}:${section}`]: getSectionVisibleCount(groupId, section) + DEFAULT_QUEUED_VISIBLE_COUNT,
     }));
   };
+  const sanitizeFilename = (value: string) => {
+    const cleaned = value.replace(/[^a-zA-Z0-9-_]+/g, "_").replace(/^_+|_+$/g, "");
+    return cleaned || "operation";
+  };
+  const downloadOperationDetails = (kind: OperationDetailsKind, operationId: string) => {
+    if (typeof window === "undefined") return;
+    const exportedAt = new Date().toISOString();
+    const timestamp = exportedAt.replace(/[:.]/g, "-");
+    const baseName = sanitizeFilename(`operation-${kind}-${operationId}`);
+    const normalizeOperation = (op: OperationItem) => ({
+      id: op.id,
+      kind: op.kind,
+      label: op.label,
+      path: op.path,
+      status: op.status,
+      progress: op.progress,
+      completionStatus: op.completionStatus,
+      completedAt: op.completedAt,
+      errorMessage: op.errorMessage,
+    });
+    let payload: Record<string, unknown> | null = null;
+
+    if (kind === "download") {
+      const group = downloadGroups.find((item) => item.op.id === operationId);
+      if (group) {
+        payload = {
+          exportedAt,
+          kind,
+          operation: normalizeOperation(group.op),
+          counts: group.counts,
+          items: group.items.map((item) => ({
+            id: item.id,
+            key: item.key,
+            label: item.label,
+            status: item.status,
+            sizeBytes: item.sizeBytes,
+            errorMessage: item.errorMessage,
+          })),
+        };
+      }
+    } else if (kind === "delete") {
+      const group = deleteGroups.find((item) => item.op.id === operationId);
+      if (group) {
+        payload = {
+          exportedAt,
+          kind,
+          operation: normalizeOperation(group.op),
+          counts: group.counts,
+          items: group.items.map((item) => ({
+            id: item.id,
+            key: item.key,
+            label: item.label,
+            status: item.status,
+            errorMessage: item.errorMessage,
+          })),
+        };
+      }
+    } else if (kind === "copy") {
+      const group = copyGroups.find((item) => item.op.id === operationId);
+      if (group) {
+        payload = {
+          exportedAt,
+          kind,
+          operation: normalizeOperation(group.op),
+          counts: group.counts,
+          items: group.items.map((item) => ({
+            id: item.id,
+            key: item.key,
+            label: item.label,
+            status: item.status,
+            sizeBytes: item.sizeBytes,
+            errorMessage: item.errorMessage,
+          })),
+        };
+      }
+    } else if (kind === "upload") {
+      const group = uploadGroups.find((item) => item.id === operationId);
+      if (group) {
+        const uploadItems: Array<{
+          id: string;
+          label: string;
+          path: string;
+          state: "queued" | "uploading" | "done" | "failed" | "cancelled";
+          progress: number;
+          sizeBytes?: number;
+          errorMessage?: string;
+          completedAt?: string;
+        }> = [
+          ...group.activeItems.map((item) => ({
+            id: item.id,
+            label: item.itemLabel ?? item.path,
+            path: item.path,
+            state: item.status,
+            progress: item.progress,
+            sizeBytes: item.sizeBytes,
+            errorMessage: item.errorMessage,
+            completedAt: item.completedAt,
+          })),
+          ...group.completedItems.map((item) => ({
+            id: item.id,
+            label: item.itemLabel ?? item.path,
+            path: item.path,
+            state: item.completionStatus ?? "done",
+            progress: item.progress,
+            sizeBytes: item.sizeBytes,
+            errorMessage: item.errorMessage,
+            completedAt: item.completedAt,
+          })),
+          ...group.queuedItems.map((item) => ({
+            id: item.id,
+            label: item.itemLabel ?? item.relativePath ?? item.key,
+            path: `${item.bucket}/${item.key}`,
+            state: "queued",
+            progress: 0,
+            sizeBytes: item.file.size,
+            errorMessage: undefined,
+            completedAt: undefined,
+          })),
+        ];
+        const counts = uploadItems.reduce(
+          (acc, item) => {
+            acc.total += 1;
+            const key = item.state as "queued" | "uploading" | "done" | "failed" | "cancelled";
+            acc[key] = (acc[key] ?? 0) + 1;
+            return acc;
+          },
+          { total: 0, queued: 0, uploading: 0, done: 0, failed: 0, cancelled: 0 }
+        );
+        payload = {
+          exportedAt,
+          kind,
+          group: {
+            id: group.id,
+            label: group.label,
+            kind: group.kind,
+            progress: group.progress,
+            totalBytes: group.totalBytes,
+          },
+          counts,
+          items: uploadItems,
+        };
+      }
+    } else if (kind === "other") {
+      const op = operations.find((item) => item.id === operationId);
+      if (op) {
+        payload = {
+          exportedAt,
+          kind,
+          operation: normalizeOperation(op),
+        };
+      }
+    }
+
+    if (!payload) {
+      setStatusMessage("No details available for this operation.");
+      return;
+    }
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${baseName}-${timestamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+  const clearFinishedOperations = () => {
+    const finishedIds = new Set(
+      operations
+        .filter(
+          (op) =>
+            op.completedAt &&
+            (!op.completionStatus || op.completionStatus === "done" || op.completionStatus === "failed")
+        )
+        .map((op) => op.id)
+    );
+    if (finishedIds.size === 0 && completedOperations.length === 0) {
+      return;
+    }
+    setOperations((prev) => prev.filter((op) => !finishedIds.has(op.id)));
+    if (finishedIds.size > 0) {
+      setDownloadDetails((prev) => {
+        const next = { ...prev };
+        finishedIds.forEach((id) => {
+          delete next[id];
+        });
+        return next;
+      });
+      setDeleteDetails((prev) => {
+        const next = { ...prev };
+        finishedIds.forEach((id) => {
+          delete next[id];
+        });
+        return next;
+      });
+      setCopyDetails((prev) => {
+        const next = { ...prev };
+        finishedIds.forEach((id) => {
+          delete next[id];
+        });
+        return next;
+      });
+      setExpandedOperationGroups((prev) => {
+        const next = { ...prev };
+        finishedIds.forEach((id) => {
+          delete next[id];
+        });
+        return next;
+      });
+      setQueuedVisibleCountByGroup((prev) => {
+        const next: Record<string, number> = {};
+        Object.entries(prev).forEach(([key, value]) => {
+          const groupId = key.split(":")[0];
+          if (!finishedIds.has(groupId)) {
+            next[key] = value;
+          }
+        });
+        return next;
+      });
+    }
+    setCompletedOperations([]);
+  };
   const openOperationsModal = () => {
     setShowOperationsModal(true);
   };
+  const operationsButtonToneClasses = hasFailedOperations
+    ? "border-rose-300 bg-rose-100 text-rose-800 shadow-sm dark:border-rose-500/60 dark:bg-rose-500/20 dark:text-rose-100"
+    : totalOperationsCount > 0
+      ? "border-emerald-300 bg-emerald-100 text-emerald-800 shadow-sm dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-100"
+      : "";
+  const operationsCountBadgeClasses = `${countBadgeClasses} ui-caption ${
+    hasFailedOperations ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100" : ""
+  }`;
+  const showFolderToggle = showPanelToggles && allowFoldersPanel;
+  const showInspectorToggle = showPanelToggles && allowInspectorPanel;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setShowFolders((prev) => !prev)}
-        aria-label={showFolders ? "Hide folders panel" : "Show folders panel"}
-        aria-pressed={showFolders}
-        title={showFolders ? "Hide folders" : "Show folders"}
-        className={`fixed left-0 top-1/2 z-30 -translate-y-1/2 rounded-r-xl border px-2 py-3 shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-          showFolders
-            ? "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/40 dark:text-amber-100"
-            : "border-slate-200 bg-white/90 text-slate-600 hover:text-primary dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200"
-        }`}
-      >
-        <FolderIcon className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => setShowInspector((prev) => !prev)}
-        aria-label={showInspector ? "Hide inspector panel" : "Show inspector panel"}
-        aria-pressed={showInspector}
-        title={showInspector ? "Hide inspector" : "Show inspector"}
-        className={`fixed right-0 top-1/2 z-30 -translate-y-1/2 rounded-l-xl border px-2 py-3 shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-          showInspector
-            ? "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/40 dark:text-sky-100"
-            : "border-slate-200 bg-white/90 text-slate-600 hover:text-primary dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200"
-        }`}
-      >
-        <MoreIcon className="h-4 w-4" />
-      </button>
+      {showFolderToggle && (
+        <button
+          type="button"
+          onClick={toggleFoldersPanel}
+          aria-label={showFolders ? "Hide folders panel" : "Show folders panel"}
+          aria-pressed={showFolders}
+          title={showFolders ? "Hide folders" : "Show folders"}
+          className={`fixed left-0 top-1/2 z-30 -translate-y-1/2 rounded-r-xl border px-2 py-3 shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+            showFolders
+              ? "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/40 dark:text-amber-100"
+              : "border-slate-200 bg-white/90 text-slate-600 hover:text-primary dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200"
+          }`}
+        >
+          <FolderIcon className="h-4 w-4" />
+        </button>
+      )}
+      {showInspectorToggle && (
+        <button
+          type="button"
+          onClick={toggleInspectorPanel}
+          aria-label={showInspector ? "Hide inspector panel" : "Show inspector panel"}
+          aria-pressed={showInspector}
+          title={showInspector ? "Hide inspector" : "Show inspector"}
+          className={`fixed right-0 top-1/2 z-30 -translate-y-1/2 rounded-l-xl border px-2 py-3 shadow-md transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+            showInspector
+              ? "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/40 dark:text-sky-100"
+              : "border-slate-200 bg-white/90 text-slate-600 hover:text-primary dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200"
+          }`}
+        >
+          <MoreIcon className="h-4 w-4" />
+        </button>
+      )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
           <div className="flex items-center gap-1.5">
@@ -4175,14 +4809,10 @@ export default function BrowserPage() {
             <button
               type="button"
               onClick={openOperationsModal}
-              className={`${filterChipClasses} ${
-                totalOperationsCount > 0
-                  ? "border-emerald-300 bg-emerald-100 text-emerald-800 shadow-sm dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-100"
-                  : ""
-              }`}
+              className={`${filterChipClasses} ${operationsButtonToneClasses}`}
             >
               Operations
-              <span className={`${countBadgeClasses} ui-caption`}>{formatBadgeCount(totalOperationsCount)}</span>
+              <span className={operationsCountBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
             </button>
             <input
               ref={fileInputRef}
@@ -4451,7 +5081,7 @@ export default function BrowserPage() {
                                             return;
                                           }
                                           setActiveItem(item);
-                                          setShowInspector(true);
+                                          setInspectorVisible(true);
                                           setInspectorTab("details");
                                         }}
                                         className="block w-full truncate text-left font-semibold text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
@@ -4527,15 +5157,17 @@ export default function BrowserPage() {
                                     >
                                       <TrashIcon />
                                     </button>
-                                    <button
-                                      type="button"
-                                      className={iconButtonClasses}
-                                      aria-label="More actions"
-                                      title="More"
-                                      onClick={() => toggleInspectorForItem(item)}
-                                    >
-                                      <MoreIcon />
-                                    </button>
+                                    {allowInspectorPanel && (
+                                      <button
+                                        type="button"
+                                        className={iconButtonClasses}
+                                        aria-label="More actions"
+                                        title="More"
+                                        onClick={() => toggleInspectorForItem(item)}
+                                      >
+                                        <MoreIcon />
+                                      </button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -4591,14 +5223,16 @@ export default function BrowserPage() {
                                   aria-label={`Select ${item.name}`}
                                   className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                                 />
-                                <button
-                                  type="button"
-                                  className={iconButtonClasses}
-                                  aria-label="Focus"
-                                  onClick={() => toggleInspectorForItem(item)}
-                                >
-                                  <MoreIcon />
-                                </button>
+                                {allowInspectorPanel && (
+                                  <button
+                                    type="button"
+                                    className={iconButtonClasses}
+                                    aria-label="Focus"
+                                    onClick={() => toggleInspectorForItem(item)}
+                                  >
+                                    <MoreIcon />
+                                  </button>
+                                )}
                               </div>
                               <button
                                 type="button"
@@ -4608,7 +5242,7 @@ export default function BrowserPage() {
                                     return;
                                   }
                                   setActiveItem(item);
-                                  setShowInspector(true);
+                                  setInspectorVisible(true);
                                   setInspectorTab("details");
                                 }}
                                 className="relative flex min-w-0 flex-1 items-start gap-3 text-left"
@@ -4714,16 +5348,18 @@ export default function BrowserPage() {
                                   <TrashIcon className="h-3.5 w-3.5" />
                                   <span className="min-w-0 truncate">Delete</span>
                                 </button>
-                                <button
-                                  type="button"
-                                  className={gridQuickActionClasses}
-                                  aria-label="More actions"
-                                  title="More"
-                                  onClick={() => toggleInspectorForItem(item)}
-                                >
-                                  <MoreIcon className="h-3.5 w-3.5" />
-                                  <span className="min-w-0 truncate">More</span>
-                                </button>
+                                {allowInspectorPanel && (
+                                  <button
+                                    type="button"
+                                    className={gridQuickActionClasses}
+                                    aria-label="More actions"
+                                    title="More"
+                                    onClick={() => toggleInspectorForItem(item)}
+                                  >
+                                    <MoreIcon className="h-3.5 w-3.5" />
+                                    <span className="min-w-0 truncate">More</span>
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );
@@ -4838,7 +5474,7 @@ export default function BrowserPage() {
                                     type="button"
                                     className={bulkActionClasses}
                                     onClick={handlePasteItems}
-                                    disabled={!clipboard || !bucketName || !hasS3AccountContext}
+                                    disabled={!canPaste}
                                   >
                                     <PasteIcon className="h-3.5 w-3.5" />
                                     {pasteLabel}
@@ -5357,6 +5993,8 @@ export default function BrowserPage() {
         contextMenuRef={contextMenuRef}
         bucketName={bucketName}
         hasS3AccountContext={hasS3AccountContext}
+        allowInspectorPanel={allowInspectorPanel}
+        canPaste={canPaste}
         clipboard={clipboard}
         currentPath={currentPath}
         fileInputRef={fileInputRef}
@@ -5497,12 +6135,16 @@ export default function BrowserPage() {
           activeOperationsCount={activeOperations.length}
           queuedOperationsCount={uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount}
           completedOperationsCount={completedOperationsCount}
+          failedOperationsCount={failedOperationsCount}
           showActiveOperations={showActiveOperations}
           showQueuedOperations={showQueuedOperations}
           showCompletedOperations={showCompletedOperations}
-          onToggleActive={() => setShowActiveOperations((prev) => !prev)}
-          onToggleQueued={() => setShowQueuedOperations((prev) => !prev)}
-          onToggleCompleted={() => setShowCompletedOperations((prev) => !prev)}
+          showFailedOperations={showFailedOperations}
+          filtersAllInactive={filtersAllInactive}
+          onToggleActive={() => toggleOperationFilter("active")}
+          onToggleQueued={() => toggleOperationFilter("queued")}
+          onToggleCompleted={() => toggleOperationFilter("completed")}
+          onToggleFailed={() => toggleOperationFilter("failed")}
           visibleDownloadGroups={visibleDownloadGroups}
           visibleDeleteGroups={visibleDeleteGroups}
           visibleCopyGroups={visibleCopyGroups}
@@ -5517,6 +6159,9 @@ export default function BrowserPage() {
           cancelUploadGroup={cancelUploadGroup}
           cancelUploadOperation={cancelUploadOperation}
           removeQueuedUpload={removeQueuedUpload}
+          onDownloadOperationDetails={downloadOperationDetails}
+          hasFinishedOperations={hasFinishedOperations}
+          onClearFinishedOperations={clearFinishedOperations}
           onClose={() => setShowOperationsModal(false)}
         />
       )}

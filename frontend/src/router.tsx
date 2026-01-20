@@ -29,6 +29,7 @@ import ManagerUsersPage from "./features/manager/ManagerUsersPage";
 import ManagerUserKeysPage from "./features/manager/ManagerUserKeysPage";
 import BucketDetailPage from "./features/manager/BucketDetailPage";
 import BrowserPage from "./features/browser/BrowserPage";
+import ManagerBrowserPage from "./features/manager/ManagerBrowserPage";
 import ManagerGroupsPage from "./features/manager/ManagerGroupsPage";
 import ManagerGroupUsersPage from "./features/manager/ManagerGroupUsersPage";
 import ManagerRolesPage from "./features/manager/ManagerRolesPage";
@@ -39,6 +40,7 @@ import ManagerMetricsPage from "./features/manager/ManagerMetricsPage";
 import TopicsPage from "./features/manager/TopicsPage";
 import PortalLayout from "./features/portal/PortalLayout";
 import PortalDashboard from "./features/portal/PortalDashboard";
+import PortalBrowserPage from "./features/portal/PortalBrowserPage";
 import PortalManagePage from "./features/portal/PortalManagePage";
 import PortalSettingsPage from "./features/portal/PortalSettingsPage";
 import BrowserLayout from "./features/browser/BrowserLayout";
@@ -210,6 +212,9 @@ export default function AppRouter() {
                 <Route index element={<ManagerDashboard />} />
                 <Route path="buckets" element={<BucketsPage />} />
                 <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
+                <Route element={<RequireFeature feature="browser" />}>
+                  <Route path="browser" element={<ManagerBrowserPage />} />
+                </Route>
                 <Route path="users" element={<ManagerUsersPage />} />
                 <Route path="users/:userName/keys" element={<ManagerUserKeysPage />} />
                 <Route path="users/:userName/policies" element={<ManagerUserPoliciesPage />} />
@@ -241,6 +246,9 @@ export default function AppRouter() {
                   element={<PortalLayout />}
                 >
                   <Route index element={<PortalDashboard />} />
+                  <Route element={<RequireFeature feature="browser" />}>
+                    <Route path="browser" element={<PortalBrowserPage />} />
+                  </Route>
                   <Route path="manage" element={<PortalManagePage />} />
                   <Route path="settings" element={<PortalSettingsPage />} />
                 </Route>

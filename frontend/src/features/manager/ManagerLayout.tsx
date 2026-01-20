@@ -8,6 +8,7 @@ import Layout from "../../components/Layout";
 import { S3AccountProvider, useS3AccountContext } from "./S3AccountContext";
 import { SidebarSection } from "../../components/Sidebar";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
 function getUserRole(): string | null {
   if (typeof window === "undefined") return null;
@@ -54,6 +55,7 @@ function ManagerShell() {
     canSwitchAccess,
     managerStatsEnabled,
   } = useS3AccountContext();
+  const { generalSettings } = useGeneralSettings();
   const navigate = useNavigate();
   const selected = accounts.find((a) => a.id === selectedS3AccountId);
   const showSelector = requiresS3AccountSelection && accounts.length > 1;
@@ -201,6 +203,7 @@ function ManagerShell() {
       label: "Storage",
       links: [
         { to: "/manager/buckets", label: "Buckets" },
+        ...(generalSettings.browser_enabled ? [{ to: "/manager/browser", label: "Browser" }] : []),
       ],
     });
     // Events (SNS Topics) are currently a Ceph RGW oriented feature.

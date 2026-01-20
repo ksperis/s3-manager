@@ -35,6 +35,8 @@ type BrowserContextMenuProps = {
   contextMenuRef: RefObject<HTMLDivElement>;
   bucketName: string;
   hasS3AccountContext: boolean;
+  allowInspectorPanel?: boolean;
+  canPaste: boolean;
   clipboard: ClipboardState | null;
   currentPath: string;
   fileInputRef: RefObject<HTMLInputElement>;
@@ -65,6 +67,8 @@ export default function BrowserContextMenu({
   contextMenuRef,
   bucketName,
   hasS3AccountContext,
+  allowInspectorPanel = true,
+  canPaste,
   clipboard,
   currentPath,
   fileInputRef,
@@ -144,12 +148,12 @@ export default function BrowserContextMenu({
           </button>
           <button
             type="button"
-            className={`${contextMenuItemClasses} ${!clipboard || !bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+            className={`${contextMenuItemClasses} ${!canPaste ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onPasteItems();
             }}
-            disabled={!clipboard || !bucketName || !hasS3AccountContext}
+            disabled={!canPaste}
           >
             <PasteIcon className="h-3.5 w-3.5" />
             {pasteLabel}
@@ -194,17 +198,19 @@ export default function BrowserContextMenu({
       )}
       {contextMenu.kind === "item" && contextItem && (
         <>
-          <button
-            type="button"
-            className={contextMenuItemClasses}
-            onClick={() => {
-              onClose();
-              onOpenDetails(contextItem);
-            }}
-          >
-            <InfoIcon className="h-3.5 w-3.5" />
-            Details
-          </button>
+          {allowInspectorPanel && (
+            <button
+              type="button"
+              className={contextMenuItemClasses}
+              onClick={() => {
+                onClose();
+                onOpenDetails(contextItem);
+              }}
+            >
+              <InfoIcon className="h-3.5 w-3.5" />
+              Details
+            </button>
+          )}
           {contextItem.type === "folder" ? (
             <button
               type="button"

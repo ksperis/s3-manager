@@ -42,6 +42,7 @@ export type OperationItem = {
   cancelable?: boolean;
   completedAt?: string;
   completionStatus?: OperationCompletionStatus;
+  errorMessage?: string;
 };
 
 export type UploadCandidate = {
@@ -77,6 +78,7 @@ export type DownloadDetailItem = {
   label: string;
   status: DownloadDetailStatus;
   sizeBytes?: number;
+  errorMessage?: string;
 };
 
 export type DeleteDetailStatus = "queued" | "deleting" | "done" | "failed";
@@ -86,6 +88,7 @@ export type DeleteDetailItem = {
   key: string;
   label: string;
   status: DeleteDetailStatus;
+  errorMessage?: string;
 };
 
 export type CopyDetailStatus = "queued" | "copying" | "done" | "failed";
@@ -96,6 +99,7 @@ export type CopyDetailItem = {
   label: string;
   status: CopyDetailStatus;
   sizeBytes?: number;
+  errorMessage?: string;
 };
 
 export type SelectionStats = {
@@ -127,6 +131,7 @@ export type ContextMenuState = {
 export type ClipboardState = {
   items: BrowserItem[];
   sourceBucket: string;
+  sourceAccountId: string | number | null;
   mode: "copy" | "move";
 };
 

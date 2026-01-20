@@ -453,6 +453,7 @@ def put_object_retention(
 
 
 @router.post("/buckets/{bucket_name}/objects/delete", response_model=dict)
+@router.post("/buckets/{bucket_name}/delete", response_model=dict)
 def delete_objects(
     bucket_name: str,
     payload: DeleteObjectsPayload,
@@ -461,8 +462,10 @@ def delete_objects(
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict:
+    if not payload.objects:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing objects")
     try:
-        result = service.delete_objects(bucket_name, account, payload)
+        deleted = service.delete_objects(bucket_name, account, payload)
         _record_browser_action(
             audit_service,
             actor,
@@ -470,14 +473,15 @@ def delete_objects(
             entity_type="bucket",
             entity_id=bucket_name,
             account=account,
-            metadata={"count": len(payload.keys)},
+            metadata={"count": len(payload.objects)},
         )
-        return result
+        return {"deleted": deleted}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.post("/buckets/{bucket_name}/objects/copy", response_model=dict)
+@router.post("/buckets/{bucket_name}/copy", response_model=dict)
 def copy_object(
     bucket_name: str,
     payload: CopyObjectPayload,
@@ -486,8 +490,10 @@ def copy_object(
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict:
+    if not payload.source_key or not payload.destination_key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing source or destination key")
     try:
-        result = service.copy_object(bucket_name, account, payload)
+        service.copy_object(bucket_name, account, payload)
         _record_browser_action(
             audit_service,
             actor,
@@ -495,14 +501,22 @@ def copy_object(
             entity_type="object",
             entity_id=f"{bucket_name}/{payload.source_key}",
             account=account,
-            metadata={"dest_key": payload.dest_key},
+            metadata={
+                "source": payload.source_key,
+                "source_bucket": payload.source_bucket or bucket_name,
+                "destination_bucket": bucket_name,
+                "destination": payload.destination_key,
+                "move": payload.move,
+                "version_id": payload.source_version_id,
+            },
         )
-        return result
+        return {"message": "ok"}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.post("/buckets/{bucket_name}/folder", response_model=dict)
+@router.post("/buckets/{bucket_name}/folders", response_model=dict)
 def create_folder(
     bucket_name: str,
     payload: CreateFolderPayload,
@@ -514,7 +528,7 @@ def create_folder(
     if not payload.prefix:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing prefix")
     try:
-        result = service.create_folder(bucket_name, account, payload.prefix)
+        service.create_folder(bucket_name, account, payload.prefix)
         _record_browser_action(
             audit_service,
             actor,
@@ -524,12 +538,13 @@ def create_folder(
             account=account,
             metadata={"prefix": payload.prefix},
         )
-        return result
+        return {"message": "created", "prefix": payload.prefix}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.post("/buckets/{bucket_name}/upload/proxy", response_model=ProxyUploadResponse)
+@router.post("/buckets/{bucket_name}/proxy-upload", response_model=ProxyUploadResponse)
 def upload_via_proxy(
     bucket_name: str,
     file: UploadFile = File(...),
@@ -558,6 +573,7 @@ def upload_via_proxy(
 
 
 @router.get("/buckets/{bucket_name}/download")
+@router.get("/buckets/{bucket_name}/proxy-download")
 def download_object(
     bucket_name: str,
     key: str,
@@ -593,6 +609,7 @@ def presign(
 
 
 @router.post("/buckets/{bucket_name}/multipart/init", response_model=MultipartUploadInitResponse)
+@router.post("/buckets/{bucket_name}/multipart/initiate", response_model=MultipartUploadInitResponse)
 def multipart_init(
     bucket_name: str,
     payload: MultipartUploadInitRequest,
@@ -601,8 +618,10 @@ def multipart_init(
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> MultipartUploadInitResponse:
+    if not payload.key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
-        result = service.multipart_init(bucket_name, account, payload)
+        result = service.initiate_multipart_upload(bucket_name, account, payload)
         _record_browser_action(
             audit_service,
             actor,
@@ -616,6 +635,7 @@ def multipart_init(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
+@router.get("/buckets/{bucket_name}/multipart", response_model=ListMultipartUploadsResponse)
 @router.get("/buckets/{bucket_name}/multipart/uploads", response_model=ListMultipartUploadsResponse)
 def list_multipart_uploads(
     bucket_name: str,
@@ -635,6 +655,30 @@ def list_multipart_uploads(
             key_marker=key_marker,
             upload_id_marker=upload_id_marker,
             max_uploads=max_uploads,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/{bucket_name}/multipart/{upload_id}/parts", response_model=ListPartsResponse)
+def list_parts_for_upload(
+    bucket_name: str,
+    upload_id: str,
+    key: str,
+    part_number_marker: Optional[int] = None,
+    max_parts: int = Query(default=1000, ge=1, le=1000),
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> ListPartsResponse:
+    try:
+        return service.list_parts(
+            bucket_name,
+            account,
+            key=key,
+            upload_id=upload_id,
+            part_number_marker=part_number_marker,
+            max_parts=max_parts,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -664,6 +708,24 @@ def list_parts(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
+@router.post("/buckets/{bucket_name}/multipart/{upload_id}/presign", response_model=PresignPartResponse)
+def presign_part_for_upload(
+    bucket_name: str,
+    upload_id: str,
+    payload: PresignPartRequest,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> PresignPartResponse:
+    if not payload.key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    payload.upload_id = upload_id
+    try:
+        return service.presign_part(bucket_name, account, payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
 @router.post("/buckets/{bucket_name}/multipart/presign", response_model=PresignPartResponse)
 def presign_part(
     bucket_name: str,
@@ -678,26 +740,85 @@ def presign_part(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/buckets/{bucket_name}/multipart/complete", response_model=dict)
-def multipart_complete(
+@router.post("/buckets/{bucket_name}/multipart/{upload_id}/complete", response_model=dict)
+def complete_multipart_upload(
     bucket_name: str,
+    upload_id: str,
+    key: str,
     payload: CompleteMultipartUploadRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict:
+    if not key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
-        result = service.multipart_complete(bucket_name, account, payload)
+        service.complete_multipart_upload(bucket_name, account, key, upload_id, payload)
         _record_browser_action(
             audit_service,
             actor,
             action="multipart_complete",
             entity_type="object",
-            entity_id=f"{bucket_name}/{payload.key}",
+            entity_id=f"{bucket_name}/{key}",
             account=account,
         )
-        return result
+        return {"message": "completed"}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/buckets/{bucket_name}/multipart/complete", response_model=dict)
+def multipart_complete(
+    bucket_name: str,
+    key: str,
+    upload_id: str,
+    payload: CompleteMultipartUploadRequest,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict:
+    if not key or not upload_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key or upload_id")
+    try:
+        service.complete_multipart_upload(bucket_name, account, key, upload_id, payload)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="multipart_complete",
+            entity_type="object",
+            entity_id=f"{bucket_name}/{key}",
+            account=account,
+        )
+        return {"message": "completed"}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/{bucket_name}/multipart/{upload_id}", response_model=dict)
+def abort_multipart_upload(
+    bucket_name: str,
+    upload_id: str,
+    key: str,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict:
+    if not key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    try:
+        service.abort_multipart_upload(bucket_name, account, key, upload_id)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="multipart_abort",
+            entity_type="object",
+            entity_id=f"{bucket_name}/{key}",
+            account=account,
+        )
+        return {"message": "aborted"}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -728,6 +849,7 @@ def restore_object(
 
 
 @router.post("/buckets/{bucket_name}/cleanup", response_model=CleanupObjectVersionsResponse)
+@router.post("/buckets/{bucket_name}/versions/cleanup", response_model=CleanupObjectVersionsResponse)
 def cleanup_object_versions(
     bucket_name: str,
     payload: CleanupObjectVersionsPayload,
