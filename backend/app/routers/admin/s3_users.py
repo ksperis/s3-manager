@@ -19,7 +19,11 @@ from app.models.s3_user import (
     S3UserSummary,
     S3UserUpdate,
 )
-from app.routers.dependencies import get_audit_logger, get_current_super_admin, get_super_admin_rgw_client
+from app.routers.dependencies import (
+    get_audit_logger,
+    get_current_super_admin,
+    get_optional_super_admin_rgw_client,
+)
 from app.services.s3_users_service import S3UsersService, get_s3_users_service
 from app.services.audit_service import AuditService
 
@@ -29,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 def get_admin_s3_users_service(
     db: Session = Depends(get_db),
-    rgw_admin_client=Depends(get_super_admin_rgw_client),
+    rgw_admin_client=Depends(get_optional_super_admin_rgw_client),
 ) -> S3UsersService:
     return get_s3_users_service(db, rgw_admin_client=rgw_admin_client)
 
