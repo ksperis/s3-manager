@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { NavLink } from "react-router-dom";
 
 export type SidebarLink = {
@@ -16,6 +16,7 @@ export type SidebarLink = {
 export type SidebarSection = {
   label: string;
   links: SidebarLink[];
+  collapsed?: boolean;
 };
 
 type SidebarProps = {
@@ -28,6 +29,20 @@ type SidebarProps = {
 export default function Sidebar({ title = "s3-manager", sections, links = [], headerAction }: SidebarProps) {
   const effectiveSections: SidebarSection[] =
     sections && sections.length > 0 ? sections : [{ label: "Navigation", links }];
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    effectiveSections.forEach((section) => {
+      initial[section.label] = section.collapsed ?? false;
+    });
+    return initial;
+  });
+
+  const toggleSection = (label: string) => {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [label]: !prev[label],
+    }));
+  };
   const baseLinkClasses =
     "group flex items-center justify-between rounded-md px-2.5 py-1.5 ui-caption font-semibold leading-4 transition-colors";
   const inactiveLinkClasses =
@@ -45,42 +60,53 @@ export default function Sidebar({ title = "s3-manager", sections, links = [], he
         </div>
       </div>
       <nav className="flex flex-1 flex-col gap-3 pb-6">
-        {effectiveSections.map((section) => (
-          <div key={section.label} className="space-y-1">
-            <p className="px-2 ui-badge font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              {section.label}
-            </p>
-            <ul className="space-y-1 border-l border-slate-200/80 pl-2 dark:border-slate-800">
-              {section.links.map((link) => (
-                <li key={link.to}>
-                  {link.disabled ? (
-                    <div
-                      className={`${baseLinkClasses} ${inactiveLinkClasses} cursor-not-allowed opacity-50`}
-                      aria-disabled="true"
-                    >
-                      <span>{link.label}</span>
-                      {link.badge && <span className={badgeClasses}>{link.badge}</span>}
-                    </div>
-                  ) : (
-                    <NavLink
-                      to={link.to}
-                      end={link.end}
-                      className={({ isActive }) =>
-                        [
-                          baseLinkClasses,
-                          isActive ? activeLinkClasses : inactiveLinkClasses,
-                        ].join(" ")
-                      }
-                    >
-                      <span>{link.label}</span>
-                      {link.badge && <span className={badgeClasses}>{link.badge}</span>}
-                    </NavLink>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        {effectiveSections.map((section) => {
+          const isCollapsed = collapsedSections[section.label];
+          return (
+            <div key={section.label} className="space-y-1">
+              <button
+                onClick={() => toggleSection(section.label)}
+                className="flex w-full items-center justify-between px-2 ui-badge font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              >
+                <span>{section.label}</span>
+                <span className={`transition-transform ${isCollapsed ? "rotate-0" : "rotate-90"}`}>
+                  ▶
+                </span>
+              </button>
+              {!isCollapsed && (
+                <ul className="space-y-1 border-l border-slate-200/80 pl-2 dark:border-slate-800">
+                  {section.links.map((link) => (
+                    <li key={link.to}>
+                      {link.disabled ? (
+                        <div
+                          className={`${baseLinkClasses} ${inactiveLinkClasses} cursor-not-allowed opacity-50`}
+                          aria-disabled="true"
+                        >
+                          <span>{link.label}</span>
+                          {link.badge && <span className={badgeClasses}>{link.badge}</span>}
+                        </div>
+                      ) : (
+                        <NavLink
+                          to={link.to}
+                          end={link.end}
+                          className={({ isActive }) =>
+                            [
+                              baseLinkClasses,
+                              isActive ? activeLinkClasses : inactiveLinkClasses,
+                            ].join(" ")
+                          }
+                        >
+                          <span>{link.label}</span>
+                          {link.badge && <span className={badgeClasses}>{link.badge}</span>}
+                        </NavLink>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
       </nav>
     </aside>
   );
