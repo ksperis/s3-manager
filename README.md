@@ -318,6 +318,29 @@ Default endpoints:
 - Frontend: http://localhost:8080
 - API: http://localhost:8000/api
 
+
+### Local (for developper)
+
+Start backend :
+
+```bash
+cd backend                        
+python3 -m venv .venv    
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+Start frontend :
+
+```bash
+cd frontend                                  
+npm install            
+npm run dev -- --host --port 5173
+```
+
+
 ### Helm (Kubernetes)
 
 ```bash
