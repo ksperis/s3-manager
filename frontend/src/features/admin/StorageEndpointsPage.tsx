@@ -858,6 +858,23 @@ export default function StorageEndpointsPage() {
                     />
                   </label>
                 </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
+                        Ceph admin endpoint override (optional)
+                        <input
+                          type="text"
+                          value={form.features.admin.endpoint}
+                          onChange={(e) =>
+                            updateFeatures((current) => ({
+                              ...current,
+                              admin: { ...current.admin, endpoint: e.target.value },
+                            }))
+                          }
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          placeholder="http://rgw-admin.local"
+                        />
+                      </label>
+                      </div>
                     <p className="ui-caption text-slate-500 dark:text-slate-400">
                       Admin, usage, and metrics require a Ceph endpoint. Usage/metrics require supervision credentials.
                     </p>
@@ -912,22 +929,6 @@ export default function StorageEndpointsPage() {
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
-                    Admin endpoint override (optional)
-                    <input
-                      type="text"
-                      value={form.features.admin.endpoint}
-                      onChange={(e) =>
-                        updateFeatures((current) => ({
-                          ...current,
-                          admin: { ...current.admin, endpoint: e.target.value },
-                        }))
-                      }
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                      placeholder="http://rgw-admin.local"
-                      disabled={!cephMode || !form.features.admin.enabled}
-                    />
-                  </label>
                   <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
                     STS endpoint override (optional)
                     <input
