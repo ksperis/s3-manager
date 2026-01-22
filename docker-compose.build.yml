@@ -2,10 +2,8 @@ services:
   backend:
     build:
       context: backend
-    env_file:
-      - backend/.env.example
     environment:
-      CORS_ORIGINS: '["http://localhost:8080"]'
+      CORS_ORIGINS: '["http://127.0.0.1:8080", "http://localhost:8080"]'
       DATABASE_URL: sqlite:////data/app.db
       APP_SETTINGS_PATH: /data/app_settings.json
     volumes:
