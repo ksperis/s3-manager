@@ -1,0 +1,101 @@
+site_name: s3-manager Documentation
+site_description: Explore and manage S3-compatible object storage with IAM-aligned workflows.
+site_author: s3-manager contributors
+repo_name: s3-manager
+repo_url: https://github.com/<ORG_OR_USER>/s3-manager
+edit_uri: edit/main/doc/docs/
+
+# For GitHub Pages, set site_url to your published URL, e.g.:
+# site_url: https://<ORG_OR_USER>.github.io/s3-manager/
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+  - git-revision-date-localized:
+      enable_creation_date: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Overview: getting-started/overview.md
+      - Run locally (Docker Compose): getting-started/docker-compose.md
+      - Run locally (dev mode): getting-started/dev-mode.md
+      - Configuration: getting-started/configuration.md
+  - Concepts:
+      - Core principles: concepts/principles.md
+      - Surfaces (Admin / Manager / Browser / Portal): concepts/surfaces.md
+      - S3 Accounts: concepts/s3-accounts.md
+      - S3 Connections: concepts/s3-connections.md
+      - Identity model (principals): concepts/identity-model.md
+      - Auditability: concepts/audit.md
+  - Functional behavior:
+      - IAM alignment: functional/iam-alignment.md
+      - Executors & context: functional/executors.md
+      - S3 Account lifecycle: functional/account-lifecycle.md
+      - S3 Connection lifecycle: functional/connection-lifecycle.md
+      - Bucket features: functional/bucket-features.md
+      - IAM features: functional/iam-features.md
+      - Audit flows: functional/audit-flows.md
+  - Architecture:
+      - High-level architecture: architecture/high-level.md
+      - Backend (FastAPI): architecture/backend.md
+      - Frontend (React): architecture/frontend.md
+      - Database & migrations: architecture/database.md
+  - Features by surface:
+      - Admin: features/admin.md
+      - Manager: features/manager.md
+      - Browser: features/browser.md
+      - Portal: features/portal.md
+  - Backends:
+      - Compatibility matrix: backends/compatibility.md
+      - Ceph RGW: backends/ceph-rgw.md
+      - MinIO and others: backends/others.md
+  - Operations:
+      - Helm chart: operations/helm.md
+      - Observability & troubleshooting: operations/ops.md
+      - Security hardening: operations/security.md
+  - Development:
+      - Contributing: development/contributing.md
+      - Repo layout: development/repo-layout.md
+      - API reference (OpenAPI): development/api-reference.md
+      - GitHub Pages deployment: development/github-pages.md
