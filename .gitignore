@@ -1,7 +1,6 @@
 .env
 .env.*
 !.env.example
-ai_prompt.md
 TODO_local.md
 
 # Databases and caches
