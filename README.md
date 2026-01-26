@@ -89,7 +89,7 @@ Responsibilities:
   - **S3 Connections** (credential-first)
 - Authentication and portal options
 
-![Admin dashboard](docs/screenshots/admin-dashboard.png)
+![Admin dashboard](doc/docs/assets/screenshots/admin-dashboard.png)
 
 ---
 
@@ -121,7 +121,7 @@ Authorization model:
 
 `Manager` is the **source of truth** for storage configuration.
 
-![Manager buckets](docs/screenshots/manager-buckets.png)
+![Manager buckets](doc/docs/assets/screenshots/manager-buckets.png)
 
 ---
 
@@ -164,7 +164,7 @@ Access modes:
 The browser does not introduce abstractions or managed behavior; it is a direct
 representation of what the user is allowed to see and do on the storage backend.
 
-![S3 browser](docs/screenshots/s3-browser.png)
+![S3 browser](doc/docs/assets/screenshots/s3-browser.png)
 
 
 
@@ -199,7 +199,7 @@ Characteristics:
 In some cases, portal workflows may rely on **controlled privilege elevation**
 (e.g. bucket creation on behalf of a user).
 
-![Portal](docs/screenshots/portal.png)
+![Portal](doc/docs/assets/screenshots/portal.png)
 
 ---
 
