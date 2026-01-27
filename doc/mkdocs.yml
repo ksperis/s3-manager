@@ -2,11 +2,9 @@ site_name: s3-manager Documentation
 site_description: Explore and manage S3-compatible object storage with IAM-aligned workflows.
 site_author: s3-manager contributors
 repo_name: s3-manager
-repo_url: https://github.com/<ORG_OR_USER>/s3-manager
+repo_url: https://github.com/ksperis/s3-manager
 edit_uri: edit/main/doc/docs/
-
-# For GitHub Pages, set site_url to your published URL, e.g.:
-# site_url: https://<ORG_OR_USER>.github.io/s3-manager/
+site_url: https://ksperis.github.io/s3-manager/
 
 theme:
   name: material
