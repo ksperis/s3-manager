@@ -69,11 +69,11 @@ type StoredUser = {
 const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean) => {
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
-    { to: "/admin/storage-endpoints", label: "S3 Endpoints" },
     { to: "/admin/manager-settings", label: "Manager" },
     { to: "/admin/browser-settings", label: "Browser", disabled: !browserEnabled },
     { to: "/admin/portal-settings", label: "Portal", disabled: !portalEnabled },
   ];
+
   return [
     {
       label: "Overview",
@@ -83,16 +83,23 @@ const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean) => {
       ],
     },
     {
-      label: "Interface",
+      label: "Platform",
       links: [{ to: "/admin/users", label: "UI Users" }],
     },
     {
-      label: "Storage",
+      label: "Managed Accounts",
       links: [
         { to: "/admin/s3-accounts", label: "Accounts (RGW)" },
         { to: "/admin/s3-users", label: "Users (RGW)" },
-        { to: "/admin/s3-connections", label: "Connections" },
       ],
+    },
+    {
+      label: "Connections",
+      links: [{ to: "/admin/s3-connections", label: "S3 Connections" }],
+    },
+    {
+      label: "Connectivity",
+      links: [{ to: "/admin/storage-endpoints", label: "S3 Endpoints" }],
     },
     {
       label: "Governance",
