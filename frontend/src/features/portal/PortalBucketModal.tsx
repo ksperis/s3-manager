@@ -188,7 +188,7 @@ export default function PortalBucketModal({
 
   const handleOpenInBrowser = () => {
     if (!accountId) return;
-    localStorage.setItem("selectedS3AccountId", String(accountId));
+    localStorage.setItem("selectedBrowserContextId", String(accountId));
     navigate(`/browser?bucket=${encodeURIComponent(bucket.name)}`);
   };
 

@@ -155,7 +155,7 @@ class ManagerSettings(BaseModel):
 
 
 class BrowserSettings(BaseModel):
-    allow_proxy_transfers: bool = False
+    allow_proxy_transfers: bool = True
     direct_upload_parallelism: int = Field(default=5, ge=1, le=20)
     proxy_upload_parallelism: int = Field(default=2, ge=1, le=20)
     direct_download_parallelism: int = Field(default=5, ge=1, le=20)

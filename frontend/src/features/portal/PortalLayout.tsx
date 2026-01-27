@@ -84,11 +84,13 @@ function PortalShell() {
   const { generalSettings } = useGeneralSettings();
   const accountRole = resolvePortalRole(getStoredUser(), selectedAccountId);
   const hideSidebar = accountRole === "portal_user";
+  const isPortalManager = accountRole === "portal_manager";
   const navSections: SidebarSection[] = [
     {
       label: "Portail",
       links: [
         { to: "/portal", label: "Accueil", end: true },
+        ...(isPortalManager ? [{ to: "/portal/buckets", label: "Buckets" }] : []),
         ...(generalSettings.browser_enabled ? [{ to: "/portal/browser", label: "Browser" }] : []),
         { to: "/portal/manage", label: "Gestion" },
         { to: "/portal/settings", label: "Configuration" },

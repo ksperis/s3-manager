@@ -98,12 +98,11 @@ export default function PortalManagePage() {
   const [editingUser, setEditingUser] = useState<PortalUserSummary | null>(null);
   const [editRole, setEditRole] = useState<PortalAccountRole>("portal_user");
   const [editBuckets, setEditBuckets] = useState<string[]>([]);
-  const [editSelectedBucket, setEditSelectedBucket] = useState("");
   const [editLoading, setEditLoading] = useState(false);
-  const [editSaving, setEditSaving] = useState(false);
-  const [editRemovingBucket, setEditRemovingBucket] = useState<string | null>(null);
+  const [editBucketAction, setEditBucketAction] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [editMessage, setEditMessage] = useState<string | null>(null);
+  const [editBucketFilter, setEditBucketFilter] = useState("");
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<SortState>({ field: "email", direction: "asc" });
   const userEmail = useMemo(() => getUserEmail(), []);
@@ -160,10 +159,11 @@ export default function PortalManagePage() {
     setShowEditModal(false);
     setEditingUser(null);
     setEditBuckets([]);
-    setEditSelectedBucket("");
     setEditRole("portal_user");
     setEditError(null);
     setEditMessage(null);
+    setEditBucketAction(null);
+    setEditBucketFilter("");
   }, [accountIdForApi]);
 
   const toggleSort = (field: SortField) => {
@@ -207,24 +207,38 @@ export default function PortalManagePage() {
     !stateLoading &&
     canManagePortalUsers;
   const userCountLabel = canRenderUsers ? `${filteredUsers.length} utilisateur(s)` : "-";
+  const bucketAccessRows = useMemo(() => {
+    const available = portalState?.buckets || [];
+    const query = editBucketFilter.trim().toLowerCase();
+    const filtered = query
+      ? available.filter((bucket) => bucket.name.toLowerCase().includes(query))
+      : available;
+    return filtered
+      .map((bucket) => ({
+        name: bucket.name,
+        hasAccess: editBuckets.includes(bucket.name),
+      }))
+      .sort((a, b) => {
+        if (a.hasAccess !== b.hasAccess) return a.hasAccess ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [editBucketFilter, editBuckets, portalState?.buckets]);
 
   const openEditModal = (user: PortalUserSummary) => {
     if (!user.id || user.iam_only || !accountIdForApi || !canManagePortalUsers) return;
     setEditingUser(user);
     setEditRole(normalizePortalRole(user.role));
     setEditBuckets([]);
-    setEditSelectedBucket("");
     setEditError(null);
     setEditMessage(null);
+    setEditBucketAction(null);
+    setEditBucketFilter("");
     setEditLoading(true);
     setShowEditModal(true);
     listPortalUserBuckets(accountIdForApi, user.id)
       .then((resp) => {
         const buckets = resp.buckets || [];
         setEditBuckets(buckets);
-        const available = (portalState?.buckets || []).map((b) => b.name);
-        const next = available.find((bucket) => !buckets.includes(bucket));
-        setEditSelectedBucket(next ?? "");
       })
       .catch(() => {
         setEditError("Impossible de charger les droits buckets.");
@@ -236,12 +250,11 @@ export default function PortalManagePage() {
     setShowEditModal(false);
     setEditingUser(null);
     setEditBuckets([]);
-    setEditSelectedBucket("");
     setEditError(null);
     setEditMessage(null);
     setEditLoading(false);
-    setEditSaving(false);
-    setEditRemovingBucket(null);
+    setEditBucketAction(null);
+    setEditBucketFilter("");
   };
 
   const handleCreatePortalUser = async (event: FormEvent) => {
@@ -313,45 +326,39 @@ export default function PortalManagePage() {
     }
   };
 
-  const handleGrantPortalBucket = async () => {
-    if (!accountIdForApi || !editingUser?.id || !editSelectedBucket) return;
-    setEditSaving(true);
+  const handleGrantPortalBucket = async (bucketName: string) => {
+    if (!accountIdForApi || !editingUser?.id || !bucketName) return;
+    setEditBucketAction(bucketName);
     setEditError(null);
     setEditMessage(null);
     try {
-      const resp = await grantPortalUserBucket(accountIdForApi, editingUser.id, editSelectedBucket);
+      const resp = await grantPortalUserBucket(accountIdForApi, editingUser.id, bucketName);
       const buckets = resp.buckets || [];
       setEditBuckets(buckets);
-      const available = (portalState?.buckets || []).map((b) => b.name);
-      const next = available.find((bucket) => !buckets.includes(bucket));
-      setEditSelectedBucket(next ?? "");
-      setEditMessage(`Acces ajoute au bucket ${editSelectedBucket}.`);
+      setEditMessage(`Acces ajoute au bucket ${bucketName}.`);
     } catch (err) {
       console.error(err);
       setEditError("Ajout impossible. Verifiez vos droits.");
     } finally {
-      setEditSaving(false);
+      setEditBucketAction(null);
     }
   };
 
   const handleRevokePortalBucket = async (bucketName: string) => {
     if (!accountIdForApi || !editingUser?.id || !bucketName) return;
-    setEditRemovingBucket(bucketName);
+    setEditBucketAction(bucketName);
     setEditError(null);
     setEditMessage(null);
     try {
       const resp = await revokePortalUserBucket(accountIdForApi, editingUser.id, bucketName);
       const buckets = resp.buckets || [];
       setEditBuckets(buckets);
-      const available = (portalState?.buckets || []).map((b) => b.name);
-      const next = available.find((bucket) => !buckets.includes(bucket));
-      setEditSelectedBucket(next ?? "");
       setEditMessage(`Acces retire du bucket ${bucketName}.`);
     } catch (err) {
       console.error(err);
       setEditError("Retrait impossible. Verifiez vos droits.");
     } finally {
-      setEditRemovingBucket(null);
+      setEditBucketAction(null);
     }
   };
 
@@ -392,10 +399,9 @@ export default function PortalManagePage() {
     ? `Gerez les utilisateurs et leurs droits buckets pour ${accountName}.`
     : "Gerez les utilisateurs et leurs droits buckets du portail.";
 
-  const headerActions = [
-    { label: "Retour au portail", to: "/portal", variant: "ghost" as const },
-    ...(canManagePortalUsers ? [{ label: "Ajouter un utilisateur", onClick: () => setShowCreateModal(true) }] : []),
-  ];
+  const headerActions = canManagePortalUsers
+    ? [{ label: "Ajouter un utilisateur", onClick: () => setShowCreateModal(true) }]
+    : [];
 
   return (
     <div className="space-y-4">
@@ -704,68 +710,79 @@ export default function PortalManagePage() {
             </div>
 
             <div className="rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-700">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Droits buckets</p>
-                <span className="ui-caption text-slate-400 dark:text-slate-500">{editBuckets.length} autorise(s)</span>
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <label className="ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Ajouter</label>
-                  <select
-                    value={editSelectedBucket}
-                    onChange={(e) => setEditSelectedBucket(e.target.value)}
-                    disabled={
-                      editLoading ||
-                      editSaving ||
-                      Boolean(editRemovingBucket) ||
-                      (portalState?.buckets || []).length === 0
-                    }
-                    className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  >
-                    <option value="">Selectionnez un bucket</option>
-                    {(portalState?.buckets || []).map((bucket) => (
-                      <option key={bucket.name} value={bucket.name} disabled={editBuckets.includes(bucket.name)}>
-                        {bucket.name} {editBuckets.includes(bucket.name) ? "(deja autorise)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Droits buckets</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    {editBuckets.length} autorise(s)
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleGrantPortalBucket}
-                  disabled={editLoading || editSaving || Boolean(editRemovingBucket) || !editSelectedBucket}
-                  className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                >
-                  {editSaving ? "Ajout..." : "Autoriser"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Filtre</span>
+                  <input
+                    type="search"
+                    value={editBucketFilter}
+                    onChange={(e) => setEditBucketFilter(e.target.value)}
+                    placeholder="Rechercher..."
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64"
+                  />
+                </div>
               </div>
-              <div className="mt-3">
-                {editLoading ? (
-                  <div className="ui-body text-slate-500 dark:text-slate-400">Chargement...</div>
-                ) : editBuckets.length === 0 ? (
-                  <p className="ui-body text-slate-500 dark:text-slate-400">Aucun bucket autorise pour cet utilisateur.</p>
-                ) : (
-                  <div className="divide-y divide-slate-200 rounded-md border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-                    {editBuckets.map((name) => {
-                      const removing = editRemovingBucket === name;
-                      return (
-                        <div key={name} className="flex items-center justify-between gap-3 px-3 py-2 ui-body">
-                          <span className="font-mono text-slate-700 dark:text-slate-200">{name}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRevokePortalBucket(name)}
-                            disabled={editSaving || Boolean(editRemovingBucket)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600"
-                            aria-label={`Retirer l'acces au bucket ${name}`}
-                            title={`Retirer l'acces au bucket ${name}`}
-                          >
-                            <span aria-hidden>{removing ? "..." : "✕"}</span>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+              <div className="mt-3 overflow-x-auto">
+                <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                  <thead className="bg-slate-50 dark:bg-slate-900/50">
+                    <tr>
+                      <th className="px-3 py-2 text-left ui-caption font-semibold text-slate-600 dark:text-slate-300">Bucket</th>
+                      <th className="px-3 py-2 text-right ui-caption font-semibold text-slate-600 dark:text-slate-300">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {editLoading && <TableEmptyState colSpan={2} message="Chargement des buckets..." />}
+                    {!editLoading && bucketAccessRows.length === 0 && (
+                      <TableEmptyState
+                        colSpan={2}
+                        message={
+                          editBucketFilter.trim()
+                            ? "Aucun bucket ne correspond au filtre."
+                            : "Aucun bucket pour ce compte."
+                        }
+                      />
+                    )}
+                    {!editLoading &&
+                      bucketAccessRows.map((bucket) => {
+                        const busy = editBucketAction === bucket.name;
+                        const disabled = editLoading || Boolean(editBucketAction);
+                        return (
+                          <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                            <td className="px-3 py-2 ui-body font-mono text-slate-700 dark:text-slate-200">
+                              {bucket.name}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {bucket.hasAccess ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevokePortalBucket(bucket.name)}
+                                  disabled={disabled}
+                                  className={tableDeleteActionClasses}
+                                >
+                                  {busy ? "Retrait..." : "Retirer"}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleGrantPortalBucket(bucket.name)}
+                                  disabled={disabled}
+                                  className={tableActionButtonClasses}
+                                >
+                                  {busy ? "Ajout..." : "Ajouter"}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

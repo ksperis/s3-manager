@@ -1548,6 +1548,32 @@ class PortalService:
             quota_max_objects=None,
         )
 
+    def delete_bucket(
+        self,
+        user: User,
+        access: "AccountAccess",
+        bucket_name: str,
+        force: bool = False,
+        use_root: bool = False,
+    ) -> None:
+        account = access.account
+        portal_settings = self._effective_portal_settings(account)
+        iam_service = self._get_iam_service(account)
+        link, _, _ = self._ensure_portal_user(user, account, iam_service)
+        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
+        if use_root:
+            access_key, secret_key = self._account_credentials(account)
+        else:
+            access_key, secret_key = self._active_credentials(link, iam_service)
+        endpoint = resolve_s3_endpoint(account)
+        s3_client.delete_bucket(
+            bucket_name,
+            force=force,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=endpoint,
+        )
+
     def provision_portal_user(self, target: User, account: S3Account, account_role: str) -> None:
         """Create/sync IAM user and group membership immediately when roles change."""
         iam_service = self._get_iam_service(account)

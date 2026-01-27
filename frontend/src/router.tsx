@@ -40,6 +40,7 @@ import ManagerMetricsPage from "./features/manager/ManagerMetricsPage";
 import TopicsPage from "./features/manager/TopicsPage";
 import PortalLayout from "./features/portal/PortalLayout";
 import PortalDashboard from "./features/portal/PortalDashboard";
+import PortalBucketsPage from "./features/portal/PortalBucketsPage";
 import PortalBrowserPage from "./features/portal/PortalBrowserPage";
 import PortalManagePage from "./features/portal/PortalManagePage";
 import PortalSettingsPage from "./features/portal/PortalSettingsPage";
@@ -254,6 +255,7 @@ export default function AppRouter() {
                   element={<PortalLayout />}
                 >
                   <Route index element={<PortalDashboard />} />
+                  <Route path="buckets" element={<PortalBucketsPage />} />
                   <Route element={<RequireFeature feature="browser" />}>
                     <Route path="browser" element={<PortalBrowserPage />} />
                   </Route>

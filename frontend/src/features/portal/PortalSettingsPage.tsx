@@ -273,7 +273,7 @@ export default function PortalSettingsPage() {
     ? `Configure portal settings for ${accountName}.`
     : "Configure portal settings.";
 
-  const headerActions = [{ label: "Back to portal", to: "/portal", variant: "ghost" as const }];
+  const headerActions = [];
 
   return (
     <div className="space-y-4">

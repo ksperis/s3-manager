@@ -102,8 +102,15 @@ export async function fetchPortalUsage(accountId: S3AccountSelector): Promise<Po
   return data;
 }
 
-export async function listPortalBuckets(accountId: S3AccountSelector): Promise<Bucket[]> {
-  const { data } = await client.get<Bucket[]>("/portal/buckets", { params: withS3AccountParam(undefined, accountId) });
+export async function listPortalBuckets(
+  accountId: S3AccountSelector,
+  options?: { search?: string }
+): Promise<Bucket[]> {
+  const baseParams: Record<string, string> = {};
+  if (options?.search) {
+    baseParams.search = options.search;
+  }
+  const { data } = await client.get<Bucket[]>("/portal/buckets", { params: withS3AccountParam(baseParams, accountId) });
   return data;
 }
 
@@ -114,6 +121,17 @@ export async function fetchPortalBucketStats(
   const { data } = await client.get<PortalBucketStats>(`/portal/buckets/${encodeURIComponent(bucketName)}/stats`, {
     params: withS3AccountParam(undefined, accountId),
   });
+  return data;
+}
+
+export async function listPortalBucketUsers(
+  accountId: S3AccountSelector,
+  bucketName: string
+): Promise<PortalUserSummary[]> {
+  const { data } = await client.get<PortalUserSummary[]>(
+    `/portal/buckets/${encodeURIComponent(bucketName)}/users`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
   return data;
 }
 
@@ -128,6 +146,16 @@ export async function createPortalBucket(
   }
   const { data } = await client.post<Bucket>("/portal/buckets", payload, { params: withS3AccountParam(undefined, accountId) });
   return data;
+}
+
+export async function deletePortalBucket(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  force = false
+): Promise<void> {
+  await client.delete(`/portal/buckets/${encodeURIComponent(bucketName)}`, {
+    params: withS3AccountParam({ force }, accountId),
+  });
 }
 
 export async function listPortalAccessKeys(accountId: S3AccountSelector): Promise<PortalAccessKey[]> {

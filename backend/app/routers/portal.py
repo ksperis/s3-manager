@@ -34,6 +34,7 @@ from app.routers.dependencies import (
 from app.services.audit_service import AuditService
 from app.services.portal_service import PortalService, get_portal_service
 from app.services.s3_accounts_service import get_s3_accounts_service
+from app.services.s3_client import BucketNotEmptyError
 from app.utils.storage_endpoint_features import (
     features_to_capabilities,
     normalize_features_config,
@@ -157,6 +158,7 @@ def portal_usage(
 
 @router.get("/buckets", response_model=list[Bucket])
 def portal_buckets(
+    search: Optional[str] = Query(None, description="Filter buckets by name"),
     access: AccountAccess = Depends(get_portal_account_access),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> list[Bucket]:
@@ -164,7 +166,55 @@ def portal_buckets(
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     try:
-        return service.get_state(actor, access).buckets
+        buckets = service.get_state(actor, access).buckets
+        if search:
+            term = search.strip().lower()
+            if term:
+                buckets = [bucket for bucket in buckets if term in bucket.name.lower()]
+        return buckets
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/{bucket_name}/users", response_model=list[PortalUserCard])
+def list_portal_bucket_users(
+    bucket_name: str,
+    access: AccountAccess = Depends(require_portal_manager),
+    users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> list[PortalUserCard]:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value]
+    rows = (
+        users_service.db.query(User, UserS3Account.account_role, AccountIAMUser.iam_username)  # type: ignore[attr-defined]
+        .join(UserS3Account, UserS3Account.user_id == User.id)
+        .outerjoin(
+            AccountIAMUser,
+            (AccountIAMUser.user_id == User.id) & (AccountIAMUser.account_id == access.account.id),
+        )
+        .filter(UserS3Account.account_id == access.account.id)
+        .filter(User.role.in_(roles))
+        .all()
+    )
+    results: list[PortalUserCard] = []
+    try:
+        for user_obj, account_role, iam_username in rows:
+            role_value = account_role or AccountRole.PORTAL_USER.value
+            buckets = service.list_user_bucket_access(user_obj, access.account, role_value)
+            if bucket_name not in buckets:
+                continue
+            results.append(
+                PortalUserCard(
+                    id=user_obj.id,
+                    email=user_obj.email,
+                    role=account_role or user_obj.role,
+                    iam_username=iam_username,
+                    iam_only=False,
+                )
+            )
+        return results
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -228,6 +278,35 @@ def create_portal_bucket(
             },
         )
         return bucket
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/{bucket_name}")
+def delete_portal_bucket(
+    bucket_name: str,
+    force: bool = Query(False, description="Set to true to delete all objects before deleting the bucket"),
+    access: AccountAccess = Depends(require_portal_manager),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+):
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    try:
+        service.delete_bucket(actor, access, bucket_name, force=force)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="delete_bucket",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=access.account,
+            metadata={"force": force},
+        )
+        return {"message": f"Bucket '{bucket_name}' deleted"}
+    except BucketNotEmptyError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
