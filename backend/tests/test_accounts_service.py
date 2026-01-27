@@ -192,34 +192,6 @@ def test_import_account_creates_root_user_when_missing(db_session):
     assert created[0].root_user_email == "RGW98765432109876543-admin"
 
 
-def test_import_account_with_provided_keys(db_session):
-    svc = S3AccountsService(db_session, rgw_admin_client=None, allow_missing_admin=True)
-
-    imports = [
-        S3AccountImport(
-            name="KeyOnly",
-            access_key="AK_KEY",
-            secret_key="SK_SECRET",
-            email="keyonly@example.com",
-        )
-    ]
-    created = svc.import_accounts(imports)
-
-    assert len(created) == 1
-    db_account = db_session.query(S3Account).filter(S3Account.name == "KeyOnly").first()
-    assert db_account is not None
-    assert db_account.rgw_access_key == "AK_KEY"
-    assert db_account.rgw_secret_key == "SK_SECRET"
-    assert created[0].rgw_account_id is None
-
-
-def test_import_account_requires_keys_without_admin(db_session):
-    svc = S3AccountsService(db_session, rgw_admin_client=None, allow_missing_admin=True)
-
-    with pytest.raises(ValueError):
-        svc.import_accounts([S3AccountImport(rgw_account_id="RGW00000000000000420")])
-
-
 class FakeRGWDeleteAdmin:
     def __init__(self):
         self.deleted: list[str] = []

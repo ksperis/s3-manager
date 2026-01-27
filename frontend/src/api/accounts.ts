@@ -121,11 +121,9 @@ export async function deleteS3Account(accountId: number, options?: { deleteRgw?:
 }
 
 export type ImportS3AccountPayload = {
-  rgw_account_id?: string | null;
+  rgw_account_id: string;
   name?: string | null;
   email?: string | null;
-  access_key?: string | null;
-  secret_key?: string | null;
   storage_endpoint_id?: number | null;
 };
 

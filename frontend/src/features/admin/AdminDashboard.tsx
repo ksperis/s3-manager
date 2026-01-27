@@ -207,12 +207,6 @@ export default function AdminDashboard() {
               >
                 Create account
               </Link>
-              <Link
-                to="/admin/general-settings"
-                className="rounded-lg border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
-              >
-                {generalSettings.portal_enabled ? "Review portal settings" : "Enable portal"}
-              </Link>
             </div>
           </div>
         </div>

@@ -73,13 +73,6 @@ export default function S3AccountsPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
-  const [importMode, setImportMode] = useState<"tenant" | "keys">("tenant");
-  const [importKeysForm, setImportKeysForm] = useState({
-    name: "",
-    email: "",
-    access_key: "",
-    secret_key: "",
-  });
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>({
     field: "name",
     direction: "asc",
@@ -100,7 +93,6 @@ export default function S3AccountsPage() {
   const [storageEndpoints, setStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
   const [importTenantEndpointId, setImportTenantEndpointId] = useState<string>("");
-  const [importKeysEndpointId, setImportKeysEndpointId] = useState<string>("");
   const [editingS3Account, setEditingS3Account] = useState<S3Account | null>(null);
   const [editForm, setEditForm] = useState({
     quota_max_size_gb: "",
@@ -456,15 +448,12 @@ export default function S3AccountsPage() {
     if (storageEndpoints.length === 0) return;
     const defaultCeph = adminCephEndpoints.find((ep) => ep.is_default) || adminCephEndpoints[0];
     const firstCephId = defaultCeph ? String(defaultCeph.id) : "";
-    const defaultAny = storageEndpoints.find((ep) => ep.is_default) || storageEndpoints[0];
-    const firstAnyId = defaultAny ? String(defaultAny.id) : "";
 
     setForm((prev) => ({
       ...prev,
       storage_endpoint_id: prev.storage_endpoint_id || firstCephId,
     }));
     setImportTenantEndpointId((prev) => prev || firstCephId);
-    setImportKeysEndpointId((prev) => prev || firstAnyId);
   }, [storageEndpoints, adminCephEndpoints]);
 
   const loadAccountDetail = useCallback(
@@ -568,10 +557,7 @@ export default function S3AccountsPage() {
   const canProvisionAccounts = adminCephEndpoints.length > 0;
   const canImportTenants = adminCephEndpoints.length > 0;
   const importDisabled =
-    importBusy ||
-    (importMode === "tenant"
-      ? !canImportTenants || !importText.trim() || !importTenantEndpointId
-      : !importKeysForm.name.trim() || !importKeysForm.access_key.trim() || !importKeysForm.secret_key.trim() || !importKeysEndpointId);
+    importBusy || !canImportTenants || !importText.trim() || !importTenantEndpointId;
 
   const startEditS3Account = async (account: S3AccountSummary) => {
     setActionError(null);
@@ -765,14 +751,6 @@ export default function S3AccountsPage() {
                   setImportText("");
                   setImportError(null);
                   setImportMessage(null);
-                  setImportMode("tenant");
-                  setImportKeysForm({
-                    name: "",
-                    email: "",
-                    rgw_account_id: "",
-                    access_key: "",
-                    secret_key: "",
-                  });
                   setShowImportModal(true);
                 }}
                 className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
@@ -994,44 +972,10 @@ export default function S3AccountsPage() {
 
       {isSuperAdmin && showImportModal && (
         <Modal title="Import accounts" onClose={() => setShowImportModal(false)}>
-          <div className="mb-3 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setImportMode("tenant");
-                setImportError(null);
-                setImportMessage(null);
-              }}
-              className={`rounded-md border px-3 py-1 ui-caption font-semibold uppercase tracking-wide ${
-                importMode === "tenant"
-                  ? "border-primary bg-primary/10 text-primary-700 dark:border-primary/60 dark:text-primary-100"
-                  : "border-slate-200 text-slate-600 hover:border-primary hover:text-primary-700 dark:border-slate-700 dark:text-slate-300"
-              }`}
-            >
-              Tenant IDs
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setImportMode("keys");
-                setImportError(null);
-                setImportMessage(null);
-              }}
-              className={`rounded-md border px-3 py-1 ui-caption font-semibold uppercase tracking-wide ${
-                importMode === "keys"
-                  ? "border-primary bg-primary/10 text-primary-700 dark:border-primary/60 dark:text-primary-100"
-                  : "border-slate-200 text-slate-600 hover:border-primary hover:text-primary-700 dark:border-slate-700 dark:text-slate-300"
-              }`}
-            >
-              Access keys
-            </button>
-          </div>
           <p className="mb-3 ui-body text-slate-500">
-            {importMode === "tenant"
-              ? "Enter RGW tenant IDs (RGWXXXXXXXXXXXXXXX) one per line. The platform will ensure a root user exists and retrieve keys."
-              : "Use this mode when the Ceph admin API is unavailable but you already have the account credentials."}
+            Enter RGW tenant IDs (RGWXXXXXXXXXXXXXXX) one per line. The platform will ensure a root user exists and retrieve keys.
           </p>
-          {importMode === "tenant" && !canImportTenants && (
+          {!canImportTenants && (
             <PageBanner tone="warning" className="mb-3">
               Admin is disabled for all Ceph endpoints. Tenant import requires admin access.
             </PageBanner>
@@ -1046,97 +990,34 @@ export default function S3AccountsPage() {
               {importMessage}
             </PageBanner>
           )}
-          {importMode === "tenant" ? (
-            <>
-              <textarea
-                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                rows={6}
-                placeholder="RGW00000000000000001"
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-              />
-              <label className="mt-3 flex flex-col gap-1 ui-body font-medium text-slate-700 dark:text-slate-200">
-                Ceph endpoint
-                <select
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={importTenantEndpointId}
-                  onChange={(e) => setImportTenantEndpointId(e.target.value)}
-                  disabled={adminCephEndpoints.length === 0}
-                  required
-                >
-                  <option value="" disabled>
-                    {adminCephEndpoints.length === 0 ? "No admin-enabled Ceph endpoint" : "Select"}
+          <>
+            <textarea
+              className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              rows={6}
+              placeholder="RGW00000000000000001"
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+            />
+            <label className="mt-3 flex flex-col gap-1 ui-body font-medium text-slate-700 dark:text-slate-200">
+              Ceph endpoint
+              <select
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                value={importTenantEndpointId}
+                onChange={(e) => setImportTenantEndpointId(e.target.value)}
+                disabled={adminCephEndpoints.length === 0}
+                required
+              >
+                <option value="" disabled>
+                  {adminCephEndpoints.length === 0 ? "No admin-enabled Ceph endpoint" : "Select"}
+                </option>
+                {adminCephEndpoints.map((ep) => (
+                  <option key={ep.id} value={ep.id}>
+                    {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
-                  {adminCephEndpoints.map((ep) => (
-                    <option key={ep.id} value={ep.id}>
-                      {ep.name} {ep.is_default ? "(default)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="flex flex-col gap-1">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Account name *</label>
-                <input
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={importKeysForm.name}
-                  onChange={(e) => setImportKeysForm((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="Customer account name"
-                  required
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Contact email</label>
-                <input
-                  type="email"
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={importKeysForm.email}
-                  onChange={(e) => setImportKeysForm((prev) => ({ ...prev, email: e.target.value }))}
-                  placeholder="owner@example.com"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Access key *</label>
-                <input
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={importKeysForm.access_key}
-                  onChange={(e) => setImportKeysForm((prev) => ({ ...prev, access_key: e.target.value }))}
-                  placeholder="AKIA..."
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Secret key *</label>
-                <input
-                  type="password"
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={importKeysForm.secret_key}
-                  onChange={(e) => setImportKeysForm((prev) => ({ ...prev, secret_key: e.target.value }))}
-                  placeholder="••••••••"
-                />
-              </div>
-              <div className="flex flex-col gap-1 md:col-span-2">
-                <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Storage endpoint</label>
-                <select
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  value={importKeysEndpointId}
-                  onChange={(e) => setImportKeysEndpointId(e.target.value)}
-                  disabled={storageEndpoints.length === 0}
-                  required
-                >
-                  <option value="" disabled>
-                    {storageEndpoints.length === 0 ? "No endpoint" : "Select"}
-                  </option>
-                  {storageEndpoints.map((ep) => (
-                    <option key={ep.id} value={ep.id}>
-                      {ep.name} {ep.is_default ? "(default)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
+                ))}
+              </select>
+            </label>
+          </>
           <div className="mt-4 flex items-center justify-end gap-3">
             <button
               type="button"
@@ -1149,7 +1030,10 @@ export default function S3AccountsPage() {
               type="button"
               disabled={importDisabled}
               onClick={async () => {
-                if (importMode === "tenant") {
+                try {
+                  setImportBusy(true);
+                  setImportError(null);
+                  setImportMessage(null);
                   const raw = importText
                     .split(/\r?\n/)
                     .map((line) => line.trim())
@@ -1159,62 +1043,18 @@ export default function S3AccountsPage() {
                     setImportMessage(null);
                     return;
                   }
-                  try {
-                    setImportBusy(true);
-                    setImportError(null);
-                    setImportMessage(null);
-                    const invalid = raw.filter((id) => !/^RGW\d{17}$/.test(id));
-                    if (invalid.length > 0) {
-                      setImportError(`Invalid identifiers: ${invalid.join(", ")}`);
-                      return;
-                    }
-                    await importS3Accounts(
-                      raw.map((id) => ({
-                        rgw_account_id: id,
-                        storage_endpoint_id: importTenantEndpointId ? Number(importTenantEndpointId) : undefined,
-                      }))
-                    );
-                    setImportMessage("S3Accounts imported.");
-                    setImportText("");
-                    await fetchS3Accounts();
-                  } catch (err) {
-                    setImportError(extractError(err));
-                  } finally {
-                    setImportBusy(false);
+                  const invalid = raw.filter((id) => !/^RGW\d{17}$/.test(id));
+                  if (invalid.length > 0) {
+                    setImportError(`Invalid identifiers: ${invalid.join(", ")}`);
+                    return;
                   }
-                  return;
-                }
-
-                const name = importKeysForm.name.trim();
-                const accessKey = importKeysForm.access_key.trim();
-                const secretKey = importKeysForm.secret_key.trim();
-                const email = importKeysForm.email.trim();
-                if (!name || !accessKey || !secretKey) {
-                  setImportError("Name, access key, and secret key are required.");
-                  setImportMessage(null);
-                  return;
-                }
-                const payload: ImportS3AccountPayload[] = [
-                  {
-                    name,
-                    email: email || undefined,
-                    access_key: accessKey,
-                    secret_key: secretKey,
-                    storage_endpoint_id: importKeysEndpointId ? Number(importKeysEndpointId) : undefined,
-                  },
-                ];
-                try {
-                  setImportBusy(true);
-                  setImportError(null);
-                  setImportMessage(null);
+                  const payload: ImportS3AccountPayload[] = raw.map((id) => ({
+                    rgw_account_id: id,
+                    storage_endpoint_id: importTenantEndpointId ? Number(importTenantEndpointId) : undefined,
+                  }));
                   await importS3Accounts(payload);
-                  setImportMessage("S3Account imported.");
-                  setImportKeysForm({
-                    name: "",
-                    email: "",
-                    access_key: "",
-                    secret_key: "",
-                  });
+                  setImportMessage("S3Accounts imported.");
+                  setImportText("");
                   await fetchS3Accounts();
                 } catch (err) {
                   setImportError(extractError(err));

@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 
 from app.models.pagination import PaginatedResponse
 
@@ -52,24 +52,10 @@ class S3AccountCreate(BaseModel):
 
 
 class S3AccountImport(BaseModel):
-    rgw_account_id: Optional[str] = None
+    rgw_account_id: str
     name: Optional[str] = None
     email: Optional[str] = None
-    access_key: Optional[str] = None
-    secret_key: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
-
-    @model_validator(mode="after")
-    def validate_import_inputs(self) -> "S3AccountImport":
-        has_rgw_id = bool(self.rgw_account_id)
-        has_access = bool(self.access_key)
-        has_secret = bool(self.secret_key)
-        if has_access != has_secret:
-            raise ValueError("Both access_key and secret_key must be provided together")
-        has_keys = has_access and has_secret
-        if not has_rgw_id and not has_keys:
-            raise ValueError("Provide either an rgw_account_id or an access/secret key pair")
-        return self
 
 
 class S3AccountUpdate(BaseModel):

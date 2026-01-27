@@ -598,67 +598,11 @@ class S3AccountsService:
             storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
         )
 
-    def _import_account_with_keys(self, item: S3AccountImport, endpoint: StorageEndpoint) -> Optional[S3AccountSchema]:
-        name = (item.name or "").strip()
-        if not name:
-            raise ValueError("Account name is required when importing with access_key/secret_key")
-        existing_by_name = self.db.query(S3Account).filter(S3Account.name == name).first()
-        if existing_by_name:
-            logger.debug("Skipping account %s: name already imported", name)
-            return None
-
-        account = S3Account(
-            name=name,
-            rgw_account_id=None,
-            rgw_access_key=item.access_key,
-            rgw_secret_key=item.secret_key,
-            rgw_user_uid=None,
-            email=item.email,
-            storage_endpoint_id=endpoint.id,
-        )
-        self.db.add(account)
-        self.db.flush()
-        return S3AccountSchema(
-            id=str(account.id),
-            db_id=account.id,
-            name=account.name,
-            rgw_account_id=account.rgw_account_id,
-            rgw_user_uid=None,
-            root_user_email=None,
-            root_user_id=None,
-            quota_max_size_gb=None,
-            quota_max_objects=None,
-            email=account.email,
-            user_ids=[],
-            user_links=[],
-            storage_endpoint_id=endpoint.id if endpoint else None,
-            storage_endpoint_name=endpoint.name if endpoint else None,
-            storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
-            storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
-        )
-
     def import_accounts(self, imports: list[S3AccountImport]) -> list[S3AccountSchema]:
         created: list[S3AccountSchema] = []
         for item in imports:
-            has_keys = bool(item.access_key and item.secret_key)
-            has_rgw_id = bool(item.rgw_account_id)
-
-            if has_keys:
-                endpoint = self._resolve_storage_endpoint(item.storage_endpoint_id)
-                created_with_keys = self._import_account_with_keys(item, endpoint)
-                if created_with_keys:
-                    created.append(created_with_keys)
-                continue
-
-            if not has_rgw_id:
-                raise ValueError("rgw_account_id is required when access_key/secret_key are not provided")
-
             endpoint = self._resolve_storage_endpoint(item.storage_endpoint_id, require_ceph=True)
             admin = self._admin_for_endpoint(endpoint, allow_missing=False)
-            if not admin:
-                raise ValueError(
-                    "RGW admin credentials are required to import accounts by id; provide access/secret keys instead"
-                )
 
             # Skip if already present
             if self.db.query(S3Account).filter(S3Account.rgw_account_id == item.rgw_account_id).first():
@@ -674,8 +618,8 @@ class S3AccountsService:
             # We do not create the account in RGW (assumed existing); ensure root user keys
             root_uid = self._root_uid(item.rgw_account_id)
             root_display = self._root_display_name(account_name, item.rgw_account_id)
-            access_key = item.access_key
-            secret_key = item.secret_key
+            access_key = None
+            secret_key = None
             existing_root = None
             for tenant in (item.rgw_account_id, None):
                 if existing_root:

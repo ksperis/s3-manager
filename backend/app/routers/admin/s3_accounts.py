@@ -46,13 +46,6 @@ def get_admin_accounts_listing_service(
     return get_s3_accounts_service(db, rgw_admin_client=rgw_admin_client, allow_missing_admin=True)
 
 
-def get_admin_accounts_import_service(
-    db: Session = Depends(get_db),
-    rgw_admin_client=Depends(get_optional_super_admin_rgw_client),
-) -> S3AccountsService:
-    return get_s3_accounts_service(db, rgw_admin_client=rgw_admin_client, allow_missing_admin=True)
-
-
 @router.get("", response_model=PaginatedS3AccountsResponse)
 def list_accounts(
     page: int = Query(1, ge=1),
@@ -184,7 +177,7 @@ def create_account(
 @router.post("/import", response_model=list[S3Account])
 def import_accounts(
     payload: list[S3AccountImport],
-    service: S3AccountsService = Depends(get_admin_accounts_import_service),
+    service: S3AccountsService = Depends(get_admin_accounts_service),
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> list[S3Account]:
