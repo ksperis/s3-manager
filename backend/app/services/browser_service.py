@@ -453,6 +453,18 @@ class BrowserService:
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to upload '{key}': {exc}") from exc
 
+    def upload_via_proxy(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        file,
+        *,
+        key: str,
+        content_type: Optional[str],
+    ) -> None:
+        file_obj = getattr(file, "file", file)
+        self.proxy_upload(bucket_name, account, key, file_obj, content_type)
+
     def proxy_download(self, bucket_name: str, account: S3Account, key: str):
         client = self._client(account)
         try:
