@@ -75,18 +75,18 @@ export default function TopicsPage() {
   const {
     accounts,
     selectedS3AccountId,
-    selectedS3AccountType,
     accountIdForApi,
     requiresS3AccountSelection,
     sessionS3AccountName,
   } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
-  const isS3User = selectedS3AccountType === "s3_user";
   const selectedS3Account = useMemo(() => {
     const accountKey = accountIdForApi ?? selectedS3AccountId;
     if (accountKey == null) return undefined;
     return accounts.find((account) => String(account.id) === String(accountKey));
   }, [accounts, accountIdForApi, selectedS3AccountId]);
+  const endpointCaps = selectedS3Account?.storage_endpoint_capabilities ?? null;
+  const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
   const accountLabel = selectedS3Account?.name ?? sessionS3AccountName ?? "Current account";
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,7 +116,7 @@ export default function TopicsPage() {
   const [attributesError, setAttributesError] = useState<string | null>(null);
   const [attributesStatus, setAttributesStatus] = useState<string | null>(null);
 
-  if (isS3User) {
+  if (!snsFeatureEnabled) {
     return (
       <div className="space-y-4">
         <PageHeader
@@ -125,7 +125,7 @@ export default function TopicsPage() {
           breadcrumbs={[{ label: "Manager" }, { label: "Events" }, { label: "SNS Topics" }]}
         />
         <PageBanner tone="info">
-          SNS topics are only available for S3 Accounts (tenants). Select an account to manage notifications.
+          SNS topics are disabled for this endpoint. Enable the SNS feature on the storage endpoint to manage topics.
         </PageBanner>
       </div>
     );

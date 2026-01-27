@@ -11,7 +11,7 @@ from app.db import StorageEndpoint, StorageProvider
 from app.utils.normalize import normalize_storage_provider
 
 
-FEATURE_KEYS: tuple[str, ...] = ("admin", "sts", "usage", "metrics", "static_website", "iam")
+FEATURE_KEYS: tuple[str, ...] = ("admin", "sts", "usage", "metrics", "static_website", "iam", "sns")
 
 DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
     StorageProvider.CEPH: {
@@ -21,6 +21,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "metrics": {"enabled": False, "endpoint": None},
         "static_website": {"enabled": False, "endpoint": None},
         "iam": {"enabled": False, "endpoint": None},
+        "sns": {"enabled": True, "endpoint": None},
     },
     StorageProvider.OTHER: {
         "admin": {"enabled": False, "endpoint": None},
@@ -29,6 +30,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "metrics": {"enabled": False, "endpoint": None},
         "static_website": {"enabled": False, "endpoint": None},
         "iam": {"enabled": False, "endpoint": None},
+        "sns": {"enabled": False, "endpoint": None},
     },
 }
 
@@ -43,6 +45,7 @@ class EndpointFeatureFlags:
     metrics_enabled: bool
     static_website_enabled: bool
     iam_enabled: bool
+    sns_enabled: bool
 
 
 def _normalize_url(value: Optional[str]) -> Optional[str]:
@@ -98,7 +101,7 @@ def normalize_features_config(
             features[key]["endpoint"] = _normalize_url(endpoint)
 
     if normalized_provider != StorageProvider.CEPH:
-        for key in ("admin", "usage", "metrics"):
+        for key in ("admin", "usage", "metrics", "sns"):
             if features[key]["enabled"]:
                 raise ValueError(
                     f"Feature '{key}' is only available for Ceph endpoints."
@@ -130,6 +133,7 @@ def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
         metrics_enabled=bool(features["metrics"]["enabled"]),
         static_website_enabled=bool(features["static_website"]["enabled"]),
         iam_enabled=bool(features.get("iam", {}).get("enabled")),
+        sns_enabled=bool(features.get("sns", {}).get("enabled")),
     )
 
 
@@ -155,4 +159,5 @@ def features_to_capabilities(features: dict[str, dict[str, Any]]) -> dict[str, b
         "metrics": bool(features.get("metrics", {}).get("enabled")),
         "static_website": bool(features.get("static_website", {}).get("enabled")),
         "iam": bool(features.get("iam", {}).get("enabled")),
+        "sns": bool(features.get("sns", {}).get("enabled")),
     }

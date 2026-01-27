@@ -1726,30 +1726,22 @@ export default function S3AccountsPage() {
       )}
 
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">S3Accounts</p>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">RGW tenants, quotas, and root users.</p>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <span className="ui-caption text-slate-500 dark:text-slate-400">
-                  {totalAccounts} account{totalAccounts === 1 ? "" : "s"}
-                </span>
-                <div className="flex items-center gap-2 sm:justify-end">
-                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
-                  <input
-                    type="text"
-                    value={filter}
-                    onChange={(e) => handleFilterChange(e.target.value)}
-                    placeholder="Search by name or RGW ID"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
-                  />
-                </div>
-              </div>
-            </div>
-            {error && !loading && <PageBanner tone="error">{error}</PageBanner>}
+        <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Accounts</p>
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
+              {totalAccounts} entr{totalAccounts === 1 ? "y" : "ies"} · search matches all records
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
+            <input
+              type="text"
+              value={filter}
+              onChange={(e) => handleFilterChange(e.target.value)}
+              placeholder="Search by name or RGW ID"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
+            />
           </div>
         </div>
         <div className="overflow-x-auto">

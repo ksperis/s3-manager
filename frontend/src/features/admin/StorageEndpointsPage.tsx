@@ -30,7 +30,7 @@ type FormState = {
   features: FeaturesState;
 };
 
-type FeatureKey = "admin" | "sts" | "usage" | "metrics" | "static_website" | "iam";
+type FeatureKey = "admin" | "sts" | "usage" | "metrics" | "static_website" | "iam" | "sns";
 
 type FeatureState = {
   enabled: boolean;
@@ -39,7 +39,7 @@ type FeatureState = {
 
 type FeaturesState = Record<FeatureKey, FeatureState>;
 
-const FEATURE_KEYS: FeatureKey[] = ["admin", "sts", "usage", "metrics", "static_website", "iam"];
+const FEATURE_KEYS: FeatureKey[] = ["admin", "sts", "usage", "metrics", "static_website", "iam", "sns"];
 
 function createEmptyFeatures(): FeaturesState {
   return {
@@ -49,6 +49,7 @@ function createEmptyFeatures(): FeaturesState {
     metrics: { enabled: false, endpoint: "" },
     static_website: { enabled: false, endpoint: "" },
     iam: { enabled: false, endpoint: "" },
+    sns: { enabled: false, endpoint: "" },
   };
 }
 
@@ -63,6 +64,7 @@ function defaultFeaturesForProvider(provider: StorageProvider): FeaturesState {
       sts: { ...base.sts, enabled: true },
       static_website: { ...base.static_website, enabled: true },
       iam: { ...base.iam, enabled: true },
+      sns: { ...base.sns, enabled: true },
     };
   }
   return {
@@ -81,11 +83,13 @@ function applyFeatureConstraints(features: FeaturesState, provider: StorageProvi
     metrics: { ...features.metrics },
     static_website: { ...features.static_website },
     iam: { ...features.iam },
+    sns: { ...features.sns },
   };
   if (provider !== "ceph") {
     next.admin.enabled = false;
     next.usage.enabled = false;
     next.metrics.enabled = false;
+    next.sns.enabled = false;
   }
   if (!next.admin.enabled) {
     next.admin.endpoint = "";
@@ -205,6 +209,10 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
           enabled: Boolean(endpoint.features.iam?.enabled),
           endpoint: "",
         },
+        sns: {
+          enabled: Boolean(endpoint.features.sns?.enabled),
+          endpoint: "",
+        },
       },
       provider
     );
@@ -216,6 +224,7 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
     metrics: { enabled: resolveCapability(endpoint, "metrics"), endpoint: "" },
     static_website: { enabled: resolveCapability(endpoint, "static_website"), endpoint: "" },
     iam: { enabled: resolveCapability(endpoint, "iam"), endpoint: "" },
+    sns: { enabled: resolveCapability(endpoint, "sns"), endpoint: "" },
   };
   return applyFeatureConstraints(fallback, provider);
 }
@@ -466,6 +475,7 @@ export default function StorageEndpointsPage() {
     const metricsEnabled = features.metrics.enabled;
     const staticWebsiteEnabled = features.static_website.enabled;
     const iamEnabled = features.iam.enabled;
+    const snsEnabled = features.sns.enabled;
     const settingDefault = defaultBusyId === endpoint.id;
     const adminEndpointOverride = features.admin.endpoint.trim();
     const stsEndpointOverride = features.sts.endpoint.trim();
@@ -612,6 +622,15 @@ export default function StorageEndpointsPage() {
                 }`}
               >
                 Metrics {metricsEnabled ? "on" : "off"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  snsEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                SNS {snsEnabled ? "on" : "off"}
               </span>
               <span
                 className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
@@ -879,8 +898,8 @@ radosgw-admin user create \
                       disabled={!cephMode}
                     />
                   </label>
-                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                    Metrics enabled
+                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        Metrics enabled
                         <input
                           type="checkbox"
                           checked={form.features.metrics.enabled}
@@ -890,6 +909,21 @@ radosgw-admin user create \
                               metrics: { ...current.metrics, enabled: e.target.checked },
                             }))
                           }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
+                      disabled={!cephMode}
+                    />
+                  </label>
+                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                    SNS topics enabled
+                    <input
+                      type="checkbox"
+                      checked={form.features.sns.enabled}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          sns: { ...current.sns, enabled: e.target.checked },
+                        }))
+                      }
                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
                       disabled={!cephMode}
                     />
@@ -913,7 +947,7 @@ radosgw-admin user create \
                       </label>
                       </div>
                     <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Admin, usage, and metrics require a Ceph endpoint. Usage/metrics require supervision credentials.
+                      Admin, usage, metrics, and SNS topics require a Ceph endpoint. Usage/metrics require supervision credentials.
                     </p>
                     </div>
                   )}

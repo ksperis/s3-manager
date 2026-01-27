@@ -74,6 +74,7 @@ function ManagerShell() {
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
   const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
   const metricsFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
+  const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
   const canViewMetricsMenu = Boolean(managerStatsEnabled) && (usageFeatureEnabled || metricsFeatureEnabled);
   const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
   const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
@@ -206,8 +207,7 @@ function ManagerShell() {
         ...(generalSettings.browser_enabled ? [{ to: "/manager/browser", label: "Browser" }] : []),
       ],
     });
-    // Events (SNS Topics) are currently a Ceph RGW oriented feature.
-    if (!isS3User && !isConnection) {
+    if (snsFeatureEnabled) {
       navSections.push({
         label: "Events",
         links: [{ to: "/manager/topics", label: "SNS Topics" }],

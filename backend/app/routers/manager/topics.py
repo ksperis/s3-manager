@@ -8,6 +8,7 @@ from app.routers.dependencies import (
     get_account_context,
     get_audit_logger,
     get_current_account_admin,
+    require_sns_capable_manager,
 )
 from app.services.audit_service import AuditService
 from app.services.topics_service import TopicsService, get_topics_service
@@ -19,7 +20,8 @@ router = APIRouter(prefix="/manager/topics", tags=["manager-topics"])
 def list_topics(
     account: S3Account = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
-    _: User = Depends(get_current_account_admin),
+    _sns_guard: object = Depends(require_sns_capable_manager),
+    _actor: User = Depends(get_current_account_admin),
 ) -> list[Topic]:
     try:
         return service.list_topics(account)
@@ -32,6 +34,7 @@ def create_topic(
     payload: TopicCreate,
     account: S3Account = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
+    _: object = Depends(require_sns_capable_manager),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> Topic:
@@ -65,6 +68,7 @@ def delete_topic(
     topic_arn: str,
     account: S3Account = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
+    _: object = Depends(require_sns_capable_manager),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
@@ -87,7 +91,8 @@ def get_topic_policy(
     topic_arn: str,
     account: S3Account = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
-    _: User = Depends(get_current_account_admin),
+    _sns_guard: object = Depends(require_sns_capable_manager),
+    _actor: User = Depends(get_current_account_admin),
 ) -> TopicPolicy:
     try:
         policy = service.get_topic_policy(account, topic_arn)
@@ -102,6 +107,7 @@ def put_topic_policy(
     payload: TopicPolicy,
     account: S3Account = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
+    _: object = Depends(require_sns_capable_manager),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> TopicPolicy:
@@ -128,7 +134,8 @@ def get_topic_configuration(
     topic_arn: str,
     account: S3Account = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
-    _: User = Depends(get_current_account_admin),
+    _sns_guard: object = Depends(require_sns_capable_manager),
+    _actor: User = Depends(get_current_account_admin),
 ) -> TopicConfiguration:
     try:
         configuration = service.get_topic_configuration(account, topic_arn)
@@ -143,6 +150,7 @@ def put_topic_configuration(
     payload: TopicConfiguration,
     account: S3Account = Depends(get_account_context),
     service: TopicsService = Depends(get_topics_service),
+    _: object = Depends(require_sns_capable_manager),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> TopicConfiguration:

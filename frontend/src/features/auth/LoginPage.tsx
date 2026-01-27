@@ -133,7 +133,10 @@ export default function LoginPage() {
       const normalizedSelected = selectedEndpoint.trim().replace(/\/+$/, "");
       const normalizedDefault =
         loginSettings?.default_endpoint_url?.trim().replace(/\/+$/, "") ?? "";
-      const endpointUrl = normalizedCustom || normalizedSelected || normalizedDefault || undefined;
+      const shouldSendEndpoint = allowEndpointList || allowCustomEndpoint;
+      const endpointUrl = shouldSendEndpoint
+        ? normalizedCustom || normalizedSelected || normalizedDefault || undefined
+        : undefined;
       const res = await loginWithKeys(accessKey.trim(), secretKey.trim(), endpointUrl);
       localStorage.setItem("token", res.access_token);
       if (endpointUrl) {

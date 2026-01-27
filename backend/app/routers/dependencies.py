@@ -22,7 +22,7 @@ from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.rgw import has_supervision_credentials
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.s3_connection_endpoint import resolve_connection_endpoint
-from app.utils.s3_endpoint import normalize_s3_endpoint
+from app.utils.s3_endpoint import normalize_s3_endpoint, resolve_s3_endpoint
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -341,6 +341,9 @@ def _resolve_session_account(
                 rgw_account_id=actor.account_id,
             )
     account.set_session_credentials(actor.access_key, actor.secret_key)
+    if not requested_endpoint and not resolve_s3_endpoint(account):
+        endpoint = _resolve_default_endpoint(db)
+        requested_endpoint = endpoint.endpoint_url
     if requested_endpoint:
         account._session_endpoint = requested_endpoint  # type: ignore[attr-defined]
     return account
@@ -580,6 +583,19 @@ def require_usage_capable_manager(
         disabled_detail="Usage metrics are disabled for this endpoint",
         enabled_flag="usage",
     )
+
+
+def require_sns_capable_manager(
+    account: S3Account = Depends(get_account_context),
+    actor: ManagerActor = Depends(get_current_actor),
+) -> ManagerActor:
+    _ensure_manager_capabilities(account)
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint:
+        flags = resolve_feature_flags(endpoint)
+        if not flags.sns_enabled:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SNS topics are disabled for this endpoint")
+    return actor
 
 
 def require_metrics_capable_manager(

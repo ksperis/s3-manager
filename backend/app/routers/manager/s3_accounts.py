@@ -159,6 +159,13 @@ def list_manager_accounts(
 
     for conn in connections:
         details = resolve_connection_details(conn)
+        sns_enabled = False
+        if conn.storage_endpoint:
+            sns_enabled = bool(
+                normalize_features_config(conn.storage_endpoint.provider, conn.storage_endpoint.features_config)
+                .get("sns", {})
+                .get("enabled")
+            )
         # We reuse the S3Account schema for the manager selector by using a dedicated id prefix.
         # Capabilities are intentionally minimal and disable platform-only features (usage/metrics/admin).
         results.append(
@@ -180,6 +187,8 @@ def list_manager_accounts(
                     "usage": False,
                     "metrics": False,
                     "static_website": False,
+                    "iam": False,
+                    "sns": sns_enabled,
                 },
             )
         )
