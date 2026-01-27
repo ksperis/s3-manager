@@ -5,6 +5,11 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import {
+  PortalSettingsItem,
+  PortalSettingsSection,
+  PortalSettingsSwitch,
+} from "../../components/PortalSettingsLayout";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { confirmAction } from "../../utils/confirm";
@@ -113,130 +118,88 @@ export default function GeneralSettingsPage() {
         {settings && (
           <div className="grid gap-4">
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Manager feature</p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Enables the /manager environment for account administrators.
-                  </p>
-                </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={Boolean(settings.general.manager_enabled)}
-                    onChange={(e) => handleToggle("manager_enabled", e.target.checked)}
-                    aria-label="Manager feature"
-                  />
-                  <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                  <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                </label>
-              </div>
+              <PortalSettingsSection
+                title="CORE FEATURES"
+                description="Main application feature set available to your users."
+                layout="grid"
+                columns={1}
+              >
+                <PortalSettingsItem
+                  title="Manager feature"
+                  description="Enables the /manager environment for account administrators."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.manager_enabled)}
+                      onChange={(value) => handleToggle("manager_enabled", value)}
+                      ariaLabel="Manager feature"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Browser feature"
+                  description="Enables the /browser environment for object navigation."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.browser_enabled)}
+                      onChange={(value) => handleToggle("browser_enabled", value)}
+                      ariaLabel="Browser feature"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Portal feature"
+                  description="Enables the /portal environment for end users."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.portal_enabled)}
+                      onChange={(value) => handleToggle("portal_enabled", value)}
+                      ariaLabel="Portal feature"
+                    />
+                  }
+                />
+              </PortalSettingsSection>
             </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Browser feature</p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Enables the /browser environment for object navigation.
-                  </p>
-                </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={Boolean(settings.general.browser_enabled)}
-                    onChange={(e) => handleToggle("browser_enabled", e.target.checked)}
-                    aria-label="Browser feature"
-                  />
-                  <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                  <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                </label>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Portal feature</p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Enables the /portal environment for end users.
-                  </p>
-                </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={Boolean(settings.general.portal_enabled)}
-                    onChange={(e) => handleToggle("portal_enabled", e.target.checked)}
-                    aria-label="Portal feature"
-                  />
-                  <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                  <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                </label>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access-key login</p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Allow users to sign in with S3 access keys.
-                  </p>
-                </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={Boolean(settings.general.allow_login_access_keys)}
-                    onChange={(e) => handleToggle("allow_login_access_keys", e.target.checked)}
-                    aria-label="Access-key login"
-                  />
-                  <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                  <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                </label>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access-key endpoint list</p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Allow the access-key login screen to display the configured endpoints.
-                  </p>
-                </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={Boolean(settings.general.allow_login_endpoint_list)}
-                    onChange={(e) => handleToggle("allow_login_endpoint_list", e.target.checked)}
-                    aria-label="Access-key endpoint list"
-                  />
-                  <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                  <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                </label>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Custom login endpoint</p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Allow access-key users to enter a custom endpoint URL on the login screen.
-                  </p>
-                </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={Boolean(settings.general.allow_login_custom_endpoint)}
-                    onChange={(e) => handleToggle("allow_login_custom_endpoint", e.target.checked)}
-                    aria-label="Custom login endpoint"
-                  />
-                  <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                  <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                </label>
-              </div>
+              <PortalSettingsSection
+                title="LOGIN OPTIONS"
+                description="Control how access-key users authenticate and select endpoints."
+                layout="grid"
+                columns={1}
+              >
+                <PortalSettingsItem
+                  title="Access-key login"
+                  description="Allow users to sign in with S3 access keys."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.allow_login_access_keys)}
+                      onChange={(value) => handleToggle("allow_login_access_keys", value)}
+                      ariaLabel="Access-key login"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Access-key endpoint list"
+                  description="Allow the access-key login screen to display the configured endpoints."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.allow_login_endpoint_list)}
+                      onChange={(value) => handleToggle("allow_login_endpoint_list", value)}
+                      ariaLabel="Access-key endpoint list"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Custom login endpoint"
+                  description="Allow access-key users to enter a custom endpoint URL on the login screen."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.allow_login_custom_endpoint)}
+                      onChange={(value) => handleToggle("allow_login_custom_endpoint", value)}
+                      ariaLabel="Custom login endpoint"
+                    />
+                  }
+                />
+              </PortalSettingsSection>
             </div>
           </div>
         )}
