@@ -49,8 +49,6 @@ class UserCreate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[str] = None
     is_root: bool = False
-    rgw_access_key: Optional[str] = None
-    rgw_secret_key: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -59,8 +57,6 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
     is_root: Optional[bool] = None
-    rgw_access_key: Optional[str] = None
-    rgw_secret_key: Optional[str] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
 
@@ -84,7 +80,6 @@ class UserOut(BaseModel):
     is_root: bool = False
     accounts: list[int] = []
     account_links: list[AccountMembership] = []
-    has_rgw_credentials: bool = False
     s3_users: list[int] = []
     s3_user_details: list[LinkedS3User] = []
     s3_connections: list[int] = []

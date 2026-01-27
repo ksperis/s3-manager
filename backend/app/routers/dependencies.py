@@ -635,7 +635,7 @@ def _resolve_default_endpoint(db: Session) -> StorageEndpoint:
     return endpoint
 
 
-def _resolve_admin_rgw_context(db: Session, user: User) -> tuple[str, str, str, Optional[str]]:
+def _resolve_admin_rgw_context(db: Session, _user: User) -> tuple[str, str, str, Optional[str]]:
     endpoint = _resolve_default_endpoint(db)
     if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
         raise HTTPException(
@@ -654,8 +654,8 @@ def _resolve_admin_rgw_context(db: Session, user: User) -> tuple[str, str, str, 
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Admin endpoint is not configured for the default endpoint",
         )
-    access_key = user.rgw_access_key or endpoint.admin_access_key
-    secret_key = user.rgw_secret_key or endpoint.admin_secret_key
+    access_key = endpoint.admin_access_key
+    secret_key = endpoint.admin_secret_key
     if not access_key or not secret_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -50,11 +50,6 @@ class UsersService:
             raise ValueError("User already exists")
         role = payload.role or UserRole.UI_USER.value
         is_root = bool(payload.is_root)
-        access_key, secret_key = self._validate_admin_credentials(
-            role,
-            self._clean_key(payload.rgw_access_key),
-            self._clean_key(payload.rgw_secret_key),
-        )
         user = User(
             email=payload.email,
             full_name=payload.full_name,
@@ -63,8 +58,6 @@ class UsersService:
             is_active=True,
             role=role,
             is_root=is_root,
-            rgw_access_key=access_key,
-            rgw_secret_key=secret_key,
         )
         self.db.add(user)
         self.db.commit()
@@ -76,8 +69,6 @@ class UsersService:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
             raise ValueError("User not found")
-        fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
-        new_role = payload.role or user.role
         if payload.email and payload.email != user.email:
             existing = self.get_by_email(payload.email)
             if existing and existing.id != user.id:
@@ -91,23 +82,6 @@ class UsersService:
             user.is_active = payload.is_active
         if payload.is_root is not None:
             user.is_root = payload.is_root
-        if user.role != UserRole.UI_ADMIN.value:
-            user.rgw_access_key = None
-            user.rgw_secret_key = None
-        elif "rgw_access_key" in fields_set or "rgw_secret_key" in fields_set:
-            normalized_access = self._clean_key(payload.rgw_access_key)
-            normalized_secret = self._clean_key(payload.rgw_secret_key)
-            if normalized_access is None and normalized_secret is None:
-                user.rgw_access_key = None
-                user.rgw_secret_key = None
-            else:
-                access_key, secret_key = self._validate_admin_credentials(
-                    new_role,
-                    normalized_access,
-                    normalized_secret,
-                )
-                user.rgw_access_key = access_key
-                user.rgw_secret_key = secret_key
         if payload.s3_user_ids is not None:
             self._set_s3_user_links(user, payload.s3_user_ids)
         if payload.s3_connection_ids is not None:
@@ -413,7 +387,6 @@ class UsersService:
             is_root=user.is_root,
             accounts=account_ids,
             account_links=account_links,
-            has_rgw_credentials=bool(user.rgw_access_key and user.rgw_secret_key),
             s3_users=s3_user_ids,
             s3_user_details=s3_user_details,
             s3_connections=s3_connection_ids,
@@ -428,28 +401,6 @@ class UsersService:
         self.db.commit()
         self.db.refresh(user)
         return user
-
-    def _clean_key(self, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        cleaned = value.strip()
-        return cleaned or None
-
-    def _validate_admin_credentials(
-        self,
-        role: str,
-        access_key: Optional[str],
-        secret_key: Optional[str],
-    ) -> tuple[Optional[str], Optional[str]]:
-        if access_key or secret_key:
-            if role != UserRole.UI_ADMIN.value:
-                raise ValueError("RGW admin credentials can only be set for admin users")
-            if not access_key or not secret_key:
-                raise ValueError("Both RGW admin access and secret keys are required")
-        else:
-            access_key = None
-            secret_key = None
-        return access_key, secret_key
 
     def _set_s3_user_links(self, user: User, target_ids: list[int]) -> None:
         cleaned_ids = sorted({int(s3_id) for s3_id in target_ids if s3_id is not None})

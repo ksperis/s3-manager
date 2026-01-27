@@ -23,7 +23,6 @@ export type User = {
   s3_connection_details?: { id: number; name: string }[];
   is_active?: boolean;
   is_root?: boolean;
-  has_rgw_credentials?: boolean;
   last_login_at?: string | null;
 };
 
@@ -36,8 +35,6 @@ export type CreateUserPayload = {
   email: string;
   password: string;
   role?: string;
-  rgw_access_key?: string | null;
-  rgw_secret_key?: string | null;
 };
 
 export type UpdateUserPayload = {
@@ -45,8 +42,6 @@ export type UpdateUserPayload = {
   password?: string;
   role?: string;
   is_active?: boolean;
-  rgw_access_key?: string | null;
-  rgw_secret_key?: string | null;
   s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;
 };

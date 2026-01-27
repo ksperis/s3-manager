@@ -5,7 +5,6 @@ from datetime import datetime
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
-from app.core.security import EncryptedString
 from .base import Base
 from .enums import UserRole
 
@@ -26,8 +25,6 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     role = Column(String, nullable=False, default=UserRole.UI_USER.value)
     is_root = Column(Boolean, default=False, nullable=False, server_default="0")
-    rgw_access_key = Column(String, nullable=True)
-    rgw_secret_key = Column(EncryptedString, nullable=True)
     auth_provider = Column(String, nullable=True)
     auth_provider_subject = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

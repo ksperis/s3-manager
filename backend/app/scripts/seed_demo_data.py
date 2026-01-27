@@ -13,7 +13,7 @@ from typing import Optional
 from app.core.config import get_settings
 from app.core.database import SessionLocal, engine
 from app.core.db_init import init_db
-from app.db import S3Account, User, UserRole
+from app.db import S3Account
 from app.models.s3_account import S3AccountCreate, S3AccountUpdate
 from app.models.user import UserCreate
 from app.services.buckets_service import BucketsService
@@ -612,24 +612,16 @@ def main() -> None:
     init_db(engine, SessionLocal)
     db = SessionLocal()
     try:
-        # Prefer stored super-admin RGW credentials (like the UI) when available
-        admin_user = (
-            db.query(User)
-            .filter(
-                User.role == UserRole.UI_ADMIN.value,
-                User.rgw_access_key.isnot(None),
-                User.rgw_secret_key.isnot(None),
-            )
-            .first()
-        )
         admin_client = None
-        if admin_user and admin_user.rgw_access_key and admin_user.rgw_secret_key:
+        admin_access = settings.seed_rgw_admin_access_key or settings.seed_s3_access_key
+        admin_secret = settings.seed_rgw_admin_secret_key or settings.seed_s3_secret_key
+        if admin_access and admin_secret:
             admin_client = get_rgw_admin_client(
-                access_key=admin_user.rgw_access_key,
-                secret_key=admin_user.rgw_secret_key,
+                access_key=admin_access,
+                secret_key=admin_secret,
                 endpoint=endpoint,
             )
-            logger.info("Using RGW admin credentials from ui-admin %s", admin_user.email)
+            logger.info("Using RGW admin credentials from seed settings.")
         accounts_service = get_s3_accounts_service(db, rgw_admin_client=admin_client)
         buckets_service = BucketsService()
         objects_service = ObjectsService()

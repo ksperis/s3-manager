@@ -690,11 +690,8 @@ export default function UsersPage() {
     email: "",
     password: "",
     role: "ui_user",
-    rgw_access_key: "",
-    rgw_secret_key: "",
   });
   const [form, setForm] = useState<CreateUserPayload>(() => createFormTemplate());
-  const [createUseCustomKeys, setCreateUseCustomKeys] = useState(false);
   const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<{ id: number; role: string; account_admin?: boolean }[]>([]);
   const [createSelectedS3Users, setCreateSelectedS3Users] = useState<number[]>([]);
   const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
@@ -712,7 +709,6 @@ export default function UsersPage() {
   const [createConnectionSelections, setCreateConnectionSelections] = useState<number[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState<UpdateUserPayload>({});
-  const [editUseCustomKeys, setEditUseCustomKeys] = useState(false);
   const [editSelectedS3Accounts, setEditSelectedS3Accounts] = useState<{ id: number; role: string; account_admin?: boolean }[]>([]);
   const [editSelectedS3Users, setEditSelectedS3Users] = useState<number[]>([]);
   const [editSelectedS3Connections, setEditSelectedS3Connections] = useState<number[]>([]);
@@ -1205,16 +1201,6 @@ export default function UsersPage() {
       password: form.password,
       role: form.role,
     };
-    if (form.role === "ui_admin" && createUseCustomKeys) {
-      const trimmedAccess = form.rgw_access_key?.trim() ?? "";
-      const trimmedSecret = form.rgw_secret_key?.trim() ?? "";
-      if (!trimmedAccess || !trimmedSecret) {
-        setActionError("Provide both RGW admin access and secret keys.");
-        return;
-      }
-      payload.rgw_access_key = trimmedAccess;
-      payload.rgw_secret_key = trimmedSecret;
-    }
     try {
       const created = await createUser(payload);
       if (created?.id && createSelectedS3Accounts.length > 0) {
@@ -1243,7 +1229,6 @@ export default function UsersPage() {
       }
       setActionMessage("User created");
       setForm(createFormTemplate());
-      setCreateUseCustomKeys(false);
       setCreateSelectedS3Accounts([]);
       setCreateSelectedS3Users([]);
       setCreateSelectedS3Connections([]);
@@ -1275,10 +1260,7 @@ export default function UsersPage() {
       email: user.email,
       password: "",
       role: normalizeUiRoleValue(user.role),
-      rgw_access_key: "",
-      rgw_secret_key: "",
     });
-    setEditUseCustomKeys(user.role === "ui_admin" && Boolean(user.has_rgw_credentials));
     const accountRoles = new Map<number, string | null>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), link.account_role ?? null])
     );
@@ -1336,29 +1318,6 @@ export default function UsersPage() {
       }
       if (editForm.role) {
         payload.role = editForm.role;
-      }
-      const resultingRole = (payload.role ?? editingUser.role) ?? "ui_user";
-      const wantsCustomKeys = resultingRole === "ui_admin" && editUseCustomKeys;
-      if (!wantsCustomKeys) {
-        payload.rgw_access_key = null;
-        payload.rgw_secret_key = null;
-      } else {
-        const trimmedAccess = editForm.rgw_access_key?.trim() ?? "";
-        const trimmedSecret = editForm.rgw_secret_key?.trim() ?? "";
-        const providedAny = Boolean(trimmedAccess) || Boolean(trimmedSecret);
-        if (providedAny) {
-          if (!trimmedAccess || !trimmedSecret) {
-            setActionError("Provide both RGW admin access and secret keys.");
-            setBusyId(null);
-            return;
-          }
-          payload.rgw_access_key = trimmedAccess;
-          payload.rgw_secret_key = trimmedSecret;
-        } else if (!editingUser.has_rgw_credentials) {
-          setActionError("Provide both RGW admin access and secret keys.");
-          setBusyId(null);
-          return;
-        }
       }
       payload.s3_user_ids = editSelectedS3Users;
       payload.s3_connection_ids = editSelectedS3Connections;
@@ -1424,7 +1383,6 @@ export default function UsersPage() {
       setEditS3AccountSearch("");
       setEditS3Search("");
       setEditConnectionSearch("");
-      setEditUseCustomKeys(false);
       setEditAssociationsTab("accounts");
       setShowEditAccountPanel(false);
       setShowEditS3UserPanel(false);
@@ -1490,7 +1448,6 @@ export default function UsersPage() {
           onClose={() => {
             setShowCreateModal(false);
             setForm(createFormTemplate());
-            setCreateUseCustomKeys(false);
             setCreateSelectedS3Accounts([]);
             setCreateSelectedS3Users([]);
             setCreateSelectedS3Connections([]);
@@ -1551,11 +1508,7 @@ export default function UsersPage() {
                   setForm((f) => ({
                     ...f,
                     role: value,
-                    ...(value !== "ui_admin" ? { rgw_access_key: "", rgw_secret_key: "" } : {}),
                   }));
-                  if (value !== "ui_admin") {
-                    setCreateUseCustomKeys(false);
-                  }
                 }}
               >
                 <option value="ui_none">No access</option>
@@ -1563,53 +1516,6 @@ export default function UsersPage() {
                 <option value="ui_admin">Admin</option>
               </select>
             </div>
-            {form.role === "ui_admin" && (
-              <div className="md:col-span-2 rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-700">
-                <label className="flex items-center gap-2 ui-body font-medium text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    className="rounded border-slate-300 text-primary focus:ring-primary"
-                    checked={createUseCustomKeys}
-                    onChange={(e) => {
-                      setCreateUseCustomKeys(e.target.checked);
-                      if (!e.target.checked) {
-                        setForm((f) => ({ ...f, rgw_access_key: "", rgw_secret_key: "" }));
-                      }
-                    }}
-                  />
-                  Override default RGW admin key
-                </label>
-                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                  Leave unchecked to use the shared admin key from configuration.
-                </p>
-                {createUseCustomKeys && (
-                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-caption font-semibold text-slate-600 dark:text-slate-300">Access key *</label>
-                      <input
-                        type="text"
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                        value={form.rgw_access_key ?? ""}
-                        autoComplete="off"
-                        onChange={(e) => setForm((f) => ({ ...f, rgw_access_key: e.target.value }))}
-                        placeholder="RGW********"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-caption font-semibold text-slate-600 dark:text-slate-300">Secret key *</label>
-                      <input
-                        type="password"
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                        value={form.rgw_secret_key ?? ""}
-                        autoComplete="new-password"
-                        onChange={(e) => setForm((f) => ({ ...f, rgw_secret_key: e.target.value }))}
-                        placeholder="****************"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
             <div className="md:col-span-2">
               <AssociationsTabs
                 activeTab={createAssociationsTab}
@@ -1678,7 +1584,6 @@ export default function UsersPage() {
                 onClick={() => {
                   setShowCreateModal(false);
                   setForm(createFormTemplate());
-                  setCreateUseCustomKeys(false);
                   setCreateSelectedS3Accounts([]);
                   setCreateS3AccountSearch("");
                   setCreateSelectedS3Users([]);
@@ -1802,15 +1707,6 @@ export default function UsersPage() {
                         >
                           {user.email}
                         </button>
-                        {user.role === "ui_admin" && user.has_rgw_credentials && (
-                          <span
-                            className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
-                            title="Custom RGW key"
-                            aria-label="Custom RGW key"
-                          >
-                            🔑
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{displayUiRole(user.role)}</td>
@@ -1861,7 +1757,6 @@ export default function UsersPage() {
             setEditS3Search("");
             setEditSelectedS3Connections([]);
             setEditConnectionSearch("");
-            setEditUseCustomKeys(false);
             setEditAssociationsTab("accounts");
             setShowEditAccountPanel(false);
             setShowEditS3UserPanel(false);
@@ -1913,11 +1808,7 @@ export default function UsersPage() {
                   setEditForm((f) => ({
                     ...f,
                     role: value,
-                    ...(value !== "ui_admin" ? { rgw_access_key: "", rgw_secret_key: "" } : {}),
                   }));
-                  if (value !== "ui_admin") {
-                    setEditUseCustomKeys(false);
-                  }
                 }}
               >
                 <option value="ui_none">No access</option>
@@ -1925,59 +1816,6 @@ export default function UsersPage() {
                 <option value="ui_admin">Admin</option>
               </select>
             </div>
-            {editRoleValue === "ui_admin" && (
-              <div className="md:col-span-2 rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-700">
-                <label className="flex items-center gap-2 ui-body font-medium text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    className="rounded border-slate-300 text-primary focus:ring-primary"
-                    checked={editUseCustomKeys}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setEditUseCustomKeys(checked);
-                      if (!checked) {
-                        setEditForm((f) => ({ ...f, rgw_access_key: "", rgw_secret_key: "" }));
-                      }
-                    }}
-                  />
-                  Override default RGW admin key
-                </label>
-                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                  Existing secrets are not shown; provide a new pair to replace them.
-                </p>
-                {editUseCustomKeys && (
-                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-caption font-semibold text-slate-600 dark:text-slate-300">Access key</label>
-                      <input
-                        type="text"
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                        value={editForm.rgw_access_key ?? ""}
-                        autoComplete="off"
-                        onChange={(e) => setEditForm((f) => ({ ...f, rgw_access_key: e.target.value }))}
-                        placeholder={editingUser?.has_rgw_credentials ? "(unchanged)" : "RGW********"}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="ui-caption font-semibold text-slate-600 dark:text-slate-300">Secret key</label>
-                      <input
-                        type="password"
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                        value={editForm.rgw_secret_key ?? ""}
-                        autoComplete="new-password"
-                        onChange={(e) => setEditForm((f) => ({ ...f, rgw_secret_key: e.target.value }))}
-                        placeholder={editingUser?.has_rgw_credentials ? "(unchanged)" : "****************"}
-                      />
-                    </div>
-                  </div>
-                )}
-                {!editUseCustomKeys && editingUser?.has_rgw_credentials && (
-                  <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                    A custom key is currently configured. Unchecking keeps using the shared key instead.
-                  </p>
-                )}
-              </div>
-            )}
             <div className="md:col-span-2">
               <AssociationsTabs
                 activeTab={editAssociationsTab}
@@ -2052,7 +1890,6 @@ export default function UsersPage() {
                   setEditS3Search("");
                   setEditSelectedS3Connections([]);
                   setEditConnectionSearch("");
-                  setEditUseCustomKeys(false);
                   setEditAssociationsTab("accounts");
                   setShowEditAccountPanel(false);
                   setShowEditS3UserPanel(false);
