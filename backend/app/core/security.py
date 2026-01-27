@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import logging
+import secrets
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any, Dict, Optional
@@ -33,6 +34,14 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm="HS256")
     return encoded_jwt
+
+
+def create_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def decode_token(token: str) -> Optional[Dict[str, Any]]:

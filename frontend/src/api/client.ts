@@ -2,13 +2,26 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
+import axios, { AxiosRequestConfig } from "axios";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 const client = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
 });
+
+const refreshClient = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+});
+
+type RetriableRequestConfig = AxiosRequestConfig & { _retry?: boolean };
+
+type RefreshResponse = {
+  access_token: string;
+  token_type: string;
+};
 
 function handleAuthRedirect() {
   if (typeof window === "undefined") return;
@@ -18,6 +31,34 @@ function handleAuthRedirect() {
   if (window.location.pathname !== "/login") {
     window.location.replace("/login");
   }
+}
+
+function isAuthEndpoint(url: string) {
+  return (
+    url.includes("/auth/login") ||
+    url.includes("/auth/login-s3") ||
+    url.includes("/auth/oidc/") ||
+    url.includes("/auth/refresh") ||
+    url.includes("/auth/logout")
+  );
+}
+
+let refreshPromise: Promise<string> | null = null;
+
+async function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = refreshClient
+      .post<RefreshResponse>("/auth/refresh")
+      .then((response) => {
+        const token = response.data.access_token;
+        localStorage.setItem("token", token);
+        return token;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
 }
 
 client.interceptors.request.use((config) => {
@@ -57,9 +98,28 @@ client.interceptors.request.use((config) => {
 
 client.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error?.response?.status;
-    if (status === 401 || status === 419) {
+    const originalRequest = error?.config as RetriableRequestConfig | undefined;
+    const url = originalRequest?.url ?? "";
+    const shouldAttemptRefresh =
+      (status === 401 || status === 419) &&
+      !isAuthEndpoint(url) &&
+      originalRequest &&
+      !originalRequest._retry;
+    if (shouldAttemptRefresh) {
+      originalRequest._retry = true;
+      try {
+        const token = await refreshAccessToken();
+        originalRequest.headers = originalRequest.headers ?? {};
+        originalRequest.headers.Authorization = `Bearer ${token}`;
+        return client(originalRequest);
+      } catch (refreshError) {
+        handleAuthRedirect();
+        return Promise.reject(refreshError);
+      }
+    }
+    if ((status === 401 || status === 419) && !isAuthEndpoint(url)) {
       handleAuthRedirect();
     }
     return Promise.reject(error);

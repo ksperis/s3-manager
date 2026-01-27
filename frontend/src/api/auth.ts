@@ -82,6 +82,11 @@ export type OidcCallbackResponse = LoginResponse & {
   redirect_path?: string | null;
 };
 
+export type RefreshResponse = {
+  access_token: string;
+  token_type: string;
+};
+
 export async function fetchOidcProviders(): Promise<OidcProviderInfo[]> {
   const { data } = await client.get<OidcProviderInfo[]>("/auth/oidc/providers");
   return data;
@@ -104,4 +109,13 @@ export async function completeOidcLogin(
     state,
   });
   return data;
+}
+
+export async function refreshSession(): Promise<RefreshResponse> {
+  const { data } = await client.post<RefreshResponse>("/auth/refresh");
+  return data;
+}
+
+export async function logout(): Promise<void> {
+  await client.post("/auth/logout");
 }

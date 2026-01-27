@@ -3,7 +3,7 @@
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import create_access_token
+from app.db import User
 from app.models.session import S3KeyLogin, SessionDescriptor
 from app.models.oidc import (
     OIDCCallbackRequest,
@@ -30,12 +31,36 @@ from app.services.oidc_service import (
     get_oidc_service,
 )
 from app.services.session_service import SessionIntrospectionError, SessionService
+from app.services.refresh_session_service import RefreshSessionService
 from app.services.users_service import UsersService, get_users_service
 from app.services.app_settings_service import load_app_settings
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    max_age = settings.refresh_token_expire_minutes * 60
+    response.set_cookie(
+        key=settings.refresh_token_cookie_name,
+        value=token,
+        max_age=max_age,
+        expires=max_age,
+        httponly=True,
+        secure=settings.refresh_token_cookie_secure,
+        samesite=settings.refresh_token_cookie_samesite,
+        path=settings.refresh_token_cookie_path,
+        domain=settings.refresh_token_cookie_domain,
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=settings.refresh_token_cookie_name,
+        path=settings.refresh_token_cookie_path,
+        domain=settings.refresh_token_cookie_domain,
+    )
 
 
 class Token(BaseModel):
@@ -70,6 +95,7 @@ def register_admin(
 
 @router.post("/login", response_model=LoginResponse)
 def login(
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -95,6 +121,9 @@ def login(
         data={"sub": user.email, "role": user.role, "uid": user.id},
         expires_delta=access_token_expires,
     )
+    refresh_service = RefreshSessionService(users_service.db)
+    refresh_token, _ = refresh_service.create_for_user(user.id, auth_type="password")
+    _set_refresh_cookie(response, refresh_token)
     audit_service.record_action(
         user=user,
         scope="auth",
@@ -107,6 +136,7 @@ def login(
 
 @router.post("/login-s3", response_model=SessionLoginResponse)
 def login_with_s3_keys(
+    response: Response,
     payload: S3KeyLogin,
     db: Session = Depends(get_db),
     audit_service: AuditService = Depends(get_audit_logger),
@@ -147,7 +177,14 @@ def login_with_s3_keys(
         user_uid=user_uid,
         capabilities=capabilities,
     )
-    token = create_access_token({"sid": principal.session_id, "auth_type": "rgw"})
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    token = create_access_token(
+        {"sid": principal.session_id, "auth_type": "rgw"},
+        expires_delta=access_token_expires,
+    )
+    refresh_service = RefreshSessionService(db)
+    refresh_token, _ = refresh_service.create_for_rgw(principal.session_id, auth_type="rgw")
+    _set_refresh_cookie(response, refresh_token)
     descriptor = SessionDescriptor(
         session_id=principal.session_id,
         actor_type=principal.actor_type,
@@ -196,6 +233,7 @@ def start_oidc_login(
 
 @router.post("/oidc/{provider_id}/callback", response_model=OidcCallbackResponse)
 def complete_oidc_login(
+    response: Response,
     provider_id: str,
     payload: OIDCCallbackRequest,
     oidc_service: OidcService = Depends(lambda db=Depends(get_db): get_oidc_service(db)),
@@ -222,6 +260,9 @@ def complete_oidc_login(
         },
         expires_delta=access_token_expires,
     )
+    refresh_service = RefreshSessionService(users_service.db)
+    refresh_token, _ = refresh_service.create_for_user(user.id, auth_type="oidc")
+    _set_refresh_cookie(response, refresh_token)
     audit_service.record_action(
         user=user,
         scope="auth",
@@ -234,3 +275,58 @@ def complete_oidc_login(
         },
     )
     return OidcCallbackResponse(access_token=token, user=users_service.user_to_out(user), redirect_path=redirect_path)
+
+
+@router.post("/refresh", response_model=Token)
+def refresh_access_token(
+    response: Response,
+    db: Session = Depends(get_db),
+    refresh_token: Optional[str] = Cookie(None, alias=settings.refresh_token_cookie_name),
+) -> Token:
+    if not refresh_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
+    refresh_service = RefreshSessionService(db)
+    session = refresh_service.get_by_token(refresh_token)
+    if not session or refresh_service.is_expired(session):
+        if session:
+            refresh_service.revoke(session)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    if session.user_id:
+        user = db.query(User).filter(User.id == session.user_id).first()
+        if not user or not user.is_active:
+            refresh_service.revoke(session)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not available")
+        token = create_access_token(
+            data={"sub": user.email, "role": user.role, "uid": user.id},
+            expires_delta=access_token_expires,
+        )
+    elif session.rgw_session_id:
+        principal = SessionService(db).get_principal(session.rgw_session_id)
+        if not principal:
+            refresh_service.revoke(session)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
+        token = create_access_token(
+            data={"sid": principal.session_id, "auth_type": "rgw"},
+            expires_delta=access_token_expires,
+        )
+    else:
+        refresh_service.revoke(session)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+    new_refresh_token = refresh_service.rotate(session)
+    _set_refresh_cookie(response, new_refresh_token)
+    return Token(access_token=token)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    response: Response,
+    db: Session = Depends(get_db),
+    refresh_token: Optional[str] = Cookie(None, alias=settings.refresh_token_cookie_name),
+) -> None:
+    if refresh_token:
+        refresh_service = RefreshSessionService(db)
+        session = refresh_service.get_by_token(refresh_token)
+        if session:
+            refresh_service.revoke(session)
+    _clear_refresh_cookie(response)

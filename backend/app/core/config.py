@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api"
     secret_key: str = Field("change-me", description="JWT secret key")
     access_token_expire_minutes: int = 60
+    refresh_token_expire_minutes: int = Field(60 * 24 * 14, description="Refresh token expiry (minutes)")
+    refresh_token_cookie_name: str = Field("refresh_token", description="Cookie name for refresh token")
+    refresh_token_cookie_path: str = Field("/api/auth", description="Cookie path for refresh token")
+    refresh_token_cookie_domain: Optional[str] = Field(None, description="Cookie domain for refresh token")
+    refresh_token_cookie_secure: bool = Field(False, description="Secure flag for refresh cookie")
+    refresh_token_cookie_samesite: str = Field("lax", description="SameSite policy for refresh cookie")
 
     database_url: str = Field(
         "sqlite:///./app.db",

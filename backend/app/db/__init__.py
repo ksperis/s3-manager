@@ -7,6 +7,7 @@ from .s3_account import AccountIAMUser, S3Account, UserS3Account
 from .user import User
 from .audit import AuditLog
 from .session import RgwSession
+from .refresh_session import RefreshSession
 from .s3_user import S3User, UserS3User
 from .s3_connection import S3Connection, UserS3Connection
 from .oidc import OidcLoginState
@@ -23,6 +24,7 @@ __all__ = [
     "User",
     "AuditLog",
     "RgwSession",
+    "RefreshSession",
     "S3User",
     "UserS3User",
     "S3Connection",

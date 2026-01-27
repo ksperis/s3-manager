@@ -4,6 +4,7 @@
  */
 import { ReactNode } from "react";
 import { Outlet } from "react-router-dom";
+import { logout as logoutRequest } from "../api/auth";
 import Header from "./Header";
 import Sidebar, { SidebarLink, SidebarSection } from "./Sidebar";
 import Topbar from "./Topbar";
@@ -61,8 +62,12 @@ export default function Layout({
 }: LayoutProps) {
   const userEmail = getUserEmail();
   const logout = () => {
+    void logoutRequest().catch((err) => {
+      console.warn("Unable to revoke refresh session", err);
+    });
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("s3SessionEndpoint");
     window.location.href = "/login";
   };
   const heroInlineAction = topbarContent ? undefined : headerInlineAction;
