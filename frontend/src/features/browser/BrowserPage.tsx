@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { unstable_usePrompt, useSearchParams } from "react-router-dom";
 import JSZip from "jszip";
 import axios from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
@@ -4143,6 +4143,13 @@ export default function BrowserPage({
   const pasteLabel = clipboard?.mode === "move" ? "Paste (Move)" : "Paste";
   const totalOperationsCount =
     activeOperations.length + uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount;
+  const hasPendingOperations = totalOperationsCount > 0;
+  const leaveMessage =
+    "Des opérations sont en cours (upload, download, copie, suppression). Quitter maintenant peut les interrompre. Continuer ?";
+  unstable_usePrompt({
+    when: hasPendingOperations,
+    message: leaveMessage,
+  });
   const completedUploadCount = useMemo(
     () =>
       operations.filter(
@@ -4204,6 +4211,17 @@ export default function BrowserPage({
       ),
     [operations]
   );
+
+  useEffect(() => {
+    if (!hasPendingOperations || typeof window === "undefined") return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = leaveMessage;
+      return leaveMessage;
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasPendingOperations, leaveMessage]);
   const failedOperationsCount =
     failedUploadCount + failedDownloadCount + failedDeleteCount + failedCopyCount + failedOtherOperations.length;
   const completedOperationsCount =

@@ -2,7 +2,8 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { useMemo } from "react";
+import { Navigate, Outlet, Route, RouterProvider, createBrowserRouter, createRoutesFromElements } from "react-router-dom";
 import Layout from "./components/Layout";
 import LoginPage from "./features/auth/LoginPage";
 import OidcCallbackPage from "./features/auth/OidcCallbackPage";
@@ -174,10 +175,10 @@ function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal"
 
 export default function AppRouter() {
   const { generalSettings } = useGeneralSettings();
-  const adminNav = buildAdminNav(generalSettings.portal_enabled, generalSettings.browser_enabled);
-  return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Routes>
+  const router = useMemo(() => {
+    const adminNav = buildAdminNav(generalSettings.portal_enabled, generalSettings.browser_enabled);
+    const routes = createRoutesFromElements(
+      <>
         <Route element={<RequireAuth />}>
           <Route index element={<RoleRedirect />} />
 
@@ -214,10 +215,7 @@ export default function AppRouter() {
 
           <Route element={<RequireRole roles={[ADMIN_ROLE, USER_ROLE]} />}>
             <Route element={<RequireFeature feature="manager" />}>
-              <Route
-                path="/manager"
-                element={<ManagerLayout />}
-              >
+              <Route path="/manager" element={<ManagerLayout />}>
                 <Route index element={<ManagerDashboard />} />
                 <Route path="buckets" element={<BucketsPage />} />
                 <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
@@ -239,10 +237,7 @@ export default function AppRouter() {
             </Route>
 
             <Route element={<RequireFeature feature="browser" />}>
-              <Route
-                path="/browser"
-                element={<BrowserLayout />}
-              >
+              <Route path="/browser" element={<BrowserLayout />}>
                 <Route index element={<BrowserPage />} />
               </Route>
             </Route>
@@ -250,18 +245,15 @@ export default function AppRouter() {
 
           <Route element={<RequireRole roles={[ADMIN_ROLE, USER_ROLE]} />}>
             <Route element={<RequireFeature feature="portal" />}>
-                <Route
-                  path="/portal"
-                  element={<PortalLayout />}
-                >
-                  <Route index element={<PortalDashboard />} />
-                  <Route path="buckets" element={<PortalBucketsPage />} />
-                  <Route element={<RequireFeature feature="browser" />}>
-                    <Route path="browser" element={<PortalBrowserPage />} />
-                  </Route>
-                  <Route path="manage" element={<PortalManagePage />} />
-                  <Route path="settings" element={<PortalSettingsPage />} />
+              <Route path="/portal" element={<PortalLayout />}>
+                <Route index element={<PortalDashboard />} />
+                <Route path="buckets" element={<PortalBucketsPage />} />
+                <Route element={<RequireFeature feature="browser" />}>
+                  <Route path="browser" element={<PortalBrowserPage />} />
                 </Route>
+                <Route path="manage" element={<PortalManagePage />} />
+                <Route path="settings" element={<PortalSettingsPage />} />
+              </Route>
             </Route>
           </Route>
         </Route>
@@ -270,7 +262,11 @@ export default function AppRouter() {
         <Route path="/oidc/:provider/callback" element={<OidcCallbackPage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
+      </>
+    );
+    return createBrowserRouter(routes, {
+      future: { v7_startTransition: true, v7_relativeSplatPath: true },
+    });
+  }, [generalSettings.portal_enabled, generalSettings.browser_enabled]);
+  return <RouterProvider router={router} />;
 }
