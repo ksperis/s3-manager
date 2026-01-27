@@ -132,6 +132,9 @@ class LoginSettings(BaseModel):
     allow_login_custom_endpoint: bool = False
     default_endpoint_url: Optional[str] = None
     endpoints: list[StorageEndpointPublic] = Field(default_factory=list)
+    seed_login_prefill: bool = False
+    seed_login_email: Optional[str] = None
+    seed_login_password: Optional[str] = None
 
 
 class PortalSettings(BaseModel):
@@ -163,8 +166,13 @@ class BrowserSettings(BaseModel):
     other_operations_parallelism: int = Field(default=3, ge=1, le=20)
 
 
+class OnboardingSettings(BaseModel):
+    dismissed: bool = False
+
+
 class AppSettings(BaseModel):
     general: GeneralSettings = GeneralSettings()
     portal: PortalSettings = PortalSettings()
     manager: ManagerSettings = ManagerSettings()
     browser: BrowserSettings = BrowserSettings()
+    onboarding: OnboardingSettings = OnboardingSettings()

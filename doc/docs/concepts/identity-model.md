@@ -16,6 +16,22 @@ UI identity is used for:
 - authorization to access surfaces (Admin / Manager / Browser / Portal)
 - selecting which **executor** (storage identity) is allowed for a given action
 
+### UI roles and account links
+
+UI roles define which surfaces a user can reach:
+
+- `ui_admin`: platform-level admin surface access.
+- `ui_user`: user surface access (Manager/Browser/Portal depending on account links).
+- `ui_none`: no surface access.
+
+Account links add per-account flags and portal roles:
+
+- `account_role`: `portal_user`, `portal_manager`, or `portal_none`.
+- `account_admin`: per-account admin flag (not a UI role).
+
+A user is considered **portal-only** when they have at least one portal role
+(`portal_user` or `portal_manager`) and **no** `account_admin` across all account links.
+
 ## Storage principals
 
 Depending on backend capabilities, storage principals can include:
@@ -34,3 +50,14 @@ A single UI user may manage:
 - multiple storage endpoints
 
 This is by design and enables both “platform console” and “S3 Browser” usage.
+
+## Default landing after login
+
+The UI redirects after login using the following rules:
+
+- `ui_admin` -> `/admin`
+- `ui_user` -> `/manager` by default
+- `ui_user` portal-only -> `/portal`
+- `ui_none` (or missing role) -> `/unauthorized`
+
+If a surface is disabled by feature flags, the UI falls back to the next available surface.

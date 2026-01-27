@@ -801,6 +801,43 @@ export default function StorageEndpointsPage() {
                     </p>
                   </div>
                 </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-caption text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <p className="ui-body font-semibold text-slate-700 dark:text-slate-100">What are Admin Ops and Supervision Ops?</p>
+                  <p className="mt-2">
+                    <span className="font-semibold">Admin Ops</span> keys let S3-Manager create RGW accounts and S3 users. If you do not
+                    provide Admin Ops keys, you must create accounts/users outside of S3-Manager and import them manually (or via the
+                    future API).
+                  </p>
+                  <p className="mt-2">
+                    <span className="font-semibold">Supervision Ops</span> keys are read-only credentials used for usage and metrics
+                    collection.
+                  </p>
+                  <p className="mt-3 font-semibold text-slate-700 dark:text-slate-100">Ceph (radosgw-admin) examples</p>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="mb-1 font-semibold text-slate-600 dark:text-slate-300">Admin Ops</p>
+                      <pre className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-100">
+radosgw-admin user create \
+  --uid="s3-manager-admin" \
+  --display-name="S3 Manager Admin Ops" \
+  --access-key="&lt;ADMIN_ACCESS_KEY&gt;" \
+  --secret-key="&lt;ADMIN_SECRET_KEY&gt;" \
+  --caps="users=read,write;metadata=read,write;usage=read,write;buckets=read,write"
+                      </pre>
+                    </div>
+                    <div>
+                      <p className="mb-1 font-semibold text-slate-600 dark:text-slate-300">Supervision Ops</p>
+                      <pre className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-100">
+radosgw-admin user create \
+  --uid="s3-manager-supervision" \
+  --display-name="S3 Manager Supervision Ops" \
+  --access-key="&lt;SUPERVISION_ACCESS_KEY&gt;" \
+  --secret-key="&lt;SUPERVISION_SECRET_KEY&gt;" \
+  --caps="usage=read;metadata=read;buckets=read"
+                      </pre>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

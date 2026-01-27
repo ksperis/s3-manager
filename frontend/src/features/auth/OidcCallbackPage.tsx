@@ -14,14 +14,19 @@ export default function OidcCallbackPage() {
   const { refresh: refreshGeneralSettings } = useGeneralSettings();
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(true);
-  const resolveDestination = (role?: string | null, accountLinks?: { account_role?: string | null; account_admin?: boolean | null }[] | null) => {
+  const resolveDestination = (
+    role?: string | null,
+    accountLinks?: { account_role?: string | null; account_admin?: boolean | null }[] | null
+  ) => {
     if (role === "ui_admin") return "/admin";
     if (role === "ui_user") {
       const links = accountLinks ?? [];
-      const hasPortalAccess = links.some((link) => link.account_role !== "portal_none");
+      const hasPortalAccess = links.some(
+        (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
+      );
       const hasAccountAdmin = links.some((link) => link.account_admin);
-      if (hasPortalAccess) return "/portal";
-      if (hasAccountAdmin) return "/manager";
+      if (hasPortalAccess && !hasAccountAdmin) return "/portal";
+      return "/manager";
     }
     return "/unauthorized";
   };

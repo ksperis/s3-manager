@@ -3,12 +3,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.app_settings import GeneralSettings, LoginSettings
 from app.models.storage_endpoint import StorageEndpointPublic
 from app.routers.dependencies import get_current_actor
 from app.services.app_settings_service import load_app_settings
 from app.services.storage_endpoints_service import get_storage_endpoints_service
+from app.utils.onboarding import seed_login_active
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -20,6 +22,7 @@ def get_general_settings(_: object = Depends(get_current_actor)) -> GeneralSetti
 
 @router.get("/login", response_model=LoginSettings)
 def get_login_settings(db: Session = Depends(get_db)) -> LoginSettings:
+    settings = get_settings()
     general = load_app_settings().general
     allow_access_keys = bool(general.allow_login_access_keys)
     allow_list = bool(general.allow_login_endpoint_list)
@@ -42,10 +45,14 @@ def get_login_settings(db: Session = Depends(get_db)) -> LoginSettings:
     elif allow_access_keys:
         service = get_storage_endpoints_service(db)
         default_endpoint_url = service.get_default_endpoint_url()
+    seed_prefill = seed_login_active(db)
     return LoginSettings(
         allow_login_access_keys=allow_access_keys,
         allow_login_endpoint_list=allow_list,
         allow_login_custom_endpoint=allow_custom,
         default_endpoint_url=default_endpoint_url,
         endpoints=endpoints,
+        seed_login_prefill=seed_prefill,
+        seed_login_email=settings.seed_super_admin_email if seed_prefill else None,
+        seed_login_password=settings.seed_super_admin_password if seed_prefill else None,
     )

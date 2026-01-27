@@ -4,6 +4,9 @@
 s3-manager exposes multiple user experiences (“surfaces”). They share a common backend but differ in intent,
 capabilities, and required inputs.
 
+Access is primarily driven by UI roles (`ui_admin`, `ui_user`, `ui_none`) and per-account links
+(`account_role`, `account_admin`). See **Concepts → Identity model** for the full mapping.
+
 ## Admin (`/admin/*`)
 
 Target audience: platform administrators.

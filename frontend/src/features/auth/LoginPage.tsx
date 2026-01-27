@@ -11,8 +11,9 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 export default function LoginPage() {
   const navigate = useNavigate();
   const { refresh: refreshGeneralSettings } = useGeneralSettings();
-  const [email, setEmail] = useState("admin@example.com");
-  const [password, setPassword] = useState("changeme");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [seedPrefillApplied, setSeedPrefillApplied] = useState(false);
   const [accessKey, setAccessKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
   const [mode, setMode] = useState<"password" | "keys">("password");
@@ -26,14 +27,19 @@ export default function LoginPage() {
   const [endpointLoading, setEndpointLoading] = useState(false);
   const [selectedEndpoint, setSelectedEndpoint] = useState("");
   const [customEndpoint, setCustomEndpoint] = useState("");
-  const resolveDestination = (role?: string | null, accountLinks?: { account_role?: string | null; account_admin?: boolean | null }[] | null) => {
+  const resolveDestination = (
+    role?: string | null,
+    accountLinks?: { account_role?: string | null; account_admin?: boolean | null }[] | null
+  ) => {
     if (role === "ui_admin") return "/admin";
     if (role === "ui_user") {
       const links = accountLinks ?? [];
-      const hasPortalAccess = links.some((link) => link.account_role !== "portal_none");
+      const hasPortalAccess = links.some(
+        (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
+      );
       const hasAccountAdmin = links.some((link) => link.account_admin);
-      if (hasPortalAccess) return "/portal";
-      if (hasAccountAdmin) return "/manager";
+      if (hasPortalAccess && !hasAccountAdmin) return "/portal";
+      return "/manager";
     }
     return "/unauthorized";
   };
@@ -88,6 +94,15 @@ export default function LoginPage() {
       setSelectedEndpoint(defaultEndpoint.endpoint_url);
     }
   }, [loginSettings, selectedEndpoint, customEndpoint]);
+
+  useEffect(() => {
+    if (!loginSettings || seedPrefillApplied) return;
+    if (loginSettings.seed_login_prefill && !email && !password) {
+      setEmail(loginSettings.seed_login_email ?? "");
+      setPassword(loginSettings.seed_login_password ?? "");
+    }
+    setSeedPrefillApplied(true);
+  }, [email, loginSettings, password, seedPrefillApplied]);
 
   const handlePasswordLogin = async (event: FormEvent) => {
     event.preventDefault();

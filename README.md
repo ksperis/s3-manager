@@ -214,10 +214,9 @@ These profiles **do not directly grant S3 permissions**.
 - Associates UI users with S3 accounts, legacy S3 users, and S3 connections
 - Manages authentication and portal options
 
-### account_admin
-- Manages the association between UI users and S3 accounts, legacy S3 users, and S3 connections
-- Oversees account-level visibility within the UI
-- Does not automatically grant storage permissions
+### ui_user
+- Access to Manager, Browser, and (optionally) Portal areas depending on account memberships
+- Account-level capabilities are derived from the user-to-account link (portal role + account_admin flag)
 
 ### portal_manager
 - Access to advanced portal workflows
@@ -226,6 +225,8 @@ These profiles **do not directly grant S3 permissions**.
 ### portal_user
 - Simplified portal access
 - Usage visibility and day-to-day object operations
+
+> Note: `account_admin` is an account membership flag (per account link), not a UI role.
 
 > UI profiles define **what the user can do in the interface**, not what the user
 > is allowed to do directly on the storage backend.
@@ -246,6 +247,19 @@ Exceptions requiring privilege elevation (portal workflows) must be:
 - explicit
 - auditable
 - documented
+
+---
+
+## Default landing after login
+
+When a user logs in, the UI redirects according to the following rules:
+
+- `ui_admin` lands on `/admin`.
+- `ui_user` lands on `/manager` by default.
+- If the `ui_user` only has portal rights (account role is `portal_user` or `portal_manager` **and** no `account_admin` on any account), the user lands on `/portal`.
+- `ui_none` (or missing role) lands on `/unauthorized`.
+
+These rules are mirrored in both the frontend routing and backend authorization to avoid UI/UX mismatches.
 
 ---
 

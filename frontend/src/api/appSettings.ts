@@ -90,11 +90,16 @@ export type BrowserSettings = {
   other_operations_parallelism: number;
 };
 
+export type OnboardingSettings = {
+  dismissed: boolean;
+};
+
 export type AppSettings = {
   general: GeneralSettings;
   portal: PortalSettings;
   manager: ManagerSettings;
   browser: BrowserSettings;
+  onboarding: OnboardingSettings;
 };
 
 export type PublicStorageEndpoint = {
@@ -110,6 +115,9 @@ export type LoginSettings = {
   allow_login_custom_endpoint: boolean;
   default_endpoint_url?: string | null;
   endpoints: PublicStorageEndpoint[];
+  seed_login_prefill?: boolean;
+  seed_login_email?: string | null;
+  seed_login_password?: string | null;
 };
 
 export async function fetchAppSettings(): Promise<AppSettings> {

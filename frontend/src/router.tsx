@@ -146,12 +146,16 @@ function RoleRedirect() {
   if (user.role === ADMIN_ROLE) return <Navigate to="/admin" replace />;
   if (user.role === USER_ROLE) {
     const links = user.account_links ?? [];
-    const hasPortalAccess = links.some((link) => link.account_role !== "portal_none");
+    const hasPortalAccess = links.some(
+      (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
+    );
     const hasAccountAdmin = links.some((link) => link.account_admin);
+    const portalOnly = hasPortalAccess && !hasAccountAdmin;
     const canManageBuckets = user.capabilities?.can_manage_buckets !== false;
+    if (portalOnly && generalSettings.portal_enabled) return <Navigate to="/portal" replace />;
+    if (generalSettings.manager_enabled) return <Navigate to="/manager" replace />;
     if (hasPortalAccess && generalSettings.portal_enabled) return <Navigate to="/portal" replace />;
-    if (hasAccountAdmin && generalSettings.manager_enabled) return <Navigate to="/manager" replace />;
-    if (hasAccountAdmin && canManageBuckets && generalSettings.browser_enabled) return <Navigate to="/browser" replace />;
+    if (generalSettings.browser_enabled && canManageBuckets) return <Navigate to="/browser" replace />;
     return <Navigate to="/unauthorized" replace />;
   }
   if (user.role === UNASSIGNED_ROLE) return <Navigate to="/unauthorized" replace />;

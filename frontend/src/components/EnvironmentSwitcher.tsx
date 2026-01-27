@@ -60,14 +60,15 @@ function resolveAvailableEnvironments(user: StoredUser | null): EnvironmentOptio
     return ALL_ENVIRONMENTS.filter((env) => env.id === "manager" || env.id === "browser");
   }
   const links = user.account_links ?? [];
-  const hasPortalAccess = links.some((link) => link.account_role !== "portal_none");
-  const hasAccountAdmin = links.some((link) => link.account_admin);
+  const hasPortalAccess = links.some(
+    (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
+  );
   const canManageBuckets = user.capabilities?.can_manage_buckets !== false;
 
   return ALL_ENVIRONMENTS.filter((env) => {
     if (env.id === "portal") return hasPortalAccess;
-    if (env.id === "manager") return hasAccountAdmin;
-    if (env.id === "browser") return hasAccountAdmin && canManageBuckets;
+    if (env.id === "manager") return true;
+    if (env.id === "browser") return canManageBuckets;
     return false;
   });
 }
