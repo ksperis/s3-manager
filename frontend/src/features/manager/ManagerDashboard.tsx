@@ -4,6 +4,7 @@
  */
 import { useMemo } from "react";
 import { useS3AccountContext } from "./S3AccountContext";
+import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import UsageOverview from "./UsageOverview";
 import { useManagerStats } from "./useManagerStats";
@@ -77,9 +78,7 @@ export default function ManagerDashboard() {
       />
 
       {requiresS3AccountSelection && !selected && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-          Select an account to view metrics.
-        </div>
+        <PageBanner tone="warning">Select an account to view metrics.</PageBanner>
       )}
 
       {isS3User && (

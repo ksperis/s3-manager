@@ -4,6 +4,7 @@
  */
 import { BucketOverview } from "../api/stats";
 import { formatBytes, formatCompactNumber } from "../utils/format";
+import PageBanner from "./PageBanner";
 import UsageTile from "./UsageTile";
 
 type QuotaProps = {
@@ -46,17 +47,9 @@ export default function StorageUsageCard({
         </h3>
       </header>
 
-      {metricsDisabled && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-          Usage metrics are not available for these credentials.
-        </div>
-      )}
+      {metricsDisabled && <PageBanner tone="warning">Usage metrics are not available for these credentials.</PageBanner>}
 
-      {!metricsDisabled && errorMessage && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-          {errorMessage}
-        </div>
-      )}
+      {!metricsDisabled && errorMessage && <PageBanner tone="error">{errorMessage}</PageBanner>}
 
       <div className="grid gap-2 sm:grid-cols-2">
         <UsageTile

@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { Link } from "react-router-dom";
+import PageBanner from "../../components/PageBanner";
 import StorageUsageCard from "../../components/StorageUsageCard";
 import { ManagerStats } from "../../api/stats";
 import { IamOverview } from "../../api/iamOverview";
@@ -80,11 +81,7 @@ export default function UsageOverview({
           <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Inventory overview</h3>
         </header>
 
-        {!iamDisabled && iamError && (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-            {iamError}
-          </div>
-        )}
+        {!iamDisabled && iamError && <PageBanner tone="error">{iamError}</PageBanner>}
 
         {iamDisabled && (
           <div className="absolute inset-0 flex cursor-not-allowed items-center justify-center rounded-xl bg-white/80 text-center ui-caption font-semibold text-slate-600 dark:bg-slate-900/70 dark:text-slate-200">

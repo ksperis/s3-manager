@@ -211,11 +211,11 @@ These profiles **do not directly grant S3 permissions**.
 ### ui_admin
 - Manages UI-level configuration
 - Manages storage endpoints
-- Associates UI users with S3 accounts
+- Associates UI users with S3 accounts, legacy S3 users, and S3 connections
 - Manages authentication and portal options
 
 ### account_admin
-- Manages the association between UI users and S3 accounts
+- Manages the association between UI users and S3 accounts, legacy S3 users, and S3 connections
 - Oversees account-level visibility within the UI
 - Does not automatically grant storage permissions
 

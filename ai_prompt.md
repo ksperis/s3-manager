@@ -155,6 +155,7 @@ Backend-only credentials are allowed **only** for:
 
 - Respect the architecture: **thin routers → services → clients**.
 - Avoid global refactors; prefer **minimal, coherent changes**.
+- Keep documentation up to date as features evolve; update relevant docs alongside code changes.
 - Any change related to keys, quotas, or permissions must include:
   - targeted tests or a documented reproducible scenario.
 - Any mutating action must:
