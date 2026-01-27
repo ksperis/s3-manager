@@ -421,7 +421,12 @@ class S3AccountsService:
     def _generate_account_id(self) -> str:
         return f"RGW{random.randint(0, 10**17 - 1):017d}"
 
-    def list_accounts(self, include_usage_stats: bool = True) -> list[S3AccountSchema]:
+    def list_accounts(
+        self,
+        include_usage_stats: bool = True,
+        include_quota: bool = True,
+        include_rgw_details: bool = True,
+    ) -> list[S3AccountSchema]:
         db_accounts = self.db.query(S3Account).all()
         user_links = self.db.query(UserS3Account).filter(UserS3Account.is_root.is_(False)).all()
         user_ids_by_account: dict[int, list[int]] = {}
@@ -454,12 +459,17 @@ class S3AccountsService:
             rgw_user_uids = None
             rgw_topic_count = None
             rgw_topics = None
+            quota_max_size_gb = None
+            quota_max_objects = None
             if include_usage_stats:
                 used_bytes, used_objects, bucket_count = self._account_usage(acc)
             account_identifier = acc.rgw_account_id or str(acc.id)
-            admin = self._admin_for_account(acc, allow_missing=True)
-            quota_max_size_gb, quota_max_objects = self._account_quota(acc, admin)
-            if admin:
+            admin = None
+            if include_quota or include_rgw_details:
+                admin = self._admin_for_account(acc, allow_missing=True)
+            if include_quota and admin:
+                quota_max_size_gb, quota_max_objects = self._account_quota(acc, admin)
+            if include_rgw_details and admin:
                 rgw_user_count, rgw_user_uids = self._account_rgw_users(account_identifier, None, admin)
                 rgw_topic_count, rgw_topics = self._account_topics_info(account_identifier, admin)
             endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)

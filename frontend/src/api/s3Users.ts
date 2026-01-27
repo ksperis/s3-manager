@@ -78,6 +78,7 @@ export type ListS3UsersParams = {
   search?: string;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
+  include_quota?: boolean;
 };
 
 export async function listS3Users(params?: ListS3UsersParams): Promise<PaginatedS3UsersResponse> {
@@ -95,13 +96,15 @@ export async function createS3User(payload: CreateS3UserPayload): Promise<S3User
   return data;
 }
 
-export async function getS3User(userId: number): Promise<S3User> {
-  const { data } = await client.get<S3User>(`/admin/s3-users/${userId}`);
+export async function getS3User(userId: number, params?: { include_quota?: boolean }): Promise<S3User> {
+  const { data } = await client.get<S3User>(`/admin/s3-users/${userId}`, { params });
   return data;
 }
 
-export async function getS3UserWithBuckets(userId: number): Promise<S3User> {
-  const { data } = await client.get<S3User>(`/admin/s3-users/${userId}`, { params: { include_buckets: true } });
+export async function getS3UserWithBuckets(userId: number, params?: { include_quota?: boolean }): Promise<S3User> {
+  const { data } = await client.get<S3User>(`/admin/s3-users/${userId}`, {
+    params: { include_buckets: true, ...(params ?? {}) },
+  });
   return data;
 }
 

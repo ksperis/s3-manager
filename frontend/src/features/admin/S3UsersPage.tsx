@@ -9,6 +9,7 @@ import {
   S3User,
   createS3User,
   deleteS3User,
+  getS3User,
   getS3UserWithBuckets,
   importS3Users,
   listS3Users,
@@ -130,6 +131,7 @@ export default function S3UsersPage() {
         page,
         page_size: pageSize,
         search: filter.trim() || undefined,
+        include_quota: false,
       });
       const totalPages = Math.max(1, Math.ceil((response.total || 0) / pageSize));
       if (response.total > 0 && page > totalPages) {
@@ -211,6 +213,27 @@ export default function S3UsersPage() {
     );
   };
 
+  const loadEditQuota = async (userId: number) => {
+    try {
+      const detail = await getS3User(userId, { include_quota: true });
+      setEditingUser((prev) => (prev && prev.id === userId ? { ...prev, ...detail } : prev));
+      setEditForm((prev) => {
+        if (prev.quota_max_size_gb !== "" || prev.quota_max_objects !== "") {
+          return prev;
+        }
+        const quota = resolveQuotaForEdit(detail.quota_max_size_gb);
+        return {
+          ...prev,
+          quota_max_size_gb: quota.value,
+          quota_max_size_unit: quota.unit,
+          quota_max_objects: detail.quota_max_objects != null ? String(detail.quota_max_objects) : "",
+        };
+      });
+    } catch {
+      // Quota is optional for editing; ignore load failures.
+    }
+  };
+
   const openEditModal = (user: S3User) => {
     const quota = resolveQuotaForEdit(user.quota_max_size_gb);
     setEditingUser(user);
@@ -227,6 +250,9 @@ export default function S3UsersPage() {
     setPortalUserSearch("");
     setShowEditPortalUserPanel(false);
     setEditPortalUserSelections([]);
+    if (user.quota_max_size_gb == null && user.quota_max_objects == null) {
+      void loadEditQuota(user.id);
+    }
   };
 
   const submitEdit = async (e: FormEvent) => {
@@ -446,7 +472,7 @@ export default function S3UsersPage() {
           <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                {["Name", "UID", "Storage", "Email", "UI Users", "Actions"].map((label) => (
+                {["Name", "UID", "Storage", "UI Users", "Actions"].map((label) => (
                   <th key={label} className="px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     {label}
                   </th>
@@ -456,14 +482,14 @@ export default function S3UsersPage() {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
+                  <td colSpan={5} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
                     Loading users...
                   </td>
                 </tr>
               )}
               {!loading && users.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-4">
+                  <td colSpan={5} className="px-6 py-4">
                     <TableEmptyState title="No users" description="Import or create standalone RGW users to expose them to managers." />
                   </td>
                 </tr>
@@ -480,7 +506,6 @@ export default function S3UsersPage() {
                           {user.storage_endpoint_name || "—"}
                         </span>
                       </td>
-                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{user.email ?? "-"}</td>
                       <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                         {user.user_ids && user.user_ids.length > 0 ? (
                           <div className="flex flex-wrap gap-2">

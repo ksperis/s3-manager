@@ -60,10 +60,16 @@ def list_accounts(
     search: Optional[str] = Query(None),
     sort_by: str = Query("name"),
     sort_dir: str = Query("asc"),
+    include_quota: bool = Query(False, description="Include RGW quota information (slower)."),
+    include_rgw_details: bool = Query(False, description="Include RGW user and topic details (slower)."),
     service: S3AccountsService = Depends(get_admin_accounts_listing_service),
     _: dict = Depends(get_current_super_admin),
 ) -> PaginatedS3AccountsResponse:
-    accounts = service.list_accounts(include_usage_stats=False)
+    accounts = service.list_accounts(
+        include_usage_stats=False,
+        include_quota=include_quota,
+        include_rgw_details=include_rgw_details,
+    )
     search_value = search.strip().lower() if isinstance(search, str) else ""
     if search_value:
         filtered = [

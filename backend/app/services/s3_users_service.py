@@ -267,13 +267,22 @@ class S3UsersService:
                     self.db.add(user)
                 self.db.add(UserS3UserModel(user_id=user.id, s3_user_id=s3_user.id))
 
-    def _serialize_s3_user(self, row: S3UserModel, link_map: dict[int, list[int]]) -> S3UserSchema:
+    def _serialize_s3_user(
+        self,
+        row: S3UserModel,
+        link_map: dict[int, list[int]],
+        *,
+        include_quota: bool = True,
+    ) -> S3UserSchema:
         endpoint = row.storage_endpoint or (
             self.db.query(StorageEndpoint).filter(StorageEndpoint.id == row.storage_endpoint_id).first()
             if row.storage_endpoint_id
             else None
         )
-        quota_max_size_gb, quota_max_objects = self._user_quota(row)
+        quota_max_size_gb = None
+        quota_max_objects = None
+        if include_quota:
+            quota_max_size_gb, quota_max_objects = self._user_quota(row)
         return S3UserSchema(
             id=row.id,
             name=row.name,
@@ -288,13 +297,13 @@ class S3UsersService:
             storage_endpoint_url=endpoint.endpoint_url if endpoint else None,
         )
 
-    def list_users(self) -> list[S3UserSchema]:
+    def list_users(self, include_quota: bool = False) -> list[S3UserSchema]:
         rows = self.db.query(S3UserModel).all()
         link_rows = self.db.query(UserS3UserModel).all()
         link_map: dict[int, list[int]] = {}
         for link in link_rows:
             link_map.setdefault(link.s3_user_id, []).append(link.user_id)
-        return [self._serialize_s3_user(row, link_map) for row in rows]
+        return [self._serialize_s3_user(row, link_map, include_quota=include_quota) for row in rows]
 
     def list_users_minimal(self) -> list[S3UserSummary]:
         rows = self.db.query(S3UserModel).order_by(S3UserModel.name.asc()).all()
@@ -324,6 +333,7 @@ class S3UsersService:
         search: Optional[str] = None,
         sort_field: str = "name",
         sort_direction: str = "asc",
+        include_quota: bool = False,
     ) -> tuple[list[S3UserSchema], int]:
         query = self.db.query(S3UserModel)
         search_value = search.strip() if isinstance(search, str) else ""
@@ -364,9 +374,14 @@ class S3UsersService:
         link_map: dict[int, list[int]] = {}
         for link in link_rows:
             link_map.setdefault(link.s3_user_id, []).append(link.user_id)
-        return [self._serialize_s3_user(row, link_map) for row in rows], total
+        return [self._serialize_s3_user(row, link_map, include_quota=include_quota) for row in rows], total
 
-    def get_user(self, user_id: int, include_buckets: bool = False) -> S3UserSchema:
+    def get_user(
+        self,
+        user_id: int,
+        include_buckets: bool = False,
+        include_quota: bool = False,
+    ) -> S3UserSchema:
         s3_user = self._get_s3_user(user_id)
         user_ids = [
             row.user_id
@@ -377,7 +392,10 @@ class S3UsersService:
             if s3_user.storage_endpoint_id
             else None
         )
-        quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
+        quota_max_size_gb = None
+        quota_max_objects = None
+        if include_quota:
+            quota_max_size_gb, quota_max_objects = self._user_quota(s3_user)
         bucket_count = self._interface_bucket_count(s3_user) if include_buckets else None
         return S3UserSchema(
             id=s3_user.id,

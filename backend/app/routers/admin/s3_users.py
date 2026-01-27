@@ -45,6 +45,7 @@ def list_s3_users(
     search: Optional[str] = Query(None),
     sort_by: str = Query("name"),
     sort_dir: str = Query("asc"),
+    include_quota: bool = Query(False, description="Include RGW quota information (slower)."),
     service: S3UsersService = Depends(get_admin_s3_users_service),
     _: User = Depends(get_current_super_admin),
 ) -> PaginatedS3UsersResponse:
@@ -54,6 +55,7 @@ def list_s3_users(
         search=search,
         sort_field=sort_by,
         sort_direction=sort_dir,
+        include_quota=include_quota,
     )
     has_next = page * page_size < total
     return PaginatedS3UsersResponse(
@@ -99,11 +101,12 @@ def create_s3_user(
 def get_s3_user(
     user_id: int,
     include_buckets: bool = Query(False, description="Include bucket count computed from the user's interface key"),
+    include_quota: bool = Query(False, description="Include RGW quota information (slower)."),
     service: S3UsersService = Depends(get_admin_s3_users_service),
     _: User = Depends(get_current_super_admin),
 ) -> S3User:
     try:
-        return service.get_user(user_id, include_buckets=include_buckets)
+        return service.get_user(user_id, include_buckets=include_buckets, include_quota=include_quota)
     except ValueError as exc:
         detail = str(exc)
         status_code = status.HTTP_404_NOT_FOUND if "not found" in detail.lower() else status.HTTP_400_BAD_REQUEST

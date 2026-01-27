@@ -61,6 +61,8 @@ export type ListS3AccountsParams = {
   search?: string;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
+  include_quota?: boolean;
+  include_rgw_details?: boolean;
 };
 
 export async function listS3Accounts(params?: ListS3AccountsParams): Promise<PaginatedS3AccountsResponse> {

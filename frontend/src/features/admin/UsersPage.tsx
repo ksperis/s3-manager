@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import {
   CreateUserPayload,
@@ -25,6 +25,647 @@ import PaginationControls from "../../components/PaginationControls";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 
+type AssociationTab = "accounts" | "s3_users" | "connections";
+
+type AccountSelection = {
+  id: number;
+  role: string;
+  account_admin?: boolean;
+};
+
+type Option = {
+  id: number;
+  label: string;
+};
+
+type AssociationsTabsProps = {
+  activeTab: AssociationTab;
+  onTabChange: (tab: AssociationTab) => void;
+  portalEnabled: boolean;
+  maxVisibleOptions: number;
+  accounts: {
+    selected: AccountSelection[];
+    setSelected: Dispatch<SetStateAction<AccountSelection[]>>;
+    optionsById: Map<number, S3AccountSummary>;
+    available: Option[];
+    visible: Option[];
+    search: string;
+    setSearch: Dispatch<SetStateAction<string>>;
+    loading: boolean;
+    showPanel: boolean;
+    setShowPanel: Dispatch<SetStateAction<boolean>>;
+    selections: number[];
+    setSelections: Dispatch<SetStateAction<number[]>>;
+    roleChoice: Record<number, string>;
+    setRoleChoice: Dispatch<SetStateAction<Record<number, string>>>;
+    adminChoice: Record<number, boolean>;
+    setAdminChoice: Dispatch<SetStateAction<Record<number, boolean>>>;
+    toggleSelection: (id: number) => void;
+  };
+  s3Users: {
+    selected: number[];
+    setSelected: Dispatch<SetStateAction<number[]>>;
+    labelById: Map<number, string>;
+    available: Option[];
+    visible: Option[];
+    search: string;
+    setSearch: Dispatch<SetStateAction<string>>;
+    loading: boolean;
+    showPanel: boolean;
+    setShowPanel: Dispatch<SetStateAction<boolean>>;
+    selections: number[];
+    setSelections: Dispatch<SetStateAction<number[]>>;
+    toggleSelection: (id: number) => void;
+  };
+  connections: {
+    selected: number[];
+    setSelected: Dispatch<SetStateAction<number[]>>;
+    labelById: Map<number, string>;
+    available: Option[];
+    visible: Option[];
+    search: string;
+    setSearch: Dispatch<SetStateAction<string>>;
+    loading: boolean;
+    showPanel: boolean;
+    setShowPanel: Dispatch<SetStateAction<boolean>>;
+    selections: number[];
+    setSelections: Dispatch<SetStateAction<number[]>>;
+    toggleSelection: (id: number) => void;
+  };
+};
+
+const AssociationsTabs = ({
+  activeTab,
+  onTabChange,
+  portalEnabled,
+  maxVisibleOptions,
+  accounts,
+  s3Users,
+  connections,
+}: AssociationsTabsProps) => {
+  const totalSelected =
+    accounts.selected.length + s3Users.selected.length + connections.selected.length;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <label className="ui-body font-medium text-slate-700">Associations</label>
+          <span className="ui-caption text-slate-500">{totalSelected} total</span>
+        </div>
+      </div>
+      <PageTabs
+        tabs={[
+          {
+            id: "accounts",
+            label: `Accounts (${accounts.selected.length})`,
+            content: (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="ui-body font-medium text-slate-700">Linked accounts</span>
+                    <span className="ui-caption text-slate-500">{accounts.selected.length} linked</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => accounts.setShowPanel((prev) => !prev)}
+                    className={tableActionButtonClasses}
+                  >
+                    {accounts.showPanel ? "Close" : "Add accounts"}
+                  </button>
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Account
+                        </th>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          {portalEnabled ? "Portal role" : "Portal access"}
+                        </th>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Admin
+                        </th>
+                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {accounts.selected.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            No account linked yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        accounts.selected.map((entry) => {
+                          const label =
+                            accounts.optionsById.get(Number(entry.id))?.name ?? `S3Account #${entry.id}`;
+                          return (
+                            <tr key={entry.id}>
+                              <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{label}</td>
+                              <td className="px-3 py-2">
+                                {portalEnabled ? (
+                                  <select
+                                    className="w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                    value={entry.role}
+                                    onChange={(e) =>
+                                      accounts.setSelected((prev) =>
+                                        prev.map((item) =>
+                                          item.id === entry.id ? { ...item, role: e.target.value } : item
+                                        )
+                                      )
+                                    }
+                                  >
+                                    <option value="portal_user">Portal user</option>
+                                    <option value="portal_manager">Portal manager</option>
+                                    <option value="portal_none">Portal none</option>
+                                  </select>
+                                ) : null}
+                              </td>
+                              <td className="px-3 py-2">
+                                {portalEnabled ? (
+                                  <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(entry.account_admin)}
+                                      onChange={(e) =>
+                                        accounts.setSelected((prev) =>
+                                          prev.map((item) =>
+                                            item.id === entry.id ? { ...item, account_admin: e.target.checked } : item
+                                          )
+                                        )
+                                      }
+                                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                    />
+                                    Admin
+                                  </label>
+                                ) : (
+                                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                                    Admin
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    accounts.setSelected((prev) => prev.filter((acc) => acc.id !== entry.id))
+                                  }
+                                  className={tableDeleteActionClasses}
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {accounts.showPanel && (
+                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="ui-body font-medium text-slate-700">Add accounts</span>
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={accounts.search}
+                        onChange={(e) => accounts.setSearch(e.target.value)}
+                        placeholder="Search..."
+                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
+                      {accounts.loading ? (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">Loading accounts...</p>
+                      ) : accounts.available.length === 0 ? (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                      ) : null}
+                      {accounts.visible.map((opt) => {
+                        const accountId = Number(opt.id);
+                        const isSelected = accounts.selections.includes(accountId);
+                        const role = accounts.roleChoice[accountId] ?? "portal_none";
+                        const adminChecked = portalEnabled
+                          ? accounts.adminChoice[accountId] ?? role === "portal_manager"
+                          : true;
+                        return (
+                          <div
+                            key={opt.id}
+                            className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
+                              isSelected
+                                ? "bg-slate-50 dark:bg-slate-800/60"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                            }`}
+                          >
+                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => accounts.toggleSelection(accountId)}
+                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                              />
+                              <span>{opt.label}</span>
+                            </label>
+                            <div className="flex items-center gap-2">
+                              {portalEnabled ? (
+                                <select
+                                  className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                  value={role}
+                                  onChange={(e) =>
+                                    accounts.setRoleChoice((prev) => ({
+                                      ...prev,
+                                      [accountId]: e.target.value,
+                                    }))
+                                  }
+                                >
+                                  <option value="portal_user">Portal user</option>
+                                  <option value="portal_manager">Portal manager</option>
+                                  <option value="portal_none">Portal none</option>
+                                </select>
+                              ) : null}
+                              {portalEnabled ? (
+                                <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(adminChecked)}
+                                    onChange={(e) =>
+                                      accounts.setAdminChoice((prev) => ({
+                                        ...prev,
+                                        [accountId]: e.target.checked,
+                                      }))
+                                    }
+                                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                  Admin
+                                </label>
+                              ) : (
+                                <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                                  Admin
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {accounts.available.length > maxVisibleOptions && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Showing first {maxVisibleOptions} matches. Use the search box to narrow down the list.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">
+                        {accounts.selections.length} selected
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            accounts.setShowPanel(false);
+                            accounts.setSelections([]);
+                            accounts.setSearch("");
+                          }}
+                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={accounts.selections.length === 0}
+                          onClick={() => {
+                            if (accounts.selections.length === 0) return;
+                            const next = accounts.selections.map((accountId) => {
+                              const role = accounts.roleChoice[accountId] ?? "portal_none";
+                              const account_admin = portalEnabled
+                                ? accounts.adminChoice[accountId] ?? role === "portal_manager"
+                                : true;
+                              return { id: accountId, role, account_admin };
+                            });
+                            accounts.setSelected((prev) => [...prev, ...next]);
+                            accounts.setSelections([]);
+                            accounts.setSearch("");
+                            accounts.setShowPanel(false);
+                          }}
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                        >
+                          Add selected
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ),
+          },
+          {
+            id: "s3_users",
+            label: `S3 Users (${s3Users.selected.length})`,
+            content: (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="ui-body font-medium text-slate-700">Linked users</span>
+                    <span className="ui-caption text-slate-500">{s3Users.selected.length} linked</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => s3Users.setShowPanel((prev) => !prev)}
+                    className={tableActionButtonClasses}
+                  >
+                    {s3Users.showPanel ? "Close" : "Add users"}
+                  </button>
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          User
+                        </th>
+                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {s3Users.selected.length === 0 ? (
+                        <tr>
+                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            No user linked yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        s3Users.selected.map((id) => (
+                          <tr key={id}>
+                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
+                              {s3Users.labelById.get(id) ?? `User #${id}`}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => s3Users.setSelected((prev) => prev.filter((s3Id) => s3Id !== id))}
+                                className={tableDeleteActionClasses}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {s3Users.showPanel && (
+                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="ui-body font-medium text-slate-700">Add users</span>
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={s3Users.search}
+                        onChange={(e) => s3Users.setSearch(e.target.value)}
+                        placeholder="Search..."
+                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
+                      {s3Users.loading ? (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">Loading users...</p>
+                      ) : s3Users.available.length === 0 ? (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                      ) : null}
+                      {s3Users.visible.map((opt) => {
+                        const isSelected = s3Users.selections.includes(opt.id);
+                        return (
+                          <div
+                            key={opt.id}
+                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
+                              isSelected
+                                ? "bg-slate-50 dark:bg-slate-800/60"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                            }`}
+                          >
+                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => s3Users.toggleSelection(opt.id)}
+                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                              />
+                              <span>{opt.label}</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                      {s3Users.available.length > maxVisibleOptions && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Showing first {maxVisibleOptions} matches. Use the search box to narrow down the list.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">
+                        {s3Users.selections.length} selected
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            s3Users.setShowPanel(false);
+                            s3Users.setSelections([]);
+                            s3Users.setSearch("");
+                          }}
+                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={s3Users.selections.length === 0}
+                          onClick={() => {
+                            if (s3Users.selections.length === 0) return;
+                            s3Users.setSelected((prev) => [...prev, ...s3Users.selections]);
+                            s3Users.setSelections([]);
+                            s3Users.setSearch("");
+                            s3Users.setShowPanel(false);
+                          }}
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                        >
+                          Add selected
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ),
+          },
+          {
+            id: "connections",
+            label: `Connections (${connections.selected.length})`,
+            content: (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="ui-body font-medium text-slate-700">Linked connections</span>
+                    <span className="ui-caption text-slate-500">{connections.selected.length} linked</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => connections.setShowPanel((prev) => !prev)}
+                    className={tableActionButtonClasses}
+                  >
+                    {connections.showPanel ? "Close" : "Add connections"}
+                  </button>
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Connection
+                        </th>
+                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {connections.selected.length === 0 ? (
+                        <tr>
+                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            No connection linked yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        connections.selected.map((id) => (
+                          <tr key={id}>
+                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
+                              {connections.labelById.get(id) ?? `Connection #${id}`}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  connections.setSelected((prev) => prev.filter((connId) => connId !== id))
+                                }
+                                className={tableDeleteActionClasses}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {connections.showPanel && (
+                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="ui-body font-medium text-slate-700">Add connections</span>
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={connections.search}
+                        onChange={(e) => connections.setSearch(e.target.value)}
+                        placeholder="Search..."
+                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                    <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
+                      {connections.loading ? (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">Loading connections...</p>
+                      ) : connections.available.length === 0 ? (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                      ) : null}
+                      {connections.visible.map((opt) => {
+                        const isSelected = connections.selections.includes(opt.id);
+                        return (
+                          <div
+                            key={opt.id}
+                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
+                              isSelected
+                                ? "bg-slate-50 dark:bg-slate-800/60"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                            }`}
+                          >
+                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => connections.toggleSelection(opt.id)}
+                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                              />
+                              <span>{opt.label}</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                      {connections.available.length > maxVisibleOptions && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Showing first {maxVisibleOptions} matches. Use the search box to narrow down the list.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">
+                        {connections.selections.length} selected
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            connections.setShowPanel(false);
+                            connections.setSelections([]);
+                            connections.setSearch("");
+                          }}
+                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={connections.selections.length === 0}
+                          onClick={() => {
+                            if (connections.selections.length === 0) return;
+                            connections.setSelected((prev) => [...prev, ...connections.selections]);
+                            connections.setSelections([]);
+                            connections.setSearch("");
+                            connections.setShowPanel(false);
+                          }}
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                        >
+                          Add selected
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ),
+          },
+        ]}
+        activeTab={activeTab}
+        onChange={(id) => {
+          const nextTab = id === "s3_users" ? "s3_users" : id === "connections" ? "connections" : "accounts";
+          onTabChange(nextTab);
+        }}
+      />
+    </div>
+  );
+};
+
 export default function UsersPage() {
   type SortField = "email" | "role" | "accounts" | "last_login_at";
 
@@ -33,6 +674,8 @@ export default function UsersPage() {
   const portalEnabled = generalSettings.portal_enabled;
   const [users, setUsers] = useState<User[]>([]);
   const [accounts, setS3Accounts] = useState<S3AccountSummary[]>([]);
+  const [s3AccountsLoaded, setS3AccountsLoaded] = useState(false);
+  const [s3AccountsLoading, setS3AccountsLoading] = useState(false);
   const [s3Users, setS3Users] = useState<S3UserSummary[]>([]);
   const [s3UsersLoaded, setS3UsersLoaded] = useState(false);
   const [s3UsersLoading, setS3UsersLoading] = useState(false);
@@ -54,10 +697,19 @@ export default function UsersPage() {
   const [createUseCustomKeys, setCreateUseCustomKeys] = useState(false);
   const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<{ id: number; role: string; account_admin?: boolean }[]>([]);
   const [createSelectedS3Users, setCreateSelectedS3Users] = useState<number[]>([]);
+  const [createSelectedS3Connections, setCreateSelectedS3Connections] = useState<number[]>([]);
   const [createAccountRoleChoice, setCreateAccountRoleChoice] = useState<Record<number, string>>({});
   const [createAccountAdminChoice, setCreateAccountAdminChoice] = useState<Record<number, boolean>>({});
   const [createS3AccountSearch, setCreateS3AccountSearch] = useState("");
   const [createS3Search, setCreateS3Search] = useState("");
+  const [createConnectionSearch, setCreateConnectionSearch] = useState("");
+  const [createAssociationsTab, setCreateAssociationsTab] = useState<"accounts" | "s3_users" | "connections">("accounts");
+  const [showCreateAccountPanel, setShowCreateAccountPanel] = useState(false);
+  const [createAccountSelections, setCreateAccountSelections] = useState<number[]>([]);
+  const [showCreateS3UserPanel, setShowCreateS3UserPanel] = useState(false);
+  const [createS3UserSelections, setCreateS3UserSelections] = useState<number[]>([]);
+  const [showCreateConnectionPanel, setShowCreateConnectionPanel] = useState(false);
+  const [createConnectionSelections, setCreateConnectionSelections] = useState<number[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState<UpdateUserPayload>({});
   const [editUseCustomKeys, setEditUseCustomKeys] = useState(false);
@@ -145,6 +797,13 @@ export default function UsersPage() {
       (opt) => !createSelectedS3Users.includes(opt.id) && (!query || opt.label.toLowerCase().includes(query))
     );
   }, [s3UserOptions, createSelectedS3Users, createS3Search]);
+  const availableCreateS3Connections = useMemo(() => {
+    const query = createConnectionSearch.trim().toLowerCase();
+    return s3ConnectionOptions.filter(
+      (opt) =>
+        !createSelectedS3Connections.includes(opt.id) && (!query || opt.label.toLowerCase().includes(query))
+    );
+  }, [s3ConnectionOptions, createSelectedS3Connections, createConnectionSearch]);
   const availableEditS3Users = useMemo(() => {
     const query = editS3Search.trim().toLowerCase();
     return s3UserOptions.filter(
@@ -164,6 +823,7 @@ export default function UsersPage() {
   const visibleCreateS3Accounts = limitedOptions(availableCreateS3Accounts);
   const visibleEditS3Accounts = limitedOptions(availableEditS3Accounts);
   const visibleCreateS3Users = limitedOptions(availableCreateS3Users);
+  const visibleCreateS3Connections = limitedOptions(availableCreateS3Connections);
   const visibleEditS3Users = limitedOptions(availableEditS3Users);
   const visibleEditS3Connections = limitedOptions(availableEditS3Connections);
   const normalizeUiRoleValue = (role?: string | null): string => {
@@ -408,11 +1068,15 @@ export default function UsersPage() {
   }, [filter, page, pageSize, sort.direction, sort.field]);
 
   const fetchS3Accounts = useCallback(async () => {
+    setS3AccountsLoading(true);
     try {
       const data = await listMinimalS3Accounts();
       setS3Accounts(data);
+      setS3AccountsLoaded(true);
     } catch (err) {
       console.error(err);
+    } finally {
+      setS3AccountsLoading(false);
     }
   }, []);
 
@@ -442,6 +1106,11 @@ export default function UsersPage() {
     }
   }, []);
 
+  const ensureS3Accounts = useCallback(async () => {
+    if (s3AccountsLoaded || s3AccountsLoading) return;
+    await fetchS3Accounts();
+  }, [s3AccountsLoaded, s3AccountsLoading, fetchS3Accounts]);
+
   const ensureS3Users = useCallback(async () => {
     if (s3UsersLoaded || s3UsersLoading) return;
     await fetchS3Users();
@@ -454,19 +1123,55 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
-    fetchS3Accounts();
-    fetchS3Connections();
-  }, [fetchUsers, fetchS3Accounts, fetchS3Connections]);
+  }, [fetchUsers]);
 
   useEffect(() => {
-    if (showCreateModal || showEditModal) {
-      ensureS3Users();
-      if (showEditModal) {
+    if (showCreateModal) {
+      if (createAssociationsTab === "accounts") {
+        ensureS3Accounts();
+      } else if (createAssociationsTab === "s3_users") {
+        ensureS3Users();
+      } else {
+        ensureS3Connections();
+      }
+      return;
+    }
+    if (showEditModal) {
+      if (editAssociationsTab === "accounts") {
+        ensureS3Accounts();
+      } else if (editAssociationsTab === "s3_users") {
+        ensureS3Users();
+      } else {
         ensureS3Connections();
       }
     }
-  }, [showCreateModal, showEditModal, ensureS3Users, ensureS3Connections]);
+  }, [
+    showCreateModal,
+    showEditModal,
+    createAssociationsTab,
+    editAssociationsTab,
+    ensureS3Accounts,
+    ensureS3Users,
+    ensureS3Connections,
+  ]);
 
+  const toggleCreateAccountSelection = (accountId: number) => {
+    setCreateAccountSelections((prev) =>
+      prev.includes(accountId) ? prev.filter((id) => id !== accountId) : [...prev, accountId]
+    );
+  };
+
+  const toggleCreateS3UserSelection = (userId: number) => {
+    setCreateS3UserSelections((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const toggleCreateConnectionSelection = (connectionId: number) => {
+    setCreateConnectionSelections((prev) =>
+      prev.includes(connectionId) ? prev.filter((id) => id !== connectionId) : [...prev, connectionId]
+    );
+  };
 
   const toggleEditAccountSelection = (accountId: number) => {
     setEditAccountSelections((prev) =>
@@ -524,18 +1229,40 @@ export default function UsersPage() {
           )
         );
       }
-      if (created?.id && createSelectedS3Users.length > 0) {
-        await updateUser(created.id, { s3_user_ids: createSelectedS3Users });
+      if (created?.id) {
+        const associationsPayload: UpdateUserPayload = {};
+        if (createSelectedS3Users.length > 0) {
+          associationsPayload.s3_user_ids = createSelectedS3Users;
+        }
+        if (createSelectedS3Connections.length > 0) {
+          associationsPayload.s3_connection_ids = createSelectedS3Connections;
+        }
+        if (Object.keys(associationsPayload).length > 0) {
+          await updateUser(created.id, associationsPayload);
+        }
       }
       setActionMessage("User created");
       setForm(createFormTemplate());
       setCreateUseCustomKeys(false);
       setCreateSelectedS3Accounts([]);
       setCreateSelectedS3Users([]);
+      setCreateSelectedS3Connections([]);
+      setCreateAccountRoleChoice({});
+      setCreateAccountAdminChoice({});
       setCreateS3AccountSearch("");
       setCreateS3Search("");
+      setCreateConnectionSearch("");
+      setCreateAccountSelections([]);
+      setCreateS3UserSelections([]);
+      setCreateConnectionSelections([]);
+      setShowCreateAccountPanel(false);
+      setShowCreateS3UserPanel(false);
+      setShowCreateConnectionPanel(false);
+      setCreateAssociationsTab("accounts");
       await fetchUsers();
-      await fetchS3Accounts();
+      if (s3AccountsLoaded) {
+        await fetchS3Accounts();
+      }
       setShowCreateModal(false);
     } catch (err) {
       setActionError(extractError(err));
@@ -707,7 +1434,9 @@ export default function UsersPage() {
       setEditConnectionSelections([]);
       setShowEditModal(false);
       await fetchUsers();
-      await fetchS3Accounts();
+      if (s3AccountsLoaded) {
+        await fetchS3Accounts();
+      }
     } catch (err) {
       setActionError(extractError(err));
     } finally {
@@ -742,7 +1471,15 @@ export default function UsersPage() {
         title="UI Users"
         description={usersDescription}
         breadcrumbs={[{ label: "Admin" }, { label: "Interface" }, { label: "UI Users" }]}
-        actions={[{ label: "Create user", onClick: () => setShowCreateModal(true) }]}
+        actions={[
+          {
+            label: "Create user",
+            onClick: () => {
+              setCreateAssociationsTab("accounts");
+              setShowCreateModal(true);
+            },
+          },
+        ]}
       />
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
@@ -755,7 +1492,20 @@ export default function UsersPage() {
             setForm(createFormTemplate());
             setCreateUseCustomKeys(false);
             setCreateSelectedS3Accounts([]);
+            setCreateSelectedS3Users([]);
+            setCreateSelectedS3Connections([]);
+            setCreateAccountRoleChoice({});
+            setCreateAccountAdminChoice({});
             setCreateS3AccountSearch("");
+            setCreateS3Search("");
+            setCreateConnectionSearch("");
+            setCreateAssociationsTab("accounts");
+            setShowCreateAccountPanel(false);
+            setShowCreateS3UserPanel(false);
+            setShowCreateConnectionPanel(false);
+            setCreateAccountSelections([]);
+            setCreateS3UserSelections([]);
+            setCreateConnectionSelections([]);
           }}
         >
           {actionError && (
@@ -860,215 +1610,67 @@ export default function UsersPage() {
                 )}
               </div>
             )}
-            <div className="md:col-span-2 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <label className="ui-body font-medium text-slate-700">Linked accounts</label>
-                    <span className="ui-caption text-slate-500">Optional</span>
-                  </div>
-                  <input
-                    type="text"
-                    value={createS3AccountSearch}
-                    onChange={(e) => setCreateS3AccountSearch(e.target.value)}
-                    placeholder="Filter by name..."
-                    className="w-48 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                </div>
-                {createSelectedS3Accounts.length === 0 ? (
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">No account selected.</p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {createSelectedS3Accounts.map((entry) => {
-                      const label =
-                        accountOptions.find((a) => Number(a.id) === Number(entry.id))?.label ?? `S3Account #${entry.id}`;
-                      return (
-                        <div
-                          key={entry.id}
-                          className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100"
-                        >
-                          <span className="ui-body">{label}</span>
-                          <div className="flex items-center gap-2">
-                            {portalEnabled ? (
-                              <select
-                                className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                                value={entry.role}
-                                onChange={(e) =>
-                                  setCreateSelectedS3Accounts((prev) =>
-                                    prev.map((item) =>
-                                      item.id === entry.id ? { ...item, role: e.target.value } : item
-                                    )
-                                  )
-                                }
-                              >
-                                <option value="portal_user">Portal user</option>
-                                <option value="portal_manager">Portal manager</option>
-                                <option value="portal_none">Portal none</option>
-                              </select>
-                            ) : null}
-                            {portalEnabled ? (
-                              <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(entry.account_admin)}
-                                  onChange={(e) =>
-                                    setCreateSelectedS3Accounts((prev) =>
-                                      prev.map((item) =>
-                                        item.id === entry.id ? { ...item, account_admin: e.target.checked } : item
-                                      )
-                                    )
-                                  }
-                                  className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                />
-                                Admin
-                              </label>
-                            ) : (
-                              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                Admin
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setCreateSelectedS3Accounts((prev) => prev.filter((acc) => acc.id !== entry.id))}
-                            className={tableDeleteActionClasses}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-200 px-2 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                  {availableCreateS3Accounts.length === 0 && (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">No accounts available.</p>
-                  )}
-                  {visibleCreateS3Accounts.map((opt) => (
-                    <div
-                      key={opt.id}
-                      className="flex items-center justify-between rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                    >
-                      <span className="ui-body text-slate-700 dark:text-slate-200">{opt.label}</span>
-                      <div className="flex items-center gap-2">
-                        {portalEnabled ? (
-                          <select
-                            className="rounded-full border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                            value={createAccountRoleChoice[Number(opt.id)] ?? "portal_none"}
-                            onChange={(e) =>
-                              setCreateAccountRoleChoice((prev) => ({
-                                ...prev,
-                                [Number(opt.id)]: e.target.value,
-                              }))
-                            }
-                          >
-                            <option value="portal_user">Portal user</option>
-                            <option value="portal_manager">Portal manager</option>
-                            <option value="portal_none">Portal none</option>
-                          </select>
-                        ) : null}
-                        {portalEnabled ? (
-                          <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(createAccountAdminChoice[Number(opt.id)])}
-                              onChange={(e) =>
-                                setCreateAccountAdminChoice((prev) => ({
-                                  ...prev,
-                                  [Number(opt.id)]: e.target.checked,
-                                }))
-                              }
-                              className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                            />
-                                Admin
-                          </label>
-                        ) : (
-                          <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                            Admin
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const role = portalEnabled
-                              ? createAccountRoleChoice[Number(opt.id)] ?? "portal_none"
-                              : "portal_none";
-                            const account_admin = portalEnabled ? Boolean(createAccountAdminChoice[Number(opt.id)]) : true;
-                            setCreateSelectedS3Accounts((prev) => [...prev, { id: Number(opt.id), role, account_admin }]);
-                          }}
-                          className={tableActionButtonClasses}
-                        >
-                          Add
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {availableCreateS3Accounts.length > MAX_VISIBLE_OPTIONS && (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
-                    </p>
-                  )}
-                </div>
-              </div>
-            <div className="md:col-span-2 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <label className="ui-body font-medium text-slate-700">Linked users</label>
-                  <span className="ui-caption text-slate-500">Optional</span>
-                </div>
-                <input
-                  type="text"
-                  value={createS3Search}
-                  onChange={(e) => setCreateS3Search(e.target.value)}
-                  placeholder="Filter by name..."
-                  className="w-48 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </div>
-              {createSelectedS3Users.length === 0 ? (
-                <p className="ui-caption text-slate-500 dark:text-slate-400">No user selected.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {createSelectedS3Users.map((id) => (
-                    <span
-                      key={id}
-                      className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                    >
-                      {s3UserLabelById.get(id) ?? `User #${id}`}
-                      <button
-                        type="button"
-                        onClick={() => setCreateSelectedS3Users((prev) => prev.filter((s3Id) => s3Id !== id))}
-                        className={tableDeleteActionClasses}
-                      >
-                        Remove
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-200 px-2 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                {availableCreateS3Users.length === 0 && (
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">No users available.</p>
-                )}
-                {visibleCreateS3Users.map((opt) => (
-                  <div
-                    key={opt.id}
-                    className="flex items-center justify-between rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                  >
-                    <span className="ui-body text-slate-700 dark:text-slate-200">{opt.label}</span>
-                    <button
-                      type="button"
-                      onClick={() => setCreateSelectedS3Users((prev) => [...prev, opt.id])}
-                      className={tableActionButtonClasses}
-                    >
-                      Add
-                    </button>
-                  </div>
-                ))}
-                {availableCreateS3Users.length > MAX_VISIBLE_OPTIONS && (
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
-                  </p>
-                )}
-              </div>
+            <div className="md:col-span-2">
+              <AssociationsTabs
+                activeTab={createAssociationsTab}
+                onTabChange={(nextTab) => {
+                  setCreateAssociationsTab(nextTab);
+                  setShowCreateAccountPanel(false);
+                  setShowCreateS3UserPanel(false);
+                  setShowCreateConnectionPanel(false);
+                }}
+                portalEnabled={portalEnabled}
+                maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+                accounts={{
+                  selected: createSelectedS3Accounts,
+                  setSelected: setCreateSelectedS3Accounts,
+                  optionsById: accountOptionsById,
+                  available: availableCreateS3Accounts,
+                  visible: visibleCreateS3Accounts,
+                  search: createS3AccountSearch,
+                  setSearch: setCreateS3AccountSearch,
+                  loading: s3AccountsLoading,
+                  showPanel: showCreateAccountPanel,
+                  setShowPanel: setShowCreateAccountPanel,
+                  selections: createAccountSelections,
+                  setSelections: setCreateAccountSelections,
+                  roleChoice: createAccountRoleChoice,
+                  setRoleChoice: setCreateAccountRoleChoice,
+                  adminChoice: createAccountAdminChoice,
+                  setAdminChoice: setCreateAccountAdminChoice,
+                  toggleSelection: toggleCreateAccountSelection,
+                }}
+                s3Users={{
+                  selected: createSelectedS3Users,
+                  setSelected: setCreateSelectedS3Users,
+                  labelById: s3UserLabelById,
+                  available: availableCreateS3Users,
+                  visible: visibleCreateS3Users,
+                  search: createS3Search,
+                  setSearch: setCreateS3Search,
+                  loading: s3UsersLoading,
+                  showPanel: showCreateS3UserPanel,
+                  setShowPanel: setShowCreateS3UserPanel,
+                  selections: createS3UserSelections,
+                  setSelections: setCreateS3UserSelections,
+                  toggleSelection: toggleCreateS3UserSelection,
+                }}
+                connections={{
+                  selected: createSelectedS3Connections,
+                  setSelected: setCreateSelectedS3Connections,
+                  labelById: s3ConnectionLabelById,
+                  available: availableCreateS3Connections,
+                  visible: visibleCreateS3Connections,
+                  search: createConnectionSearch,
+                  setSearch: setCreateConnectionSearch,
+                  loading: s3ConnectionsLoading,
+                  showPanel: showCreateConnectionPanel,
+                  setShowPanel: setShowCreateConnectionPanel,
+                  selections: createConnectionSelections,
+                  setSelections: setCreateConnectionSelections,
+                  toggleSelection: toggleCreateConnectionSelection,
+                }}
+              />
             </div>
             <div className="flex items-center justify-end gap-3 md:col-span-2">
               <button
@@ -1081,6 +1683,17 @@ export default function UsersPage() {
                   setCreateS3AccountSearch("");
                   setCreateSelectedS3Users([]);
                   setCreateS3Search("");
+                  setCreateSelectedS3Connections([]);
+                  setCreateConnectionSearch("");
+                  setCreateAccountRoleChoice({});
+                  setCreateAccountAdminChoice({});
+                  setCreateAssociationsTab("accounts");
+                  setShowCreateAccountPanel(false);
+                  setShowCreateS3UserPanel(false);
+                  setShowCreateConnectionPanel(false);
+                  setCreateAccountSelections([]);
+                  setCreateS3UserSelections([]);
+                  setCreateConnectionSelections([]);
                 }}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50"
               >
@@ -1365,561 +1978,65 @@ export default function UsersPage() {
                 )}
               </div>
             )}
-            <div className="md:col-span-2 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <label className="ui-body font-medium text-slate-700">Associations</label>
-                  <span className="ui-caption text-slate-500">
-                    {editSelectedS3Accounts.length + editSelectedS3Users.length + editSelectedS3Connections.length} total
-                  </span>
-                </div>
-              </div>
-              <PageTabs
-                tabs={[
-                  {
-                    id: "accounts",
-                    label: `Accounts (${editSelectedS3Accounts.length})`,
-                    content: (
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="ui-body font-medium text-slate-700">Linked accounts</span>
-                            <span className="ui-caption text-slate-500">{editSelectedS3Accounts.length} linked</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setShowEditAccountPanel((prev) => !prev)}
-                            className={tableActionButtonClasses}
-                          >
-                            {showEditAccountPanel ? "Close" : "Add accounts"}
-                          </button>
-                        </div>
-                        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                            <thead className="bg-slate-50 dark:bg-slate-900/50">
-                              <tr>
-                                <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  Account
-                                </th>
-                                <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  {portalEnabled ? "Portal role" : "Portal access"}
-                                </th>
-                                <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  Admin
-                                </th>
-                                <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  Actions
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                              {editSelectedS3Accounts.length === 0 ? (
-                                <tr>
-                                  <td colSpan={4} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
-                                    No account linked yet.
-                                  </td>
-                                </tr>
-                              ) : (
-                                editSelectedS3Accounts.map((entry) => {
-                                  const label =
-                                    accountOptionsById.get(Number(entry.id))?.name ?? `S3Account #${entry.id}`;
-                                  return (
-                                    <tr key={entry.id}>
-                                      <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{label}</td>
-                                      <td className="px-3 py-2">
-                                        {portalEnabled ? (
-                                          <select
-                                            className="w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                                            value={entry.role}
-                                            onChange={(e) =>
-                                              setEditSelectedS3Accounts((prev) =>
-                                                prev.map((item) =>
-                                                  item.id === entry.id ? { ...item, role: e.target.value } : item
-                                                )
-                                              )
-                                            }
-                                          >
-                                            <option value="portal_user">Portal user</option>
-                                            <option value="portal_manager">Portal manager</option>
-                                            <option value="portal_none">Portal none</option>
-                                          </select>
-                                        ) : null}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                      {portalEnabled ? (
-                                        <label className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                                          <input
-                                            type="checkbox"
-                                            checked={Boolean(entry.account_admin)}
-                                            onChange={(e) =>
-                                              setEditSelectedS3Accounts((prev) =>
-                                                prev.map((item) =>
-                                                  item.id === entry.id ? { ...item, account_admin: e.target.checked } : item
-                                                )
-                                              )
-                                            }
-                                            className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                          />
-                                          Admin
-                                        </label>
-                                      ) : (
-                                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                          Admin
-                                        </span>
-                                      )}
-                                      </td>
-                                      <td className="px-3 py-2 text-right">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setEditSelectedS3Accounts((prev) => prev.filter((acc) => acc.id !== entry.id))
-                                          }
-                                          className={tableDeleteActionClasses}
-                                        >
-                                          Remove
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  );
-                                })
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                        {showEditAccountPanel && (
-                          <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="ui-body font-medium text-slate-700">Add accounts</span>
-                                <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
-                              </div>
-                              <input
-                                type="text"
-                                value={editS3AccountSearch}
-                                onChange={(e) => setEditS3AccountSearch(e.target.value)}
-                                placeholder="Search..."
-                                className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              />
-                            </div>
-                            <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
-                              {availableEditS3Accounts.length === 0 && (
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                              )}
-                              {visibleEditS3Accounts.map((opt) => {
-                                const accountId = Number(opt.id);
-                                const isSelected = editAccountSelections.includes(accountId);
-                                const role = editAccountRoleChoice[accountId] ?? "portal_none";
-                                const adminChecked = portalEnabled ? editAccountAdminChoice[accountId] ?? role === "portal_manager" : true;
-                                return (
-                                  <div
-                                    key={opt.id}
-                                    className={`flex flex-wrap items-center justify-between gap-2 rounded-md px-2 py-1 ${
-                                      isSelected
-                                        ? "bg-slate-50 dark:bg-slate-800/60"
-                                        : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                                    }`}
-                                  >
-                                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={() => toggleEditAccountSelection(accountId)}
-                                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                      />
-                                      <span>{opt.label}</span>
-                                    </label>
-                                    <div className="flex items-center gap-2">
-                                      {portalEnabled ? (
-                                        <select
-                                          className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                                          value={role}
-                                          onChange={(e) => {
-                                            const nextRole = e.target.value;
-                                            setEditAccountRoleChoice((prev) => ({
-                                              ...prev,
-                                              [accountId]: nextRole,
-                                            }));
-                                            setEditAccountAdminChoice((prev) => ({
-                                              ...prev,
-                                              [accountId]: prev[accountId] ?? nextRole === "portal_manager",
-                                            }));
-                                          }}
-                                        >
-                                          <option value="portal_user">Portal user</option>
-                                          <option value="portal_manager">Portal manager</option>
-                                          <option value="portal_none">Portal none</option>
-                                        </select>
-                                      ) : null}
-                                      {portalEnabled ? (
-                                        <label className="flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                                          <input
-                                            type="checkbox"
-                                            checked={Boolean(adminChecked)}
-                                            onChange={(e) =>
-                                              setEditAccountAdminChoice((prev) => ({
-                                                ...prev,
-                                                [accountId]: e.target.checked,
-                                              }))
-                                            }
-                                            className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                          />
-                                          Admin
-                                        </label>
-                                      ) : (
-                                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
-                                          Admin
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                              {availableEditS3Accounts.length > MAX_VISIBLE_OPTIONS && (
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                  Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="ui-caption text-slate-500 dark:text-slate-400">
-                                {editAccountSelections.length} selected
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowEditAccountPanel(false);
-                                    setEditAccountSelections([]);
-                                    setEditS3AccountSearch("");
-                                  }}
-                                  className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={editAccountSelections.length === 0}
-                                  onClick={() => {
-                                    if (editAccountSelections.length === 0) return;
-                                    const toAdd = editAccountSelections.map((id) => {
-                                      const role = portalEnabled ? editAccountRoleChoice[id] ?? "portal_none" : "portal_none";
-                                      const account_admin = portalEnabled ? editAccountAdminChoice[id] ?? role === "portal_manager" : true;
-                                      return { id, role, account_admin };
-                                    });
-                                    setEditSelectedS3Accounts((prev) => [...prev, ...toAdd]);
-                                    setEditAccountSelections([]);
-                                    setEditS3AccountSearch("");
-                                    setShowEditAccountPanel(false);
-                                  }}
-                                  className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
-                                >
-                                  Add selected
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ),
-                  },
-                  {
-                    id: "s3_users",
-                    label: `S3 Users (${editSelectedS3Users.length})`,
-                    content: (
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="ui-body font-medium text-slate-700">Linked S3 users</span>
-                            <span className="ui-caption text-slate-500">{editSelectedS3Users.length} linked</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setShowEditS3UserPanel((prev) => !prev)}
-                            className={tableActionButtonClasses}
-                          >
-                            {showEditS3UserPanel ? "Close" : "Add S3 users"}
-                          </button>
-                        </div>
-                        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                            <thead className="bg-slate-50 dark:bg-slate-900/50">
-                              <tr>
-                                <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  User
-                                </th>
-                                <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  Actions
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                              {editSelectedS3Users.length === 0 ? (
-                                <tr>
-                                  <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
-                                    No user linked yet.
-                                  </td>
-                                </tr>
-                              ) : (
-                                editSelectedS3Users.map((id) => (
-                                  <tr key={id}>
-                                    <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
-                                      {s3UserLabelById.get(id) ?? `User #${id}`}
-                                    </td>
-                                    <td className="px-3 py-2 text-right">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setEditSelectedS3Users((prev) => prev.filter((s3Id) => s3Id !== id))
-                                        }
-                                        className={tableDeleteActionClasses}
-                                      >
-                                        Remove
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                        {showEditS3UserPanel && (
-                          <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="ui-body font-medium text-slate-700">Add S3 users</span>
-                                <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
-                              </div>
-                              <input
-                                type="text"
-                                value={editS3Search}
-                                onChange={(e) => setEditS3Search(e.target.value)}
-                                placeholder="Search..."
-                                className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              />
-                            </div>
-                            <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
-                              {availableEditS3Users.length === 0 && (
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                              )}
-                              {visibleEditS3Users.map((opt) => {
-                                const isSelected = editS3UserSelections.includes(opt.id);
-                                return (
-                                  <div
-                                    key={opt.id}
-                                    className={`flex items-center justify-between rounded-md px-2 py-1 ${
-                                      isSelected
-                                        ? "bg-slate-50 dark:bg-slate-800/60"
-                                        : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                                    }`}
-                                  >
-                                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={() => toggleEditS3UserSelection(opt.id)}
-                                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                      />
-                                      <span>{opt.label}</span>
-                                    </label>
-                                  </div>
-                                );
-                              })}
-                              {availableEditS3Users.length > MAX_VISIBLE_OPTIONS && (
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                  Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="ui-caption text-slate-500 dark:text-slate-400">
-                                {editS3UserSelections.length} selected
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowEditS3UserPanel(false);
-                                    setEditS3UserSelections([]);
-                                    setEditS3Search("");
-                                  }}
-                                  className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={editS3UserSelections.length === 0}
-                                  onClick={() => {
-                                    if (editS3UserSelections.length === 0) return;
-                                    setEditSelectedS3Users((prev) => [...prev, ...editS3UserSelections]);
-                                    setEditS3UserSelections([]);
-                                    setEditS3Search("");
-                                    setShowEditS3UserPanel(false);
-                                  }}
-                                  className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
-                                >
-                                  Add selected
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ),
-                  },
-                  {
-                    id: "connections",
-                    label: `Connections (${editSelectedS3Connections.length})`,
-                    content: (
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="ui-body font-medium text-slate-700">Linked connections</span>
-                            <span className="ui-caption text-slate-500">{editSelectedS3Connections.length} linked</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setShowEditConnectionPanel((prev) => !prev)}
-                            className={tableActionButtonClasses}
-                          >
-                            {showEditConnectionPanel ? "Close" : "Add connections"}
-                          </button>
-                        </div>
-                        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-                            <thead className="bg-slate-50 dark:bg-slate-900/50">
-                              <tr>
-                                <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  Connection
-                                </th>
-                                <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                  Actions
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                              {editSelectedS3Connections.length === 0 ? (
-                                <tr>
-                                  <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
-                                    No connection linked yet.
-                                  </td>
-                                </tr>
-                              ) : (
-                                editSelectedS3Connections.map((id) => (
-                                  <tr key={id}>
-                                    <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">
-                                      {s3ConnectionLabelById.get(id) ?? `Connection #${id}`}
-                                    </td>
-                                    <td className="px-3 py-2 text-right">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setEditSelectedS3Connections((prev) => prev.filter((connId) => connId !== id))
-                                        }
-                                        className={tableDeleteActionClasses}
-                                      >
-                                        Remove
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                        {showEditConnectionPanel && (
-                          <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="ui-body font-medium text-slate-700">Add connections</span>
-                                <span className="ui-caption text-slate-500 dark:text-slate-400">(search by name)</span>
-                              </div>
-                              <input
-                                type="text"
-                                value={editConnectionSearch}
-                                onChange={(e) => setEditConnectionSearch(e.target.value)}
-                                placeholder="Search..."
-                                className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              />
-                            </div>
-                            <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
-                              {availableEditS3Connections.length === 0 && (
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
-                              )}
-                              {visibleEditS3Connections.map((opt) => {
-                                const isSelected = editConnectionSelections.includes(opt.id);
-                                return (
-                                  <div
-                                    key={opt.id}
-                                    className={`flex items-center justify-between rounded-md px-2 py-1 ${
-                                      isSelected
-                                        ? "bg-slate-50 dark:bg-slate-800/60"
-                                        : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                                    }`}
-                                  >
-                                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={() => toggleEditConnectionSelection(opt.id)}
-                                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                                      />
-                                      <span>{opt.label}</span>
-                                    </label>
-                                  </div>
-                                );
-                              })}
-                              {availableEditS3Connections.length > MAX_VISIBLE_OPTIONS && (
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                  Showing first {MAX_VISIBLE_OPTIONS} matches. Use the search box to narrow down the list.
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="ui-caption text-slate-500 dark:text-slate-400">
-                                {editConnectionSelections.length} selected
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowEditConnectionPanel(false);
-                                    setEditConnectionSelections([]);
-                                    setEditConnectionSearch("");
-                                  }}
-                                  className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={editConnectionSelections.length === 0}
-                                  onClick={() => {
-                                    if (editConnectionSelections.length === 0) return;
-                                    setEditSelectedS3Connections((prev) => [...prev, ...editConnectionSelections]);
-                                    setEditConnectionSelections([]);
-                                    setEditConnectionSearch("");
-                                    setShowEditConnectionPanel(false);
-                                  }}
-                                  className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
-                                >
-                                  Add selected
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ),
-                  },
-                ]}
+            <div className="md:col-span-2">
+              <AssociationsTabs
                 activeTab={editAssociationsTab}
-                onChange={(id) => {
-                  const nextTab = id === "s3_users" ? "s3_users" : id === "connections" ? "connections" : "accounts";
+                onTabChange={(nextTab) => {
                   setEditAssociationsTab(nextTab);
                   setShowEditAccountPanel(false);
                   setShowEditS3UserPanel(false);
                   setShowEditConnectionPanel(false);
+                }}
+                portalEnabled={portalEnabled}
+                maxVisibleOptions={MAX_VISIBLE_OPTIONS}
+                accounts={{
+                  selected: editSelectedS3Accounts,
+                  setSelected: setEditSelectedS3Accounts,
+                  optionsById: accountOptionsById,
+                  available: availableEditS3Accounts,
+                  visible: visibleEditS3Accounts,
+                  search: editS3AccountSearch,
+                  setSearch: setEditS3AccountSearch,
+                  loading: s3AccountsLoading,
+                  showPanel: showEditAccountPanel,
+                  setShowPanel: setShowEditAccountPanel,
+                  selections: editAccountSelections,
+                  setSelections: setEditAccountSelections,
+                  roleChoice: editAccountRoleChoice,
+                  setRoleChoice: setEditAccountRoleChoice,
+                  adminChoice: editAccountAdminChoice,
+                  setAdminChoice: setEditAccountAdminChoice,
+                  toggleSelection: toggleEditAccountSelection,
+                }}
+                s3Users={{
+                  selected: editSelectedS3Users,
+                  setSelected: setEditSelectedS3Users,
+                  labelById: s3UserLabelById,
+                  available: availableEditS3Users,
+                  visible: visibleEditS3Users,
+                  search: editS3Search,
+                  setSearch: setEditS3Search,
+                  loading: s3UsersLoading,
+                  showPanel: showEditS3UserPanel,
+                  setShowPanel: setShowEditS3UserPanel,
+                  selections: editS3UserSelections,
+                  setSelections: setEditS3UserSelections,
+                  toggleSelection: toggleEditS3UserSelection,
+                }}
+                connections={{
+                  selected: editSelectedS3Connections,
+                  setSelected: setEditSelectedS3Connections,
+                  labelById: s3ConnectionLabelById,
+                  available: availableEditS3Connections,
+                  visible: visibleEditS3Connections,
+                  search: editConnectionSearch,
+                  setSearch: setEditConnectionSearch,
+                  loading: s3ConnectionsLoading,
+                  showPanel: showEditConnectionPanel,
+                  setShowPanel: setShowEditConnectionPanel,
+                  selections: editConnectionSelections,
+                  setSelections: setEditConnectionSelections,
+                  toggleSelection: toggleEditConnectionSelection,
                 }}
               />
             </div>

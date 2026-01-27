@@ -14,7 +14,7 @@ import {
   fetchAccountPortalSettings,
   getS3Account,
   importS3Accounts,
-  listMinimalS3Accounts,
+  listS3Accounts,
   updateS3Account,
   updateAccountPortalSettings,
 } from "../../api/accounts";
@@ -60,9 +60,10 @@ const toOverrideValue = (value: TriState): boolean | undefined => {
 export default function S3AccountsPage() {
   const { generalSettings } = useGeneralSettings();
   const portalEnabled = generalSettings.portal_enabled;
-  const [accounts, setS3Accounts] = useState<S3AccountSummary[]>([]);
+  const [accounts, setS3Accounts] = useState<S3Account[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [totalAccounts, setTotalAccounts] = useState(0);
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -239,7 +240,7 @@ export default function S3AccountsPage() {
     return { value: String(quotaGb), unit: "GiB" as const };
   };
 
-  const renderS3AccountTypeBadge = (account: S3Account | S3AccountSummary) => {
+  const renderS3AccountTypeBadge = (account: S3Account) => {
     if (resolveS3AccountType(account) !== "rgw_user") {
       return null;
     }
@@ -257,8 +258,22 @@ export default function S3AccountsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await listMinimalS3Accounts();
-      setS3Accounts(data);
+      const response = await listS3Accounts({
+        page,
+        page_size: pageSize,
+        search: filter.trim() || undefined,
+        sort_by: sort.field,
+        sort_dir: sort.direction,
+        include_quota: false,
+        include_rgw_details: false,
+      });
+      const totalPages = Math.max(1, Math.ceil((response.total || 0) / pageSize));
+      if (response.total > 0 && page > totalPages) {
+        setPage(totalPages);
+        return;
+      }
+      setS3Accounts(response.items);
+      setTotalAccounts(response.total);
     } catch (err) {
       console.error(err);
       const msg = extractError(err);
@@ -270,7 +285,7 @@ export default function S3AccountsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filter, page, pageSize, sort.direction, sort.field]);
 
   const userOptions = useMemo(() => users.map((u) => ({ id: u.id, label: u.email })), [users]);
   const userLabelById = useMemo(() => {
@@ -300,45 +315,6 @@ export default function S3AccountsPage() {
     () => availableUsers.slice(0, MAX_LINK_OPTIONS),
     [availableUsers]
   );
-
-  const filteredS3Accounts = useMemo(() => {
-    const query = filter.trim().toLowerCase();
-    const items = query
-      ? accounts.filter(
-          (acc) =>
-            acc.name.toLowerCase().includes(query) ||
-            (acc.rgw_account_id ?? acc.id).toLowerCase().includes(query)
-        )
-      : accounts;
-    const sorted = [...items].sort((a, b) => {
-      const direction = sort.direction === "asc" ? 1 : -1;
-      const valueA =
-        sort.field === "rgw_account_id"
-          ? (a.rgw_account_id ?? a.id).toLowerCase()
-          : (a.name ?? "").toLowerCase();
-      const valueB =
-        sort.field === "rgw_account_id"
-          ? (b.rgw_account_id ?? b.id).toLowerCase()
-          : (b.name ?? "").toLowerCase();
-      if (valueA < valueB) return -1 * direction;
-      if (valueA > valueB) return 1 * direction;
-      return 0;
-    });
-    return sorted;
-  }, [accounts, filter, sort]);
-
-  const totalAccounts = filteredS3Accounts.length;
-  const pagedS3Accounts = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredS3Accounts.slice(start, start + pageSize);
-  }, [filteredS3Accounts, page, pageSize]);
-
-  useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(totalAccounts / pageSize));
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [page, pageSize, totalAccounts]);
 
   useEffect(() => {
     setPortalAccountSettings(null);
@@ -1982,7 +1958,7 @@ export default function S3AccountsPage() {
               )}
               {!loading &&
                 !error &&
-                pagedS3Accounts.map((account) => {
+                accounts.map((account) => {
                   const summaryDbId = accountDbId(account);
                   const deleteBusy = summaryDbId != null && deletingS3AccountId === summaryDbId;
                   const accountUserLinks = resolveAccountUserLinks(account);
