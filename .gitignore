@@ -5,6 +5,7 @@ TODO_local.md
 
 # Databases and caches
 *.db
+*.db.save
 backend/app/data/
 .pytest_cache/
 __pycache__/
