@@ -89,10 +89,10 @@ const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean) => {
       links: [{ to: "/admin/users", label: "UI Users" }],
     },
     {
-      label: "Managed Accounts",
+      label: "Managed Tenants",
       links: [
-        { to: "/admin/s3-accounts", label: "Accounts (RGW)" },
-        { to: "/admin/s3-users", label: "Users (RGW)" },
+        { to: "/admin/s3-accounts", label: "RGW Accounts" },
+        { to: "/admin/s3-users", label: "RGW Users" },
       ],
     },
     {
