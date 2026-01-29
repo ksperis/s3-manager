@@ -16,6 +16,8 @@ class ExecutionContext(BaseModel):
     id: str
     display_name: str
     rgw_account_id: Optional[str] = None
+    quota_max_size_gb: Optional[float] = None
+    quota_max_objects: Optional[int] = None
     endpoint_id: Optional[int] = None
     endpoint_name: Optional[str] = None
     endpoint_url: Optional[str] = None

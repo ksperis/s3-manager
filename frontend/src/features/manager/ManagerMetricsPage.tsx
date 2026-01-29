@@ -57,12 +57,6 @@ export default function ManagerMetricsPage() {
         </div>
       )}
 
-      {isS3User && (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-          Autonomous S3 users: IAM features are disabled. Storage and traffic insights depend on the storage endpoint features (usage/metrics) and your profile permissions.
-        </div>
-      )}
-
       {isConnection && (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
           Connection context: platform metrics are disabled. Use a platform account with supervision enabled to access usage and traffic analytics.

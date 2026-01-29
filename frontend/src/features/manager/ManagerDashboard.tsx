@@ -81,18 +81,6 @@ export default function ManagerDashboard() {
         <PageBanner tone="warning">Select an account to view metrics.</PageBanner>
       )}
 
-      {isS3User && (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-          Autonomous S3 users: IAM widgets are disabled. Usage and traffic insights depend on the storage endpoint features (usage/metrics) and your profile permissions.
-        </div>
-      )}
-
-      {isConnection && (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-          Connection context: IAM widgets are disabled for now. Usage and traffic insights are available only for platform accounts with supervision enabled.
-        </div>
-      )}
-
       {hasContext && (
         <>
           <UsageOverview

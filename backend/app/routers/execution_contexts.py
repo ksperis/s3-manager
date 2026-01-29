@@ -1,5 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -7,6 +9,7 @@ from app.core.database import get_db
 from app.db import S3Account, S3Connection, S3User, User, UserS3Account, UserS3Connection, UserS3User
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.routers.dependencies import get_current_account_user
+from app.services.s3_users_service import S3UsersService
 from app.utils.s3_connection_endpoint import resolve_connection_details
 from app.utils.storage_endpoint_features import features_to_capabilities, normalize_features_config
 
@@ -38,7 +41,11 @@ def _build_account_context(account: S3Account) -> ExecutionContext:
     )
 
 
-def _build_legacy_user_context(s3_user: S3User) -> ExecutionContext:
+def _build_legacy_user_context(
+    s3_user: S3User,
+    quota_max_size_gb: Optional[float],
+    quota_max_objects: Optional[int],
+) -> ExecutionContext:
     endpoint = s3_user.storage_endpoint
     endpoint_caps = (
         features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
@@ -49,6 +56,8 @@ def _build_legacy_user_context(s3_user: S3User) -> ExecutionContext:
         kind="legacy_user",
         id=f"s3u-{s3_user.id}",
         display_name=s3_user.name,
+        quota_max_size_gb=quota_max_size_gb,
+        quota_max_objects=quota_max_objects,
         endpoint_id=endpoint.id if endpoint else None,
         endpoint_name=endpoint.name if endpoint else None,
         endpoint_url=endpoint.endpoint_url if endpoint else None,
@@ -99,6 +108,7 @@ def list_execution_contexts(
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
 ) -> list[ExecutionContext]:
+    s3_users_service = S3UsersService(db)
     links = (
         db.query(UserS3Account)
         .filter(UserS3Account.user_id == user.id)
@@ -141,7 +151,8 @@ def list_execution_contexts(
     for account in accounts:
         results.append(_build_account_context(account))
     for s3_user in s3_users:
-        results.append(_build_legacy_user_context(s3_user))
+        quota_max_size_gb, quota_max_objects = s3_users_service.get_user_quota(s3_user)
+        results.append(_build_legacy_user_context(s3_user, quota_max_size_gb, quota_max_objects))
     for connection in connections:
         results.append(_build_connection_context(connection))
     return results

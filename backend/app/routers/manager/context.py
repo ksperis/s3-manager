@@ -27,7 +27,7 @@ class ManagerContext(BaseModel):
 def _manager_stats_enabled(account, actor) -> bool:
     if not has_supervision_credentials(account):
         return False
-    if getattr(account, "s3_user_id", None) is not None:
+    if getattr(account, "s3_user_id", None) is not None and not getattr(account, "rgw_user_uid", None):
         return False
     caps = getattr(account, "_manager_capabilities", None)
     if not caps or not caps.can_manage_buckets:

@@ -17,6 +17,8 @@ export type ExecutionContext = {
   id: string;
   display_name: string;
   rgw_account_id?: string | null;
+  quota_max_size_gb?: number | null;
+  quota_max_objects?: number | null;
   endpoint_id?: number | null;
   endpoint_name?: string | null;
   endpoint_url?: string | null;
