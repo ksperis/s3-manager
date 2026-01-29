@@ -3,30 +3,22 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
-import { S3Account } from "../../api/accounts";
+import { useSearchParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
-import { listConnections, type S3Connection } from "../../api/connections";
-import { listManagerS3Accounts } from "../../api/managerS3Accounts";
+import { ExecutionContext, ExecutionContextKind, listExecutionContexts } from "../../api/executionContexts";
 export type BrowserAccessMode = "admin" | "portal";
 
-export type BrowserContextKind = "account" | "connection" | "s3_user";
-
-export type BrowserContextItem = {
-  id: string;
-  kind: BrowserContextKind;
-  name: string;
-  endpoint?: string | null;
-  provider_hint?: string | null;
-  raw?: S3Account | S3Connection;
-};
+const EXECUTION_CONTEXT_STORAGE_KEY = "selectedExecutionContextId";
+const EXECUTION_CONTEXT_URL_PARAM = "ctx";
+const LEGACY_CONTEXT_KEYS = ["selectedBrowserContextId", "selectedS3AccountId"];
 
 type BrowserContextState = {
-  contexts: BrowserContextItem[];
+  contexts: ExecutionContext[];
   selectedContextId: string | null;
   setSelectedContextId: (id: string | null) => void;
   hasContext: boolean;
   selectorForApi: S3AccountSelector;
-  selectedKind: BrowserContextKind | null;
+  selectedKind: ExecutionContextKind | null;
   accessMode: BrowserAccessMode | null;
   setAccessMode: (mode: BrowserAccessMode) => void;
   canSwitchAccess: boolean;
@@ -46,65 +38,20 @@ const Ctx = createContext<BrowserContextState>({
   accessError: null,
 });
 
-function isS3UserAccount(account: S3Account): boolean {
-  if (account.is_s3_user != null) return Boolean(account.is_s3_user);
-  return account.id.startsWith("s3u-") || !account.rgw_account_id;
-}
-
-function normalizeAccountToContextItem(account: S3Account): BrowserContextItem {
-  const kind: BrowserContextKind = isS3UserAccount(account) ? "s3_user" : "account";
-  return {
-    id: String(account.id),
-    kind,
-    name: account.name,
-    endpoint: account.storage_endpoint_url ?? null,
-    raw: account,
-  };
-}
-
-function normalizeConnectionToContextItem(conn: S3Connection): BrowserContextItem {
-  return {
-    id: `conn-${conn.id}`,
-    kind: "connection",
-    name: conn.name,
-    endpoint: conn.endpoint_url,
-    provider_hint: conn.provider_hint ?? null,
-    raw: conn,
-  };
-}
-
 export function BrowserContextProvider({ children }: { children: ReactNode }) {
-  const [contexts, setContexts] = useState<BrowserContextItem[]>([]);
+  const [contexts, setContexts] = useState<ExecutionContext[]>([]);
   const [selectedContextId, setSelectedContextIdState] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [accessMode, setAccessModeState] = useState<BrowserAccessMode | null>(null);
   const [canSwitchAccess, setCanSwitchAccess] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     const load = async () => {
       setAccessError(null);
       try {
-        const [connections, accounts] = await Promise.all([
-          listConnections().catch(() => [] as S3Connection[]),
-          listManagerS3Accounts().catch(() => [] as S3Account[]),
-        ]);
-        const accountIds = new Set(accounts.map((account) => String(account.id)));
-        const combined: BrowserContextItem[] = [
-          ...connections
-            .filter((conn) => !accountIds.has(`conn-${conn.id}`))
-            .map(normalizeConnectionToContextItem),
-          ...accounts.map(normalizeAccountToContextItem),
-        ];
-        setContexts(combined);
-        const stored = localStorage.getItem("selectedBrowserContextId");
-        if (stored && combined.some((c) => c.id === stored)) {
-          setSelectedContextIdState(stored);
-          return;
-        }
-        if (combined.length > 0) {
-          setSelectedContextIdState(combined[0].id);
-          localStorage.setItem("selectedBrowserContextId", combined[0].id);
-        }
+        const data = await listExecutionContexts();
+        setContexts(data);
       } catch {
         setContexts([]);
         setAccessError("Access to /browser is denied for this user.");
@@ -113,12 +60,50 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
     load();
   }, []);
 
+  useEffect(() => {
+    if (contexts.length === 0) return;
+    const urlContext = searchParams.get(EXECUTION_CONTEXT_URL_PARAM);
+    const stored =
+      localStorage.getItem(EXECUTION_CONTEXT_STORAGE_KEY) ??
+      LEGACY_CONTEXT_KEYS.map((key) => localStorage.getItem(key)).find((value) => value);
+    if (urlContext && contexts.some((context) => context.id === urlContext)) {
+      if (urlContext !== selectedContextId) {
+        setSelectedContextIdState(urlContext);
+      }
+      localStorage.setItem(EXECUTION_CONTEXT_STORAGE_KEY, urlContext);
+      return;
+    }
+    if (stored && contexts.some((context) => context.id === stored)) {
+      if (stored !== selectedContextId) {
+        setSelectedContextIdState(stored);
+      }
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set(EXECUTION_CONTEXT_URL_PARAM, stored);
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+    if (!selectedContextId) {
+      const nextId = contexts[0].id;
+      setSelectedContextIdState(nextId);
+      localStorage.setItem(EXECUTION_CONTEXT_STORAGE_KEY, nextId);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set(EXECUTION_CONTEXT_URL_PARAM, nextId);
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [contexts, searchParams, selectedContextId, setSearchParams]);
+
   const setSelectedContextId = (id: string | null) => {
     setSelectedContextIdState(id);
     if (id == null) {
-      localStorage.removeItem("selectedBrowserContextId");
+      localStorage.removeItem(EXECUTION_CONTEXT_STORAGE_KEY);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete(EXECUTION_CONTEXT_URL_PARAM);
+      setSearchParams(nextParams, { replace: true });
     } else {
-      localStorage.setItem("selectedBrowserContextId", id);
+      localStorage.setItem(EXECUTION_CONTEXT_STORAGE_KEY, id);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set(EXECUTION_CONTEXT_URL_PARAM, id);
+      setSearchParams(nextParams, { replace: true });
     }
   };
 

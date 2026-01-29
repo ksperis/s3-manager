@@ -14,8 +14,9 @@ Entry point:
 Routers are organized by surface and feature area. Notable groups include:
 
 - Auth and users: `app/routers/auth.py`, `app/routers/users.py`
+- Execution contexts: `app/routers/execution_contexts.py` (`/api/me/execution-contexts`)
 - Admin: `app/routers/admin_*`
-- Manager (account context): `app/routers/manager_*`
+- Manager (execution context): `app/routers/manager_*`
 - Browser: `app/routers/browser.py` and related routers
 - IAM: `app/routers/iam_*`
 - Portal: `app/routers/portal.py` (conditionally enabled)

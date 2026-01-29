@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.database import engine, SessionLocal
 from app.core.db_init import init_db
 from app.routers import auth, users, portal, settings as public_settings, browser as user_browser
+from app.routers import execution_contexts
 from app.routers import connections as user_connections
 from app.routers.admin import s3_accounts as admin_s3_accounts
 from app.routers.admin import audit as admin_audit
@@ -73,6 +74,7 @@ def health_check():
 # API routers
 app.include_router(auth.router, prefix=settings.api_v1_prefix)
 app.include_router(users.router, prefix=settings.api_v1_prefix)
+app.include_router(execution_contexts.router, prefix=settings.api_v1_prefix)
 app.include_router(user_connections.router, prefix=settings.api_v1_prefix)
 app.include_router(portal.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_portal_enabled)])
 app.include_router(public_settings.router, prefix=settings.api_v1_prefix)

@@ -13,8 +13,9 @@ s3-manager follows a standard web-console architecture:
 1. User authenticates to the UI (OIDC or local auth)
 2. UI calls backend APIs under `/api`
 3. Backend validates the UI identity and surface entitlements
-4. Backend selects an executor (Account context or S3 Connection)
-5. Backend calls:
+4. UI provides an **execution context** (for `/manager` and `/browser`)
+5. Backend resolves an executor from the provided context
+6. Backend calls:
    - S3 APIs (buckets, objects, lifecycle, IAM)
    - and optionally RGW admin APIs (Ceph-specific administration)
 

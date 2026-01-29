@@ -21,7 +21,8 @@ Connections enable:
 ## Surfaces using S3 Connections
 
 - Browser: uses an S3 Connection directly
-- Manager: may use an S3 Connection as an execution mechanism (depending on your design)
+- Manager: uses an S3 Connection as an execution context (credential-first)
+- Portal: **not** supported (portal requires account scopes)
 - Admin: manages the list of available connections and who can use them
 
 ## Data model pointers

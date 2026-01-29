@@ -60,7 +60,10 @@ def list_portal_accounts(
     quota_service = get_s3_accounts_service(db, allow_missing_admin=True)
     links = (
         db.query(UserS3Account)
-        .filter(UserS3Account.user_id == user.id)
+        .filter(
+            UserS3Account.user_id == user.id,
+            UserS3Account.account_role.in_([AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value]),
+        )
         .all()
     )
     account_ids = {l.account_id for l in links}

@@ -62,7 +62,7 @@ export default function ManagerDashboard() {
     hasContext,
     accessMode ?? "default"
   );
-  const accountLabel = selected?.name ?? sessionS3AccountName ?? "RGW session";
+  const accountLabel = selected?.display_name ?? sessionS3AccountName ?? "RGW session";
   const iamDisabled = isS3User || isConnection;
 
   return (

@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { fetchLoginSettings } from "../../api/appSettings";
+import { ExecutionContext } from "../../api/executionContexts";
 import { S3Account } from "../../api/accounts";
 
 type DefaultEndpointInfo = {
@@ -37,48 +38,63 @@ export function useDefaultStorageEndpoint(): DefaultEndpointInfo {
   return { defaultEndpointId, defaultEndpointName };
 }
 
+type AccountLike = ExecutionContext | S3Account;
+
+function isExecutionContext(value: AccountLike): value is ExecutionContext {
+  return "display_name" in value;
+}
+
 function isDefaultStorageEndpoint(
-  account: S3Account,
+  context: AccountLike,
   defaultEndpointId: number | null,
   defaultEndpointName: string | null
 ): boolean {
   // User-scoped connections are always explicit targets and should display their endpoint.
-  if (account.id.startsWith("conn-")) return false;
-  if (account.storage_endpoint_id == null) return true;
+  if ((isExecutionContext(context) && context.kind === "connection") || context.id.startsWith("conn-")) return false;
+  if (isExecutionContext(context) ? context.endpoint_id == null : context.storage_endpoint_id == null) return true;
   if (defaultEndpointId !== null) {
-    return Number(account.storage_endpoint_id) === defaultEndpointId;
+    const endpointId = isExecutionContext(context) ? context.endpoint_id : context.storage_endpoint_id;
+    return Number(endpointId) === defaultEndpointId;
   }
   if (defaultEndpointName) {
-    return account.storage_endpoint_name === defaultEndpointName;
+    const endpointName = isExecutionContext(context) ? context.endpoint_name : context.storage_endpoint_name;
+    return endpointName === defaultEndpointName;
   }
-  return (account.storage_endpoint_name ?? "").startsWith("Default");
+  const fallbackName = isExecutionContext(context) ? context.endpoint_name : context.storage_endpoint_name;
+  return (fallbackName ?? "").startsWith("Default");
 }
 
 export function getStorageSuffix(
-  account: S3Account,
+  context: AccountLike,
   defaultEndpointId: number | null,
   defaultEndpointName: string | null
 ): string {
-  if (isDefaultStorageEndpoint(account, defaultEndpointId, defaultEndpointName)) return "";
-  const endpointName = account.storage_endpoint_name || account.storage_endpoint_url || "Custom endpoint";
-  return ` (${endpointName})`;
+  if (isDefaultStorageEndpoint(context, defaultEndpointId, defaultEndpointName)) return "";
+  const endpointName = isExecutionContext(context)
+    ? context.endpoint_name || context.endpoint_url
+    : context.storage_endpoint_name || context.storage_endpoint_url;
+  const label = endpointName || "Custom endpoint";
+  return ` (${label})`;
 }
 
 export function formatAccountLabel(
-  account: S3Account,
+  context: AccountLike,
   defaultEndpointId: number | null,
   defaultEndpointName: string | null,
   includeS3UserBadge = true
 ): string {
-  const isS3User = account.is_s3_user ?? account.id.startsWith("s3u-");
-  const isConnection = account.id.startsWith("conn-");
+  const isLegacyUser = isExecutionContext(context)
+    ? context.kind === "legacy_user"
+    : context.is_s3_user ?? context.id.startsWith("s3u-");
+  const isConnection = (isExecutionContext(context) && context.kind === "connection") || context.id.startsWith("conn-");
   const badge = includeS3UserBadge
     ? isConnection
       ? " · Connection"
-      : isS3User
+      : isLegacyUser
         ? " · S3 user"
         : ""
     : "";
-  const base = `${account.name}${badge}`;
-  return `${base}${getStorageSuffix(account, defaultEndpointId, defaultEndpointName)}`;
+  const displayName = isExecutionContext(context) ? context.display_name : context.name;
+  const base = `${displayName}${badge}`;
+  return `${base}${getStorageSuffix(context, defaultEndpointId, defaultEndpointName)}`;
 }

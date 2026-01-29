@@ -2,10 +2,10 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { S3Account } from "../../api/accounts";
+import { ExecutionContext } from "../../api/executionContexts";
 
 type Props = {
-  accounts: S3Account[];
+  accounts: ExecutionContext[];
   selectedS3AccountId: string | null;
   onChange: (id: string | null) => void;
 };
@@ -30,7 +30,7 @@ export default function ManagerS3AccountSelector({ accounts, selectedS3AccountId
         <option value="">Select account</option>
         {accounts.map((acc) => (
           <option key={acc.id} value={acc.id}>
-            {acc.name}
+            {acc.display_name}
           </option>
         ))}
       </select>

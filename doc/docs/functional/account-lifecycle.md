@@ -27,7 +27,7 @@ These steps are intentionally explicit to avoid “magic defaults”.
 
 During normal operation:
 
-- Manager users operate *within* the account context
+- Manager users operate *within* an execution context (account or connection)
 - buckets and IAM resources are scoped to the account
 - usage and stats are collected
 

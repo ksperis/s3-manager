@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ChangeEvent } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate, useSearchParams } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { S3AccountProvider, useS3AccountContext } from "./S3AccountContext";
 import { SidebarSection } from "../../components/Sidebar";
@@ -57,6 +57,7 @@ function ManagerShell() {
   } = useS3AccountContext();
   const { generalSettings } = useGeneralSettings();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const selected = accounts.find((a) => a.id === selectedS3AccountId);
   const showSelector = requiresS3AccountSelection && accounts.length > 1;
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
@@ -93,7 +94,13 @@ function ManagerShell() {
     const value = event.target.value || null;
     if (value === selectedS3AccountId) return;
     setSelectedS3AccountId(value);
-    navigate("/manager");
+    const nextParams = new URLSearchParams(searchParams);
+    if (value) {
+      nextParams.set("ctx", value);
+    } else {
+      nextParams.delete("ctx");
+    }
+    navigate({ pathname: "/manager", search: nextParams.toString() ? `?${nextParams.toString()}` : "" });
   };
   const handleAccessModeToggle = () => {
     if (!canToggleAccess) return;
@@ -119,7 +126,7 @@ function ManagerShell() {
                   </option>
                 )}
                 {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id} title={acc.storage_endpoint_url || undefined}>
+                  <option key={acc.id} value={acc.id} title={acc.endpoint_url || undefined}>
                     {formatAccountLabel(acc, defaultEndpointId, defaultEndpointName)}
                   </option>
                 ))}

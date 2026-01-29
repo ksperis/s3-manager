@@ -35,6 +35,19 @@ Before any non-trivial change:
 
 The two **must not be merged** in the domain model or the UX.
 
+### Execution Context vs Portal Context
+
+- **Execution Context**  
+  A transversal selection layer for `/manager` and `/browser`. It defines the **executor identity**
+  used for S3 operations and can be one of:
+  - account
+  - connection
+  - legacy S3 user (only if it already exists)
+
+- **Portal Context**  
+  A **target scope** for `/portal` workflows. It is always **account-based** and **never** used as execution credentials.
+  The executor is a dedicated portal technical identity or explicit workflow executor.
+
 ---
 
 ## Non-negotiable Principles
@@ -120,6 +133,11 @@ Every mutating operation must run using a **clearly identified execution identit
 - S3 Connection credentials,
 - legacy S3 User credentials,
 - session credentials (STS when available).
+
+Execution contexts must be:
+- explicitly selected by the user,
+- included in every `/manager` and `/browser` API call,
+- never inferred implicitly by the backend.
 
 STS may be used when available, but **must not be assumed** as the only mechanism
 as long as persistent credentials still exist.

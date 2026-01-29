@@ -188,8 +188,8 @@ export default function PortalBucketModal({
 
   const handleOpenInBrowser = () => {
     if (!accountId) return;
-    localStorage.setItem("selectedBrowserContextId", String(accountId));
-    navigate(`/browser?bucket=${encodeURIComponent(bucket.name)}`);
+    localStorage.setItem("selectedExecutionContextId", String(accountId));
+    navigate(`/browser?ctx=${encodeURIComponent(String(accountId))}&bucket=${encodeURIComponent(bucket.name)}`);
   };
 
   return (

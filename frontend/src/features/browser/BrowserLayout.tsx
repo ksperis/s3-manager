@@ -79,12 +79,8 @@ function BrowserShell() {
                 </option>
               )}
               {contexts.map((ctx) => (
-                <option key={ctx.id} value={ctx.id} title={ctx.endpoint || undefined}>
-                  {ctx.kind === "connection"
-                    ? `Connection: ${ctx.name}`
-                    : ctx.raw
-                      ? formatAccountLabel(ctx.raw as any, defaultEndpointId, defaultEndpointName)
-                      : ctx.name}
+                <option key={ctx.id} value={ctx.id} title={ctx.endpoint_url || undefined}>
+                  {formatAccountLabel(ctx, defaultEndpointId, defaultEndpointName)}
                 </option>
               ))}
             </select>
@@ -94,10 +90,10 @@ function BrowserShell() {
           </div>
         ) : (
           <div className={pillClasses} title={identityLabel ?? undefined}>
-            {selected ? (selected.kind === "connection" ? `Connection: ${selected.name}` : selected.name) : "No context selected"}
+            {selected ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName) : "No context selected"}
           </div>
         )}
-        {selectedKind === "s3_user" && (
+        {selectedKind === "legacy_user" && (
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
             S3 user context
           </span>

@@ -125,7 +125,7 @@ export default function BucketsPage() {
     [accounts, selectedS3AccountId]
   );
   const accountLabel = selectedS3Account
-    ? selectedS3Account.name
+    ? selectedS3Account.display_name
     : requiresS3AccountSelection
       ? "Not selected"
       : sessionS3AccountName || "RGW session";

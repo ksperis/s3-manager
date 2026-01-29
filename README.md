@@ -100,9 +100,10 @@ The **Manager** surface acts as a **thin, IAM-native configuration explorer**.
 Its purpose is to expose the **actual S3 and IAM configuration as-is**, without
 opinionated abstraction.
 
-Manager can be accessed through:
-- an **RGW account** context (account-centric), or
-- an **S3 Connection** (credential-first) for AWS/Scality/MinIO/Ceph, depending on the effective IAM permissions.
+Manager uses an **execution context** selected by the UI user:
+- **RGW account** context (account-centric), or
+- **S3 Connection** (credential-first) for AWS/Scality/MinIO/Ceph, depending on the effective IAM permissions,
+- **Legacy S3 users** when explicitly linked.
 
 Responsibilities:
 - Buckets management (creation, versioning, object lock, tags)
@@ -130,7 +131,7 @@ Authorization model:
 The **Browser** surface provides a **direct, storage-centric view of S3 objects**.
 It represents the **data plane** of the platform.
 
-Browser can be used with RGW accounts, legacy S3 users (when explicitly linked), or S3 Connections.
+Browser can be used with RGW accounts, legacy S3 users (when explicitly linked), or S3 Connections via the shared execution context selector.
 
 ### Purpose
 - Browse buckets and objects hierarchically

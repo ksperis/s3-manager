@@ -3,13 +3,17 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
-import { S3Account } from "../../api/accounts";
+import { useSearchParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
+import { ExecutionContext, listExecutionContexts } from "../../api/executionContexts";
 import { fetchManagerContext, type ManagerAccessMode } from "../../api/managerContext";
-import { listManagerS3Accounts } from "../../api/managerS3Accounts";
+
+const EXECUTION_CONTEXT_STORAGE_KEY = "selectedExecutionContextId";
+const EXECUTION_CONTEXT_URL_PARAM = "ctx";
+const LEGACY_CONTEXT_KEYS = ["selectedS3AccountId", "selectedBrowserContextId"];
 
 type S3AccountContextType = {
-  accounts: S3Account[];
+  accounts: ExecutionContext[];
   selectedS3AccountId: string | null;
   setSelectedS3AccountId: (id: string | null) => void;
   requiresS3AccountSelection: boolean;
@@ -47,18 +51,15 @@ type SessionInfo = {
   accountName: string | null;
 };
 
-function deriveS3AccountType(account: S3Account | null | undefined): string | null {
-  if (!account) return null;
-  if (account.id.startsWith("conn-")) {
+function deriveS3AccountType(context: ExecutionContext | null | undefined): string | null {
+  if (!context) return null;
+  if (context.kind === "connection" || context.id.startsWith("conn-")) {
     return "connection";
   }
-  if (account.is_s3_user != null) {
-    return account.is_s3_user ? "s3_user" : "tenant";
-  }
-  if (account.id.startsWith("s3u-")) {
+  if (context.kind === "legacy_user" || context.id.startsWith("s3u-")) {
     return "s3_user";
   }
-  return account.rgw_account_id ? "tenant" : "s3_user";
+  return "tenant";
 }
 
 function readSessionInfo(): SessionInfo {
@@ -82,35 +83,25 @@ function readSessionInfo(): SessionInfo {
 export function S3AccountProvider({ children }: { children: ReactNode }) {
   const sessionInfo = useMemo(() => readSessionInfo(), []);
   const requiresS3AccountSelection = !sessionInfo.isSession;
-  const [accounts, setS3Accounts] = useState<S3Account[]>([]);
+  const [accounts, setS3Accounts] = useState<ExecutionContext[]>([]);
   const [selectedS3AccountId, setSelectedS3AccountId] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
   const [accessMode, setAccessModeState] = useState<ManagerAccessMode | null>(null);
   const [canSwitchAccess, setCanSwitchAccess] = useState(false);
   const [managerStatsEnabled, setManagerStatsEnabled] = useState<boolean | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     const load = async () => {
       setAccessError(null);
+      if (!requiresS3AccountSelection) {
+        setS3Accounts([]);
+        return;
+      }
       try {
-        const data = await listManagerS3Accounts();
+        const data = await listExecutionContexts();
         setS3Accounts(data);
-        if (requiresS3AccountSelection) {
-          const stored = localStorage.getItem("selectedS3AccountId");
-          if (stored && data.some((a) => a.id === stored)) {
-            setSelectedS3AccountId(stored);
-            return;
-          }
-          if (data.length > 0) {
-            const nextId = String(data[0].id);
-            setSelectedS3AccountId(nextId);
-            localStorage.setItem("selectedS3AccountId", nextId);
-          }
-        } else {
-          setSelectedS3AccountId(null);
-          localStorage.removeItem("selectedS3AccountId");
-        }
       } catch (err) {
         setS3Accounts([]);
         setAccessError("Access to manager is denied for this user.");
@@ -119,15 +110,61 @@ export function S3AccountProvider({ children }: { children: ReactNode }) {
     load();
   }, [requiresS3AccountSelection]);
 
+  useEffect(() => {
+    if (!requiresS3AccountSelection) {
+      setSelectedS3AccountId(null);
+      localStorage.removeItem(EXECUTION_CONTEXT_STORAGE_KEY);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete(EXECUTION_CONTEXT_URL_PARAM);
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+    if (accounts.length === 0) return;
+    const urlContext = searchParams.get(EXECUTION_CONTEXT_URL_PARAM);
+    const stored =
+      localStorage.getItem(EXECUTION_CONTEXT_STORAGE_KEY) ??
+      LEGACY_CONTEXT_KEYS.map((key) => localStorage.getItem(key)).find((value) => value);
+    if (urlContext && accounts.some((context) => context.id === urlContext)) {
+      if (urlContext !== selectedS3AccountId) {
+        setSelectedS3AccountId(urlContext);
+      }
+      localStorage.setItem(EXECUTION_CONTEXT_STORAGE_KEY, urlContext);
+      return;
+    }
+    if (stored && accounts.some((context) => context.id === stored)) {
+      if (stored !== selectedS3AccountId) {
+        setSelectedS3AccountId(stored);
+      }
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set(EXECUTION_CONTEXT_URL_PARAM, stored);
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+    if (!selectedS3AccountId) {
+      const nextId = String(accounts[0].id);
+      setSelectedS3AccountId(nextId);
+      localStorage.setItem(EXECUTION_CONTEXT_STORAGE_KEY, nextId);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set(EXECUTION_CONTEXT_URL_PARAM, nextId);
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [accounts, requiresS3AccountSelection, searchParams, selectedS3AccountId, setSearchParams]);
+
   const updateSelected = (id: string | null) => {
     setSelectedS3AccountId(id);
     if (!requiresS3AccountSelection) {
       return;
     }
     if (id === null) {
-      localStorage.removeItem("selectedS3AccountId");
+      localStorage.removeItem(EXECUTION_CONTEXT_STORAGE_KEY);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete(EXECUTION_CONTEXT_URL_PARAM);
+      setSearchParams(nextParams, { replace: true });
     } else {
-      localStorage.setItem("selectedS3AccountId", id);
+      localStorage.setItem(EXECUTION_CONTEXT_STORAGE_KEY, id);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set(EXECUTION_CONTEXT_URL_PARAM, id);
+      setSearchParams(nextParams, { replace: true });
     }
   };
 

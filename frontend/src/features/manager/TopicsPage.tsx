@@ -87,7 +87,7 @@ export default function TopicsPage() {
   }, [accounts, accountIdForApi, selectedS3AccountId]);
   const endpointCaps = selectedS3Account?.storage_endpoint_capabilities ?? null;
   const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
-  const accountLabel = selectedS3Account?.name ?? sessionS3AccountName ?? "Current account";
+  const accountLabel = selectedS3Account?.display_name ?? sessionS3AccountName ?? "Current account";
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

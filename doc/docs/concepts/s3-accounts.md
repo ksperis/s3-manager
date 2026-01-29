@@ -21,7 +21,13 @@ Accounts enable:
 ## Where it is used in s3-manager
 
 - Admin: create/import/manage accounts, quotas, account-level stats
-- Manager: operate inside an account context (buckets, IAM, policies)
+- Manager: operate inside an execution context (buckets, IAM, policies)
+- Portal: target scope for managed workflows (portal context)
+
+## Portal eligibility
+
+S3 Accounts are the only portal-eligible contexts. The portal selects an **account scope**
+but never uses that scope as execution credentials.
 
 ## Data model pointers
 

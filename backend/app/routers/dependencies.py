@@ -419,7 +419,7 @@ def get_portal_account_context(
     account_id, s3_user_id, connection_id = _parse_account_selector(account_ref)
     if s3_user_id is not None or connection_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
-    account, _ = _resolve_user_account_link(db, user, account_id, allow_default=True)
+    account, _ = _resolve_user_account_link(db, user, account_id, allow_default=False)
     return account
 
 
@@ -431,7 +431,7 @@ def get_portal_account_access(
     account_id, s3_user_id, connection_id = _parse_account_selector(account_ref)
     if s3_user_id is not None or connection_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
-    account, link = _resolve_user_account_link(db, user, account_id, allow_default=True)
+    account, link = _resolve_user_account_link(db, user, account_id, allow_default=False)
     # Portal is restricted to RGW accounts with IAM support.
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint is None:

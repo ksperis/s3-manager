@@ -69,7 +69,7 @@ client.interceptors.request.use((config) => {
   }
   const url = config.url ?? "";
   if (url.startsWith("/manager")) {
-    const accountId = localStorage.getItem("selectedS3AccountId");
+    const accountId = localStorage.getItem("selectedExecutionContextId");
     if (accountId) {
       const mode = localStorage.getItem(`managerAccessMode:${accountId}`);
       if (mode === "admin" || mode === "portal") {

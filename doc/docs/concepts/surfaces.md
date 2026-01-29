@@ -24,7 +24,7 @@ Target audience: account administrators and advanced users.
 
 Typical responsibilities:
 
-- operate within an **account-scoped context**
+- operate within an **execution context** (account / connection / legacy user)
 - manage S3 resources aligned with S3/IAM semantics:
   - buckets, objects, lifecycle, versioning, object lock (when supported)
   - IAM users, groups, roles, policies
@@ -38,6 +38,7 @@ Characteristics:
 - works in a **credential-first** manner
 - focuses on bucket listing, object browsing, uploads/downloads, and basic bucket settings
 - avoids requiring knowledge of “Accounts” or platform concepts
+- uses the same **execution context** selection as `/manager`
 
 ## Portal (`/portal/*`) (optional)
 
@@ -45,6 +46,7 @@ Target audience: end users needing guided workflows.
 
 Characteristics:
 
+- uses a **portal context** (target account scope) for workflows
 - provides managed flows that may involve:
   - request/approval patterns (future)
   - “golden path” configurations
