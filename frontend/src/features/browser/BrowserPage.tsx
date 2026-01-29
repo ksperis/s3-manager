@@ -559,9 +559,11 @@ export default function BrowserPage({
       items.push(stsCredentialsError);
     }
     const corsDisabled = Boolean(corsStatus && !corsStatus.enabled);
-    if (!proxyAllowed && corsDisabled && !useProxyTransfers) {
-      items.push(corsStatus?.error ?? "Bucket CORS is not enabled.");
-      items.push("Proxy transfers are disabled in settings.");
+    if (corsDisabled) {
+      items.push("Direct download/upload is not allowed on this bucket.");
+      if (!proxyAllowed) {
+        items.push("Proxy transfers are disabled in settings.");
+      }
     }
     return items;
   }, [
@@ -587,29 +589,51 @@ export default function BrowserPage({
   }, [isLegacyConnectionContext, isLegacyContext]);
   const accessBadge = useMemo(() => {
     if (!hasS3AccountContext) return null;
+    const corsDisabled = Boolean(corsStatus && !corsStatus.enabled);
+    const transfersBlocked = corsDisabled && !proxyAllowed;
+    if (transfersBlocked) {
+      return {
+        label: "Unavailable",
+        title: "Download/Upload unavailable: CORS is disabled and proxy transfers are disabled.",
+        className:
+          "border-rose-200/70 bg-rose-200/60 text-rose-600/70 dark:border-rose-400/40 dark:bg-rose-400/25 dark:text-rose-200/90",
+      };
+    }
     if (useProxyTransfers) {
       return {
         label: "Proxy",
-        title: "Backend proxy transfers are active.",
+        title: "Download/Upload mode: Backend proxy transfers are active.",
         className:
-          "border-rose-200/70 bg-rose-200/60 text-rose-600/70 dark:border-rose-400/40 dark:bg-rose-400/25 dark:text-rose-200/90",
+          "border-amber-200/70 bg-amber-200/60 text-amber-600/70 dark:border-amber-400/40 dark:bg-amber-400/25 dark:text-amber-200/90",
       };
     }
     if (stsCredentials) {
       return {
         label: "STS",
-        title: stsExpirationLabel ? `STS expires at ${stsExpirationLabel}` : "STS credentials are active.",
+        title: stsExpirationLabel
+          ? `Download/Upload mode: STS credentials active (expires at ${stsExpirationLabel}).`
+          : "Download/Upload mode: STS credentials are active.",
         className:
           "border-emerald-200/70 bg-emerald-200/60 text-emerald-600/70 dark:border-emerald-400/40 dark:bg-emerald-400/25 dark:text-emerald-200/90",
       };
     }
     return {
       label: "Presign",
-      title: legacyStsTooltip ? `Presigned URLs are active. ${legacyStsTooltip}` : "Presigned URLs are active.",
+      title: legacyStsTooltip
+        ? `Download/Upload mode: Presigned URLs are active. ${legacyStsTooltip}`
+        : "Download/Upload mode: Presigned URLs are active.",
       className:
-        "border-amber-200/70 bg-amber-200/60 text-amber-600/70 dark:border-amber-400/40 dark:bg-amber-400/25 dark:text-amber-200/90",
+        "border-emerald-200/70 bg-emerald-200/60 text-emerald-600/70 dark:border-emerald-400/40 dark:bg-emerald-400/25 dark:text-emerald-200/90",
     };
-  }, [hasS3AccountContext, legacyStsTooltip, stsCredentials, stsExpirationLabel, useProxyTransfers]);
+  }, [
+    corsStatus,
+    hasS3AccountContext,
+    legacyStsTooltip,
+    proxyAllowed,
+    stsCredentials,
+    stsExpirationLabel,
+    useProxyTransfers,
+  ]);
 
   useEffect(() => {
     if (!folderInputRef.current) return;
@@ -4597,8 +4621,8 @@ export default function BrowserPage({
             {accessBadge && (
               <span
                 className={`inline-flex h-3 w-3 rounded-full border shadow-sm ${accessBadge.className}`}
-                title={`Mode: ${accessBadge.label} — ${accessBadge.title}`}
-                aria-label={`Mode: ${accessBadge.label} — ${accessBadge.title}`}
+                title={`${accessBadge.label} — ${accessBadge.title}`}
+                aria-label={`${accessBadge.label} — ${accessBadge.title}`}
               />
             )}
           </div>
@@ -4848,11 +4872,13 @@ export default function BrowserPage({
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  className={bulkActionClasses}
+                  className={`${filterChipClasses} border-emerald-200 bg-emerald-100 text-emerald-800 hover:border-emerald-300 hover:text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-100 dark:hover:border-emerald-400`}
                   onClick={handleEnsureCors}
                   disabled={corsFixing}
+                  title={`Allow direct access from ${uiOrigin} by adding CORS rules to this bucket.`}
+                  aria-label={`Allow direct access from ${uiOrigin} by adding CORS rules to this bucket.`}
                 >
-                  {corsFixing ? "Activation CORS..." : `Ajouter CORS pour ${uiOrigin}`}
+                  {corsFixing ? "Enabling..." : "Allow"}
                 </button>
               </div>
             )}
@@ -5991,25 +6017,24 @@ export default function BrowserPage({
           </div>
         </div>
       </div>
-      <BrowserContextMenu
-        contextMenu={contextMenu}
-        contextMenuRef={contextMenuRef}
-        bucketName={bucketName}
-        hasS3AccountContext={hasS3AccountContext}
-        allowInspectorPanel={allowInspectorPanel}
-        canPaste={canPaste}
-        clipboard={clipboard}
-        currentPath={currentPath}
-        fileInputRef={fileInputRef}
-        folderInputRef={folderInputRef}
-        onClose={closeContextMenu}
-        onNewFolder={handleNewFolder}
-        onPasteItems={handlePasteItems}
-        onCopyPath={handleCopyPath}
-        onOpenPrefixVersions={() => setShowPrefixVersions(true)}
-        onOpenCleanupVersions={openCleanupModal}
-        onDownloadTarget={handleDownloadTarget}
-        onPreviewItem={handlePreviewItem}
+        <BrowserContextMenu
+          contextMenu={contextMenu}
+          contextMenuRef={contextMenuRef}
+          bucketName={bucketName}
+          hasS3AccountContext={hasS3AccountContext}
+          allowInspectorPanel={allowInspectorPanel}
+          canPaste={canPaste}
+          clipboard={clipboard}
+          currentPath={currentPath}
+          fileInputRef={fileInputRef}
+          folderInputRef={folderInputRef}
+          onClose={closeContextMenu}
+          onNewFolder={handleNewFolder}
+          onPasteItems={handlePasteItems}
+          onOpenPrefixVersions={() => setShowPrefixVersions(true)}
+          onOpenCleanupVersions={openCleanupModal}
+          onDownloadTarget={handleDownloadTarget}
+          onPreviewItem={handlePreviewItem}
         onCopyUrl={handleCopyUrl}
         onCopyItems={handleCopyItems}
         onCutItems={handleCutItems}

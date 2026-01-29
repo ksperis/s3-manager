@@ -44,7 +44,6 @@ type BrowserContextMenuProps = {
   onClose: () => void;
   onNewFolder: () => void;
   onPasteItems: () => void;
-  onCopyPath: (path: string) => void;
   onOpenPrefixVersions: () => void;
   onOpenCleanupVersions: () => void;
   onDownloadTarget: (item: BrowserItem) => void;
@@ -76,7 +75,6 @@ export default function BrowserContextMenu({
   onClose,
   onNewFolder,
   onPasteItems,
-  onCopyPath,
   onOpenPrefixVersions,
   onOpenCleanupVersions,
   onDownloadTarget,
@@ -182,18 +180,6 @@ export default function BrowserContextMenu({
             <TrashIcon className="h-3.5 w-3.5" />
             Clean versions
           </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!currentPath ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onCopyPath(currentPath);
-            }}
-            disabled={!currentPath}
-          >
-            <CopyIcon className="h-3.5 w-3.5" />
-            Copy path
-          </button>
         </>
       )}
       {contextMenu.kind === "item" && contextItem && (
@@ -263,18 +249,6 @@ export default function BrowserContextMenu({
               Copy URL
             </button>
           )}
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onCopyPath(`${bucketName}/${contextItem.key}`);
-            }}
-            disabled={!bucketName}
-          >
-            <CopyIcon className="h-3.5 w-3.5" />
-            Copy path
-          </button>
           <button
             type="button"
             className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
@@ -435,20 +409,6 @@ export default function BrowserContextMenu({
             Cut
           </button>
           <div className={contextMenuSeparatorClasses} />
-          {contextSelectionInfo.isSingle && contextSelectionInfo.primary && (
-            <button
-              type="button"
-              className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
-              onClick={() => {
-                onClose();
-                onCopyPath(`${bucketName}/${contextSelectionInfo.primary.key}`);
-              }}
-              disabled={!bucketName}
-            >
-              <CopyIcon className="h-3.5 w-3.5" />
-              Copy path
-            </button>
-          )}
           <button
             type="button"
             className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
