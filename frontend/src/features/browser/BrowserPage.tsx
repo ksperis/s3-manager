@@ -559,44 +559,8 @@ export default function BrowserPage({
       items.push(stsCredentialsError);
     }
     const corsDisabled = Boolean(corsStatus && !corsStatus.enabled);
-    const stsDisabled = Boolean(stsStatus && !stsStatus.available);
-    const stripTrailingPeriod = (value: string) => (value.endsWith(".") ? value.slice(0, -1) : value);
-    const normalizeStsError = (value?: string | null) => {
-      if (!value) return null;
-      if (value.includes("AccessDenied") && value.includes("GetSessionToken")) {
-        return "STS access denied. IAM credentials with sts:GetSessionToken are required.";
-      }
-      if (value.includes("GetCallerIdentity")) return "STS is unavailable.";
-      return value;
-    };
-    const stsError = normalizeStsError(stsStatus?.error) ?? "STS is not available for this account.";
-    if (isLegacyContext) {
-      items.push(
-        isLegacyConnectionContext
-          ? "STS is not available for legacy S3 connections. Presigned URLs are used instead."
-          : "STS is not available for legacy S3 users. Presigned URLs are used instead."
-      );
-    }
-    if (useProxyTransfers) {
-      const reasons: string[] = [];
-      if (corsDisabled) {
-        reasons.push(corsStatus?.error ?? "Bucket CORS is not enabled.");
-      }
-      if (stsDisabled) {
-        reasons.push(stsError);
-      }
-      if (reasons.length > 0) {
-        const reasonText = reasons.map(stripTrailingPeriod).join("; ");
-        items.push(`Backend proxy is active for uploads/downloads (${reasonText}).`);
-      } else {
-        items.push("Backend proxy is active for uploads/downloads.");
-      }
-      return items;
-    }
-    if (corsDisabled && !useProxyTransfers) {
-      items.push(corsStatus?.error ?? "Bucket CORS is not enabled.");
-    }
     if (!proxyAllowed && corsDisabled && !useProxyTransfers) {
+      items.push(corsStatus?.error ?? "Bucket CORS is not enabled.");
       items.push("Proxy transfers are disabled in settings.");
     }
     return items;
@@ -607,7 +571,6 @@ export default function BrowserPage({
     isLegacyContext,
     proxyAllowed,
     stsCredentialsError,
-    stsStatus,
     useProxyTransfers,
     warningMessage,
   ]);
@@ -616,6 +579,12 @@ export default function BrowserPage({
     const formatted = formatDateTime(stsCredentials.expiration);
     return formatted === "-" ? "" : formatted;
   }, [stsCredentials?.expiration]);
+  const legacyStsTooltip = useMemo(() => {
+    if (!isLegacyContext) return "";
+    return isLegacyConnectionContext
+      ? "STS is not available for legacy S3 connections. Presigned URLs are used instead."
+      : "STS is not available for legacy S3 users. Presigned URLs are used instead.";
+  }, [isLegacyConnectionContext, isLegacyContext]);
   const accessBadge = useMemo(() => {
     if (!hasS3AccountContext) return null;
     if (useProxyTransfers) {
@@ -636,11 +605,11 @@ export default function BrowserPage({
     }
     return {
       label: "Presign",
-      title: "Presigned URLs are active.",
+      title: legacyStsTooltip ? `Presigned URLs are active. ${legacyStsTooltip}` : "Presigned URLs are active.",
       className:
         "border-amber-200/70 bg-amber-200/60 text-amber-600/70 dark:border-amber-400/40 dark:bg-amber-400/25 dark:text-amber-200/90",
     };
-  }, [hasS3AccountContext, stsCredentials, stsExpirationLabel, useProxyTransfers]);
+  }, [hasS3AccountContext, legacyStsTooltip, stsCredentials, stsExpirationLabel, useProxyTransfers]);
 
   useEffect(() => {
     if (!folderInputRef.current) return;
