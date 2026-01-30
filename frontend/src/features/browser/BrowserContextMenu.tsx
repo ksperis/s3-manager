@@ -35,6 +35,7 @@ type BrowserContextMenuProps = {
   contextMenuRef: RefObject<HTMLDivElement>;
   bucketName: string;
   hasS3AccountContext: boolean;
+  versioningEnabled: boolean;
   allowInspectorPanel?: boolean;
   canPaste: boolean;
   clipboard: ClipboardState | null;
@@ -53,6 +54,7 @@ type BrowserContextMenuProps = {
   onCutItems: (items: BrowserItem[]) => void;
   onOpenBulkAttributes: (items: BrowserItem[]) => void;
   onOpenBulkRestore: (items: BrowserItem[]) => void;
+  onOpenObjectVersions: (item: BrowserItem) => void;
   onOpenAdvanced: (item: BrowserItem) => void;
   onDeleteItems: (items: BrowserItem[]) => void;
   onDownloadFolder: (item: BrowserItem) => void;
@@ -66,6 +68,7 @@ export default function BrowserContextMenu({
   contextMenuRef,
   bucketName,
   hasS3AccountContext,
+  versioningEnabled,
   allowInspectorPanel = true,
   canPaste,
   clipboard,
@@ -84,6 +87,7 @@ export default function BrowserContextMenu({
   onCutItems,
   onOpenBulkAttributes,
   onOpenBulkRestore,
+  onOpenObjectVersions,
   onOpenAdvanced,
   onDeleteItems,
   onDownloadFolder,
@@ -156,30 +160,46 @@ export default function BrowserContextMenu({
             <PasteIcon className="h-3.5 w-3.5" />
             {pasteLabel}
           </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onOpenPrefixVersions();
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            <ListIcon className="h-3.5 w-3.5" />
-            Versions
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onOpenCleanupVersions();
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            <TrashIcon className="h-3.5 w-3.5" />
-            Clean versions
-          </button>
+          {versioningEnabled && (
+            <>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  onClose();
+                  onOpenPrefixVersions();
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                <ListIcon className="h-3.5 w-3.5" />
+                Versions
+              </button>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  onClose();
+                  onOpenBulkRestore([]);
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                <HistoryIcon className="h-3.5 w-3.5" />
+                Restore to date
+              </button>
+              <button
+                type="button"
+                className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+                onClick={() => {
+                  onClose();
+                  onOpenCleanupVersions();
+                }}
+                disabled={!bucketName || !hasS3AccountContext}
+              >
+                <TrashIcon className="h-3.5 w-3.5" />
+                Clean versions
+              </button>
+            </>
+          )}
         </>
       )}
       {contextMenu.kind === "item" && contextItem && (
@@ -195,6 +215,20 @@ export default function BrowserContextMenu({
             >
               <InfoIcon className="h-3.5 w-3.5" />
               Details
+            </button>
+          )}
+          {versioningEnabled && contextItem.type === "file" && (
+            <button
+              type="button"
+              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+              onClick={() => {
+                onClose();
+                onOpenObjectVersions(contextItem);
+              }}
+              disabled={!bucketName || !hasS3AccountContext}
+            >
+              <HistoryIcon className="h-3.5 w-3.5" />
+              Versions
             </button>
           )}
           {contextItem.type === "folder" ? (

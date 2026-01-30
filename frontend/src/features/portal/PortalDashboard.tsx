@@ -161,7 +161,14 @@ export default function PortalDashboard() {
   const bucketTotalsObjects = accountUsedObjects != null ? accountUsedObjects : derivedBucketTotals.objects;
   const visibleBucketCount = state?.buckets?.length ?? 0;
   const totalBucketCount = state?.total_buckets ?? visibleBucketCount;
-  const allAccessKeys = useMemo(() => state?.access_keys ?? [], [state?.access_keys]);
+  const isPortalManager = state?.account_role === "portal_manager";
+  const isPortalUser = state?.account_role === "portal_user";
+  const canViewPortalKey = Boolean(isPortalManager || portalSettings?.allow_portal_key);
+  const allAccessKeys = useMemo(() => {
+    const keys = state?.access_keys ?? [];
+    if (canViewPortalKey) return keys;
+    return keys.filter((key) => !key.is_portal);
+  }, [state?.access_keys, canViewPortalKey]);
   const orderedAccessKeys = useMemo(() => {
     const portalKeys = allAccessKeys.filter((key) => key.is_portal);
     const userKeys = allAccessKeys.filter((key) => !key.is_portal);
@@ -210,10 +217,10 @@ export default function PortalDashboard() {
   }, []);
 
   const canManageBuckets = Boolean(state?.can_manage_buckets);
-  const allowPortalUserBucketCreate = Boolean(
-    portalSettings?.allow_portal_user_bucket_create && state?.account_role === "portal_user"
-  );
+  const allowPortalUserBucketCreate = Boolean(portalSettings?.allow_portal_user_bucket_create && isPortalUser);
+  const allowPortalUserAccessKeyCreate = Boolean(portalSettings?.allow_portal_user_access_key_create && isPortalUser);
   const canCreateBuckets = canManageBuckets || allowPortalUserBucketCreate;
+  const canCreateAccessKeys = canManageBuckets || allowPortalUserAccessKeyCreate;
   const canViewPortalUsers = Boolean(state?.can_manage_portal_users);
   const assignedPortalUsers = useMemo(() => portalUsers.filter((u) => !u.iam_only), [portalUsers]);
   const portalUsersCount = canViewPortalUsers ? (loadingUsers ? "…" : assignedPortalUsers.length) : "-";
@@ -884,7 +891,7 @@ export default function PortalDashboard() {
                     onClick={() => setShowKeysModal(true)}
                     className="mt-1 ui-body font-semibold text-slate-700 underline decoration-slate-300 decoration-2 underline-offset-4 transition hover:text-slate-900 dark:text-slate-100 dark:decoration-slate-600 dark:hover:text-white"
                   >
-                    {state?.access_keys?.length ?? 0} clé(s)
+                    {allAccessKeys.length} clé(s)
                   </button>
                 </div>
               </div>
@@ -916,7 +923,7 @@ export default function PortalDashboard() {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {portalSettings?.allow_portal_key && (
+                    {isPortalManager && (
                       <button
                         type="button"
                         onClick={handleRenewPortalKey}
@@ -932,7 +939,7 @@ export default function PortalDashboard() {
                     <button
                       type="button"
                       onClick={handleRotateKey}
-                      disabled={creatingKey || !accountIdForApi || !canManageBuckets || Boolean(togglingKeyId) || renewingPortalKey}
+                      disabled={creatingKey || !accountIdForApi || !canCreateAccessKeys || Boolean(togglingKeyId) || renewingPortalKey}
                       aria-label="Créer une clé utilisateur"
                       title="Créer une clé utilisateur"
                       className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
@@ -951,7 +958,7 @@ export default function PortalDashboard() {
                   <div className="rounded-lg border border-amber-200/70 bg-amber-50/60 px-3 py-2 ui-body text-amber-800 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
                     <p className="ui-body font-semibold">Nouvelle clé utilisateur</p>
                     <p className="ui-caption text-amber-700 dark:text-amber-200">Le secret est affiché une seule fois.</p>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <div className="mt-2 space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span aria-hidden title="Access key">🔑</span>
@@ -1034,7 +1041,7 @@ export default function PortalDashboard() {
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
-                                {k.is_portal && portalSettings?.allow_portal_key && (
+                                {k.is_portal && canViewPortalKey && (
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -1056,7 +1063,14 @@ export default function PortalDashboard() {
                                   type="button"
                                   className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
                                   onClick={() => handleToggleKeyStatus(k)}
-                                  disabled={k.is_portal || k.deletable === false || creatingKey || Boolean(togglingKeyId) || renewingPortalKey}
+                                  disabled={
+                                    !isPortalManager ||
+                                    k.is_portal ||
+                                    k.deletable === false ||
+                                    creatingKey ||
+                                    Boolean(togglingKeyId) ||
+                                    renewingPortalKey
+                                  }
                                   aria-label={isActive ? "Désactiver la clé" : "Activer la clé"}
                                   title={isActive ? "Désactiver la clé" : "Activer la clé"}
                                 >
@@ -1066,7 +1080,14 @@ export default function PortalDashboard() {
                                   type="button"
                                   className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-rose-200 text-rose-600 transition hover:border-rose-300 hover:text-rose-700 disabled:opacity-40 dark:border-rose-900/40 dark:text-rose-300 dark:hover:border-rose-800"
                                   onClick={() => handleDeleteKey(k)}
-                                  disabled={k.is_portal || k.deletable === false || creatingKey || Boolean(togglingKeyId) || renewingPortalKey}
+                                  disabled={
+                                    !isPortalManager ||
+                                    k.is_portal ||
+                                    k.deletable === false ||
+                                    creatingKey ||
+                                    Boolean(togglingKeyId) ||
+                                    renewingPortalKey
+                                  }
                                   aria-label="Supprimer la clé"
                                   title="Supprimer la clé"
                                 >

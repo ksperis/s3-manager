@@ -91,7 +91,9 @@ function PortalShell() {
       links: [
         { to: "/portal", label: "Accueil", end: true },
         ...(isPortalManager ? [{ to: "/portal/buckets", label: "Buckets" }] : []),
-        ...(generalSettings.browser_enabled ? [{ to: "/portal/browser", label: "Browser" }] : []),
+        ...(generalSettings.browser_enabled && generalSettings.browser_portal_enabled
+          ? [{ to: "/portal/browser", label: "Browser" }]
+          : []),
         { to: "/portal/manage", label: "Gestion" },
         { to: "/portal/settings", label: "Configuration" },
       ],

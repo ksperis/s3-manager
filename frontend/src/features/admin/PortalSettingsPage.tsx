@@ -49,6 +49,12 @@ export default function PortalSettingsPage() {
     setSettings((prev) => (prev ? { ...prev, portal: { ...prev.portal, allow_portal_user_bucket_create: value } } : prev));
   };
 
+  const handleToggleAllowPortalAccessKeyCreate = (value: boolean) => {
+    setSettings((prev) =>
+      prev ? { ...prev, portal: { ...prev.portal, allow_portal_user_access_key_create: value } } : prev
+    );
+  };
+
   const handleBucketDefaultVersioning = (value: boolean) => {
     setSettings((prev) =>
       prev ? { ...prev, portal: { ...prev.portal, bucket_defaults: { ...prev.portal.bucket_defaults, versioning: value } } } : prev
@@ -84,7 +90,7 @@ export default function PortalSettingsPage() {
   };
 
   const handleOverrideToggle = (
-    field: "allow_portal_key" | "allow_portal_user_bucket_create",
+    field: "allow_portal_key" | "allow_portal_user_bucket_create" | "allow_portal_user_access_key_create",
     value: boolean
   ) => {
     updateOverridePolicy((policy) => ({ ...policy, [field]: value }));
@@ -227,6 +233,7 @@ export default function PortalSettingsPage() {
 
   const portalKeyEnabled = Boolean(settings?.portal.allow_portal_key);
   const portalBucketCreateEnabled = Boolean(settings?.portal.allow_portal_user_bucket_create);
+  const portalAccessKeyCreateEnabled = Boolean(settings?.portal.allow_portal_user_access_key_create);
   const bucketVersioningEnabled = Boolean(settings?.portal.bucket_defaults.versioning);
   const bucketLifecycleEnabled = Boolean(settings?.portal.bucket_defaults.enable_lifecycle);
   const bucketCorsEnabled = Boolean(settings?.portal.bucket_defaults.enable_cors);
@@ -269,7 +276,7 @@ export default function PortalSettingsPage() {
           <PortalSettingsSection title="UI" description="Portal UI switches and per-account override permissions." layout="grid">
             <PortalSettingsItem
               title="Portal key"
-              description="Show the active portal key in the portal."
+              description="Show the active portal key to portal users."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
                   <PortalSettingsSwitch
@@ -293,7 +300,7 @@ export default function PortalSettingsPage() {
             />
             <PortalSettingsItem
               title="Bucket creation"
-              description="Allow bucket creation from the portal."
+              description="Allow portal users to create buckets from the portal."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
                   <PortalSettingsSwitch
@@ -308,6 +315,30 @@ export default function PortalSettingsPage() {
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.allow_portal_user_bucket_create)}
                       onChange={(e) => handleOverrideToggle("allow_portal_user_bucket_create", e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      disabled={!settings}
+                    />
+                  </label>
+                </div>
+              }
+            />
+            <PortalSettingsItem
+              title="Access key creation"
+              description="Allow portal users to create access keys from the portal."
+              action={
+                <div className="flex flex-col gap-2 sm:items-end">
+                  <PortalSettingsSwitch
+                    checked={portalAccessKeyCreateEnabled}
+                    onChange={(value) => handleToggleAllowPortalAccessKeyCreate(value)}
+                    disabled={!settings}
+                    ariaLabel="Portal user access key creation"
+                  />
+                  <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                    <span>Allow override</span>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(settings?.portal.override_policy.allow_portal_user_access_key_create)}
+                      onChange={(e) => handleOverrideToggle("allow_portal_user_access_key_create", e.target.checked)}
                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
                       disabled={!settings}
                     />

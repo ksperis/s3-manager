@@ -12,6 +12,7 @@ import PageTabs from "../../components/PageTabs";
 import SplitView from "../../components/SplitView";
 import UsageTile from "../../components/UsageTile";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
 type PortalBucketModalProps = {
   bucket: Bucket;
@@ -38,6 +39,7 @@ export default function PortalBucketModal({
   accountUsedObjects,
 }: PortalBucketModalProps) {
   const navigate = useNavigate();
+  const { generalSettings } = useGeneralSettings();
   const [activeTab, setActiveTab] = useState<"overview" | "objects">("overview");
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [objects, setObjects] = useState<S3Object[]>([]);
@@ -184,12 +186,13 @@ export default function PortalBucketModal({
 
   const storageShare = computeRelativeShare(bucket.used_bytes, accountUsedBytes);
   const objectsShare = computeRelativeShare(bucket.object_count, accountUsedObjects);
-  const canOpenInBrowser = Boolean(accountId);
+  const canOpenInBrowser =
+    Boolean(accountId) && generalSettings.browser_enabled && generalSettings.browser_portal_enabled;
 
   const handleOpenInBrowser = () => {
-    if (!accountId) return;
-    localStorage.setItem("selectedExecutionContextId", String(accountId));
-    navigate(`/browser?ctx=${encodeURIComponent(String(accountId))}&bucket=${encodeURIComponent(bucket.name)}`);
+    if (!accountId || !generalSettings.browser_enabled || !generalSettings.browser_portal_enabled) return;
+    localStorage.setItem("selectedPortalAccountId", String(accountId));
+    navigate(`/portal/browser?bucket=${encodeURIComponent(bucket.name)}`);
   };
 
   return (

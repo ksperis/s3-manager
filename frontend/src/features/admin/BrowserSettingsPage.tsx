@@ -56,6 +56,13 @@ export default function BrowserSettingsPage() {
     );
   };
 
+  const handleWorkspaceToggle = (
+    field: "browser_root_enabled" | "browser_manager_enabled" | "browser_portal_enabled",
+    checked: boolean
+  ) => {
+    setSettings((prev) => (prev ? { ...prev, general: { ...prev.general, [field]: checked } } : prev));
+  };
+
   const handleSave = async (event?: React.FormEvent | React.MouseEvent) => {
     event?.preventDefault();
     if (!settings) return;
@@ -93,7 +100,20 @@ export default function BrowserSettingsPage() {
     setSavedMessage(null);
     try {
       const defaults = await fetchDefaultAppSettings();
-      setSettings((prev) => (prev ? { ...prev, browser: defaults.browser } : defaults));
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              browser: defaults.browser,
+              general: {
+                ...prev.general,
+                browser_root_enabled: defaults.general.browser_root_enabled,
+                browser_manager_enabled: defaults.general.browser_manager_enabled,
+                browser_portal_enabled: defaults.general.browser_portal_enabled,
+              },
+            }
+          : defaults
+      );
     } catch (err) {
       console.error(err);
       setError("Unable to load default settings.");
@@ -139,6 +159,47 @@ export default function BrowserSettingsPage() {
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
           <div className="grid gap-4">
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <PortalSettingsSection
+                title="BROWSER WORKSPACES"
+                description="Enable the browser in specific workspaces."
+                layout="stack"
+              >
+                <PortalSettingsItem
+                  title="/browser"
+                  description="Standalone browser workspace."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={settings.general.browser_root_enabled}
+                      onChange={(value) => handleWorkspaceToggle("browser_root_enabled", value)}
+                      ariaLabel="Enable /browser workspace"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="/manager/browser"
+                  description="Browser tab inside the manager workspace."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={settings.general.browser_manager_enabled}
+                      onChange={(value) => handleWorkspaceToggle("browser_manager_enabled", value)}
+                      ariaLabel="Enable /manager/browser workspace"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="/portal/browser"
+                  description="Browser tab inside the portal workspace."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={settings.general.browser_portal_enabled}
+                      onChange={(value) => handleWorkspaceToggle("browser_portal_enabled", value)}
+                      ariaLabel="Enable /portal/browser workspace"
+                    />
+                  }
+                />
+              </PortalSettingsSection>
+            </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <PortalSettingsSection
                 title="PROXY TRANSFERS"

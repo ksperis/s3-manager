@@ -55,6 +55,7 @@ export default function PortalSettingsPage() {
   const [portalSettingsMessage, setPortalSettingsMessage] = useState<string | null>(null);
   const [overridePortalKey, setOverridePortalKey] = useState<TriState>("inherit");
   const [overridePortalBucketCreate, setOverridePortalBucketCreate] = useState<TriState>("inherit");
+  const [overridePortalAccessKeyCreate, setOverridePortalAccessKeyCreate] = useState<TriState>("inherit");
   const [bucketVersioningOverride, setBucketVersioningOverride] = useState<TriState>("inherit");
   const [bucketLifecycleOverride, setBucketLifecycleOverride] = useState<TriState>("inherit");
   const [bucketCorsOverride, setBucketCorsOverride] = useState<TriState>("inherit");
@@ -74,12 +75,17 @@ export default function PortalSettingsPage() {
   const adminOverride = portalAccountSettings?.admin_override ?? null;
   const portalKeyEnabled = Boolean(effectivePortalSettings?.allow_portal_key);
   const portalBucketCreateEnabled = Boolean(effectivePortalSettings?.allow_portal_user_bucket_create);
+  const portalAccessKeyCreateEnabled = Boolean(effectivePortalSettings?.allow_portal_user_access_key_create);
   const bucketVersioningEnabled = Boolean(effectivePortalSettings?.bucket_defaults.versioning);
   const bucketLifecycleEnabled = Boolean(effectivePortalSettings?.bucket_defaults.enable_lifecycle);
   const bucketCorsEnabled = Boolean(effectivePortalSettings?.bucket_defaults.enable_cors);
   const hasAdminOverrides = useMemo(() => {
     if (!adminOverride) return false;
-    if (adminOverride.allow_portal_key != null || adminOverride.allow_portal_user_bucket_create != null) {
+    if (
+      adminOverride.allow_portal_key != null ||
+      adminOverride.allow_portal_user_bucket_create != null ||
+      adminOverride.allow_portal_user_access_key_create != null
+    ) {
       return true;
     }
     if (adminOverride.bucket_defaults) {
@@ -147,6 +153,7 @@ export default function PortalSettingsPage() {
     if (!portalAccountSettings) {
       setOverridePortalKey("inherit");
       setOverridePortalBucketCreate("inherit");
+      setOverridePortalAccessKeyCreate("inherit");
       setBucketVersioningOverride("inherit");
       setBucketLifecycleOverride("inherit");
       setBucketCorsOverride("inherit");
@@ -164,6 +171,7 @@ export default function PortalSettingsPage() {
     const effective = portalAccountSettings.effective;
     setOverridePortalKey(resolveTriState(override.allow_portal_key));
     setOverridePortalBucketCreate(resolveTriState(override.allow_portal_user_bucket_create));
+    setOverridePortalAccessKeyCreate(resolveTriState(override.allow_portal_user_access_key_create));
 
     const bucketDefaultsOverride = override.bucket_defaults;
     setBucketVersioningOverride(resolveTriState(bucketDefaultsOverride?.versioning));
@@ -207,6 +215,10 @@ export default function PortalSettingsPage() {
     const allowBucketCreateValue = toOverrideValue(overridePortalBucketCreate);
     if (allowBucketCreateValue !== undefined) {
       payload.allow_portal_user_bucket_create = allowBucketCreateValue;
+    }
+    const allowAccessKeyCreateValue = toOverrideValue(overridePortalAccessKeyCreate);
+    if (allowAccessKeyCreateValue !== undefined) {
+      payload.allow_portal_user_access_key_create = allowAccessKeyCreateValue;
     }
 
     const bucketDefaults: NonNullable<PortalAccountSettings["portal_manager_override"]["bucket_defaults"]> = {};
@@ -336,7 +348,7 @@ export default function PortalSettingsPage() {
                 <PortalSettingsSection title="UI" layout="grid">
                   <PortalSettingsItem
                     title="Portal key"
-                    description="Show the active portal key in the portal."
+                    description="Show the active portal key to portal users."
                     action={
                       <div className="flex flex-col items-end gap-2">
                         <PortalSettingsSwitch
@@ -382,7 +394,7 @@ export default function PortalSettingsPage() {
                   </PortalSettingsItem>
                   <PortalSettingsItem
                     title="Bucket creation"
-                    description="Allow bucket creation from the portal."
+                    description="Allow portal users to create buckets from the portal."
                     action={
                       <div className="flex flex-col items-end gap-2">
                         <PortalSettingsSwitch
@@ -423,6 +435,52 @@ export default function PortalSettingsPage() {
                       <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">Override disabled by admin.</p>
                     )}
                     {adminOverride?.allow_portal_user_bucket_create != null && (
+                      <p className="mt-2 ui-caption text-amber-600 dark:text-amber-300">Locked by admin.</p>
+                    )}
+                  </PortalSettingsItem>
+                  <PortalSettingsItem
+                    title="Access key creation"
+                    description="Allow portal users to create access keys from the portal."
+                    action={
+                      <div className="flex flex-col items-end gap-2">
+                        <PortalSettingsSwitch
+                          checked={portalAccessKeyCreateEnabled}
+                          disabled={
+                            portalSettingsLoading ||
+                            portalSettingsSaving ||
+                            overridePortalAccessKeyCreate === "inherit" ||
+                            !overridePolicy.allow_portal_user_access_key_create ||
+                            adminOverride?.allow_portal_user_access_key_create != null
+                          }
+                          ariaLabel="Toggle access key creation for portal users"
+                          onChange={(value) => setOverridePortalAccessKeyCreate(value ? "enabled" : "disabled")}
+                        />
+                        <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                          <span>Inherit</span>
+                          <input
+                            type="checkbox"
+                            checked={overridePortalAccessKeyCreate === "inherit"}
+                            onChange={(e) =>
+                              setOverridePortalAccessKeyCreate(
+                                e.target.checked ? "inherit" : portalAccessKeyCreateEnabled ? "enabled" : "disabled"
+                              )
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            disabled={
+                              portalSettingsLoading ||
+                              portalSettingsSaving ||
+                              !overridePolicy.allow_portal_user_access_key_create ||
+                              adminOverride?.allow_portal_user_access_key_create != null
+                            }
+                          />
+                        </label>
+                      </div>
+                    }
+                  >
+                    {!overridePolicy.allow_portal_user_access_key_create && (
+                      <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">Override disabled by admin.</p>
+                    )}
+                    {adminOverride?.allow_portal_user_access_key_create != null && (
                       <p className="mt-2 ui-caption text-amber-600 dark:text-amber-300">Locked by admin.</p>
                     )}
                   </PortalSettingsItem>

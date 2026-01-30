@@ -54,6 +54,7 @@ type MetadataDraft = {
 };
 
 type TagDraft = ObjectTag & { id: string };
+type MetadataDraftItem = ObjectTag & { id: string };
 
 const inputClasses =
   "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
@@ -126,7 +127,7 @@ export default function ObjectAdvancedModal({
     contentLanguage: "",
     expires: "",
   });
-  const [metadataItems, setMetadataItems] = useState<ObjectTag[]>([]);
+  const [metadataItems, setMetadataItems] = useState<MetadataDraftItem[]>([]);
   const [tagsDraft, setTagsDraft] = useState<TagDraft[]>([]);
   const [storageClass, setStorageClass] = useState("");
   const [aclValue, setAclValue] = useState("private");
@@ -157,10 +158,16 @@ export default function ObjectAdvancedModal({
   const [savingPresign, setSavingPresign] = useState(false);
 
   const tagIdRef = useRef(0);
+  const metadataIdRef = useRef(0);
 
   const nextTagId = () => {
     tagIdRef.current += 1;
     return `tag-${tagIdRef.current}`;
+  };
+
+  const nextMetadataId = () => {
+    metadataIdRef.current += 1;
+    return `meta-${metadataIdRef.current}`;
   };
 
   const versionId = metadata?.version_id ?? tagsVersionId ?? undefined;
@@ -198,7 +205,7 @@ export default function ObjectAdvancedModal({
       contentLanguage: metadata.content_language ?? "",
       expires: formatLocalDateTime(metadata.expires),
     });
-    setMetadataItems(Object.entries(metadata.metadata || {}).map(([key, value]) => ({ key, value })));
+    setMetadataItems(Object.entries(metadata.metadata || {}).map(([key, value]) => ({ id: nextMetadataId(), key, value })));
     setStorageClass(metadata.storage_class ?? item.storageClass ?? "");
   }, [item.storageClass, metadata]);
 
@@ -531,7 +538,7 @@ export default function ObjectAdvancedModal({
               <button
                 type="button"
                 className={buttonGhostClasses}
-                onClick={() => setMetadataItems((prev) => [...prev, { key: "", value: "" }])}
+                onClick={() => setMetadataItems((prev) => [...prev, { id: nextMetadataId(), key: "", value: "" }])}
               >
                 Add metadata
               </button>
@@ -540,14 +547,14 @@ export default function ObjectAdvancedModal({
               <p className="ui-caption text-slate-500 dark:text-slate-400">No custom metadata defined.</p>
             ) : (
               <div className="space-y-2">
-                {metadataItems.map((item, idx) => (
-                  <div key={`${item.key}-${idx}`} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                {metadataItems.map((item) => (
+                  <div key={item.id} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
                     <input
                       className={inputClasses}
                       value={item.key}
                       onChange={(event) =>
                         setMetadataItems((prev) =>
-                          prev.map((entry, index) => (index === idx ? { ...entry, key: event.target.value } : entry))
+                          prev.map((entry) => (entry.id === item.id ? { ...entry, key: event.target.value } : entry))
                         )
                       }
                       placeholder="x-custom-key"
@@ -557,7 +564,7 @@ export default function ObjectAdvancedModal({
                       value={item.value}
                       onChange={(event) =>
                         setMetadataItems((prev) =>
-                          prev.map((entry, index) => (index === idx ? { ...entry, value: event.target.value } : entry))
+                          prev.map((entry) => (entry.id === item.id ? { ...entry, value: event.target.value } : entry))
                         )
                       }
                       placeholder="value"
@@ -565,7 +572,7 @@ export default function ObjectAdvancedModal({
                     <button
                       type="button"
                       className={buttonGhostClasses}
-                      onClick={() => setMetadataItems((prev) => prev.filter((_, index) => index !== idx))}
+                      onClick={() => setMetadataItems((prev) => prev.filter((entry) => entry.id !== item.id))}
                     >
                       Remove
                     </button>

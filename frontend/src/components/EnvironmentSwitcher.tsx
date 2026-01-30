@@ -63,7 +63,13 @@ function resolveAvailableEnvironments(user: StoredUser | null): EnvironmentOptio
   const hasPortalAccess = links.some(
     (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
   );
+  const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
+  const portalOnly = hasPortalAccess && !hasAccountAdmin;
   const canManageBuckets = user.capabilities?.can_manage_buckets !== false;
+
+  if (portalOnly) {
+    return ALL_ENVIRONMENTS.filter((env) => env.id === "portal");
+  }
 
   return ALL_ENVIRONMENTS.filter((env) => {
     if (env.id === "portal") return hasPortalAccess;
@@ -130,7 +136,7 @@ function resolveAvailableEnvironmentsWithFlags(user: StoredUser | null, generalS
   const filtered = resolveAvailableEnvironments(user);
   return filtered.filter((env) => {
     if (env.id === "manager") return generalSettings.manager_enabled;
-    if (env.id === "browser") return generalSettings.browser_enabled;
+    if (env.id === "browser") return generalSettings.browser_enabled && generalSettings.browser_root_enabled;
     if (env.id === "portal") return generalSettings.portal_enabled;
     return true;
   });

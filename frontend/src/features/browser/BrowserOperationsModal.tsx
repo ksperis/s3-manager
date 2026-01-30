@@ -2,6 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { Fragment, type ReactNode } from "react";
 import Modal from "../../components/Modal";
 import { formatBytes } from "../../utils/format";
 import {
@@ -14,7 +15,6 @@ import {
 } from "./browserConstants";
 import { formatBadgeCount } from "./browserUtils";
 import type {
-  CompletedOperationItem,
   CopyDetailItem,
   CopyDetailStatus,
   DeleteDetailItem,
@@ -77,7 +77,9 @@ type BrowserOperationsModalProps = {
   visibleCopyGroups: CopyGroup[];
   visibleUploadGroups: UploadGroup[];
   visibleOtherOperations: OperationItem[];
-  completedOperations: CompletedOperationItem[];
+  operationSortIndexById: Record<string, number>;
+  uploadGroupSortIndexById: Record<string, number>;
+  operationSortFallback: number;
   isGroupExpanded: (groupId: string) => boolean;
   toggleGroupExpanded: (groupId: string) => void;
   getSectionVisibleCount: (groupId: string, section: "queued" | "completed" | "failed") => number;
@@ -113,7 +115,9 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     visibleCopyGroups,
     visibleUploadGroups,
     visibleOtherOperations,
-    completedOperations,
+    operationSortIndexById,
+    uploadGroupSortIndexById,
+    operationSortFallback,
     isGroupExpanded,
     toggleGroupExpanded,
     getSectionVisibleCount,
@@ -127,7 +131,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     onClearFinishedOperations,
     onClose,
   } = props;
-  const operationsPanelHeightClasses = "h-[240px]";
+  const operationsPanelHeightClasses = "h-[300px] sm:h-[340px] lg:h-[380px]";
   const operationsListAreaClasses = "flex-1 overflow-y-auto pr-1";
 
   const showAllOperations = filtersAllInactive;
@@ -135,21 +139,12 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
   const showQueuedSection = showAllOperations || showQueuedOperations;
   const showCompletedSection = showAllOperations || showCompletedOperations;
   const showFailedSection = showAllOperations || showFailedOperations;
-  const hasVisibleCompletedActivity = showCompletedSection && completedOperations.length > 0;
   const hasVisibleOperations =
     visibleUploadGroups.length > 0 ||
     visibleDownloadGroups.length > 0 ||
     visibleDeleteGroups.length > 0 ||
     visibleCopyGroups.length > 0 ||
-    visibleOtherOperations.length > 0 ||
-    hasVisibleCompletedActivity;
-
-  const statusLabel = (status: OperationItem["status"]) => {
-    if (status === "uploading") return "Uploading";
-    if (status === "downloading") return "Downloading";
-    if (status === "copying") return "Copying";
-    return "Deleting";
-  };
+    visibleOtherOperations.length > 0;
 
   const statusClasses = (status: OperationItem["status"]) => {
     if (status === "uploading") return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
@@ -173,12 +168,753 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     }
     return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
   };
+  const queuedPillClasses = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
   const failedFilterChipActiveClasses =
     "border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-500/50 dark:bg-rose-900/30 dark:text-rose-100";
   const failedBadgeClasses = `${countBadgeClasses} ${showFailedOperations ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100" : ""}`;
 
+  const buildStatusPill = (options: {
+    hasFailed: boolean;
+    isCompleted: boolean;
+    queuedOnly: boolean;
+    status: OperationItem["status"];
+    completionStatus?: OperationItem["completionStatus"];
+  }) => {
+    if (options.hasFailed) {
+      return { label: completionLabel("failed"), classes: completionClasses("failed") };
+    }
+    if (options.isCompleted) {
+      return {
+        label: completionLabel(options.completionStatus),
+        classes: completionClasses(options.completionStatus),
+      };
+    }
+    if (options.queuedOnly) {
+      return { label: "Queued", classes: queuedPillClasses };
+    }
+    return { label: "In progress", classes: statusClasses(options.status) };
+  };
+
+  const OperationCard = ({
+    title,
+    subtitle,
+    summary,
+    progress,
+    statusPill,
+    actions,
+    children,
+  }: {
+    title: string;
+    subtitle?: string;
+    summary?: string;
+    progress?: number;
+    statusPill?: { label: string; classes: string };
+    actions?: ReactNode;
+    children?: ReactNode;
+  }) => (
+    <div className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">{title}</p>
+          {subtitle && <p className="ui-caption text-slate-400">{subtitle}</p>}
+          {summary && <p className="ui-caption text-slate-400">{summary}</p>}
+        </div>
+        <div className="flex items-center gap-2">
+          {statusPill && (
+            <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${statusPill.classes}`}>
+              {statusPill.label}
+            </span>
+          )}
+          {actions}
+        </div>
+      </div>
+      {typeof progress === "number" && (
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+          <div className="h-full bg-primary-500" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+      {children != null && <div className="mt-2 space-y-1.5">{children}</div>}
+    </div>
+  );
+
+  const timelineEntries = [
+    ...visibleDownloadGroups.map((group) => ({
+      type: "download" as const,
+      sortIndex: operationSortIndexById[group.op.id] ?? operationSortFallback,
+      group,
+    })),
+    ...visibleDeleteGroups.map((group) => ({
+      type: "delete" as const,
+      sortIndex: operationSortIndexById[group.op.id] ?? operationSortFallback,
+      group,
+    })),
+    ...visibleCopyGroups.map((group) => ({
+      type: "copy" as const,
+      sortIndex: operationSortIndexById[group.op.id] ?? operationSortFallback,
+      group,
+    })),
+    ...visibleUploadGroups.map((group) => ({
+      type: "upload" as const,
+      sortIndex: uploadGroupSortIndexById[group.id] ?? operationSortFallback,
+      group,
+    })),
+    ...visibleOtherOperations.map((op) => ({
+      type: "other" as const,
+      sortIndex: operationSortIndexById[op.id] ?? operationSortFallback,
+      op,
+    })),
+  ].sort((a, b) => a.sortIndex - b.sortIndex);
+
+  const renderDownloadGroup = (group: DownloadGroup) => {
+    const queuedItems = group.items.filter((item) => item.status === "queued");
+    const activeItems = group.items.filter((item) => item.status === "downloading");
+    const completedItems = group.items.filter((item) => item.status === "done" || item.status === "cancelled");
+    const failedItems = group.items.filter((item) => item.status === "failed");
+    const completedCount = completedItems.length;
+    const visibleQueuedItems = queuedItems.slice(0, getSectionVisibleCount(group.op.id, "queued"));
+    const visibleCompletedItems = completedItems.slice(0, getSectionVisibleCount(group.op.id, "completed"));
+    const visibleFailedItems = failedItems.slice(0, getSectionVisibleCount(group.op.id, "failed"));
+    const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
+    const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
+    const hasMoreFailed = failedItems.length > visibleFailedItems.length;
+    const failedCount = failedItems.length;
+    const hasFailed = failedCount > 0 || group.op.completionStatus === "failed";
+    const isCompleted = Boolean(group.op.completedAt);
+    const queuedOnly = !isCompleted && activeItems.length === 0 && queuedItems.length > 0;
+    const statusPill = buildStatusPill({
+      hasFailed,
+      isCompleted,
+      queuedOnly,
+      status: group.op.status,
+      completionStatus: group.op.completionStatus,
+    });
+    const actions = (
+      <>
+        <button
+          type="button"
+          className={operationSecondaryClasses}
+          onClick={() => onDownloadOperationDetails("download", group.op.id)}
+        >
+          Details
+        </button>
+        <button
+          type="button"
+          className={operationSecondaryClasses}
+          onClick={() => toggleGroupExpanded(group.op.id)}
+        >
+          {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
+        </button>
+        {group.op.cancelable && !group.op.completedAt && (
+          <button
+            type="button"
+            className={operationStopClasses}
+            onClick={() => cancelOperation(group.op.id)}
+          >
+            Stop
+          </button>
+        )}
+      </>
+    );
+    const details = isGroupExpanded(group.op.id) ? (
+      group.items.length === 0 ? (
+        <div className="space-y-1 ui-caption text-slate-500 dark:text-slate-400">
+          <p>{group.op.completedAt ? "No files found." : "Preparing download list..."}</p>
+          {group.op.completionStatus === "failed" && group.op.errorMessage && (
+            <p className="text-rose-600 dark:text-rose-200">{group.op.errorMessage}</p>
+          )}
+        </div>
+      ) : (
+        <>
+          {showActiveSection &&
+            activeItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">
+                    Downloading
+                    {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          {showQueuedSection &&
+            visibleQueuedItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">
+                    Queued
+                    {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          {showQueuedSection && hasMoreQueued && (
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.op.id, "queued")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+          )}
+          {showCompletedSection &&
+            visibleCompletedItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">
+                    {item.status === "done" && "Done"}
+                    {item.status === "cancelled" && "Cancelled"}
+                    {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          {showCompletedSection && hasMoreCompleted && (
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.op.id, "completed")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+          )}
+          {showFailedSection &&
+            visibleFailedItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">
+                    Failed
+                    {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                  </p>
+                  {item.errorMessage && (
+                    <p className="ui-caption text-rose-600 dark:text-rose-200">{item.errorMessage}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          {showFailedSection && hasMoreFailed && (
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.op.id, "failed")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+          )}
+        </>
+      )
+    ) : null;
+
+    return (
+      <OperationCard
+        key={group.op.id}
+        title={group.op.label}
+        subtitle={group.op.path}
+        summary={`${group.counts.downloading} active · ${group.counts.queued} queued · ${completedCount} completed · ${failedCount} failed · ${group.op.progress}%`}
+        progress={group.op.progress}
+        statusPill={statusPill}
+        actions={actions}
+      >
+        {details}
+      </OperationCard>
+    );
+  };
+
+  const renderDeleteGroup = (group: DeleteGroup) => {
+    const queuedItems = group.items.filter((item) => item.status === "queued");
+    const activeItems = group.items.filter((item) => item.status === "deleting");
+    const completedItems = group.items.filter((item) => item.status === "done");
+    const failedItems = group.items.filter((item) => item.status === "failed");
+    const completedCount = completedItems.length;
+    const visibleQueuedItems = queuedItems.slice(0, getSectionVisibleCount(group.op.id, "queued"));
+    const visibleCompletedItems = completedItems.slice(0, getSectionVisibleCount(group.op.id, "completed"));
+    const visibleFailedItems = failedItems.slice(0, getSectionVisibleCount(group.op.id, "failed"));
+    const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
+    const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
+    const hasMoreFailed = failedItems.length > visibleFailedItems.length;
+    const failedCount = failedItems.length;
+    const hasFailed = failedCount > 0 || group.op.completionStatus === "failed";
+    const isCompleted = Boolean(group.op.completedAt);
+    const queuedOnly = !isCompleted && activeItems.length === 0 && queuedItems.length > 0;
+    const statusPill = buildStatusPill({
+      hasFailed,
+      isCompleted,
+      queuedOnly,
+      status: group.op.status,
+      completionStatus: group.op.completionStatus,
+    });
+    const actions = (
+      <>
+        <button
+          type="button"
+          className={operationSecondaryClasses}
+          onClick={() => onDownloadOperationDetails("delete", group.op.id)}
+        >
+          Details
+        </button>
+        <button
+          type="button"
+          className={operationSecondaryClasses}
+          onClick={() => toggleGroupExpanded(group.op.id)}
+        >
+          {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
+        </button>
+      </>
+    );
+    const details = isGroupExpanded(group.op.id) ? (
+      group.items.length === 0 ? (
+        <div className="space-y-1 ui-caption text-slate-500 dark:text-slate-400">
+          <p>{group.op.completedAt ? "No items to delete." : "Preparing delete list..."}</p>
+          {group.op.completionStatus === "failed" && group.op.errorMessage && (
+            <p className="text-rose-600 dark:text-rose-200">{group.op.errorMessage}</p>
+          )}
+        </div>
+      ) : (
+        <>
+          {showActiveSection &&
+            activeItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">Deleting</p>
+                </div>
+              </div>
+            ))}
+          {showQueuedSection &&
+            visibleQueuedItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">Queued</p>
+                </div>
+              </div>
+            ))}
+          {showQueuedSection && hasMoreQueued && (
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.op.id, "queued")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+          )}
+          {showCompletedSection &&
+            visibleCompletedItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">{item.status === "done" && "Done"}</p>
+                </div>
+              </div>
+            ))}
+          {showCompletedSection && hasMoreCompleted && (
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.op.id, "completed")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+          )}
+          {showFailedSection &&
+            visibleFailedItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">Failed</p>
+                  {item.errorMessage && (
+                    <p className="ui-caption text-rose-600 dark:text-rose-200">{item.errorMessage}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          {showFailedSection && hasMoreFailed && (
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.op.id, "failed")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+          )}
+        </>
+      )
+    ) : null;
+
+    return (
+      <OperationCard
+        key={group.op.id}
+        title={group.op.label}
+        subtitle={group.op.path}
+        summary={`${group.counts.deleting} active · ${group.counts.queued} queued · ${completedCount} completed · ${failedCount} failed · ${group.op.progress}%`}
+        progress={group.op.progress}
+        statusPill={statusPill}
+        actions={actions}
+      >
+        {details}
+      </OperationCard>
+    );
+  };
+
+  const renderCopyGroup = (group: CopyGroup) => {
+    const queuedItems = group.items.filter((item) => item.status === "queued");
+    const activeItems = group.items.filter((item) => item.status === "copying");
+    const completedItems = group.items.filter((item) => item.status === "done");
+    const failedItems = group.items.filter((item) => item.status === "failed");
+    const completedCount = completedItems.length;
+    const visibleQueuedItems = queuedItems.slice(0, getSectionVisibleCount(group.op.id, "queued"));
+    const visibleCompletedItems = completedItems.slice(0, getSectionVisibleCount(group.op.id, "completed"));
+    const visibleFailedItems = failedItems.slice(0, getSectionVisibleCount(group.op.id, "failed"));
+    const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
+    const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
+    const hasMoreFailed = failedItems.length > visibleFailedItems.length;
+    const failedCount = failedItems.length;
+    const hasFailed = failedCount > 0 || group.op.completionStatus === "failed";
+    const isCompleted = Boolean(group.op.completedAt);
+    const queuedOnly = !isCompleted && activeItems.length === 0 && queuedItems.length > 0;
+    const statusPill = buildStatusPill({
+      hasFailed,
+      isCompleted,
+      queuedOnly,
+      status: group.op.status,
+      completionStatus: group.op.completionStatus,
+    });
+    const actions = (
+      <>
+        <button
+          type="button"
+          className={operationSecondaryClasses}
+          onClick={() => onDownloadOperationDetails("copy", group.op.id)}
+        >
+          Details
+        </button>
+        <button
+          type="button"
+          className={operationSecondaryClasses}
+          onClick={() => toggleGroupExpanded(group.op.id)}
+        >
+          {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
+        </button>
+      </>
+    );
+    const details = isGroupExpanded(group.op.id) ? (
+      group.items.length === 0 ? (
+        <div className="space-y-1 ui-caption text-slate-500 dark:text-slate-400">
+          <p>{group.op.completedAt ? "No items copied." : "Preparing copy list..."}</p>
+          {group.op.completionStatus === "failed" && group.op.errorMessage && (
+            <p className="text-rose-600 dark:text-rose-200">{group.op.errorMessage}</p>
+          )}
+        </div>
+      ) : (
+        <>
+          {showActiveSection &&
+            activeItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">
+                    Copying
+                    {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          {showQueuedSection &&
+            visibleQueuedItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">
+                    Queued
+                    {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          {showQueuedSection && hasMoreQueued && (
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.op.id, "queued")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+          )}
+          {showCompletedSection &&
+            visibleCompletedItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">
+                    {item.status === "done" && "Done"}
+                    {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                  </p>
+                </div>
+              </div>
+            ))}
+          {showCompletedSection && hasMoreCompleted && (
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.op.id, "completed")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+          )}
+          {showFailedSection &&
+            visibleFailedItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.label}</p>
+                  <p className="ui-caption text-slate-400">
+                    Failed
+                    {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                  </p>
+                  {item.errorMessage && (
+                    <p className="ui-caption text-rose-600 dark:text-rose-200">{item.errorMessage}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          {showFailedSection && hasMoreFailed && (
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.op.id, "failed")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+          )}
+        </>
+      )
+    ) : null;
+
+    return (
+      <OperationCard
+        key={group.op.id}
+        title={group.op.label}
+        subtitle={group.op.path}
+        summary={`${group.counts.copying} active · ${group.counts.queued} queued · ${completedCount} completed · ${failedCount} failed · ${group.op.progress}%`}
+        progress={group.op.progress}
+        statusPill={statusPill}
+        actions={actions}
+      >
+        {details}
+      </OperationCard>
+    );
+  };
+
+  const renderUploadGroup = (group: UploadGroup) => {
+    const activeCount = group.activeItems.length;
+    const queuedCount = group.queuedItems.length;
+    const completedItems = group.completedItems.filter((item) => item.completionStatus !== "failed");
+    const failedItems = group.completedItems.filter((item) => item.completionStatus === "failed");
+    const failedCount = failedItems.length;
+    const completedCount = completedItems.length;
+    const visibleQueuedItems = group.queuedItems.slice(0, getSectionVisibleCount(group.id, "queued"));
+    const visibleCompletedItems = completedItems.slice(0, getSectionVisibleCount(group.id, "completed"));
+    const visibleFailedItems = failedItems.slice(0, getSectionVisibleCount(group.id, "failed"));
+    const hasMoreQueued = group.queuedItems.length > visibleQueuedItems.length;
+    const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
+    const hasMoreFailed = failedItems.length > visibleFailedItems.length;
+    const hasFailed = failedCount > 0;
+    const isCompleted = activeCount === 0 && queuedCount === 0 && group.completedItems.length > 0;
+    const queuedOnly = activeCount === 0 && queuedCount > 0;
+    const statusPill = buildStatusPill({
+      hasFailed,
+      isCompleted,
+      queuedOnly,
+      status: "uploading",
+      completionStatus: hasFailed ? "failed" : "done",
+    });
+    const title = group.kind === "folder" ? `Upload folder ${group.label}` : `Upload ${group.label}`;
+    const subtitle = group.totalBytes > 0 ? `${formatBytes(group.totalBytes)} total` : undefined;
+    const actions = (
+      <>
+        <button
+          type="button"
+          className={operationSecondaryClasses}
+          onClick={() => onDownloadOperationDetails("upload", group.id)}
+        >
+          Details
+        </button>
+        <button
+          type="button"
+          className={operationSecondaryClasses}
+          onClick={() => toggleGroupExpanded(group.id)}
+        >
+          {isGroupExpanded(group.id) ? "Hide files" : "Show files"}
+        </button>
+        {(activeCount > 0 || queuedCount > 0) && (
+          <button type="button" className={operationStopClasses} onClick={() => cancelUploadGroup(group.id)}>
+            Stop all
+          </button>
+        )}
+      </>
+    );
+    const details = isGroupExpanded(group.id) ? (
+      <>
+        {showActiveSection &&
+          group.activeItems.map((op) => (
+            <div key={op.id} className="flex items-center justify-between gap-3 ui-caption">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{op.itemLabel ?? op.path}</p>
+                <p className="ui-caption text-slate-400">
+                  Uploading · {op.progress > 0 ? `${op.progress}%` : "In progress"}
+                </p>
+              </div>
+              <button
+                type="button"
+                className={operationStopClasses}
+                onClick={() => cancelUploadOperation(op.id)}
+                disabled={!op.cancelable}
+              >
+                Stop
+              </button>
+            </div>
+          ))}
+        {showQueuedSection &&
+          visibleQueuedItems.map((item) => (
+            <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.itemLabel || item.key}</p>
+                <p className="ui-caption text-slate-400">Queued · {formatBytes(item.file.size)}</p>
+              </div>
+              <button type="button" className={operationStopClasses} onClick={() => removeQueuedUpload(item.id)}>
+                Stop
+              </button>
+            </div>
+          ))}
+        {showQueuedSection && hasMoreQueued && (
+          <button
+            type="button"
+            className={operationSecondaryClasses}
+            onClick={() => showMoreSection(group.id, "queued")}
+          >
+            Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+          </button>
+        )}
+        {showCompletedSection &&
+          visibleCompletedItems.map((item) => (
+            <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                  {item.itemLabel ?? item.path}
+                </p>
+                <p className="ui-caption text-slate-400">
+                  {completionLabel(item.completionStatus)}
+                  {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                </p>
+              </div>
+            </div>
+          ))}
+        {showCompletedSection && hasMoreCompleted && (
+          <button
+            type="button"
+            className={operationSecondaryClasses}
+            onClick={() => showMoreSection(group.id, "completed")}
+          >
+            Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+          </button>
+        )}
+        {showFailedSection &&
+          visibleFailedItems.map((item) => (
+            <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-800 dark:text-slate-100">{item.itemLabel ?? item.path}</p>
+                <p className="ui-caption text-slate-400">
+                  Failed
+                  {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
+                </p>
+                {item.errorMessage && (
+                  <p className="ui-caption text-rose-600 dark:text-rose-200">{item.errorMessage}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        {showFailedSection && hasMoreFailed && (
+          <button
+            type="button"
+            className={operationSecondaryClasses}
+            onClick={() => showMoreSection(group.id, "failed")}
+          >
+            Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+          </button>
+        )}
+      </>
+    ) : null;
+
+    return (
+      <OperationCard
+        key={group.id}
+        title={title}
+        subtitle={subtitle}
+        summary={`${activeCount} active · ${queuedCount} queued · ${completedCount} completed · ${failedCount} failed · ${group.progress}%`}
+        progress={group.progress}
+        statusPill={statusPill}
+        actions={actions}
+      >
+        {details}
+      </OperationCard>
+    );
+  };
+
+  const renderOtherOperation = (op: OperationItem) => {
+    const isCompleted = Boolean(op.completedAt);
+    const hasFailed = op.completionStatus === "failed";
+    const statusPill = buildStatusPill({
+      hasFailed,
+      isCompleted,
+      queuedOnly: false,
+      status: op.status,
+      completionStatus: op.completionStatus,
+    });
+    const summary = isCompleted
+      ? `${completionLabel(op.completionStatus)}${op.completedAt ? ` · ${op.completedAt}` : ""}`
+      : `${op.progress > 0 ? `${op.progress}%` : "In progress"}`;
+    const actions = (
+      <>
+        <button
+          type="button"
+          className={operationSecondaryClasses}
+          onClick={() => onDownloadOperationDetails("other", op.id)}
+        >
+          Details
+        </button>
+        {!isCompleted && op.cancelable && (
+          <button type="button" className={operationStopClasses} onClick={() => cancelOperation(op.id)}>
+            Stop
+          </button>
+        )}
+      </>
+    );
+    return (
+      <OperationCard
+        key={op.id}
+        title={op.label}
+        subtitle={op.path}
+        summary={summary}
+        progress={op.progress}
+        statusPill={statusPill}
+        actions={actions}
+      >
+        {op.completionStatus === "failed" && op.errorMessage ? (
+          <p className="ui-caption text-rose-600 dark:text-rose-200">{op.errorMessage}</p>
+        ) : null}
+      </OperationCard>
+    );
+  };
+
   return (
-    <Modal title="Operations overview" onClose={onClose} maxWidthClass="max-w-3xl">
+    <Modal
+      title="Operations overview"
+      onClose={onClose}
+      maxWidthClass="max-w-6xl"
+      maxBodyHeightClass="max-h-[90vh]"
+    >
       <div className="space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -240,749 +976,27 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {visibleDownloadGroups.map((group) => {
-                    const queuedItems = group.items.filter((item) => item.status === "queued");
-                    const activeItems = group.items.filter((item) => item.status === "downloading");
-                    const completedItems = group.items.filter(
-                      (item) => item.status === "done" || item.status === "cancelled"
-                    );
-                    const failedItems = group.items.filter((item) => item.status === "failed");
-                    const visibleQueuedItems = queuedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.op.id, "queued")
-                    );
-                    const visibleCompletedItems = completedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.op.id, "completed")
-                    );
-                    const visibleFailedItems = failedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.op.id, "failed")
-                    );
-                    const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
-                    const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
-                    const hasMoreFailed = failedItems.length > visibleFailedItems.length;
-                    const failedCount = failedItems.length;
-                    const hasFailed = failedCount > 0 || group.op.completionStatus === "failed";
-                    return (
-                      <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                              {group.op.path}
-                            </p>
-                            <p className="ui-caption text-slate-400">
-                              {group.counts.downloading} active · {group.counts.queued} queued · {failedCount} failed ·{" "}
-                              {group.op.progress}%
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {hasFailed && (
-                              <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${completionClasses("failed")}`}>
-                                {completionLabel("failed")}
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              className={operationSecondaryClasses}
-                              onClick={() => onDownloadOperationDetails("download", group.op.id)}
-                            >
-                              Download details
-                            </button>
-                            <button
-                              type="button"
-                              className={operationSecondaryClasses}
-                              onClick={() => toggleGroupExpanded(group.op.id)}
-                            >
-                              {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
-                            </button>
-                            {group.op.cancelable && !group.op.completedAt && (
-                              <button
-                                type="button"
-                                className={operationStopClasses}
-                                onClick={() => cancelOperation(group.op.id)}
-                              >
-                                Stop
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                          <div className="h-full bg-primary-500" style={{ width: `${group.op.progress}%` }} />
-                        </div>
-                        {isGroupExpanded(group.op.id) && (
-                          <div className="mt-2 space-y-1.5">
-                            {group.items.length === 0 ? (
-                              <div className="space-y-1 ui-caption text-slate-500 dark:text-slate-400">
-                                <p>{group.op.completedAt ? "No files found." : "Preparing download list..."}</p>
-                                {group.op.completionStatus === "failed" && group.op.errorMessage && (
-                                  <p className="text-rose-600 dark:text-rose-200">{group.op.errorMessage}</p>
-                                )}
-                              </div>
-                            ) : (
-                              <>
-                                {showActiveSection &&
-                                  activeItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">
-                                          Downloading
-                                          {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showQueuedSection &&
-                                  visibleQueuedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">
-                                          Queued
-                                          {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showQueuedSection && hasMoreQueued && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.op.id, "queued")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                                {showCompletedSection &&
-                                  visibleCompletedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">
-                                          {item.status === "done" && "Done"}
-                                          {item.status === "cancelled" && "Cancelled"}
-                                          {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showCompletedSection && hasMoreCompleted && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.op.id, "completed")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                                {showFailedSection &&
-                                  visibleFailedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">
-                                          Failed
-                                          {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                        </p>
-                                        {item.errorMessage && (
-                                          <p className="ui-caption text-rose-600 dark:text-rose-200">{item.errorMessage}</p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showFailedSection && hasMoreFailed && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.op.id, "failed")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
+                  {timelineEntries.map((entry) => {
+                    const key =
+                      entry.type === "other"
+                        ? `other:${entry.op.id}`
+                        : entry.type === "upload"
+                          ? `upload:${entry.group.id}`
+                          : `${entry.type}:${entry.group.op.id}`;
+                    if (entry.type === "download") {
+                      return <Fragment key={key}>{renderDownloadGroup(entry.group)}</Fragment>;
+                    }
+                    if (entry.type === "delete") {
+                      return <Fragment key={key}>{renderDeleteGroup(entry.group)}</Fragment>;
+                    }
+                    if (entry.type === "copy") {
+                      return <Fragment key={key}>{renderCopyGroup(entry.group)}</Fragment>;
+                    }
+                    if (entry.type === "upload") {
+                      return <Fragment key={key}>{renderUploadGroup(entry.group)}</Fragment>;
+                    }
+                    return <Fragment key={key}>{renderOtherOperation(entry.op)}</Fragment>;
                   })}
-                  {visibleDeleteGroups.map((group) => {
-                    const queuedItems = group.items.filter((item) => item.status === "queued");
-                    const activeItems = group.items.filter((item) => item.status === "deleting");
-                    const completedItems = group.items.filter((item) => item.status === "done");
-                    const failedItems = group.items.filter((item) => item.status === "failed");
-                    const visibleQueuedItems = queuedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.op.id, "queued")
-                    );
-                    const visibleCompletedItems = completedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.op.id, "completed")
-                    );
-                    const visibleFailedItems = failedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.op.id, "failed")
-                    );
-                    const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
-                    const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
-                    const hasMoreFailed = failedItems.length > visibleFailedItems.length;
-                    const failedCount = failedItems.length;
-                    const hasFailed = failedCount > 0 || group.op.completionStatus === "failed";
-                    return (
-                      <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                              {group.op.path}
-                            </p>
-                            <p className="ui-caption text-slate-400">
-                              {group.counts.deleting} active · {group.counts.queued} queued · {failedCount} failed ·{" "}
-                              {group.op.progress}%
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {hasFailed && (
-                              <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${completionClasses("failed")}`}>
-                                {completionLabel("failed")}
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              className={operationSecondaryClasses}
-                              onClick={() => onDownloadOperationDetails("delete", group.op.id)}
-                            >
-                              Download details
-                            </button>
-                            <button
-                              type="button"
-                              className={operationSecondaryClasses}
-                              onClick={() => toggleGroupExpanded(group.op.id)}
-                            >
-                              {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                          <div className="h-full bg-primary-500" style={{ width: `${group.op.progress}%` }} />
-                        </div>
-                        {isGroupExpanded(group.op.id) && (
-                          <div className="mt-2 space-y-1.5">
-                            {group.items.length === 0 ? (
-                              <div className="space-y-1 ui-caption text-slate-500 dark:text-slate-400">
-                                <p>{group.op.completedAt ? "No items to delete." : "Preparing delete list..."}</p>
-                                {group.op.completionStatus === "failed" && group.op.errorMessage && (
-                                  <p className="text-rose-600 dark:text-rose-200">{group.op.errorMessage}</p>
-                                )}
-                              </div>
-                            ) : (
-                              <>
-                                {showActiveSection &&
-                                  activeItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">Deleting</p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showQueuedSection &&
-                                  visibleQueuedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">Queued</p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showQueuedSection && hasMoreQueued && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.op.id, "queued")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                                {showCompletedSection &&
-                                  visibleCompletedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">
-                                          {item.status === "done" && "Done"}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showCompletedSection && hasMoreCompleted && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.op.id, "completed")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                                {showFailedSection &&
-                                  visibleFailedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">Failed</p>
-                                        {item.errorMessage && (
-                                          <p className="ui-caption text-rose-600 dark:text-rose-200">{item.errorMessage}</p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showFailedSection && hasMoreFailed && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.op.id, "failed")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {visibleCopyGroups.map((group) => {
-                    const queuedItems = group.items.filter((item) => item.status === "queued");
-                    const activeItems = group.items.filter((item) => item.status === "copying");
-                    const completedItems = group.items.filter((item) => item.status === "done");
-                    const failedItems = group.items.filter((item) => item.status === "failed");
-                    const visibleQueuedItems = queuedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.op.id, "queued")
-                    );
-                    const visibleCompletedItems = completedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.op.id, "completed")
-                    );
-                    const visibleFailedItems = failedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.op.id, "failed")
-                    );
-                    const hasMoreQueued = queuedItems.length > visibleQueuedItems.length;
-                    const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
-                    const hasMoreFailed = failedItems.length > visibleFailedItems.length;
-                    const failedCount = failedItems.length;
-                    const hasFailed = failedCount > 0 || group.op.completionStatus === "failed";
-                    return (
-                      <div key={group.op.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                              {group.op.path}
-                            </p>
-                            <p className="ui-caption text-slate-400">
-                              {group.counts.copying} active · {group.counts.queued} queued · {failedCount} failed ·{" "}
-                              {group.op.progress}%
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {hasFailed && (
-                              <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${completionClasses("failed")}`}>
-                                {completionLabel("failed")}
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              className={operationSecondaryClasses}
-                              onClick={() => onDownloadOperationDetails("copy", group.op.id)}
-                            >
-                              Download details
-                            </button>
-                            <button
-                              type="button"
-                              className={operationSecondaryClasses}
-                              onClick={() => toggleGroupExpanded(group.op.id)}
-                            >
-                              {isGroupExpanded(group.op.id) ? "Hide files" : "Show files"}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                          <div className="h-full bg-primary-500" style={{ width: `${group.op.progress}%` }} />
-                        </div>
-                        {isGroupExpanded(group.op.id) && (
-                          <div className="mt-2 space-y-1.5">
-                            {group.items.length === 0 ? (
-                              <div className="space-y-1 ui-caption text-slate-500 dark:text-slate-400">
-                                <p>{group.op.completedAt ? "No items copied." : "Preparing copy list..."}</p>
-                                {group.op.completionStatus === "failed" && group.op.errorMessage && (
-                                  <p className="text-rose-600 dark:text-rose-200">{group.op.errorMessage}</p>
-                                )}
-                              </div>
-                            ) : (
-                              <>
-                                {showActiveSection &&
-                                  activeItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">
-                                          Copying
-                                          {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showQueuedSection &&
-                                  visibleQueuedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">
-                                          Queued
-                                          {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showQueuedSection && hasMoreQueued && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.op.id, "queued")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                                {showCompletedSection &&
-                                  visibleCompletedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">
-                                          {item.status === "done" && "Done"}
-                                          {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showCompletedSection && hasMoreCompleted && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.op.id, "completed")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                                {showFailedSection &&
-                                  visibleFailedItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                      <div className="min-w-0">
-                                        <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                          {item.label}
-                                        </p>
-                                        <p className="ui-caption text-slate-400">
-                                          Failed
-                                          {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                        </p>
-                                        {item.errorMessage && (
-                                          <p className="ui-caption text-rose-600 dark:text-rose-200">{item.errorMessage}</p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                {showFailedSection && hasMoreFailed && (
-                                  <button
-                                    type="button"
-                                    className={operationSecondaryClasses}
-                                    onClick={() => showMoreSection(group.op.id, "failed")}
-                                  >
-                                    Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                                  </button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {visibleUploadGroups.map((group) => {
-                    const activeCount = group.activeItems.length;
-                    const queuedCount = group.queuedItems.length;
-                    const completedItems = group.completedItems.filter((item) => item.completionStatus !== "failed");
-                    const failedItems = group.completedItems.filter((item) => item.completionStatus === "failed");
-                    const failedCount = failedItems.length;
-                    const hasFailed = failedCount > 0;
-                    const visibleQueuedItems = group.queuedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.id, "queued")
-                    );
-                    const visibleCompletedItems = completedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.id, "completed")
-                    );
-                    const visibleFailedItems = failedItems.slice(
-                      0,
-                      getSectionVisibleCount(group.id, "failed")
-                    );
-                    const hasMoreQueued = group.queuedItems.length > visibleQueuedItems.length;
-                    const hasMoreCompleted = completedItems.length > visibleCompletedItems.length;
-                    const hasMoreFailed = failedItems.length > visibleFailedItems.length;
-                    return (
-                      <div key={group.id} className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                              {group.kind === "folder" ? `Upload folder ${group.label}` : `Upload ${group.label}`}
-                            </p>
-                            <p className="ui-caption text-slate-400">
-                              {activeCount} active · {queuedCount} queued · {failedCount} failed · {group.progress}%
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {hasFailed && (
-                              <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${completionClasses("failed")}`}>
-                                {completionLabel("failed")}
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              className={operationSecondaryClasses}
-                              onClick={() => onDownloadOperationDetails("upload", group.id)}
-                            >
-                              Download details
-                            </button>
-                            <button
-                              type="button"
-                              className={operationSecondaryClasses}
-                              onClick={() => toggleGroupExpanded(group.id)}
-                            >
-                              {isGroupExpanded(group.id) ? "Hide files" : "Show files"}
-                            </button>
-                            {(activeCount > 0 || queuedCount > 0) && (
-                              <button
-                                type="button"
-                                className={operationStopClasses}
-                                onClick={() => cancelUploadGroup(group.id)}
-                              >
-                                Stop all
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                          <div className="h-full bg-primary-500" style={{ width: `${group.progress}%` }} />
-                        </div>
-                        {isGroupExpanded(group.id) && (
-                          <div className="mt-2 space-y-1.5">
-                            {showActiveSection &&
-                              group.activeItems.map((op) => (
-                                <div key={op.id} className="flex items-center justify-between gap-3 ui-caption">
-                                  <div className="min-w-0">
-                                    <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                      {op.itemLabel ?? op.path}
-                                    </p>
-                                    <p className="ui-caption text-slate-400">
-                                      Uploading · {op.progress > 0 ? `${op.progress}%` : "In progress"}
-                                    </p>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className={operationStopClasses}
-                                    onClick={() => cancelUploadOperation(op.id)}
-                                    disabled={!op.cancelable}
-                                  >
-                                    Stop
-                                  </button>
-                                </div>
-                              ))}
-                            {showQueuedSection &&
-                              visibleQueuedItems.map((item) => (
-                                <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                  <div className="min-w-0">
-                                    <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                      {item.itemLabel || item.key}
-                                    </p>
-                                    <p className="ui-caption text-slate-400">
-                                      Queued · {formatBytes(item.file.size)}
-                                    </p>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className={operationStopClasses}
-                                    onClick={() => removeQueuedUpload(item.id)}
-                                  >
-                                    Stop
-                                  </button>
-                                </div>
-                              ))}
-                            {showQueuedSection && hasMoreQueued && (
-                              <button
-                                type="button"
-                                className={operationSecondaryClasses}
-                                onClick={() => showMoreSection(group.id, "queued")}
-                              >
-                                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                              </button>
-                            )}
-                            {showCompletedSection &&
-                              visibleCompletedItems.map((item) => (
-                                <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                  <div className="min-w-0">
-                                    <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                      {item.itemLabel ?? item.path}
-                                    </p>
-                                    <p className="ui-caption text-slate-400">
-                                      {completionLabel(item.completionStatus)}
-                                      {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                    </p>
-                                  </div>
-                                </div>
-                              ))}
-                            {showCompletedSection && hasMoreCompleted && (
-                              <button
-                                type="button"
-                                className={operationSecondaryClasses}
-                                onClick={() => showMoreSection(group.id, "completed")}
-                              >
-                                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                              </button>
-                            )}
-                            {showFailedSection &&
-                              visibleFailedItems.map((item) => (
-                                <div key={item.id} className="flex items-center justify-between gap-3 ui-caption">
-                                  <div className="min-w-0">
-                                    <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                                      {item.itemLabel ?? item.path}
-                                    </p>
-                                    <p className="ui-caption text-slate-400">
-                                      Failed
-                                      {item.sizeBytes != null ? ` · ${formatBytes(item.sizeBytes)}` : ""}
-                                    </p>
-                                    {item.errorMessage && (
-                                      <p className="ui-caption text-rose-600 dark:text-rose-200">{item.errorMessage}</p>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            {showFailedSection && hasMoreFailed && (
-                              <button
-                                type="button"
-                                className={operationSecondaryClasses}
-                                onClick={() => showMoreSection(group.id, "failed")}
-                              >
-                                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {visibleOtherOperations.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Other operations</p>
-                      {visibleOtherOperations.map((op) => {
-                        const isCompleted = Boolean(op.completedAt);
-                        return (
-                          <div
-                            key={op.id}
-                            className="space-y-2 rounded-lg border border-slate-200 px-4 py-3 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${statusClasses(op.status)}`}>
-                                {statusLabel(op.status)}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                {isCompleted ? (
-                                  <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${completionClasses(op.completionStatus)}`}>
-                                    {completionLabel(op.completionStatus)}
-                                  </span>
-                                ) : (
-                                  <span className="ui-caption text-slate-500 dark:text-slate-400">
-                                    {op.progress > 0 ? `${op.progress}%` : "In progress"}
-                                  </span>
-                                )}
-                                <button
-                                  type="button"
-                                  className={operationSecondaryClasses}
-                                  onClick={() => onDownloadOperationDetails("other", op.id)}
-                                >
-                                  Download details
-                                </button>
-                                {!isCompleted && op.cancelable && (
-                                  <button
-                                    type="button"
-                                    className={operationStopClasses}
-                                    onClick={() => cancelOperation(op.id)}
-                                  >
-                                    Stop
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <p className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">{op.path}</p>
-                            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                              <div className="h-full bg-primary-500" style={{ width: `${op.progress}%` }} />
-                            </div>
-                            <p className="ui-caption text-slate-400">
-                              {isCompleted ? `${completionLabel(op.completionStatus)}.` : `${op.label} in progress.`}
-                            </p>
-                            {op.completionStatus === "failed" && op.errorMessage && (
-                              <p className="ui-caption text-rose-600 dark:text-rose-200">{op.errorMessage}</p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {showCompletedSection && completedOperations.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Completed</p>
-                      {completedOperations.map((activity) => (
-                        <div
-                          key={activity.id}
-                          className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-4 py-3 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                        >
-                          <div className="min-w-0 space-y-1">
-                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 ui-caption font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
-                              Completed
-                            </span>
-                            <p className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                              {activity.label}
-                            </p>
-                            <p className="truncate ui-caption text-slate-400">{activity.path}</p>
-                          </div>
-                          <span className="shrink-0 ui-caption text-slate-400">{activity.when}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>

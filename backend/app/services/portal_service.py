@@ -170,6 +170,8 @@ class PortalService:
             portal_settings.allow_portal_key = override.allow_portal_key
         if override.allow_portal_user_bucket_create is not None:
             portal_settings.allow_portal_user_bucket_create = override.allow_portal_user_bucket_create
+        if override.allow_portal_user_access_key_create is not None:
+            portal_settings.allow_portal_user_access_key_create = override.allow_portal_user_access_key_create
         self._apply_policy_override(
             portal_settings.iam_group_manager_policy,
             override.iam_group_manager_policy,
@@ -217,6 +219,12 @@ class PortalService:
             and admin_override.allow_portal_user_bucket_create is None
         ):
             portal_settings.allow_portal_user_bucket_create = override.allow_portal_user_bucket_create
+        if (
+            override.allow_portal_user_access_key_create is not None
+            and policy.allow_portal_user_access_key_create
+            and admin_override.allow_portal_user_access_key_create is None
+        ):
+            portal_settings.allow_portal_user_access_key_create = override.allow_portal_user_access_key_create
 
         admin_manager_actions, admin_manager_advanced = self._policy_override_flags(admin_override.iam_group_manager_policy)
         admin_user_actions, admin_user_advanced = self._policy_override_flags(admin_override.iam_group_user_policy)
@@ -278,6 +286,11 @@ class PortalService:
                 issues.append("Override non autorise pour la creation de bucket portail.")
             if admin_override.allow_portal_user_bucket_create is not None:
                 issues.append("Override verrouille par l'admin pour la creation de bucket portail.")
+        if override.allow_portal_user_access_key_create is not None:
+            if not policy.allow_portal_user_access_key_create:
+                issues.append("Override non autorise pour la creation de cle d'acces portail.")
+            if admin_override.allow_portal_user_access_key_create is not None:
+                issues.append("Override verrouille par l'admin pour la creation de cle d'acces portail.")
 
         admin_manager_actions, admin_manager_advanced = self._policy_override_flags(admin_override.iam_group_manager_policy)
         admin_user_actions, admin_user_advanced = self._policy_override_flags(admin_override.iam_group_user_policy)
@@ -1299,6 +1312,9 @@ class PortalService:
         portal_key.secret_access_key = None
         access_key, secret_key = self._active_credentials(link, iam_service)
         keys = self._list_access_keys(link, iam_service, include_portal=False)
+        access_keys = [portal_key, *keys]
+        if access.role == AccountRole.PORTAL_USER.value and not portal_settings.allow_portal_key:
+            access_keys = keys
         used_bytes = None
         used_objects = None
         accessible_names: Optional[set[str]] = None
@@ -1343,7 +1359,7 @@ class PortalService:
                 arn=iam_user.arn if iam_user else None,
                 created_at=link.created_at,
             ),
-            access_keys=[portal_key, *keys],
+            access_keys=access_keys,
             buckets=buckets,
             total_buckets=total_buckets,
             s3_endpoint=resolve_s3_endpoint(account),

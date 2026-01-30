@@ -28,7 +28,6 @@ from app.routers.dependencies import (
     get_current_account_user,
     get_portal_account_access,
     get_portal_account_context,
-    require_portal_buckets,
     require_portal_manager,
 )
 from app.services.audit_service import AuditService
@@ -330,13 +329,16 @@ def list_portal_access_keys(
 
 @router.post("/access-keys", response_model=PortalAccessKey, status_code=status.HTTP_201_CREATED)
 def create_portal_access_key(
-    access: AccountAccess = Depends(require_portal_buckets),
+    access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_logger),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalAccessKey:
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    portal_settings = service.get_effective_portal_settings(access.account)
+    if access.role == AccountRole.PORTAL_USER.value and not portal_settings.allow_portal_user_access_key_create:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access key creation not allowed for this role.")
     try:
         key = service.create_access_key(actor, access)
         audit_service.record_action(
@@ -386,6 +388,9 @@ def get_active_portal_access_key(
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    portal_settings = service.get_effective_portal_settings(access.account)
+    if access.role == AccountRole.PORTAL_USER.value and not portal_settings.allow_portal_key:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal key visibility not allowed for this role.")
     try:
         return service.get_portal_access_key(actor, access)
     except RuntimeError as exc:

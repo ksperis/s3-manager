@@ -24,6 +24,7 @@ from app.db import S3Account, User
 from app.models.app_settings import BrowserSettings
 from app.models.browser import (
     BrowserBucket,
+    BucketVersioningStatus,
     BucketCorsStatus,
     CleanupObjectVersionsPayload,
     CleanupObjectVersionsResponse,
@@ -123,6 +124,21 @@ def list_buckets(
 ) -> list[BrowserBucket]:
     try:
         return service.list_buckets(account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/{bucket_name}/versioning", response_model=BucketVersioningStatus)
+def get_bucket_versioning(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketVersioningStatus:
+    try:
+        status_value = service.get_bucket_versioning(bucket_name, account)
+        enabled = status_value == "Enabled"
+        return BucketVersioningStatus(status=status_value, enabled=enabled)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

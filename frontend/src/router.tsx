@@ -155,7 +155,9 @@ function RoleRedirect() {
     if (portalOnly && generalSettings.portal_enabled) return <Navigate to="/portal" replace />;
     if (generalSettings.manager_enabled) return <Navigate to="/manager" replace />;
     if (hasPortalAccess && generalSettings.portal_enabled) return <Navigate to="/portal" replace />;
-    if (generalSettings.browser_enabled && canManageBuckets) return <Navigate to="/browser" replace />;
+    if (isBrowserSurfaceEnabled(generalSettings, "root") && canManageBuckets) {
+      return <Navigate to="/browser" replace />;
+    }
     return <Navigate to="/unauthorized" replace />;
   }
   if (user.role === UNASSIGNED_ROLE) return <Navigate to="/unauthorized" replace />;
@@ -173,6 +175,24 @@ function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal"
   if (!enabled) {
     const label = feature === "manager" ? "Manager" : feature === "browser" ? "Browser" : "Portal";
     return <FeatureDisabledPage feature={label} />;
+  }
+  return <Outlet />;
+}
+
+function isBrowserSurfaceEnabled(
+  generalSettings: ReturnType<typeof useGeneralSettings>["generalSettings"],
+  surface: "root" | "manager" | "portal"
+) {
+  if (!generalSettings.browser_enabled) return false;
+  if (surface === "root") return generalSettings.browser_root_enabled;
+  if (surface === "manager") return generalSettings.browser_manager_enabled;
+  return generalSettings.browser_portal_enabled;
+}
+
+function RequireBrowserSurface({ surface }: { surface: "root" | "manager" | "portal" }) {
+  const { generalSettings } = useGeneralSettings();
+  if (!isBrowserSurfaceEnabled(generalSettings, surface)) {
+    return <FeatureDisabledPage feature="Browser" />;
   }
   return <Outlet />;
 }
@@ -223,7 +243,7 @@ export default function AppRouter() {
                 <Route index element={<ManagerDashboard />} />
                 <Route path="buckets" element={<BucketsPage />} />
                 <Route path="buckets/:bucketName" element={<BucketDetailPage />} />
-                <Route element={<RequireFeature feature="browser" />}>
+                <Route element={<RequireBrowserSurface surface="manager" />}>
                   <Route path="browser" element={<ManagerBrowserPage />} />
                 </Route>
                 <Route path="users" element={<ManagerUsersPage />} />
@@ -240,7 +260,7 @@ export default function AppRouter() {
               </Route>
             </Route>
 
-            <Route element={<RequireFeature feature="browser" />}>
+            <Route element={<RequireBrowserSurface surface="root" />}>
               <Route path="/browser" element={<BrowserLayout />}>
                 <Route index element={<BrowserPage />} />
               </Route>
@@ -252,7 +272,7 @@ export default function AppRouter() {
               <Route path="/portal" element={<PortalLayout />}>
                 <Route index element={<PortalDashboard />} />
                 <Route path="buckets" element={<PortalBucketsPage />} />
-                <Route element={<RequireFeature feature="browser" />}>
+                <Route element={<RequireBrowserSurface surface="portal" />}>
                   <Route path="browser" element={<PortalBrowserPage />} />
                 </Route>
                 <Route path="manage" element={<PortalManagePage />} />

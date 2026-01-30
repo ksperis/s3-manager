@@ -10,6 +10,11 @@ export type BrowserBucket = {
   creation_date?: string | null;
 };
 
+export type BucketVersioningStatus = {
+  status?: string | null;
+  enabled: boolean;
+};
+
 export type BrowserObject = {
   key: string;
   size: number;
@@ -272,6 +277,17 @@ export async function listBrowserBuckets(accountId: S3AccountSelector): Promise<
   const { data } = await client.get<BrowserBucket[]>("/browser/buckets", {
     params: withS3AccountParam(undefined, accountId),
   });
+  return data;
+}
+
+export async function getBucketVersioning(
+  accountId: S3AccountSelector,
+  bucketName: string
+): Promise<BucketVersioningStatus> {
+  const { data } = await client.get<BucketVersioningStatus>(
+    `/browser/buckets/${encodeURIComponent(bucketName)}/versioning`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
   return data;
 }
 

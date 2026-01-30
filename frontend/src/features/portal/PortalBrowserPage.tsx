@@ -11,7 +11,10 @@ export default function PortalBrowserPage() {
 
   return (
     <>
-      <PageHeader title="Browser" />
+      <PageHeader
+        title="Browser"
+        actions={[{ label: "Retour au portail", to: "/portal", variant: "ghost" }]}
+      />
       <div className="min-h-0 flex-1">
         <BrowserEmbed
           accountIdForApi={accountIdForApi}

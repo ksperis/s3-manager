@@ -641,6 +641,14 @@ class BrowserService:
             next_version_id_marker=resp.get("NextVersionIdMarker"),
         )
 
+    def get_bucket_versioning(self, bucket_name: str, account: S3Account) -> Optional[str]:
+        client = self._client(account)
+        try:
+            resp = client.get_bucket_versioning(Bucket=bucket_name)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to fetch versioning for bucket '{bucket_name}': {exc}") from exc
+        return resp.get("Status")
+
     def cleanup_object_versions(
         self,
         bucket_name: str,

@@ -25,6 +25,7 @@ import {
   cleanupObjectVersions,
   createFolder,
   deleteObjects,
+  getBucketVersioning,
   fetchObjectMetadata,
   getBucketCorsStatus,
   ensureBucketCors,
@@ -54,6 +55,8 @@ import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
 import BrowserContextMenu from "./BrowserContextMenu";
 import BrowserOperationsModal from "./BrowserOperationsModal";
+import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
+import BrowserObjectVersionsModal from "./BrowserObjectVersionsModal";
 import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
 import BrowserPreviewModal from "./BrowserPreviewModal";
 import ObjectAdvancedModal from "./ObjectAdvancedModal";
@@ -230,6 +233,16 @@ export default function BrowserPage({
   const [objectVersionsError, setObjectVersionsError] = useState<string | null>(null);
   const [objectVersionKeyMarker, setObjectVersionKeyMarker] = useState<string | null>(null);
   const [objectVersionIdMarker, setObjectVersionIdMarker] = useState<string | null>(null);
+  const [bucketVersioningEnabled, setBucketVersioningEnabled] = useState(false);
+  const [showObjectVersionsModal, setShowObjectVersionsModal] = useState(false);
+  const [objectVersionsModalKey, setObjectVersionsModalKey] = useState<string | null>(null);
+  const [objectVersionsModalPath, setObjectVersionsModalPath] = useState<string | null>(null);
+  const [objectVersionsModal, setObjectVersionsModal] = useState<BrowserObjectVersion[]>([]);
+  const [objectDeleteMarkersModal, setObjectDeleteMarkersModal] = useState<BrowserObjectVersion[]>([]);
+  const [objectVersionsModalLoading, setObjectVersionsModalLoading] = useState(false);
+  const [objectVersionsModalError, setObjectVersionsModalError] = useState<string | null>(null);
+  const [objectVersionModalKeyMarker, setObjectVersionModalKeyMarker] = useState<string | null>(null);
+  const [objectVersionModalIdMarker, setObjectVersionModalIdMarker] = useState<string | null>(null);
   const [loadingBuckets, setLoadingBuckets] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
@@ -328,9 +341,19 @@ export default function BrowserPage({
   const [bulkRetentionBypass, setBulkRetentionBypass] = useState(false);
   const [bulkRestoreDate, setBulkRestoreDate] = useState("");
   const [bulkRestoreDeleteMissing, setBulkRestoreDeleteMissing] = useState(false);
+  const [bulkRestoreDryRun, setBulkRestoreDryRun] = useState(false);
   const [bulkRestoreLoading, setBulkRestoreLoading] = useState(false);
   const [bulkRestoreError, setBulkRestoreError] = useState<string | null>(null);
   const [bulkRestoreSummary, setBulkRestoreSummary] = useState<string | null>(null);
+  const [bulkRestorePreview, setBulkRestorePreview] = useState<{
+    restoreKeys: string[];
+    deleteKeys: string[];
+    unchangedKeys: string[];
+    totalRestore: number;
+    totalDelete: number;
+    totalUnchanged: number;
+  } | null>(null);
+  const [bulkRestoreTargetPath, setBulkRestoreTargetPath] = useState<string | null>(null);
   const [showCleanupModal, setShowCleanupModal] = useState(false);
   const [cleanupKeepLast, setCleanupKeepLast] = useState("");
   const [cleanupOlderThanDays, setCleanupOlderThanDays] = useState("");
@@ -418,6 +441,7 @@ export default function BrowserPage({
   );
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
+  const isVersioningEnabled = bucketVersioningEnabled;
   useEffect(() => {
     bucketNameRef.current = bucketName;
     prefixRef.current = prefix;
@@ -932,7 +956,7 @@ export default function BrowserPage({
   };
 
   const loadPrefixVersions = async (opts?: { append?: boolean; keyMarker?: string | null; versionIdMarker?: string | null }) => {
-    if (!bucketName || !hasS3AccountContext) return;
+    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
     if (!opts?.append) {
       setPrefixVersionsLoading(true);
       setPrefixVersionsError(null);
@@ -969,7 +993,7 @@ export default function BrowserPage({
     versionIdMarker?: string | null;
     targetKey?: string | null;
   }) => {
-    if (!bucketName || !hasS3AccountContext) return;
+    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
     const targetKey = opts?.targetKey ?? inspectedItem?.key ?? null;
     if (!targetKey) return;
     if (!opts?.append) {
@@ -1002,6 +1026,49 @@ export default function BrowserPage({
     }
   };
 
+  const loadObjectVersionsModal = async (opts?: {
+    append?: boolean;
+    keyMarker?: string | null;
+    versionIdMarker?: string | null;
+    targetKey?: string | null;
+  }) => {
+    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
+    const targetKey = opts?.targetKey ?? objectVersionsModalKey ?? null;
+    if (!targetKey) return;
+    if (!opts?.append) {
+      setObjectVersionsModalLoading(true);
+      setObjectVersionsModalError(null);
+    } else {
+      setObjectVersionsModalLoading(true);
+    }
+    const resolvedKeyMarker =
+      opts?.keyMarker !== undefined ? opts.keyMarker : objectVersionModalKeyMarker;
+    const resolvedVersionIdMarker =
+      opts?.versionIdMarker !== undefined ? opts.versionIdMarker : objectVersionModalIdMarker;
+    try {
+      const data = await listObjectVersions(accountIdForApi, bucketName, {
+        key: targetKey,
+        keyMarker: resolvedKeyMarker ?? undefined,
+        versionIdMarker: resolvedVersionIdMarker ?? undefined,
+        maxKeys: VERSIONS_PAGE_SIZE,
+      });
+      setObjectVersionModalKeyMarker(data.next_key_marker ?? null);
+      setObjectVersionModalIdMarker(data.next_version_id_marker ?? null);
+      setObjectVersionsModal((prev) => (opts?.append ? [...prev, ...data.versions] : data.versions));
+      setObjectDeleteMarkersModal((prev) =>
+        opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers
+      );
+    } catch (err) {
+      setObjectVersionsModalError("Unable to list versions for this object.");
+      if (!opts?.append) {
+        setObjectVersionsModal([]);
+        setObjectDeleteMarkersModal([]);
+      }
+    } finally {
+      setObjectVersionsModalLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (previousAccountIdRef.current === accountIdForApi) {
       return;
@@ -1030,7 +1097,7 @@ export default function BrowserPage({
   }, [accountIdForApi, accessMode, bucketName, filter, hasS3AccountContext, prefix, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!showPrefixVersions || !bucketName || !hasS3AccountContext) {
+    if (!showPrefixVersions || !bucketName || !hasS3AccountContext || !isVersioningEnabled) {
       setPrefixVersions([]);
       setPrefixDeleteMarkers([]);
       setPrefixVersionsError(null);
@@ -1042,6 +1109,42 @@ export default function BrowserPage({
     setPrefixVersionIdMarker(null);
     loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
   }, [accountIdForApi, accessMode, bucketName, hasS3AccountContext, normalizedPrefix, showPrefixVersions]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!bucketName || !hasS3AccountContext) {
+      setBucketVersioningEnabled(false);
+      return;
+    }
+    let active = true;
+    getBucketVersioning(accountIdForApi, bucketName)
+      .then((data) => {
+        if (!active) return;
+        setBucketVersioningEnabled(Boolean(data.enabled));
+      })
+      .catch(() => {
+        if (!active) return;
+        setBucketVersioningEnabled(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [accountIdForApi, bucketName, hasS3AccountContext]);
+
+  useEffect(() => {
+    if (isVersioningEnabled) return;
+    setShowPrefixVersions(false);
+    closeObjectVersionsModal();
+    setPrefixVersions([]);
+    setPrefixDeleteMarkers([]);
+    setPrefixVersionsError(null);
+    setPrefixVersionKeyMarker(null);
+    setPrefixVersionIdMarker(null);
+    setObjectVersions([]);
+    setObjectDeleteMarkers([]);
+    setObjectVersionsError(null);
+    setObjectVersionKeyMarker(null);
+    setObjectVersionIdMarker(null);
+  }, [bucketName, isVersioningEnabled]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {
@@ -1401,6 +1504,10 @@ export default function BrowserPage({
     () => buildVersionRows(objectVersions, objectDeleteMarkers),
     [objectDeleteMarkers, objectVersions]
   );
+  const objectVersionModalRows = useMemo(
+    () => buildVersionRows(objectVersionsModal, objectDeleteMarkersModal),
+    [objectDeleteMarkersModal, objectVersionsModal]
+  );
 
   const currentPath = useMemo(() => {
     if (!bucketName) return "";
@@ -1432,6 +1539,20 @@ export default function BrowserPage({
     setActiveItem(item);
     setInspectorTab("details");
     setInspectorVisible(true);
+  };
+
+  const isInteractiveTarget = (target: EventTarget | null) => {
+    const element = target as HTMLElement | null;
+    return Boolean(element?.closest("button, a, input, textarea, select, label"));
+  };
+
+  const handleItemDoubleClick = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
+    if (isInteractiveTarget(event.target)) return;
+    if (item.type === "folder") {
+      handleOpenItem(item);
+      return;
+    }
+    handlePreviewItem(item);
   };
 
   const openAdvancedForItem = (item: BrowserItem) => {
@@ -1659,7 +1780,13 @@ export default function BrowserPage({
   }, [inspectedItem?.key, inspectedItem?.type, showAdvancedModal]);
 
   useEffect(() => {
-    if (!bucketName || !hasS3AccountContext || !inspectedItem || inspectedItem.type === "folder") {
+    if (
+      !bucketName ||
+      !hasS3AccountContext ||
+      !inspectedItem ||
+      inspectedItem.type === "folder" ||
+      !isVersioningEnabled
+    ) {
       setObjectVersions([]);
       setObjectDeleteMarkers([]);
       setObjectVersionsError(null);
@@ -1771,6 +1898,9 @@ export default function BrowserPage({
   };
 
   const listVersionStats = async (opts: { prefix?: string; key?: string | null }) => {
+    if (!isVersioningEnabled) {
+      return { objectCount: 0, totalBytes: 0, versionsCount: 0, deleteMarkersCount: 0 };
+    }
     let versionsCount = 0;
     let deleteMarkersCount = 0;
     const latestByKey = new Map<string, { isDelete: boolean; size: number }>();
@@ -1818,7 +1948,7 @@ export default function BrowserPage({
   };
 
   const handleContextCount = async () => {
-    if (!bucketName || !hasS3AccountContext) return;
+    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
     const requestId = contextCountIdRef.current + 1;
     contextCountIdRef.current = requestId;
     setContextCountsLoading(true);
@@ -2171,8 +2301,11 @@ export default function BrowserPage({
   const resetBulkRestoreDraft = () => {
     setBulkRestoreDate(formatLocalDateTime(new Date()));
     setBulkRestoreDeleteMissing(false);
+    setBulkRestoreDryRun(false);
     setBulkRestoreError(null);
     setBulkRestoreSummary(null);
+    setBulkRestorePreview(null);
+    setBulkRestoreTargetPath(null);
   };
 
   const openBulkAttributesModal = (items: BrowserItem[]) => {
@@ -2181,10 +2314,60 @@ export default function BrowserPage({
     setShowBulkAttributesModal(true);
   };
 
+  const buildBulkRestorePathTarget = () => {
+    if (!bucketName) return null;
+    const key = normalizedPrefix;
+    const name = key ? key.replace(/\/$/, "") : bucketName;
+    return {
+      id: makeId(),
+      key,
+      name,
+      type: "folder",
+      size: "",
+      modified: "",
+      owner: "",
+      sizeBytes: null,
+      modifiedAt: null,
+      storageClass: undefined,
+    } as BrowserItem;
+  };
+
   const openBulkRestoreModal = (items: BrowserItem[]) => {
-    setBulkActionItems(items);
+    if (!isVersioningEnabled) return;
+    const pathTarget = buildBulkRestorePathTarget();
+    const resolvedItems = items.length > 0 ? items : pathTarget ? [pathTarget] : [];
+    if (resolvedItems.length === 0) return;
+    setBulkActionItems(resolvedItems);
     resetBulkRestoreDraft();
+    if (items.length === 0 && pathTarget && bucketName) {
+      setBulkRestoreTargetPath(currentPath || bucketName);
+    }
     setShowBulkRestoreModal(true);
+  };
+
+  const openObjectVersionsModal = (item: BrowserItem) => {
+    if (!bucketName || !hasS3AccountContext || item.type !== "file" || !isVersioningEnabled) return;
+    setObjectVersionsModalKey(item.key);
+    setObjectVersionsModalPath(`${bucketName}/${item.key}`);
+    setObjectVersionsModal([]);
+    setObjectDeleteMarkersModal([]);
+    setObjectVersionsModalError(null);
+    setObjectVersionModalKeyMarker(null);
+    setObjectVersionModalIdMarker(null);
+    setShowObjectVersionsModal(true);
+    loadObjectVersionsModal({ append: false, keyMarker: null, versionIdMarker: null, targetKey: item.key });
+  };
+
+  const closeObjectVersionsModal = () => {
+    setShowObjectVersionsModal(false);
+    setObjectVersionsModalKey(null);
+    setObjectVersionsModalPath(null);
+    setObjectVersionsModal([]);
+    setObjectDeleteMarkersModal([]);
+    setObjectVersionsModalLoading(false);
+    setObjectVersionsModalError(null);
+    setObjectVersionModalKeyMarker(null);
+    setObjectVersionModalIdMarker(null);
   };
 
   const requestObjectsRefresh = (prefixOverride: string) => {
@@ -2687,7 +2870,7 @@ export default function BrowserPage({
   };
 
   const listAllVersionsForPrefix = async (targetPrefix: string) => {
-    if (!bucketName || !hasS3AccountContext) return { versions: [], deleteMarkers: [] };
+    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return { versions: [], deleteMarkers: [] };
     const versions: BrowserObjectVersion[] = [];
     const deleteMarkers: BrowserObjectVersion[] = [];
     let keyMarker: string | null = null;
@@ -2710,7 +2893,7 @@ export default function BrowserPage({
   };
 
   const listAllVersionsForKey = async (key: string) => {
-    if (!bucketName || !hasS3AccountContext) return { versions: [], deleteMarkers: [] };
+    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return { versions: [], deleteMarkers: [] };
     const versions: BrowserObjectVersion[] = [];
     const deleteMarkers: BrowserObjectVersion[] = [];
     let keyMarker: string | null = null;
@@ -3440,6 +3623,10 @@ export default function BrowserPage({
 
   const handleBulkRestoreApply = async () => {
     if (!bucketName || !hasS3AccountContext) return;
+    if (!isVersioningEnabled) {
+      setBulkRestoreError("Versioning is not enabled for this bucket.");
+      return;
+    }
     const targetTime = bulkRestoreDate ? new Date(bulkRestoreDate).getTime() : Number.NaN;
     if (!bulkRestoreDate || Number.isNaN(targetTime)) {
       setBulkRestoreError("Select a valid date.");
@@ -3448,77 +3635,109 @@ export default function BrowserPage({
     setBulkRestoreLoading(true);
     setBulkRestoreError(null);
     setBulkRestoreSummary(null);
+    setBulkRestorePreview(null);
     try {
-      const fileItems = bulkActionItems.filter((item) => item.type === "file");
-      const folderItems = bulkActionItems.filter((item) => item.type === "folder");
-      const restoreCandidates = new Map<string, string>();
-      const presentAtDate = new Set<string>();
-      const deleteCandidates = new Set<string>();
-      const unchangedKeys = new Set<string>();
+      const buildRestorePlan = async () => {
+        const fileItems = bulkActionItems.filter((item) => item.type === "file");
+        const folderItems = bulkActionItems.filter((item) => item.type === "folder");
+        const restoreCandidates = new Map<string, string>();
+        const presentAtDate = new Set<string>();
+        const deleteCandidates = new Set<string>();
+        const unchangedKeys = new Set<string>();
 
-      for (const item of fileItems) {
-        const { versions, deleteMarkers } = await listAllVersionsForKey(item.key);
-        const allEntries = [...versions, ...deleteMarkers];
-        const match = findVersionForDate(allEntries, targetTime);
-        const latest = allEntries.find((entry) => entry.is_latest);
-        if (match && !match.is_delete_marker && match.version_id) {
-          if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
-            unchangedKeys.add(item.key);
-          } else {
-            restoreCandidates.set(item.key, match.version_id);
-          }
-          presentAtDate.add(item.key);
-        } else if (bulkRestoreDeleteMissing) {
-          deleteCandidates.add(item.key);
-        }
-      }
-
-      for (const folder of folderItems) {
-        const folderPrefix = normalizePrefix(folder.key);
-        const { versions, deleteMarkers } = await listAllVersionsForPrefix(folderPrefix);
-        const byKey = new Map<string, BrowserObjectVersion[]>();
-        [...versions, ...deleteMarkers].forEach((entry) => {
-          const list = byKey.get(entry.key) ?? [];
-          list.push(entry);
-          byKey.set(entry.key, list);
-        });
-        byKey.forEach((entries, key) => {
-          const match = findVersionForDate(entries, targetTime);
-          const latest = entries.find((entry) => entry.is_latest);
+        for (const item of fileItems) {
+          const { versions, deleteMarkers } = await listAllVersionsForKey(item.key);
+          const allEntries = [...versions, ...deleteMarkers];
+          const match = findVersionForDate(allEntries, targetTime);
+          const latest = allEntries.find((entry) => entry.is_latest);
           if (match && !match.is_delete_marker && match.version_id) {
             if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
-              unchangedKeys.add(key);
+              unchangedKeys.add(item.key);
             } else {
-              restoreCandidates.set(key, match.version_id);
+              restoreCandidates.set(item.key, match.version_id);
             }
-            presentAtDate.add(key);
+            presentAtDate.add(item.key);
+          } else if (bulkRestoreDeleteMissing) {
+            deleteCandidates.add(item.key);
           }
-        });
-        if (bulkRestoreDeleteMissing) {
-          const currentObjects = await listAllObjectsForPrefix(folderPrefix);
-          currentObjects.forEach((obj) => {
-            if (!presentAtDate.has(obj.key)) {
-              deleteCandidates.add(obj.key);
+        }
+
+        for (const folder of folderItems) {
+          const folderPrefix = normalizePrefix(folder.key);
+          const { versions, deleteMarkers } = await listAllVersionsForPrefix(folderPrefix);
+          const byKey = new Map<string, BrowserObjectVersion[]>();
+          [...versions, ...deleteMarkers].forEach((entry) => {
+            const list = byKey.get(entry.key) ?? [];
+            list.push(entry);
+            byKey.set(entry.key, list);
+          });
+          byKey.forEach((entries, key) => {
+            const match = findVersionForDate(entries, targetTime);
+            const latest = entries.find((entry) => entry.is_latest);
+            if (match && !match.is_delete_marker && match.version_id) {
+              if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
+                unchangedKeys.add(key);
+              } else {
+                restoreCandidates.set(key, match.version_id);
+              }
+              presentAtDate.add(key);
             }
           });
+          if (bulkRestoreDeleteMissing) {
+            const currentObjects = await listAllObjectsForPrefix(folderPrefix);
+            currentObjects.forEach((obj) => {
+              if (!presentAtDate.has(obj.key)) {
+                deleteCandidates.add(obj.key);
+              }
+            });
+          }
         }
-      }
 
-      const restoreList = Array.from(restoreCandidates.entries()).map(([key, versionId]) => ({
-        key,
-        versionId,
-      }));
-      const deleteList = bulkRestoreDeleteMissing ? Array.from(deleteCandidates) : [];
+        const restoreList = Array.from(restoreCandidates.entries()).map(([key, versionId]) => ({
+          key,
+          versionId,
+        }));
+        const deleteList = bulkRestoreDeleteMissing ? Array.from(deleteCandidates) : [];
+        return { restoreList, deleteList, unchangedKeys };
+      };
+
+      const { restoreList, deleteList, unchangedKeys } = await buildRestorePlan();
       const unchangedCount = unchangedKeys.size;
       const total = restoreList.length + deleteList.length;
       if (total === 0) {
         if (unchangedCount > 0) {
-          const summary = `Unchanged ${unchangedCount} object(s).`;
+          const summary = bulkRestoreDryRun
+            ? `Dry run: unchanged ${unchangedCount} object(s).`
+            : `Unchanged ${unchangedCount} object(s).`;
           setBulkRestoreSummary(summary);
           setStatusMessage(summary);
+          if (bulkRestoreDryRun) {
+            setBulkRestorePreview({
+              restoreKeys: [],
+              deleteKeys: [],
+              unchangedKeys: Array.from(unchangedKeys).slice(0, 20),
+              totalRestore: 0,
+              totalDelete: 0,
+              totalUnchanged: unchangedCount,
+            });
+          }
         } else {
           setBulkRestoreError("No objects matched the selected date.");
         }
+        return;
+      }
+
+      if (bulkRestoreDryRun) {
+        const summary = `Dry run: would restore ${restoreList.length} object(s), delete ${deleteList.length} object(s), unchanged ${unchangedCount} object(s).`;
+        setBulkRestoreSummary(summary);
+        setBulkRestorePreview({
+          restoreKeys: restoreList.slice(0, 20).map((item) => item.key),
+          deleteKeys: deleteList.slice(0, 20),
+          unchangedKeys: Array.from(unchangedKeys).slice(0, 20),
+          totalRestore: restoreList.length,
+          totalDelete: deleteList.length,
+          totalUnchanged: unchangedCount,
+        });
         return;
       }
 
@@ -3589,6 +3808,7 @@ export default function BrowserPage({
   };
 
   const openCleanupModal = () => {
+    if (!isVersioningEnabled) return;
     setCleanupError(null);
     setCleanupSummary(null);
     setShowCleanupModal(true);
@@ -3822,6 +4042,9 @@ export default function BrowserPage({
     if (inspectedItem?.type === "file" && inspectedItem.key === targetKey) {
       await loadObjectVersions({ append: false, keyMarker: null, versionIdMarker: null, targetKey });
     }
+    if (showObjectVersionsModal && objectVersionsModalKey === targetKey) {
+      await loadObjectVersionsModal({ append: false, keyMarker: null, versionIdMarker: null, targetKey });
+    }
   };
 
   const handleAdvancedRefresh = async (targetKey: string) => {
@@ -3831,7 +4054,14 @@ export default function BrowserPage({
   };
 
   const handleRestoreVersion = async (item: BrowserObjectVersion) => {
-    if (!bucketName || !hasS3AccountContext || !item.version_id || item.is_delete_marker) return;
+    if (
+      !bucketName ||
+      !hasS3AccountContext ||
+      !item.version_id ||
+      item.is_delete_marker ||
+      !isVersioningEnabled
+    )
+      return;
     setWarningMessage(null);
     const operationId = startOperation("copying", "Restoring version", `${bucketName}/${item.key}`);
     let completionStatus: OperationCompletionStatus = "done";
@@ -3857,7 +4087,7 @@ export default function BrowserPage({
   };
 
   const handleDeleteVersion = async (item: BrowserObjectVersion) => {
-    if (!bucketName || !hasS3AccountContext || !item.version_id) return;
+    if (!bucketName || !hasS3AccountContext || !item.version_id || !isVersioningEnabled) return;
     setWarningMessage(null);
     const label = item.is_delete_marker ? "delete marker" : "version";
     const confirmed = window.confirm(`Delete ${label} for ${item.key}?`);
@@ -4218,7 +4448,6 @@ export default function BrowserPage({
   const failedOperationsCount =
     failedUploadCount + failedDownloadCount + failedDeleteCount + failedCopyCount + failedOtherOperations.length;
   const completedOperationsCount =
-    completedOperations.length +
     completedUploadCount +
     completedDownloadCount +
     completedDeleteCount +
@@ -4324,6 +4553,37 @@ export default function BrowserPage({
       );
     });
   }, [copyGroups, showActiveOperations, showQueuedOperations, showCompletedOperations, showFailedOperations]);
+  const operationSortIndexById = useMemo(() => {
+    const next: Record<string, number> = {};
+    operations.forEach((op, index) => {
+      next[op.id] = index;
+    });
+    return next;
+  }, [operations]);
+  const uploadQueueOrderByGroup = useMemo(() => {
+    const next: Record<string, number> = {};
+    uploadQueue.forEach((item, index) => {
+      if (next[item.groupId] == null) {
+        next[item.groupId] = index;
+      }
+    });
+    return next;
+  }, [uploadQueue]);
+  const uploadGroupSortIndexById = useMemo(() => {
+    const next: Record<string, number> = {};
+    uploadGroups.forEach((group) => {
+      const opIndices = [...group.activeItems, ...group.completedItems]
+        .map((item) => operationSortIndexById[item.id])
+        .filter((value): value is number => typeof value === "number");
+      if (opIndices.length > 0) {
+        next[group.id] = Math.min(...opIndices);
+        return;
+      }
+      next[group.id] = operations.length + (uploadQueueOrderByGroup[group.id] ?? 0);
+    });
+    return next;
+  }, [uploadGroups, operationSortIndexById, operations.length, uploadQueueOrderByGroup]);
+  const operationSortFallback = operations.length + uploadQueue.length + 1000;
   const isGroupExpanded = (groupId: string) => Boolean(expandedOperationGroups[groupId]);
   const toggleGroupExpanded = (groupId: string) => {
     setExpandedOperationGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
@@ -5060,8 +5320,10 @@ export default function BrowserPage({
                                 key={item.id}
                                 data-browser-item
                                 onClick={(event) => {
-                                  const target = event.target as HTMLElement;
-                                  if (target.closest("button, a, input, textarea, select, label")) {
+                                  if (isInteractiveTarget(event.target)) {
+                                    return;
+                                  }
+                                  if (event.detail > 1) {
                                     return;
                                   }
                                   if (event.metaKey || event.ctrlKey) {
@@ -5070,6 +5332,7 @@ export default function BrowserPage({
                                     selectSingleRow(item.id);
                                   }
                                 }}
+                                onDoubleClick={(event) => handleItemDoubleClick(event, item)}
                                 onContextMenu={(event) => handleItemContextMenu(event, item)}
                                 className={`${rowHeightClasses} transition-colors ${
                                   isSelected
@@ -5104,14 +5367,13 @@ export default function BrowserPage({
                                     <div className="min-w-0 flex-1">
                                       <button
                                         type="button"
-                                        onClick={() => {
+                                        onClick={() => openItemDetails(item)}
+                                        onDoubleClick={() => {
                                           if (item.type === "folder") {
                                             handleOpenItem(item);
                                             return;
                                           }
-                                          setActiveItem(item);
-                                          setInspectorVisible(true);
-                                          setInspectorTab("details");
+                                          handlePreviewItem(item);
                                         }}
                                         className="block w-full truncate text-left font-semibold text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
                                         title={item.name}
@@ -5241,6 +5503,7 @@ export default function BrowserPage({
                                   ? "border-primary-200 bg-primary-50/60 shadow-[0_12px_24px_-16px_rgba(79,70,229,0.45)] dark:border-primary-700/60 dark:bg-primary-500/20"
                                   : "border-slate-200 bg-white/90 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-primary-700/60"
                               }`}
+                              onDoubleClick={(event) => handleItemDoubleClick(event, item)}
                               onContextMenu={(event) => handleItemContextMenu(event, item)}
                             >
                               <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-slate-50/90 to-transparent dark:from-slate-900/60" />
@@ -5265,14 +5528,13 @@ export default function BrowserPage({
                               </div>
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={() => openItemDetails(item)}
+                                onDoubleClick={() => {
                                   if (item.type === "folder") {
                                     handleOpenItem(item);
                                     return;
                                   }
-                                  setActiveItem(item);
-                                  setInspectorVisible(true);
-                                  setInspectorTab("details");
+                                  handlePreviewItem(item);
                                 }}
                                 className="relative flex min-w-0 flex-1 items-start gap-3 text-left"
                               >
@@ -5508,24 +5770,28 @@ export default function BrowserPage({
                                     <PasteIcon className="h-3.5 w-3.5" />
                                     {pasteLabel}
                                   </button>
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={() => setShowPrefixVersions(true)}
-                                    disabled={!bucketName || !hasS3AccountContext}
-                                  >
-                                    <ListIcon className="h-3.5 w-3.5" />
-                                    Versions
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={openCleanupModal}
-                                    disabled={!bucketName || !hasS3AccountContext}
-                                  >
-                                    <TrashIcon className="h-3.5 w-3.5" />
-                                    Clean versions
-                                  </button>
+                                  {isVersioningEnabled && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className={bulkActionClasses}
+                                        onClick={() => setShowPrefixVersions(true)}
+                                        disabled={!bucketName || !hasS3AccountContext}
+                                      >
+                                        <ListIcon className="h-3.5 w-3.5" />
+                                        Versions
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={bulkActionClasses}
+                                        onClick={openCleanupModal}
+                                        disabled={!bucketName || !hasS3AccountContext}
+                                      >
+                                        <TrashIcon className="h-3.5 w-3.5" />
+                                        Clean versions
+                                      </button>
+                                    </>
+                                  )}
                                   <button
                                     type="button"
                                     className={bulkActionClasses}
@@ -5563,7 +5829,12 @@ export default function BrowserPage({
                                     type="button"
                                     className={bulkActionClasses}
                                     onClick={handleContextCount}
-                                    disabled={!bucketName || !hasS3AccountContext || contextCountsLoading}
+                                    disabled={
+                                      !bucketName ||
+                                      !hasS3AccountContext ||
+                                      contextCountsLoading ||
+                                      !isVersioningEnabled
+                                    }
                                   >
                                     <RefreshIcon className="h-3.5 w-3.5" />
                                     {contextCountsLoading ? "Counting..." : contextCounts ? "Recount" : "Count"}
@@ -5574,6 +5845,11 @@ export default function BrowserPage({
                                     {contextCountsError}
                                   </p>
                                 )}
+                                {!isVersioningEnabled && (
+                                  <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                                    Versioning is disabled for this bucket.
+                                  </p>
+                                )}
                                 <div className="mt-2 grid gap-2">
                                   <div className="flex items-center justify-between">
                                     <span className="text-slate-500">Current objects</span>
@@ -5581,18 +5857,22 @@ export default function BrowserPage({
                                       {contextCountsLoading ? "..." : contextCounts ? contextCounts.objects : "-"}
                                     </span>
                                   </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Versions</span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {contextCountsLoading ? "..." : contextCounts ? contextCounts.versions : "-"}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-500">Delete markers</span>
-                                    <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                      {contextCountsLoading ? "..." : contextCounts ? contextCounts.deleteMarkers : "-"}
-                                    </span>
-                                  </div>
+                                  {isVersioningEnabled && (
+                                    <>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-slate-500">Versions</span>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                          {contextCountsLoading ? "..." : contextCounts ? contextCounts.versions : "-"}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-slate-500">Delete markers</span>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                          {contextCountsLoading ? "..." : contextCounts ? contextCounts.deleteMarkers : "-"}
+                                        </span>
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                               <div>
@@ -5757,14 +6037,16 @@ export default function BrowserPage({
                                     <SlidersIcon className="h-3.5 w-3.5" />
                                     Bulk attributes
                                   </button>
-                                  <button
-                                    type="button"
-                                    className={bulkActionClasses}
-                                    onClick={() => openBulkRestoreModal(selectionItems)}
-                                  >
-                                    <HistoryIcon className="h-3.5 w-3.5" />
-                                    Restore to date
-                                  </button>
+                                  {isVersioningEnabled && (
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => openBulkRestoreModal(selectionItems)}
+                                    >
+                                      <HistoryIcon className="h-3.5 w-3.5" />
+                                      Restore to date
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     className={bulkDangerClasses}
@@ -5927,80 +6209,18 @@ export default function BrowserPage({
                                 )}
                               </div>
                             </div>
-                            {inspectedItem.type === "file" && (
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Versions</p>
-                                  {objectVersionsLoading && (
-                                    <span className="ui-caption text-slate-500 dark:text-slate-400">Loading...</span>
-                                  )}
-                                </div>
-                                {objectVersionsError && (
-                                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                                    {objectVersionsError}
-                                  </p>
-                                )}
-                                <div className="space-y-2">
-                                  {objectVersionRows.length === 0 && !objectVersionsLoading && (
-                                    <span className="ui-caption text-slate-500 dark:text-slate-400">No versions found.</span>
-                                  )}
-                                  {objectVersionRows.map((ver) => (
-                                    <div
-                                      key={`${ver.key}-${ver.version_id ?? "none"}-${ver.is_delete_marker ? "marker" : "version"}`}
-                                      className="rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                    >
-                                      <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          {ver.is_delete_marker && (
-                                            <span className="rounded-full bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
-                                              delete marker
-                                            </span>
-                                          )}
-                                          {ver.is_latest && (
-                                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 ui-caption font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100">
-                                              latest
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          {!ver.is_delete_marker && (
-                                            <button
-                                              type="button"
-                                              className={bulkActionClasses}
-                                              onClick={() => handleRestoreVersion(ver)}
-                                            >
-                                              Restore
-                                            </button>
-                                          )}
-                                          <button
-                                            type="button"
-                                            className={bulkDangerClasses}
-                                            onClick={() => handleDeleteVersion(ver)}
-                                          >
-                                            {ver.is_delete_marker ? "Delete marker" : "Delete version"}
-                                          </button>
-                                        </div>
-                                      </div>
-                                      <div className="mt-2 space-y-1 ui-caption text-slate-500 dark:text-slate-400">
-                                        {ver.version_id && <div>v: {ver.version_id}</div>}
-                                        {ver.last_modified && <div>Modified: {formatDateTime(ver.last_modified)}</div>}
-                                        {ver.size != null && <div>Size: {formatBytes(ver.size)}</div>}
-                                        {ver.etag && <div>ETag: {ver.etag}</div>}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                                {(objectVersionKeyMarker || objectVersionIdMarker) && (
-                                  <button
-                                    type="button"
-                                    className={toolbarButtonClasses}
-                                    onClick={() => loadObjectVersions({ append: true })}
-                                    disabled={objectVersionsLoading}
-                                  >
-                                    Load more versions
-                                  </button>
-                                )}
-                              </div>
+                            {isVersioningEnabled && inspectedItem.type === "file" && (
+                              <BrowserObjectVersionsList
+                                versions={objectVersionRows}
+                                loading={objectVersionsLoading}
+                                error={objectVersionsError}
+                                canLoadMore={Boolean(objectVersionKeyMarker || objectVersionIdMarker)}
+                                onLoadMore={() =>
+                                  loadObjectVersions({ append: true, targetKey: inspectedItem.key })
+                                }
+                                onRestoreVersion={handleRestoreVersion}
+                                onDeleteVersion={handleDeleteVersion}
+                              />
                             )}
                           </div>
                         ) : (
@@ -6022,6 +6242,7 @@ export default function BrowserPage({
           contextMenuRef={contextMenuRef}
           bucketName={bucketName}
           hasS3AccountContext={hasS3AccountContext}
+          versioningEnabled={isVersioningEnabled}
           allowInspectorPanel={allowInspectorPanel}
           canPaste={canPaste}
           clipboard={clipboard}
@@ -6040,6 +6261,7 @@ export default function BrowserPage({
         onCutItems={handleCutItems}
         onOpenBulkAttributes={openBulkAttributesModal}
         onOpenBulkRestore={openBulkRestoreModal}
+        onOpenObjectVersions={openObjectVersionsModal}
         onOpenAdvanced={openAdvancedForItem}
         onDeleteItems={handleDeleteItems}
         onDownloadFolder={handleDownloadFolder}
@@ -6069,7 +6291,7 @@ export default function BrowserPage({
           onRefresh={handleAdvancedRefresh}
         />
       )}
-      {showPrefixVersions && (
+      {showPrefixVersions && isVersioningEnabled && (
         <BrowserPrefixVersionsModal
           bucketName={bucketName}
           normalizedPrefix={normalizedPrefix}
@@ -6081,6 +6303,30 @@ export default function BrowserPage({
           onClose={() => setShowPrefixVersions(false)}
           onRefresh={() => loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null })}
           onLoadMore={() => loadPrefixVersions({ append: true })}
+          onRestoreVersion={handleRestoreVersion}
+          onDeleteVersion={handleDeleteVersion}
+        />
+      )}
+      {showObjectVersionsModal && isVersioningEnabled && objectVersionsModalKey && objectVersionsModalPath && (
+        <BrowserObjectVersionsModal
+          bucketName={bucketName}
+          objectKey={objectVersionsModalKey}
+          objectPath={objectVersionsModalPath}
+          objectVersionsLoading={objectVersionsModalLoading}
+          objectVersionsError={objectVersionsModalError}
+          objectVersionRows={objectVersionModalRows}
+          objectVersionKeyMarker={objectVersionModalKeyMarker}
+          objectVersionIdMarker={objectVersionModalIdMarker}
+          onClose={closeObjectVersionsModal}
+          onRefresh={() =>
+            loadObjectVersionsModal({
+              append: false,
+              keyMarker: null,
+              versionIdMarker: null,
+              targetKey: objectVersionsModalKey,
+            })
+          }
+          onLoadMore={() => loadObjectVersionsModal({ append: true, targetKey: objectVersionsModalKey })}
           onRestoreVersion={handleRestoreVersion}
           onDeleteVersion={handleDeleteVersion}
         />
@@ -6132,6 +6378,10 @@ export default function BrowserPage({
           bulkActionFolderCount={bulkActionFolderCount}
           bulkRestoreError={bulkRestoreError}
           bulkRestoreSummary={bulkRestoreSummary}
+          bulkRestoreTargetPath={bulkRestoreTargetPath}
+          bulkRestoreDryRun={bulkRestoreDryRun}
+          setBulkRestoreDryRun={setBulkRestoreDryRun}
+          bulkRestorePreview={bulkRestorePreview}
           bulkRestoreDate={bulkRestoreDate}
           setBulkRestoreDate={setBulkRestoreDate}
           bulkRestoreDeleteMissing={bulkRestoreDeleteMissing}
@@ -6178,7 +6428,9 @@ export default function BrowserPage({
           visibleCopyGroups={visibleCopyGroups}
           visibleUploadGroups={visibleUploadGroups}
           visibleOtherOperations={visibleOtherOperations}
-          completedOperations={completedOperations}
+          operationSortIndexById={operationSortIndexById}
+          uploadGroupSortIndexById={uploadGroupSortIndexById}
+          operationSortFallback={operationSortFallback}
           isGroupExpanded={isGroupExpanded}
           toggleGroupExpanded={toggleGroupExpanded}
           getSectionVisibleCount={getSectionVisibleCount}

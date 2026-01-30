@@ -73,6 +73,7 @@ class PortalBucketDefaultsOverridePolicy(BaseModel):
 class PortalSettingsOverridePolicy(BaseModel):
     allow_portal_key: bool = False
     allow_portal_user_bucket_create: bool = False
+    allow_portal_user_access_key_create: bool = False
     iam_group_manager_policy: PortalIAMPolicyOverridePolicy = Field(default_factory=PortalIAMPolicyOverridePolicy)
     iam_group_user_policy: PortalIAMPolicyOverridePolicy = Field(default_factory=PortalIAMPolicyOverridePolicy)
     bucket_access_policy: PortalIAMPolicyOverridePolicy = Field(default_factory=PortalIAMPolicyOverridePolicy)
@@ -104,6 +105,7 @@ class PortalBucketDefaultsOverride(BaseModel):
 class PortalSettingsOverride(BaseModel):
     allow_portal_key: Optional[bool] = None
     allow_portal_user_bucket_create: Optional[bool] = None
+    allow_portal_user_access_key_create: Optional[bool] = None
     iam_group_manager_policy: Optional[PortalIAMPolicyOverride] = None
     iam_group_user_policy: Optional[PortalIAMPolicyOverride] = None
     bucket_access_policy: Optional[PortalIAMPolicyOverride] = None
@@ -120,6 +122,9 @@ class PortalBucketDefaults(BaseModel):
 class GeneralSettings(BaseModel):
     manager_enabled: bool = True
     browser_enabled: bool = True
+    browser_root_enabled: bool = False
+    browser_manager_enabled: bool = True
+    browser_portal_enabled: bool = True
     portal_enabled: bool = False
     allow_login_access_keys: bool = True
     allow_login_endpoint_list: bool = False
@@ -140,6 +145,7 @@ class LoginSettings(BaseModel):
 class PortalSettings(BaseModel):
     allow_portal_key: bool = False
     allow_portal_user_bucket_create: bool = True
+    allow_portal_user_access_key_create: bool = False
     iam_group_manager_policy: PortalIAMPolicySettings = Field(
         default_factory=lambda: PortalIAMPolicySettings(actions=_default_portal_manager_actions())
     )
