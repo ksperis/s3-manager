@@ -5,10 +5,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { unstable_usePrompt, useSearchParams } from "react-router-dom";
 import JSZip from "jszip";
+import { ZipWriter } from "@zip.js/zip.js";
 import axios from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
 import { formatBytes } from "../../utils/format";
-import type { S3AccountSelector } from "../../api/accountParams";
+import { withS3AccountParam, type S3AccountSelector } from "../../api/accountParams";
 import {
   BrowserBucket,
   BrowserObject,
@@ -189,6 +190,9 @@ type BrowserPageProps = {
 };
 
 type OperationDetailsKind = "download" | "delete" | "copy" | "upload" | "other";
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
 
 export default function BrowserPage({
   accountIdForApi: accountIdOverride,
@@ -2848,6 +2852,119 @@ export default function BrowserPage({
     return response.blob();
   };
 
+  const buildAuthHeaders = () => {
+    const headers: Record<string, string> = {};
+    if (typeof window === "undefined") return headers;
+    const token = localStorage.getItem("token");
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const accountId = localStorage.getItem("selectedExecutionContextId");
+    if (accountId) {
+      const mode = localStorage.getItem(`managerAccessMode:${accountId}`);
+      if (mode === "admin" || mode === "portal") {
+        headers["X-Manager-Access-Mode"] = mode;
+      }
+    }
+    const userRaw = localStorage.getItem("user");
+    if (userRaw) {
+      try {
+        const parsed = JSON.parse(userRaw) as { authType?: string };
+        if (parsed?.authType === "rgw_session") {
+          const endpoint = localStorage.getItem("s3SessionEndpoint");
+          if (endpoint) {
+            headers["X-S3-Endpoint"] = endpoint;
+          }
+        }
+      } catch (err) {
+        console.warn("Unable to parse stored user payload", err);
+      }
+    }
+    return headers;
+  };
+
+  const buildApiUrl = (path: string, params?: Record<string, unknown>) => {
+    const base = API_BASE_URL.endsWith("/") ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+    const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
+    const url = new URL(`${base}/${normalizedPath}`);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        url.searchParams.set(key, String(value));
+      });
+    }
+    return url.toString();
+  };
+
+  const downloadObjectStream = async (key: string, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>> => {
+    if (!bucketName || !hasS3AccountContext) {
+      throw new Error("Missing bucket context.");
+    }
+    if (useProxyTransfers) {
+      const params = withS3AccountParam({ key }, accountIdForApi);
+      const url = buildApiUrl(
+        `/browser/buckets/${encodeURIComponent(bucketName)}/proxy-download`,
+        params ?? undefined
+      );
+      const response = await fetch(url, {
+        headers: buildAuthHeaders(),
+        credentials: "include",
+        signal,
+      });
+      if (!response.ok) {
+        let detail: string | undefined;
+        let code: string | undefined;
+        try {
+          const text = await response.text();
+          const parsed = extractErrorDetails(text);
+          code = parsed?.code;
+          detail = parsed?.message;
+        } catch {
+          // ignore body parsing failures
+        }
+        const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+        const detailLabel = code && detail ? `${code}: ${detail}` : detail || code;
+        const parts = [statusLabel, detailLabel].filter(Boolean);
+        const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
+        throw new Error(`Download failed for ${key}${suffix}`);
+      }
+      if (!response.body) {
+        throw new Error("Streaming download is not supported in this browser.");
+      }
+      return response.body;
+    }
+    const presign = await presignObjectRequest(bucketName, {
+      key,
+      operation: "get_object",
+      expires_in: 900,
+    });
+    const response = await fetch(presign.url, {
+      headers: presign.headers || undefined,
+      signal,
+    });
+    if (!response.ok) {
+      let detail: string | undefined;
+      let code: string | undefined;
+      try {
+        const text = await response.text();
+        const parsed = extractErrorDetails(text);
+        code = parsed?.code;
+        detail = parsed?.message;
+      } catch {
+        // ignore body parsing failures
+      }
+      const statusLabel = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+      const detailLabel = code && detail ? `${code}: ${detail}` : detail || code;
+      const parts = [statusLabel, detailLabel].filter(Boolean);
+      const suffix = parts.length > 0 ? `: ${parts.join(" - ")}` : "";
+      throw new Error(`Download failed for ${key}${suffix}`);
+    }
+    if (!response.body) {
+      throw new Error("Streaming download is not supported in this browser.");
+    }
+    return response.body;
+  };
+
   const listAllObjectsForPrefix = async (targetPrefix: string, targetBucket?: string) => {
     const bucket = targetBucket ?? bucketName;
     if (!bucket || !hasS3AccountContext) return [];
@@ -3154,8 +3271,11 @@ export default function BrowserPage({
           sizeBytes: target.obj.size,
         })),
       }));
-      const zip = new JSZip();
       const totalBytes = downloadTargets.reduce((sum, target) => sum + (target.obj.size ?? 0), 0);
+      const streamingZipThresholdBytes =
+        Math.max(0, (browserSettings?.streaming_zip_threshold_mb ?? DEFAULT_STREAMING_ZIP_THRESHOLD_MB)) *
+        1024 *
+        1024;
       const totalCount = downloadTargets.length;
       let downloadedBytes = 0;
       let completed = 0;
@@ -3168,68 +3288,159 @@ export default function BrowserPage({
         setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
       };
 
-      const queue = [...downloadTargets];
-      const workerCount = Math.max(1, Math.min(downloadParallelismRef.current, queue.length));
-      const workers = Array.from({ length: workerCount }, async () => {
-        while (queue.length > 0 && !aborted) {
-          if (controller.signal.aborted) {
-            aborted = true;
+      const saveFilePicker =
+        typeof window !== "undefined"
+          ? (window as Window & { showSaveFilePicker?: (options?: unknown) => Promise<unknown> }).showSaveFilePicker
+          : undefined;
+      const supportsStreamingZip = Boolean(
+        saveFilePicker &&
+          typeof ReadableStream !== "undefined" &&
+          typeof WritableStream !== "undefined" &&
+          typeof TransformStream !== "undefined"
+      );
+      const shouldStreamZip = supportsStreamingZip && totalBytes >= streamingZipThresholdBytes;
+
+      if (shouldStreamZip && saveFilePicker) {
+        let fileStream: (WritableStream<Uint8Array> & { abort?: () => Promise<void> }) | null = null;
+        let zipWriter: ZipWriter | null = null;
+        try {
+          const handle = (await saveFilePicker({
+            suggestedName: `${folderLabel}.zip`,
+            types: [
+              {
+                description: "ZIP archive",
+                accept: { "application/zip": [".zip"] },
+              },
+            ],
+          })) as { createWritable: () => Promise<WritableStream<Uint8Array>> };
+          fileStream = (await handle.createWritable()) as WritableStream<Uint8Array> & { abort?: () => Promise<void> };
+          zipWriter = new ZipWriter(fileStream);
+        } catch (err) {
+          if (isAbortError(err)) {
+            completionStatus = "cancelled";
+            setStatusMessage(`Download cancelled for ${folderLabel}`);
+            cancelDownloadDetails(operationId);
             return;
           }
-          const obj = queue.shift();
-          if (!obj) return;
-          updateDownloadDetail(operationId, obj.detailId, "downloading");
+          throw err;
+        }
+
+        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, label: "Streaming zip" } : op)));
+
+        for (const target of downloadTargets) {
+          if (controller.signal.aborted) {
+            aborted = true;
+            break;
+          }
+          updateDownloadDetail(operationId, target.detailId, "downloading");
           try {
-            const blob = await downloadObjectBlob(obj.obj.key, controller.signal);
-            zip.file(`${folderLabel}/${obj.relativeKey}`, blob);
-            updateDownloadDetail(operationId, obj.detailId, "done");
+            const stream = await downloadObjectStream(target.obj.key, controller.signal);
+            const counter = new TransformStream<Uint8Array, Uint8Array>({
+              transform(chunk, streamController) {
+                downloadedBytes += chunk.byteLength;
+                updateProgress();
+                streamController.enqueue(chunk);
+              },
+            });
+            await zipWriter.add(`${folderLabel}/${target.relativeKey}`, stream.pipeThrough(counter));
+            updateDownloadDetail(operationId, target.detailId, "done");
           } catch (err) {
             if (isAbortError(err) || controller.signal.aborted) {
-              updateDownloadDetail(operationId, obj.detailId, "cancelled");
+              updateDownloadDetail(operationId, target.detailId, "cancelled");
               aborted = true;
               controller.abort();
-              return;
+              break;
             }
             console.error(err);
-            updateDownloadDetail(operationId, obj.detailId, "failed", formatOperationError(err, "Download failed."));
-            errors.push(obj.obj.key);
+            updateDownloadDetail(operationId, target.detailId, "failed", formatOperationError(err, "Download failed."));
+            errors.push(target.obj.key);
           } finally {
             completed += 1;
-            downloadedBytes += obj.obj.size ?? 0;
-            updateProgress();
+            if (totalBytes <= 0) {
+              updateProgress();
+            }
           }
         }
-      });
-      await Promise.all(workers);
 
-      if (aborted || controller.signal.aborted) {
-        completionStatus = "cancelled";
-        setStatusMessage(`Download cancelled for ${folderLabel}`);
-        cancelDownloadDetails(operationId);
-        return;
+        if (aborted || controller.signal.aborted) {
+          completionStatus = "cancelled";
+          setStatusMessage(`Download cancelled for ${folderLabel}`);
+          cancelDownloadDetails(operationId);
+          if (fileStream?.abort) {
+            await fileStream.abort();
+          }
+          return;
+        }
+
+        if (zipWriter) {
+          await zipWriter.close();
+        }
+        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
+      } else {
+        const zip = new JSZip();
+        const queue = [...downloadTargets];
+        const workerCount = Math.max(1, Math.min(downloadParallelismRef.current, queue.length));
+        const workers = Array.from({ length: workerCount }, async () => {
+          while (queue.length > 0 && !aborted) {
+            if (controller.signal.aborted) {
+              aborted = true;
+              return;
+            }
+            const obj = queue.shift();
+            if (!obj) return;
+            updateDownloadDetail(operationId, obj.detailId, "downloading");
+            try {
+              const blob = await downloadObjectBlob(obj.obj.key, controller.signal);
+              zip.file(`${folderLabel}/${obj.relativeKey}`, blob);
+              updateDownloadDetail(operationId, obj.detailId, "done");
+            } catch (err) {
+              if (isAbortError(err) || controller.signal.aborted) {
+                updateDownloadDetail(operationId, obj.detailId, "cancelled");
+                aborted = true;
+                controller.abort();
+                return;
+              }
+              console.error(err);
+              updateDownloadDetail(operationId, obj.detailId, "failed", formatOperationError(err, "Download failed."));
+              errors.push(obj.obj.key);
+            } finally {
+              completed += 1;
+              downloadedBytes += obj.obj.size ?? 0;
+              updateProgress();
+            }
+          }
+        });
+        await Promise.all(workers);
+
+        if (aborted || controller.signal.aborted) {
+          completionStatus = "cancelled";
+          setStatusMessage(`Download cancelled for ${folderLabel}`);
+          cancelDownloadDetails(operationId);
+          return;
+        }
+
+        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, label: "Packaging zip" } : op)));
+        const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
+          const percent = Math.min(99, 80 + Math.round(metadata.percent * 0.2));
+          setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
+        });
+        if (controller.signal.aborted) {
+          setStatusMessage(`Download cancelled for ${folderLabel}`);
+          cancelDownloadDetails(operationId);
+          return;
+        }
+        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
+
+        const downloadName = `${folderLabel}.zip`;
+        const url = window.URL.createObjectURL(zipBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = downloadName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
       }
-
-      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, label: "Packaging zip" } : op)));
-      const zipBlob = await zip.generateAsync({ type: "blob" }, (metadata) => {
-        const percent = Math.min(99, 80 + Math.round(metadata.percent * 0.2));
-        setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: percent } : op)));
-      });
-      if (controller.signal.aborted) {
-        setStatusMessage(`Download cancelled for ${folderLabel}`);
-        cancelDownloadDetails(operationId);
-        return;
-      }
-      setOperations((prev) => prev.map((op) => (op.id === operationId ? { ...op, progress: 100 } : op)));
-
-      const downloadName = `${folderLabel}.zip`;
-      const url = window.URL.createObjectURL(zipBlob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = downloadName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
 
       if (errors.length > 0) {
         completionStatus = "failed";

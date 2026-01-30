@@ -38,6 +38,7 @@ export type BrowserSettings = {
   direct_download_parallelism: number;
   proxy_download_parallelism: number;
   other_operations_parallelism: number;
+  streaming_zip_threshold_mb: number;
 };
 
 export type BrowserObjectsQuery = {

@@ -170,6 +170,7 @@ class BrowserSettings(BaseModel):
     direct_download_parallelism: int = Field(default=5, ge=1, le=20)
     proxy_download_parallelism: int = Field(default=2, ge=1, le=20)
     other_operations_parallelism: int = Field(default=3, ge=1, le=20)
+    streaming_zip_threshold_mb: int = Field(default=200, ge=0, le=10240)
 
 
 class OnboardingSettings(BaseModel):

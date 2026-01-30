@@ -15,10 +15,17 @@ import { confirmAction } from "../../utils/confirm";
 
 const PARALLELISM_MIN = 1;
 const PARALLELISM_MAX = 20;
+const ZIP_STREAM_THRESHOLD_MIN = 0;
+const ZIP_STREAM_THRESHOLD_MAX = 10240;
 
 const normalizeParallelism = (value: number) => {
   if (!Number.isFinite(value)) return PARALLELISM_MIN;
   return Math.min(PARALLELISM_MAX, Math.max(PARALLELISM_MIN, Math.floor(value)));
+};
+
+const normalizeZipStreamThreshold = (value: number) => {
+  if (!Number.isFinite(value)) return ZIP_STREAM_THRESHOLD_MIN;
+  return Math.min(ZIP_STREAM_THRESHOLD_MAX, Math.max(ZIP_STREAM_THRESHOLD_MIN, Math.floor(value)));
 };
 
 export default function BrowserSettingsPage() {
@@ -50,6 +57,14 @@ export default function BrowserSettingsPage() {
     );
   };
 
+  const handleZipThresholdChange = (value: string) => {
+    const parsed = Number(value);
+    const normalized = normalizeZipStreamThreshold(parsed);
+    setSettings((prev) =>
+      prev ? { ...prev, browser: { ...prev.browser, streaming_zip_threshold_mb: normalized } } : prev
+    );
+  };
+
   const handleToggleChange = (checked: boolean) => {
     setSettings((prev) =>
       prev ? { ...prev, browser: { ...prev.browser, allow_proxy_transfers: checked } } : prev
@@ -78,6 +93,7 @@ export default function BrowserSettingsPage() {
           direct_download_parallelism: normalizeParallelism(settings.browser.direct_download_parallelism),
           proxy_download_parallelism: normalizeParallelism(settings.browser.proxy_download_parallelism),
           other_operations_parallelism: normalizeParallelism(settings.browser.other_operations_parallelism),
+          streaming_zip_threshold_mb: normalizeZipStreamThreshold(settings.browser.streaming_zip_threshold_mb),
         },
       };
       const saved = await updateAppSettings(payload);
@@ -198,6 +214,29 @@ export default function BrowserSettingsPage() {
                     />
                   }
                 />
+              </PortalSettingsSection>
+            </div>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <PortalSettingsSection
+                title="ZIP DOWNLOADS"
+                description="Stream ZIP generation in the browser for large folder downloads."
+                layout="stack"
+              >
+                <PortalSettingsItem
+                  title="Streaming threshold (MB)"
+                  description="ZIP streaming is used only above this size. Set to 0 to always stream when supported."
+                >
+                  <div className="mt-3 max-w-xs">
+                    <input
+                      type="number"
+                      min={ZIP_STREAM_THRESHOLD_MIN}
+                      max={ZIP_STREAM_THRESHOLD_MAX}
+                      className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      value={settings.browser.streaming_zip_threshold_mb}
+                      onChange={(e) => handleZipThresholdChange(e.target.value)}
+                    />
+                  </div>
+                </PortalSettingsItem>
               </PortalSettingsSection>
             </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
