@@ -32,7 +32,7 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm="HS256")
+    encoded_jwt = jwt.encode(to_encode, settings.fernet_key, algorithm="HS256")
     return encoded_jwt
 
 
@@ -46,16 +46,32 @@ def hash_refresh_token(token: str) -> str:
 
 def decode_token(token: str) -> Optional[Dict[str, Any]]:
     try:
-        return jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        return jwt.decode(token, settings.fernet_key, algorithms=["HS256"])
     except JWTError:
         return None
 
 
+def _looks_like_fernet_key(value: str) -> bool:
+    if len(value) != 44:
+        return False
+    try:
+        decoded = base64.urlsafe_b64decode(value.encode())
+    except Exception:
+        return False
+    return len(decoded) == 32
+
+
+def _normalize_fernet_key(value: str) -> bytes:
+    key = value.strip()
+    if _looks_like_fernet_key(key):
+        return key.encode()
+    return base64.urlsafe_b64encode(hashlib.sha256(key.encode()).digest())
+
+
 @lru_cache(maxsize=1)
 def _get_fernet() -> Fernet:
-    secret = settings.secret_key.encode()
-    key = base64.urlsafe_b64encode(hashlib.sha256(secret).digest())
-    return Fernet(key)
+    secret = settings.credential_key
+    return Fernet(_normalize_fernet_key(secret))
 
 
 def encrypt_secret(value: str) -> str:

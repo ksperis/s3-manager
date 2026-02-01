@@ -50,7 +50,15 @@ class Settings(BaseSettings):
 
     app_name: str = Field("s3-manager", description="Application name")
     api_v1_prefix: str = "/api"
-    secret_key: str = Field("change-me", description="JWT secret key")
+    fernet_key: str = Field("change-me", description="JWT secret key (FERNET_KEY)")
+    credential_key: str = Field(
+        "change-me",
+        description="Key used to encrypt credentials at rest (CREDENTIAL_KEY)",
+    )
+    fernet_key: Optional[str] = Field(
+        None,
+        description="Fernet key used to encrypt secrets at rest (separate from JWT secret)",
+    )
     access_token_expire_minutes: int = 60
     refresh_token_expire_minutes: int = Field(60 * 24 * 14, description="Refresh token expiry (minutes)")
     refresh_token_cookie_name: str = Field("refresh_token", description="Cookie name for refresh token")

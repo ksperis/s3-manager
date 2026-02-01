@@ -60,7 +60,8 @@ Environment variables (or `.env` file) supported via `pydantic`:
 
 - `APP_NAME` (default: `s3-manager`)
 - `API_V1_PREFIX` (default: `/api`)
-- `SECRET_KEY` (default: `change-me`)
+- `FERNET_KEY` (default: `change-me`, JWT signing key)
+- `CREDENTIAL_KEY` (default: `change-me`, encrypts secrets at rest)
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `60`)
 - `REFRESH_TOKEN_EXPIRE_MINUTES` (default: `20160`)
 - `REFRESH_TOKEN_COOKIE_NAME` (default: `refresh_token`)
