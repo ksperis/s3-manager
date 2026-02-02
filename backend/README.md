@@ -61,7 +61,9 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `APP_NAME` (default: `s3-manager`)
 - `API_V1_PREFIX` (default: `/api`)
 - `FERNET_KEY` (default: `change-me`, JWT signing key)
+- `JWT_KEYS` (optional JSON list or comma-separated; overrides `FERNET_KEY`)
 - `CREDENTIAL_KEY` (default: `change-me`, encrypts secrets at rest)
+- `CREDENTIAL_KEYS` (optional JSON list or comma-separated; overrides `CREDENTIAL_KEY`)
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `60`)
 - `REFRESH_TOKEN_EXPIRE_MINUTES` (default: `20160`)
 - `REFRESH_TOKEN_COOKIE_NAME` (default: `refresh_token`)
@@ -82,6 +84,18 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `SEED_SUPER_ADMIN_EMAIL` / `SEED_SUPER_ADMIN_PASSWORD` / `SEED_SUPER_ADMIN_FULL_NAME`
 - `OIDC_STATE_TTL_SECONDS` (default: `600`, validity of login `state`)
 - `OIDC_PROVIDERS__<key>__*` to configure OpenID Connect providers (see below)
+
+JWT signing uses the first key in `JWT_KEYS` and validates against the full list.
+
+### Credential key rotation (manual)
+
+To rotate the credential encryption key, run:
+
+```bash
+python -m app.scripts.rotate_credential_keys --new-key "your-new-key"
+```
+
+Then update `CREDENTIAL_KEY` / `CREDENTIAL_KEYS` to the new value.
 
 To seed a default endpoint with features enabled, provide `SEED_S3_ENDPOINT` along with a JSON/YAML payload:
 

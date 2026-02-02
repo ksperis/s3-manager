@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -51,13 +51,17 @@ class Settings(BaseSettings):
     app_name: str = Field("s3-manager", description="Application name")
     api_v1_prefix: str = "/api"
     fernet_key: str = Field("change-me", description="JWT secret key (FERNET_KEY)")
+    jwt_keys: list[str] = Field(
+        default_factory=list,
+        description="JWT key ring (JSON list or comma-separated)",
+    )
     credential_key: str = Field(
         "change-me",
         description="Key used to encrypt credentials at rest (CREDENTIAL_KEY)",
     )
-    fernet_key: Optional[str] = Field(
-        None,
-        description="Fernet key used to encrypt secrets at rest (separate from JWT secret)",
+    credential_keys: list[str] = Field(
+        default_factory=list,
+        description="Credential key ring (JSON list or comma-separated)",
     )
     access_token_expire_minutes: int = 60
     refresh_token_expire_minutes: int = Field(60 * 24 * 14, description="Refresh token expiry (minutes)")
@@ -135,6 +139,31 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     oidc_providers: dict[str, OIDCProviderSettings] = Field(default_factory=dict)
     oidc_state_ttl_seconds: int = Field(600, description="Validity of OIDC login state (seconds)")
+
+    @field_validator("jwt_keys", "credential_keys", mode="before")
+    @classmethod
+    def parse_key_list(cls, value):
+        if value is None:
+            return []
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+            if text.startswith("["):
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("Unable to parse keys JSON") from exc
+            return [item.strip() for item in text.split(",") if item.strip()]
+        return value
+
+    @model_validator(mode="after")
+    def ensure_key_defaults(self):
+        if not self.jwt_keys:
+            self.jwt_keys = [self.fernet_key]
+        if not self.credential_keys:
+            self.credential_keys = [self.credential_key]
+        return self
 
 @lru_cache
 def get_settings() -> Settings:
