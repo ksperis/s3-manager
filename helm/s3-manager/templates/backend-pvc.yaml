@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/component: backend
 spec:
   accessModes:
-    - ReadWriteOnce
+    - {{ .Values.backend.persistence.accessMode | default "ReadWriteOnce" }}
   resources:
     requests:
       storage: {{ .Values.backend.persistence.size }}

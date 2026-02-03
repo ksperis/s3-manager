@@ -7,8 +7,9 @@ Frontend sources live under `frontend/`.
 
 ## Runtime assumptions
 
-- Default API URL: `http://localhost:8000/api`
+- Default API URL: `/api`
 - Override via `VITE_API_URL` in a `.env` at repo root
+- In Kubernetes, `/api` is expected to be routed to the backend by the Ingress (or another reverse proxy)
 
 ## App shell
 

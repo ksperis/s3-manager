@@ -31,13 +31,13 @@ Feedback and contributions are welcome.
 
 ### UI Authentication
 
-L'authentification sur l'interface s3-manager est basé sur l'identité.
+Authentication on the s3-manager interface is based on identity.
 
 Supported mechanisms include:
 - Enterprise OIDC (SSO)
 - Email / password (local or external identity provider)
 
-This allows users to access the interface **without ever handling S3 access keys**.
+This allows users to access the interface without ever handling S3 access keys.
 
 A single UI user may manage:
 - multiple S3 accounts
@@ -56,7 +56,7 @@ Authorization for storage operations always relies on:
 - bucket policies
 - or delegated STS credentials
 
-UI profiles **do not grant storage permissions by themselves**.
+UI profiles do not grant storage permissions by themselves.
 
 ---
 
@@ -374,8 +374,6 @@ helm upgrade --install s3-manager helm/s3-manager \\
   --set postgresql.enabled=false \\
   --set backend.env.DATABASE_URL=postgresql://user:pass@host:5432/db
 ```
-
-For ingress-based deployments, build the frontend with `VITE_API_URL=/api`.
 
 ---
 

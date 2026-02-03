@@ -191,7 +191,7 @@ type BrowserPageProps = {
 
 type OperationDetailsKind = "download" | "delete" | "copy" | "upload" | "other";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
 
 export default function BrowserPage({

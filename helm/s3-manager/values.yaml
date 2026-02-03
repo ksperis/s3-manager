@@ -1,11 +1,11 @@
 image:
   backend:
     repository: ghcr.io/ksperis/s3-manager-backend
-    tag: "0.1.0"
+    tag: "0.1.3"
     pullPolicy: IfNotPresent
   frontend:
     repository: ghcr.io/ksperis/s3-manager-frontend
-    tag: "0.1.0"
+    tag: "0.1.3"
     pullPolicy: IfNotPresent
 
 backend:
@@ -19,6 +19,7 @@ backend:
     enabled: true
     size: 1Gi
     storageClass: ""
+    accessMode: ReadWriteOnce
 
 frontend:
   replicas: 1

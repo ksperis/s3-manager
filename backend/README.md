@@ -72,7 +72,7 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `REFRESH_TOKEN_COOKIE_SECURE` (default: `false`)
 - `REFRESH_TOKEN_COOKIE_SAMESITE` (default: `lax`)
 - `DATABASE_URL` (default: `sqlite:///./app.db`)
-- `APP_SETTINGS_PATH` (default: `backend/app/data/app_settings.json`, set to a persistent path to keep UI settings)
+- `APP_SETTINGS_PATH` (default: `backend/app/data/app_settings.json`, set to a persistent path to keep UI settings; use shared storage for multi-backend)
 - `SEED_S3_ENDPOINT` (default: `http://localhost:9000`)
 - `SEED_S3_ENDPOINT_FEATURES` (YAML or JSON, used to seed default endpoint features)
 - `ENV_STORAGE_ENDPOINTS` (JSON array, authoritative list of storage endpoints managed by env)
