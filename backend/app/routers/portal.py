@@ -46,9 +46,14 @@ from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
 from app.db import UserRole
 from pydantic import BaseModel
+from app.core.config import get_settings
+from app.services.billing_service import BillingService
+from app.services.app_settings_service import load_app_settings
+from app.models.billing import BillingSubjectDetail
 
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 @router.get("/accounts", response_model=list[S3AccountSchema])
@@ -156,6 +161,28 @@ def portal_usage(
         return service.get_usage(actor, access)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/billing/me", response_model=BillingSubjectDetail)
+def portal_billing_me(
+    month: str = Query(..., description="YYYY-MM"),
+    access: AccountAccess = Depends(get_portal_account_access),
+    db: Session = Depends(get_db),
+) -> BillingSubjectDetail:
+    app_settings = load_app_settings()
+    if not settings.billing_enabled or not app_settings.general.billing_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Billing is disabled")
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    account = access.account
+    if account.storage_endpoint_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage endpoint is not configured")
+    service = BillingService(db)
+    try:
+        return service.subject_detail(month, account.storage_endpoint_id, "account", account.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get("/buckets", response_model=list[Bucket])

@@ -1,0 +1,68 @@
+{{- if .Values.billingCronJob.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "s3-manager.fullname" . }}-billing
+  labels:
+    {{- include "s3-manager.labels" . | nindent 4 }}
+    app.kubernetes.io/component: billing-cron
+spec:
+  schedule: {{ .Values.billingCronJob.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.billingCronJob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.billingCronJob.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.billingCronJob.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "s3-manager.labels" . | nindent 12 }}
+            app.kubernetes.io/component: billing-cron
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: billing-collector
+              image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+              imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+              env:
+                - name: BILLING_API_BASE
+                  value: {{ printf "http://%s-backend:%d" (include "s3-manager.fullname" .) (.Values.service.backend.port | int) | quote }}
+                - name: BILLING_DAY_OFFSET
+                  value: {{ .Values.billingCronJob.dayOffset | quote }}
+                {{- $backendToken := get .Values.backend.env "INTERNAL_CRON_TOKEN" }}
+                {{- if $backendToken }}
+                - name: INTERNAL_CRON_TOKEN
+                  value: {{ $backendToken | quote }}
+                {{- else if .Values.billingCronJob.internalToken }}
+                - name: INTERNAL_CRON_TOKEN
+                  value: {{ .Values.billingCronJob.internalToken | quote }}
+                {{- end }}
+                {{- range .Values.billingCronJob.extraEnv }}
+                - name: {{ .name }}
+                  value: {{ .value | quote }}
+                {{- end }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  python - <<'PY'
+                  import datetime
+                  import os
+                  import sys
+                  import requests
+
+                  base = os.environ.get("BILLING_API_BASE")
+                  token = os.environ.get("INTERNAL_CRON_TOKEN")
+                  if not base or not token:
+                      print("Missing BILLING_API_BASE or INTERNAL_CRON_TOKEN", file=sys.stderr)
+                      sys.exit(1)
+                  try:
+                      offset = int(os.environ.get("BILLING_DAY_OFFSET", "1"))
+                  except ValueError:
+                      offset = 1
+                  day = (datetime.datetime.utcnow() - datetime.timedelta(days=offset)).date().isoformat()
+                  url = f"{base}/api/internal/billing/collect/daily?day={day}"
+                  resp = requests.post(url, headers={"X-Internal-Token": token}, timeout=30)
+                  print(resp.status_code, resp.text)
+                  resp.raise_for_status()
+                  PY
+{{- end }}

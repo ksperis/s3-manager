@@ -126,6 +126,7 @@ class GeneralSettings(BaseModel):
     browser_manager_enabled: bool = True
     browser_portal_enabled: bool = True
     portal_enabled: bool = False
+    billing_enabled: bool = False
     allow_login_access_keys: bool = True
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False

@@ -7,6 +7,9 @@ export default defineConfig(({ mode }) => {
     .split(",")
     .map((host) => host.trim())
     .filter(Boolean);
+  const apiUrl = env.VITE_API_URL || "/api";
+  const apiProxyTarget = env.VITE_API_PROXY_TARGET || "http://localhost:8000";
+  const shouldProxyApi = apiUrl.startsWith("/");
 
   return {
     plugins: [react()],
@@ -14,6 +17,15 @@ export default defineConfig(({ mode }) => {
       host: env.VITE_DEV_HOST || true,
       port: Number(env.VITE_DEV_PORT) || 5173,
       allowedHosts,
+      proxy: shouldProxyApi
+        ? {
+            [apiUrl]: {
+              target: apiProxyTarget,
+              changeOrigin: true,
+              secure: false,
+            },
+          }
+        : undefined,
     },
   };
 });

@@ -17,12 +17,14 @@ from app.routers import connections as user_connections
 from app.routers.admin import s3_accounts as admin_s3_accounts
 from app.routers.admin import audit as admin_audit
 from app.routers.admin import stats as admin_stats
+from app.routers.admin import billing as admin_billing
 from app.routers.admin import users as admin_users
 from app.routers.admin import s3_users as admin_s3_users
 from app.routers.admin import s3_connections as admin_s3_connections
 from app.routers.admin import storage_endpoints as admin_storage_endpoints
 from app.routers.admin import settings as admin_settings
 from app.routers.admin import onboarding as admin_onboarding
+from app.routers.internal import billing_collect as internal_billing
 from app.routers.manager import s3_accounts as manager_accounts
 from app.routers.manager import browser as manager_browser
 from app.routers.manager import buckets as manager_buckets
@@ -83,10 +85,12 @@ app.include_router(admin_s3_users.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_s3_connections.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_audit.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_stats.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_users.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_storage_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_settings.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_onboarding.router, prefix=settings.api_v1_prefix)
+app.include_router(internal_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(
     manager_accounts.router,
     prefix=settings.api_v1_prefix,

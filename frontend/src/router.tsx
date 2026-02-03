@@ -13,6 +13,7 @@ import AuditLogsPage from "./features/admin/AuditLogsPage";
 import UsersPage from "./features/admin/UsersPage";
 import AdminDashboard from "./features/admin/AdminDashboard";
 import AdminMetricsPage from "./features/admin/AdminMetricsPage";
+import BillingPage from "./features/admin/BillingPage";
 import S3UsersPage from "./features/admin/S3UsersPage";
 import S3UserKeysPage from "./features/admin/S3UserKeysPage";
 import S3ConnectionsPage from "./features/admin/S3ConnectionsPage";
@@ -45,6 +46,7 @@ import PortalBucketsPage from "./features/portal/PortalBucketsPage";
 import PortalBrowserPage from "./features/portal/PortalBrowserPage";
 import PortalManagePage from "./features/portal/PortalManagePage";
 import PortalSettingsPage from "./features/portal/PortalSettingsPage";
+import PortalBillingPage from "./features/portal/BillingPage";
 import BrowserLayout from "./features/browser/BrowserLayout";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
 
@@ -68,7 +70,7 @@ type StoredUser = {
   };
 };
 
-const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean) => {
+const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean, billingEnabled: boolean) => {
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
     { to: "/admin/manager-settings", label: "Manager" },
@@ -82,6 +84,7 @@ const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean) => {
       links: [
         { to: "/admin", label: "Dashboard", end: true },
         { to: "/admin/metrics", label: "Metrics" },
+        ...(billingEnabled ? [{ to: "/admin/billing", label: "Billing" }] : []),
       ],
     },
     {
@@ -130,6 +133,38 @@ function RequireAuth() {
   const user = getStoredUser();
   if (!token || !user) return <Navigate to="/login" replace />;
   return <Outlet />;
+}
+
+function AdminLayoutShell() {
+  const { generalSettings } = useGeneralSettings();
+  const adminNav = buildAdminNav(
+    generalSettings.portal_enabled,
+    generalSettings.browser_enabled,
+    generalSettings.billing_enabled
+  );
+  return (
+    <Layout
+      navSections={adminNav}
+      sidebarTitle="ADMIN"
+      hideHeader
+      topbarContent={<span className="ui-body text-slate-500 dark:text-slate-300">Administration globale</span>}
+    />
+  );
+}
+
+function AdminPortalSettingsRoute() {
+  const { generalSettings } = useGeneralSettings();
+  return generalSettings.portal_enabled ? <AdminPortalSettingsPage /> : <FeatureDisabledPage feature="Portal" />;
+}
+
+function AdminBillingRoute() {
+  const { generalSettings } = useGeneralSettings();
+  return generalSettings.billing_enabled ? <BillingPage /> : <FeatureDisabledPage feature="Billing" />;
+}
+
+function PortalBillingRoute() {
+  const { generalSettings } = useGeneralSettings();
+  return generalSettings.billing_enabled ? <PortalBillingPage /> : <FeatureDisabledPage feature="Billing" />;
 }
 
 function RequireRole({ roles }: { roles: string[] }) {
@@ -198,28 +233,14 @@ function RequireBrowserSurface({ surface }: { surface: "root" | "manager" | "por
 }
 
 export default function AppRouter() {
-  const { generalSettings } = useGeneralSettings();
   const router = useMemo(() => {
-    const adminNav = buildAdminNav(generalSettings.portal_enabled, generalSettings.browser_enabled);
     const routes = createRoutesFromElements(
       <>
         <Route element={<RequireAuth />}>
           <Route index element={<RoleRedirect />} />
 
           <Route element={<RequireRole roles={[ADMIN_ROLE]} />}>
-            <Route
-              path="/admin"
-              element={
-                <Layout
-                  navSections={adminNav}
-                  sidebarTitle="ADMIN"
-                  hideHeader
-                  topbarContent={
-                    <span className="ui-body text-slate-500 dark:text-slate-300">Administration globale</span>
-                  }
-                />
-              }
-            >
+            <Route path="/admin" element={<AdminLayoutShell />}>
               <Route index element={<AdminDashboard />} />
               <Route path="s3-accounts" element={<S3AccountsPage />} />
               <Route path="accounts" element={<Navigate to="/admin/s3-accounts" replace />} />
@@ -230,9 +251,10 @@ export default function AppRouter() {
               <Route path="users" element={<UsersPage />} />
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="metrics" element={<AdminMetricsPage />} />
+              <Route path="billing" element={<AdminBillingRoute />} />
               <Route path="general-settings" element={<GeneralSettingsPage />} />
               <Route path="manager-settings" element={<ManagerSettingsPage />} />
-              {generalSettings.portal_enabled && <Route path="portal-settings" element={<AdminPortalSettingsPage />} />}
+              <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
               <Route path="browser-settings" element={<BrowserSettingsPage />} />
             </Route>
           </Route>
@@ -276,6 +298,7 @@ export default function AppRouter() {
                   <Route path="browser" element={<PortalBrowserPage />} />
                 </Route>
                 <Route path="manage" element={<PortalManagePage />} />
+                <Route path="billing" element={<PortalBillingRoute />} />
                 <Route path="settings" element={<PortalSettingsPage />} />
               </Route>
             </Route>
@@ -291,6 +314,6 @@ export default function AppRouter() {
     return createBrowserRouter(routes, {
       future: { v7_startTransition: true, v7_relativeSplatPath: true },
     });
-  }, [generalSettings.portal_enabled, generalSettings.browser_enabled]);
+  }, []);
   return <RouterProvider router={router} />;
 }

@@ -95,6 +95,7 @@ function PortalShell() {
           ? [{ to: "/portal/browser", label: "Browser" }]
           : []),
         { to: "/portal/manage", label: "Gestion" },
+        ...(generalSettings.billing_enabled ? [{ to: "/portal/billing", label: "Billing" }] : []),
         { to: "/portal/settings", label: "Configuration" },
       ],
     },

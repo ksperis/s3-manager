@@ -93,14 +93,17 @@ export default function EnvironmentSwitcher() {
   const environments = resolveAvailableEnvironmentsWithFlags(user, generalSettings);
   const current = resolveEnvironmentId(location.pathname, environments);
 
-  if (environments.length <= 1 || !current) return null;
-
   useEffect(() => {
+    if (!current) {
+      return;
+    }
     const stored = getStoredWorkspaceId();
     if (stored !== current.id) {
       localStorage.setItem(WORKSPACE_STORAGE_KEY, current.id);
     }
-  }, [current.id]);
+  }, [current?.id]);
+
+  if (environments.length <= 1 || !current) return null;
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const next = environments.find((env) => env.id === event.target.value);

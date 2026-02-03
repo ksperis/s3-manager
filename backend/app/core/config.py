@@ -140,6 +140,20 @@ class Settings(BaseSettings):
     oidc_providers: dict[str, OIDCProviderSettings] = Field(default_factory=dict)
     oidc_state_ttl_seconds: int = Field(600, description="Validity of OIDC login state (seconds)")
 
+    billing_enabled: bool = Field(True, description="Enable billing endpoints and collection")
+    billing_store_by_bucket: bool = Field(
+        False,
+        description="Store per-bucket breakdown in billing snapshots",
+    )
+    internal_cron_token: Optional[str] = Field(
+        None,
+        description="Shared secret for internal cron endpoints (INTERNAL_CRON_TOKEN)",
+    )
+    billing_default_rate_card_name: Optional[str] = Field(
+        None,
+        description="Default billing rate card name when no explicit assignment exists",
+    )
+
     @field_validator("jwt_keys", "credential_keys", mode="before")
     @classmethod
     def parse_key_list(cls, value):

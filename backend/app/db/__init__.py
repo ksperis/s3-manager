@@ -11,6 +11,7 @@ from .refresh_session import RefreshSession
 from .s3_user import S3User, UserS3User
 from .s3_connection import S3Connection, UserS3Connection
 from .oidc import OidcLoginState
+from .billing import BillingAssignment, BillingRateCard, BillingStorageDaily, BillingUsageDaily
 
 __all__ = [
     "Base",
@@ -30,4 +31,8 @@ __all__ = [
     "S3Connection",
     "UserS3Connection",
     "OidcLoginState",
+    "BillingAssignment",
+    "BillingRateCard",
+    "BillingStorageDaily",
+    "BillingUsageDaily",
 ]

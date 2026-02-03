@@ -36,6 +36,7 @@ export default function GeneralSettingsPage() {
       | "manager_enabled"
       | "browser_enabled"
       | "portal_enabled"
+      | "billing_enabled"
       | "allow_login_access_keys"
       | "allow_login_endpoint_list"
       | "allow_login_custom_endpoint",
@@ -154,6 +155,17 @@ export default function GeneralSettingsPage() {
                       checked={Boolean(settings.general.portal_enabled)}
                       onChange={(value) => handleToggle("portal_enabled", value)}
                       ariaLabel="Portal feature"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Billing feature"
+                  description="Enables the billing dashboards for admin and portal."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.billing_enabled)}
+                      onChange={(value) => handleToggle("billing_enabled", value)}
+                      ariaLabel="Billing feature"
                     />
                   }
                 />

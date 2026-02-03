@@ -90,6 +90,7 @@ nav:
       - MinIO and others: backends/others.md
   - Operations:
       - Helm chart: operations/helm.md
+      - Billing & collection: operations/billing.md
       - Observability & troubleshooting: operations/ops.md
       - Security hardening: operations/security.md
   - Development:

@@ -22,6 +22,7 @@ export type GeneralSettings = {
   browser_manager_enabled: boolean;
   browser_portal_enabled: boolean;
   portal_enabled: boolean;
+  billing_enabled: boolean;
   allow_login_access_keys: boolean;
   allow_login_endpoint_list: boolean;
   allow_login_custom_endpoint: boolean;
@@ -143,8 +144,18 @@ export async function fetchGeneralSettings(): Promise<GeneralSettings> {
 }
 
 export async function fetchLoginSettings(): Promise<LoginSettings> {
-  const { data } = await client.get<LoginSettings>("/settings/login");
-  return data;
+  const { data } = await client.get("/settings/login");
+  const normalized = (data && typeof data === "object" ? data : {}) as Partial<LoginSettings>;
+  return {
+    allow_login_access_keys: Boolean(normalized.allow_login_access_keys ?? true),
+    allow_login_endpoint_list: Boolean(normalized.allow_login_endpoint_list ?? false),
+    allow_login_custom_endpoint: Boolean(normalized.allow_login_custom_endpoint ?? false),
+    default_endpoint_url: normalized.default_endpoint_url ?? null,
+    endpoints: Array.isArray(normalized.endpoints) ? normalized.endpoints : [],
+    seed_login_prefill: Boolean(normalized.seed_login_prefill ?? false),
+    seed_login_email: normalized.seed_login_email ?? null,
+    seed_login_password: normalized.seed_login_password ?? null,
+  };
 }
 
 export async function updateAppSettings(payload: AppSettings): Promise<AppSettings> {

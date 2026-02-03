@@ -88,8 +88,20 @@ export type RefreshResponse = {
 };
 
 export async function fetchOidcProviders(): Promise<OidcProviderInfo[]> {
-  const { data } = await client.get<OidcProviderInfo[]>("/auth/oidc/providers");
-  return data;
+  const { data } = await client.get("/auth/oidc/providers");
+  if (Array.isArray(data)) {
+    return data as OidcProviderInfo[];
+  }
+  if (data && typeof data === "object") {
+    const maybeProviders =
+      (data as { providers?: unknown }).providers ??
+      (data as { items?: unknown }).items ??
+      (data as { data?: unknown }).data;
+    if (Array.isArray(maybeProviders)) {
+      return maybeProviders as OidcProviderInfo[];
+    }
+  }
+  return [];
 }
 
 export async function startOidcLogin(providerId: string, redirectPath?: string): Promise<OidcStartResponse> {

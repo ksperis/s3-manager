@@ -29,6 +29,10 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+            {{- if and .Values.billingCronJob.internalToken (not (hasKey .Values.backend.env "INTERNAL_CRON_TOKEN")) }}
+            - name: INTERNAL_CRON_TOKEN
+              value: {{ .Values.billingCronJob.internalToken | quote }}
+            {{- end }}
             {{- if and .Values.postgresql.enabled (not (hasKey .Values.backend.env "DATABASE_URL")) }}
             - name: DATABASE_URL
               valueFrom:

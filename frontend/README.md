@@ -7,10 +7,12 @@ npm install
 npm run dev
 ```
 
-The app expects the API at `/api` by default. Override with `VITE_API_URL` in a `.env` file at the project root:
+The app expects the API at `/api` by default. In dev, Vite will proxy `/api` to `VITE_API_PROXY_TARGET` (defaults to `http://localhost:8000`).
+Override with `VITE_API_URL` in a `.env` file at the project root:
 
 ```
-VITE_API_URL=http://localhost:8000/api
+VITE_API_URL=/api
+VITE_API_PROXY_TARGET=http://localhost:8000
 
 In Kubernetes, `/api` should be routed to the backend by the Ingress (or another reverse proxy).
 ```

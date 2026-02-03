@@ -58,5 +58,15 @@ ingress:
   host: s3-manager.local
   tls: []
 
+billingCronJob:
+  enabled: false
+  schedule: "0 2 * * *"
+  dayOffset: 1
+  backoffLimit: 1
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  internalToken: ""
+  extraEnv: []
+
 nameOverride: ""
 fullnameOverride: ""
