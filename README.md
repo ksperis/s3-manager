@@ -1,8 +1,15 @@
 # s3-manager
 
 **s3-manager** is an open-source web application to explore and manage
-**S3-compatible object storage** such as **Ceph RGW**, **MinIO**, and other
+**S3-compatible object storage** such as **Ceph RGW**, and other
 implementations exposing S3 and IAM semantics.
+
+The goal of this project is to simplify enterprise object storage usage by
+providing tailored views for each role:
+- **Admin**: storage admins configure the platform and grant access to storage managers and end users.
+- **Manager**: tenant/storage admins access IAM configuration and manage their buckets.
+- **Portal**: end users perform guided, simplified day-to-day operations.
+- **Browser**: users directly access S3 objects throw Web UI for data-level operations.
 
 ---
 
@@ -15,48 +22,6 @@ It is suitable for labs, experimentation, and design validation, but is **not ye
 considered production-ready**.
 
 Feedback and contributions are welcome.
-
----
-
-## Key Principles
-
-- IAM remains the **source of truth** for storage authorization
-- UI authentication is **decoupled** from storage credentials
-- All storage changes result in **standard S3 / IAM resources**
-- Designed primarily for **Ceph RGW (Tentacle and later)**
-
----
-
-## Authentication vs Authorization
-
-### UI Authentication
-
-Authentication on the s3-manager interface is based on identity.
-
-Supported mechanisms include:
-- Enterprise OIDC (SSO)
-- Email / password (local or external identity provider)
-
-This allows users to access the interface without ever handling S3 access keys.
-
-A single UI user may manage:
-- multiple S3 accounts
-- multiple storage/RGW backends
-
-In addition, s3-manager can be used in a **credential-first** mode for day-to-day administration:
-- UI admins can create **S3 Connections** (endpoint + access_key + secret_key)
-- Then attach UI users to those connections to grant access to **Manager** and **Browser**
-
-This enables using s3-manager across multiple platforms (AWS, Ceph RGW, Scality, MinIO, etc.) without requiring an RGW account concept.
-
-### Storage Authorization
-
-Authorization for storage operations always relies on:
-- S3 IAM policies
-- bucket policies
-- or delegated STS credentials
-
-UI profiles do not grant storage permissions by themselves.
 
 ---
 
@@ -201,6 +166,49 @@ In some cases, portal workflows may rely on **controlled privilege elevation**
 (e.g. bucket creation on behalf of a user).
 
 ![Portal](doc/docs/assets/screenshots/portal.png)
+
+---
+
+
+## Key Principles
+
+- IAM remains the **source of truth** for storage authorization
+- UI authentication is **decoupled** from storage credentials
+- All storage changes result in **standard S3 / IAM resources**
+- Designed primarily for **Ceph RGW (Tentacle and later)**
+
+---
+
+## Authentication vs Authorization
+
+### UI Authentication
+
+Authentication on the s3-manager interface is based on identity.
+
+Supported mechanisms include:
+- Enterprise OIDC (SSO)
+- Email / password (local or external identity provider)
+
+This allows users to access the interface without ever handling S3 access keys.
+
+A single UI user may manage:
+- multiple S3 accounts
+- multiple storage/RGW backends
+
+In addition, s3-manager can be used in a **credential-first** mode for day-to-day administration:
+- UI admins can create **S3 Connections** (endpoint + access_key + secret_key)
+- Then attach UI users to those connections to grant access to **Manager** and **Browser**
+
+This enables using s3-manager across multiple platforms (AWS, Ceph RGW, Scality, MinIO, etc.) without requiring an RGW account concept.
+
+### Storage Authorization
+
+Authorization for storage operations always relies on:
+- S3 IAM policies
+- bucket policies
+- or delegated STS credentials
+
+UI profiles do not grant storage permissions by themselves.
 
 ---
 
