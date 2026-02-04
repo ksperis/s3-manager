@@ -13,7 +13,13 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
-def get_iam_client(access_key: str, secret_key: str, endpoint: Optional[str] = None, region: Optional[str] = None):
+def get_iam_client(
+    access_key: str,
+    secret_key: str,
+    endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    verify_tls: bool = True,
+):
     if not endpoint:
         raise RuntimeError("IAM endpoint is not configured")
     return boto3.client(
@@ -23,12 +29,20 @@ def get_iam_client(access_key: str, secret_key: str, endpoint: Optional[str] = N
         aws_secret_access_key=secret_key,
         config=Config(signature_version="s3v4"),
         region_name=region or settings.seed_s3_region,
+        verify=verify_tls,
     )
 
 
 class RGWIAMService:
-    def __init__(self, access_key: str, secret_key: str, endpoint: Optional[str] = None) -> None:
-        self.client = get_iam_client(access_key, secret_key, endpoint=endpoint)
+    def __init__(
+        self,
+        access_key: str,
+        secret_key: str,
+        endpoint: Optional[str] = None,
+        region: Optional[str] = None,
+        verify_tls: bool = True,
+    ) -> None:
+        self.client = get_iam_client(access_key, secret_key, endpoint=endpoint, region=region, verify_tls=verify_tls)
         # Known Ceph-managed policies (subset supported by RGW IAM)
         self._default_policies: list[Policy] = [
             self._policy_from_data({"PolicyName": "AmazonS3FullAccess", "Arn": "arn:aws:iam::aws:policy/AmazonS3FullAccess"}),
@@ -556,5 +570,11 @@ class RGWIAMService:
             return None
 
 
-def get_iam_service(access_key: str, secret_key: str, endpoint: Optional[str] = None) -> RGWIAMService:
-    return RGWIAMService(access_key, secret_key, endpoint=endpoint)
+def get_iam_service(
+    access_key: str,
+    secret_key: str,
+    endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    verify_tls: bool = True,
+) -> RGWIAMService:
+    return RGWIAMService(access_key, secret_key, endpoint=endpoint, region=region, verify_tls=verify_tls)

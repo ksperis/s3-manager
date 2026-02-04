@@ -38,7 +38,7 @@ from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_
 from app.services.rgw_iam import RGWIAMService, get_iam_service
 from app.utils.rgw import extract_bucket_list, get_supervision_rgw_client, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_admin_endpoint
-from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
 from app.utils.normalize import normalize_string_list
 from app.utils.usage_stats import extract_usage_stats
 
@@ -535,6 +535,15 @@ class PortalService:
             raise RuntimeError("S3Account is missing root credentials")
         return access_key, secret_key
 
+    def _s3_client_kwargs(self, account: S3Account) -> dict:
+        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+        return {
+            "endpoint": endpoint,
+            "region": region,
+            "force_path_style": force_path_style,
+            "verify_tls": verify_tls,
+        }
+
     def _supervision_admin_for_account(self, account: S3Account) -> RGWAdminClient:
         endpoint = getattr(account, "storage_endpoint", None)
         if endpoint is None and account.storage_endpoint_id:
@@ -621,7 +630,14 @@ class PortalService:
 
     def _get_iam_service(self, account: S3Account) -> RGWIAMService:
         access_key, secret_key = self._account_credentials(account)
-        return get_iam_service(access_key, secret_key, endpoint=resolve_s3_endpoint(account))
+        endpoint, region, _, verify_tls = resolve_s3_client_options(account)
+        return get_iam_service(
+            access_key,
+            secret_key,
+            endpoint=endpoint,
+            region=region,
+            verify_tls=verify_tls,
+        )
 
     def check_eligibility(self, user: User, access: "AccountAccess") -> tuple[bool, list[str]]:
         """Return whether the portal can be used for this account context.
@@ -1249,8 +1265,9 @@ class PortalService:
         portal_settings = self._effective_portal_settings(account)
         self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
         access_key, secret_key = self._account_credentials(account)
-        endpoint = resolve_s3_endpoint(account)
-        buckets = s3_client.list_buckets(access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        buckets = s3_client.list_buckets(
+            access_key=access_key, secret_key=secret_key, **self._s3_client_kwargs(account)
+        )
         if bucket_name not in [b.get("name") for b in buckets]:
             raise RuntimeError("Bucket introuvable pour ce compte.")
         self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name, portal_settings=portal_settings)
@@ -1323,8 +1340,9 @@ class PortalService:
             accessible_names = set(allowed)
 
         buckets = []
-        endpoint = resolve_s3_endpoint(account)
-        for b in s3_client.list_buckets(access_key=access_key, secret_key=secret_key, endpoint=endpoint):
+        for b in s3_client.list_buckets(
+            access_key=access_key, secret_key=secret_key, **self._s3_client_kwargs(account)
+        ):
             name = b.get("name")
             if accessible_names is not None and name not in accessible_names:
                 continue
@@ -1526,15 +1544,16 @@ class PortalService:
             active_key_id, active_secret = self._account_credentials(account)
         else:
             active_key_id, active_secret = self._active_credentials(link, iam_service)
-        endpoint = resolve_s3_endpoint(account)
-        s3_client.create_bucket(bucket_name, access_key=active_key_id, secret_key=active_secret, endpoint=endpoint)
+        s3_client.create_bucket(
+            bucket_name, access_key=active_key_id, secret_key=active_secret, **self._s3_client_kwargs(account)
+        )
         if versioning_flag:
             s3_client.set_bucket_versioning(
                 bucket_name,
                 enabled=True,
                 access_key=active_key_id,
                 secret_key=active_secret,
-                endpoint=endpoint,
+                **self._s3_client_kwargs(account),
             )
         if portal_defaults.bucket_defaults.enable_lifecycle:
             s3_client.put_bucket_lifecycle(
@@ -1542,7 +1561,7 @@ class PortalService:
                 rules=self._portal_bucket_lifecycle_rules(),
                 access_key=active_key_id,
                 secret_key=active_secret,
-                endpoint=endpoint,
+                **self._s3_client_kwargs(account),
             )
         if portal_defaults.bucket_defaults.enable_cors:
             origins = self._normalize_origins(portal_defaults.bucket_defaults.cors_allowed_origins)
@@ -1552,7 +1571,7 @@ class PortalService:
                     rules=self._portal_bucket_cors_rules(origins),
                     access_key=active_key_id,
                     secret_key=active_secret,
-                    endpoint=endpoint,
+                    **self._s3_client_kwargs(account),
                 )
         self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name, portal_settings=portal_defaults)
         return Bucket(
@@ -1581,13 +1600,12 @@ class PortalService:
             access_key, secret_key = self._account_credentials(account)
         else:
             access_key, secret_key = self._active_credentials(link, iam_service)
-        endpoint = resolve_s3_endpoint(account)
         s3_client.delete_bucket(
             bucket_name,
             force=force,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._s3_client_kwargs(account),
         )
 
     def provision_portal_user(self, target: User, account: S3Account, account_role: str) -> None:

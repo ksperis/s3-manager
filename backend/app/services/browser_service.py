@@ -47,7 +47,7 @@ from app.models.browser import (
 )
 from app.services.s3_client import _delete_objects, get_s3_client
 from app.services.sts_service import get_session_token
-from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ _STS_CACHE_LOCK = Lock()
 
 
 def _resolve_endpoint(account: S3Account) -> str:
-    endpoint = resolve_s3_endpoint(account)
+    endpoint, _, _, _ = resolve_s3_client_options(account)
     if not endpoint:
         raise RuntimeError("S3 endpoint is not configured for this account")
     return endpoint
@@ -149,13 +149,22 @@ class BrowserService:
             return sts_credentials.access_key_id, sts_credentials.secret_access_key, sts_credentials.session_token
         return access_key, secret_key, session_token
 
+    def _s3_client_kwargs(self, account: S3Account) -> dict:
+        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+        return {
+            "endpoint": endpoint,
+            "region": region,
+            "force_path_style": force_path_style,
+            "verify_tls": verify_tls,
+        }
+
     def _client(self, account: S3Account):
         access_key, secret_key, session_token = self._resolve_s3_credentials(account)
         return get_s3_client(
             access_key,
             secret_key,
-            endpoint=_resolve_endpoint(account),
             session_token=session_token,
+            **self._s3_client_kwargs(account),
         )
 
     def _get_sts_credentials(
@@ -171,6 +180,7 @@ class BrowserService:
         if not endpoint:
             return None
         cache_key = _sts_cache_key(access_key, endpoint)
+        _, region, _, verify_tls = resolve_s3_client_options(account)
         cached = _get_cached_sts_credentials(cache_key)
         if cached:
             return cached
@@ -183,6 +193,8 @@ class BrowserService:
                 secret_key,
                 endpoint=endpoint,
                 session_token=session_token,
+                region=region,
+                verify_tls=verify_tls,
             )
         except RuntimeError as exc:
             _record_sts_failure(cache_key)
@@ -358,6 +370,7 @@ class BrowserService:
         if not access_key or not secret_key:
             return StsStatus(available=False, error="S3 credentials missing for this account")
         session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        _, region, _, verify_tls = resolve_s3_client_options(account)
         endpoint = resolve_sts_endpoint(account.storage_endpoint) if account.storage_endpoint else None
         if not endpoint:
             return StsStatus(available=False, error="STS endpoint is not configured for this account")
@@ -374,6 +387,8 @@ class BrowserService:
                 secret_key,
                 endpoint=endpoint,
                 session_token=session_token,
+                region=region,
+                verify_tls=verify_tls,
             )
         except RuntimeError as exc:
             _record_sts_failure(cache_key)
@@ -395,6 +410,7 @@ class BrowserService:
         if not access_key or not secret_key:
             raise RuntimeError("S3 credentials missing for this account")
         session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
+        _, region, _, verify_tls = resolve_s3_client_options(account)
         endpoint = resolve_sts_endpoint(account.storage_endpoint) if account.storage_endpoint else None
         if not endpoint:
             raise RuntimeError("STS endpoint is not configured for this account")
@@ -407,7 +423,7 @@ class BrowserService:
                 session_token=cached.session_token,
                 expiration=_normalize_expiration(cached.expiration),
                 endpoint=_resolve_endpoint(account),
-                region=settings.seed_s3_region,
+                region=region or settings.seed_s3_region,
             )
         try:
             session_name = f"browser-{account.id or access_key[:8]}"
@@ -418,6 +434,8 @@ class BrowserService:
                 secret_key,
                 endpoint=endpoint,
                 session_token=session_token,
+                region=region,
+                verify_tls=verify_tls,
             )
         except RuntimeError as exc:
             _record_sts_failure(cache_key)
@@ -436,7 +454,7 @@ class BrowserService:
             session_token=token,
             expiration=normalized_expiration,
             endpoint=_resolve_endpoint(account),
-            region=settings.seed_s3_region,
+            region=region or settings.seed_s3_region,
         )
 
     def proxy_upload(self, bucket_name: str, account: S3Account, key: str, file_obj, content_type: Optional[str]) -> None:

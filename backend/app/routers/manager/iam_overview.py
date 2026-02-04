@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.db import S3Account
 from app.routers.dependencies import get_account_context, require_iam_capable_manager
 from app.services.rgw_iam import get_iam_service
-from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.s3_endpoint import resolve_s3_client_options
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,14 @@ def _service_for_account(account: S3Account):
     access_key, secret_key = account.effective_rgw_credentials()
     if not access_key or not secret_key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account root keys missing")
-    return get_iam_service(access_key, secret_key, endpoint=resolve_s3_endpoint(account))
+    endpoint, region, _, verify_tls = resolve_s3_client_options(account)
+    return get_iam_service(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        verify_tls=verify_tls,
+    )
 
 
 @router.get("/overview")

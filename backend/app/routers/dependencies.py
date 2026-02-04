@@ -154,8 +154,11 @@ def _build_s3_connection_account(conn: S3Connection) -> S3Account:
     account.rgw_secret_key = conn.secret_access_key
     account.storage_endpoint_id = conn.storage_endpoint_id
     # Let resolve_s3_endpoint() pick it up.
-    endpoint_url, _, _, _ = resolve_connection_endpoint(conn)
+    endpoint_url, region, force_path_style, verify_tls = resolve_connection_endpoint(conn)
     account.storage_endpoint_url = endpoint_url  # type: ignore[attr-defined]
+    account._session_region = region  # type: ignore[attr-defined]
+    account._session_force_path_style = force_path_style  # type: ignore[attr-defined]
+    account._session_verify_tls = verify_tls  # type: ignore[attr-defined]
     account.s3_connection_id = conn.id  # type: ignore[attr-defined]
     account._session_token = conn.session_token  # type: ignore[attr-defined]
     return account

@@ -9,7 +9,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.db import S3Account
 from app.models.object import ListObjectsResponse, S3Object
 from app.services.s3_client import _delete_objects, get_s3_client
-from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.s3_endpoint import resolve_s3_client_options
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,15 @@ class ObjectsService:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise RuntimeError("S3Account root keys missing")
-        return get_s3_client(access_key, secret_key, endpoint=resolve_s3_endpoint(account))
+        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+        return get_s3_client(
+            access_key,
+            secret_key,
+            endpoint=endpoint,
+            region=region,
+            force_path_style=force_path_style,
+            verify_tls=verify_tls,
+        )
 
     def list_objects(
         self,

@@ -30,7 +30,7 @@ from app.utils.rgw import (
     resolve_admin_uid,
     get_supervision_credentials,
 )
-from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 from app.utils.size_units import size_to_bytes
@@ -81,13 +81,18 @@ class BucketsService:
             raise RuntimeError("S3Account is missing RGW admin credentials")
         return access_key, secret_key
 
-    def _endpoint(self, account: S3Account) -> Optional[str]:
-        return resolve_s3_endpoint(account)
+    def _client_kwargs(self, account: S3Account) -> dict:
+        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+        return {
+            "endpoint": endpoint,
+            "region": region,
+            "force_path_style": force_path_style,
+            "verify_tls": verify_tls,
+        }
 
     def list_buckets(self, account: S3Account) -> List[Bucket]:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        buckets = s3_client.list_buckets(access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        buckets = s3_client.list_buckets(access_key=access_key, secret_key=secret_key, **self._client_kwargs(account))
         account_uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
         admin_by_name: dict[str, dict] = {}
         if account_uid:
@@ -153,53 +158,51 @@ class BucketsService:
         versioning: bool = False,
     ) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        s3_client.create_bucket(name, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        s3_client.create_bucket(name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account))
         if versioning:
             s3_client.set_bucket_versioning(
                 name,
                 enabled=versioning,
                 access_key=access_key,
                 secret_key=secret_key,
-                endpoint=endpoint,
+                **self._client_kwargs(account),
             )
         logger.debug("S3Account %s created bucket %s (versioning=%s)", account.rgw_account_id or account.id, name, versioning)
 
     def delete_bucket(self, name: str, account: S3Account, force: bool = False) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        s3_client.delete_bucket(name, force=force, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        s3_client.delete_bucket(
+            name, force=force, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
         logger.debug("S3Account %s deleted bucket %s force=%s", account.rgw_account_id or account.id, name, force)
 
     def set_versioning(self, name: str, account: S3Account, enabled: bool) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         s3_client.set_bucket_versioning(
             name,
             enabled=enabled,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         logger.debug("S3Account %s set versioning on bucket %s to %s", account.rgw_account_id or account.id, name, enabled)
 
     def get_bucket_properties(self, name: str, account: S3Account) -> BucketProperties:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         versioning_status = s3_client.get_bucket_versioning(
-            name, access_key=access_key, secret_key=secret_key, endpoint=endpoint
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
         public_access_block_raw = s3_client.get_bucket_public_access_block(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         object_lock_raw = s3_client.get_bucket_object_lock(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         object_lock = (
             BucketObjectLock(
@@ -222,7 +225,7 @@ class BucketsService:
             else None
         )
         lifecycle_rules_raw = s3_client.get_bucket_lifecycle(
-            name, access_key=access_key, secret_key=secret_key, endpoint=endpoint
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
         lifecycle_rules: list[LifecycleRule] = []
         for rule in lifecycle_rules_raw:
@@ -233,7 +236,9 @@ class BucketsService:
                     prefix=rule.get("Prefix") or (rule.get("Filter", {}) or {}).get("Prefix"),
                 )
             )
-        cors_rules = s3_client.get_bucket_cors(name, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        cors_rules = s3_client.get_bucket_cors(
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
         return BucketProperties(
             versioning_status=versioning_status,
             object_lock_enabled=object_lock.enabled if object_lock else None,
@@ -245,12 +250,11 @@ class BucketsService:
 
     def get_public_access_block(self, name: str, account: S3Account) -> BucketPublicAccessBlock:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         config = s3_client.get_bucket_public_access_block(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         ) or {}
         return BucketPublicAccessBlock(
             block_public_acls=config.get("block_public_acls"),
@@ -266,7 +270,6 @@ class BucketsService:
         payload: BucketPublicAccessBlock,
     ) -> BucketPublicAccessBlock:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         config = {
             "BlockPublicAcls": bool(payload.block_public_acls) if payload.block_public_acls is not None else False,
             "IgnorePublicAcls": bool(payload.ignore_public_acls) if payload.ignore_public_acls is not None else False,
@@ -282,13 +285,13 @@ class BucketsService:
             configuration=config,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         updated = s3_client.get_bucket_public_access_block(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         return BucketPublicAccessBlock(
             block_public_acls=(updated or {}).get("block_public_acls"),
@@ -323,37 +326,41 @@ class BucketsService:
 
     def get_policy(self, name: str, account: S3Account) -> Optional[dict]:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        return s3_client.get_bucket_policy(name, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        return s3_client.get_bucket_policy(
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
 
     def put_policy(self, name: str, account: S3Account, policy: dict) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        s3_client.put_bucket_policy(name, policy=policy, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        s3_client.put_bucket_policy(
+            name, policy=policy, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
 
     def delete_policy(self, name: str, account: S3Account) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        s3_client.delete_bucket_policy(name, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        s3_client.delete_bucket_policy(
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
 
     def set_cors(self, name: str, account: S3Account, rules: list[dict]) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        s3_client.put_bucket_cors(name, rules=rules, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        s3_client.put_bucket_cors(
+            name, rules=rules, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
 
     def delete_cors(self, name: str, account: S3Account) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        s3_client.delete_bucket_cors(name, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        s3_client.delete_bucket_cors(
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
 
     def get_lifecycle(self, name: str, account: S3Account) -> BucketLifecycleConfig:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         rules = s3_client.get_bucket_lifecycle(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         return BucketLifecycleConfig(rules=rules)
 
@@ -362,14 +369,13 @@ class BucketsService:
             self.delete_lifecycle(name, account)
             return BucketLifecycleConfig(rules=[])
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         try:
             s3_client.put_bucket_lifecycle(
                 name,
                 rules=rules,
                 access_key=access_key,
                 secret_key=secret_key,
-                endpoint=endpoint,
+                **self._client_kwargs(account),
             )
         except RuntimeError as exc:
             raise RuntimeError(f"Unable to set lifecycle rules: {exc}") from exc
@@ -377,15 +383,16 @@ class BucketsService:
 
     def delete_lifecycle(self, name: str, account: S3Account) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        s3_client.delete_bucket_lifecycle(name, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        s3_client.delete_bucket_lifecycle(
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
         # Some RGW backends may return 204 but keep lifecycle rules.
         # Double-check and overwrite with an empty configuration to purge if needed.
         remaining = s3_client.get_bucket_lifecycle(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         if remaining:
             try:
@@ -394,29 +401,30 @@ class BucketsService:
                     rules=[],
                     access_key=access_key,
                     secret_key=secret_key,
-                    endpoint=endpoint,
+                    **self._client_kwargs(account),
                 )
             except RuntimeError as exc:  # noqa: BLE001
                 raise RuntimeError(f"Unable to delete bucket lifecycle: {exc}") from exc
 
     def set_bucket_tags(self, name: str, account: S3Account, tags: list[dict]) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        s3_client.put_bucket_tags(name, tags=tags, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        s3_client.put_bucket_tags(
+            name, tags=tags, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
 
     def delete_bucket_tags(self, name: str, account: S3Account) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        s3_client.delete_bucket_tags(name, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        s3_client.delete_bucket_tags(
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
 
     def get_bucket_notifications(self, name: str, account: S3Account) -> BucketNotificationConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         config = s3_client.get_bucket_notifications(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         ) or {}
         return BucketNotificationConfiguration(configuration=config)
 
@@ -427,35 +435,32 @@ class BucketsService:
         configuration: dict,
     ) -> BucketNotificationConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         s3_client.put_bucket_notifications(
             name,
             config=configuration or {},
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         return self.get_bucket_notifications(name, account)
 
     def delete_bucket_notifications(self, name: str, account: S3Account) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         s3_client.put_bucket_notifications(
             name,
             config={},
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
 
     def get_bucket_logging(self, name: str, account: S3Account) -> BucketLoggingConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         config = s3_client.get_bucket_logging(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         if not config:
             return BucketLoggingConfiguration(enabled=False)
@@ -472,14 +477,13 @@ class BucketsService:
         payload: BucketLoggingConfiguration,
     ) -> BucketLoggingConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         if not payload.enabled:
             s3_client.put_bucket_logging(
                 name,
                 logging_config=None,
                 access_key=access_key,
                 secret_key=secret_key,
-                endpoint=endpoint,
+                **self._client_kwargs(account),
             )
             return BucketLoggingConfiguration(enabled=False)
         target_bucket = (payload.target_bucket or "").strip()
@@ -493,29 +497,27 @@ class BucketsService:
             logging_config=logging_config,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         return self.get_bucket_logging(name, account)
 
     def delete_bucket_logging(self, name: str, account: S3Account) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         s3_client.put_bucket_logging(
             name,
             logging_config=None,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
 
     def get_bucket_website(self, name: str, account: S3Account) -> BucketWebsiteConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         config = s3_client.get_bucket_website(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         if not config:
             return BucketWebsiteConfiguration()
@@ -553,7 +555,6 @@ class BucketsService:
         payload: BucketWebsiteConfiguration,
     ) -> BucketWebsiteConfiguration:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         config: dict = {}
         if payload.redirect_all_requests_to:
             host_name = payload.redirect_all_requests_to.host_name.strip()
@@ -581,24 +582,24 @@ class BucketsService:
             configuration=config,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         return self.get_bucket_website(name, account)
 
     def delete_bucket_website(self, name: str, account: S3Account) -> None:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         s3_client.delete_bucket_website(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
 
     def get_bucket_acl(self, name: str, account: S3Account) -> BucketAcl:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
-        acl_raw = s3_client.get_bucket_acl(name, access_key=access_key, secret_key=secret_key, endpoint=endpoint)
+        acl_raw = s3_client.get_bucket_acl(
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
         owner = acl_raw.get("Owner") or {}
         owner_name = owner.get("DisplayName") or owner.get("ID")
         grants: list[BucketAclGrant] = []
@@ -622,24 +623,22 @@ class BucketsService:
 
     def set_bucket_acl(self, name: str, account: S3Account, payload: BucketAclUpdate) -> BucketAcl:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         s3_client.put_bucket_acl(
             name,
             acl=payload.acl,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         return self.get_bucket_acl(name, account)
 
     def get_object_lock(self, name: str, account: S3Account) -> BucketObjectLock:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         config = s3_client.get_bucket_object_lock(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         if not config:
             return BucketObjectLock(enabled=None, mode=None, days=None, years=None)
@@ -652,12 +651,11 @@ class BucketsService:
 
     def set_object_lock(self, name: str, account: S3Account, payload: BucketObjectLockUpdate) -> BucketObjectLock:
         access_key, secret_key = self._account_credentials(account)
-        endpoint = self._endpoint(account)
         current_config = s3_client.get_bucket_object_lock(
             name,
             access_key=access_key,
             secret_key=secret_key,
-            endpoint=endpoint,
+            **self._client_kwargs(account),
         )
         enabled = payload.enabled if payload.enabled is not None else (current_config or {}).get("enabled")
         mode = payload.mode or None
@@ -682,7 +680,7 @@ class BucketsService:
                 mode=mode,
                 days=days,
                 years=years,
-                endpoint=endpoint,
+                **self._client_kwargs(account),
             )
         except RuntimeError as exc:
             raise RuntimeError(f"Unable to update object lock for bucket {name}: {exc}") from exc

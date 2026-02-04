@@ -18,6 +18,8 @@ def get_sts_client(
     secret_key: Optional[str],
     endpoint: Optional[str] = None,
     session_token: Optional[str] = None,
+    region: Optional[str] = None,
+    verify_tls: bool = True,
 ):
     resolved_endpoint = endpoint
     if not resolved_endpoint:
@@ -28,7 +30,8 @@ def get_sts_client(
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         aws_session_token=session_token,
-        region_name=settings.seed_s3_region,
+        region_name=region or settings.seed_s3_region,
+        verify=verify_tls,
     )
     return client
 
@@ -40,8 +43,10 @@ def assume_role(
     access_key: str,
     secret_key: str,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    verify_tls: bool = True,
 ) -> Tuple[str, str, str, datetime]:
-    client = get_sts_client(access_key, secret_key, endpoint=endpoint)
+    client = get_sts_client(access_key, secret_key, endpoint=endpoint, region=region, verify_tls=verify_tls)
     try:
         resp = client.assume_role(
             RoleArn=role_arn,
@@ -71,8 +76,17 @@ def get_session_token(
     secret_key: str,
     endpoint: Optional[str] = None,
     session_token: Optional[str] = None,
+    region: Optional[str] = None,
+    verify_tls: bool = True,
 ) -> Tuple[str, str, str, datetime]:
-    client = get_sts_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
+    client = get_sts_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        session_token=session_token,
+        region=region,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.get_session_token(DurationSeconds=duration_seconds)
         creds = resp.get("Credentials") or {}

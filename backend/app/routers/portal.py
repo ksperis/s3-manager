@@ -40,7 +40,7 @@ from app.utils.storage_endpoint_features import (
     resolve_feature_flags,
 )
 from app.services.rgw_iam import get_iam_service
-from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
 from app.services.traffic_service import TrafficService, TrafficWindow, WINDOW_RESOLUTION_LABELS, WINDOW_DELTAS
 from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
@@ -603,7 +603,14 @@ def list_portal_ui_users(
     try:
         access_key, secret_key = access.account.effective_rgw_credentials()
         if access_key and secret_key:
-            iam_service = get_iam_service(access_key, secret_key, endpoint=resolve_s3_endpoint(access.account))
+            endpoint, region, _, verify_tls = resolve_s3_client_options(access.account)
+            iam_service = get_iam_service(
+                access_key,
+                secret_key,
+                endpoint=endpoint,
+                region=region,
+                verify_tls=verify_tls,
+            )
             iam_users = iam_service.list_users()
             for iam_user in iam_users:
                 name = iam_user.name

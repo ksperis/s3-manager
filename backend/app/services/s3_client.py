@@ -22,17 +22,24 @@ def get_s3_client(
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
     session_token: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ):
     if not endpoint:
         raise RuntimeError("S3 endpoint is not configured")
+    config_kwargs = {"signature_version": "s3v4"}
+    if force_path_style:
+        config_kwargs["s3"] = {"addressing_style": "path"}
     client = boto3.client(
         "s3",
         endpoint_url=endpoint,
         aws_access_key_id=access_key or settings.seed_s3_access_key,
         aws_secret_access_key=secret_key or settings.seed_s3_secret_key,
         aws_session_token=session_token,
-        region_name=settings.seed_s3_region,
-        config=Config(signature_version="s3v4"),
+        region_name=region or settings.seed_s3_region,
+        verify=verify_tls,
+        config=Config(**config_kwargs),
     )
     return LoggedS3Client(client)
 
@@ -73,8 +80,19 @@ def list_buckets(
     secret_key: Optional[str] = None,
     session_token: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> list[dict]:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        session_token=session_token,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         response = client.list_buckets()
     except (BotoCoreError, ClientError) as exc:
@@ -90,13 +108,25 @@ def create_bucket(
     secret_key: Optional[str] = None,
     session_token: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        session_token=session_token,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
-        if settings.seed_s3_region and settings.seed_s3_region != "us-east-1":
+        effective_region = region or settings.seed_s3_region
+        if effective_region and effective_region != "us-east-1":
             client.create_bucket(
                 Bucket=bucket_name,
-                CreateBucketConfiguration={"LocationConstraint": settings.seed_s3_region},
+                CreateBucketConfiguration={"LocationConstraint": effective_region},
             )
         else:
             client.create_bucket(Bucket=bucket_name)
@@ -112,8 +142,19 @@ def set_bucket_versioning(
     secret_key: Optional[str] = None,
     session_token: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint, session_token=session_token)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        session_token=session_token,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     status = "Enabled" if enabled else "Suspended"
     try:
         client.put_bucket_versioning(Bucket=bucket_name, VersioningConfiguration={"Status": status})
@@ -129,8 +170,18 @@ def set_bucket_public_access_block(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     block_state = bool(configuration) if configuration is not None else block
     try:
         if configuration is None:
@@ -167,8 +218,18 @@ def get_bucket_public_access_block(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> Optional[dict]:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.get_public_access_block(Bucket=bucket_name)
         config = resp.get("PublicAccessBlockConfiguration") or {}
@@ -195,8 +256,18 @@ def get_bucket_versioning(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> Optional[str]:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.get_bucket_versioning(Bucket=bucket_name)
     except (BotoCoreError, ClientError) as exc:
@@ -209,8 +280,18 @@ def get_bucket_object_lock(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> Optional[dict]:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.get_object_lock_configuration(Bucket=bucket_name)
         config = resp.get("ObjectLockConfiguration") or {}
@@ -240,8 +321,18 @@ def get_bucket_acl(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> dict:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         return client.get_bucket_acl(Bucket=bucket_name)
     except (BotoCoreError, ClientError) as exc:
@@ -254,8 +345,18 @@ def put_bucket_acl(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.put_bucket_acl(Bucket=bucket_name, ACL=acl)
     except (BotoCoreError, ClientError) as exc:
@@ -269,8 +370,18 @@ def put_bucket_tags(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     tag_set = [
         {"Key": str(tag.get("key") or ""), "Value": str(tag.get("value") or "")}
         for tag in tags
@@ -292,8 +403,18 @@ def delete_bucket_tags(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.delete_bucket_tagging(Bucket=bucket_name)
     except (ClientError, BotoCoreError) as exc:
@@ -305,8 +426,18 @@ def get_bucket_logging(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> Optional[dict]:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.get_bucket_logging(Bucket=bucket_name)
     except (BotoCoreError, ClientError) as exc:
@@ -327,8 +458,18 @@ def put_bucket_logging(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     status: dict = {}
     if logging_config:
         status["LoggingEnabled"] = logging_config
@@ -344,8 +485,18 @@ def get_bucket_notifications(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> dict:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.get_bucket_notification_configuration(Bucket=bucket_name)
         resp.pop("ResponseMetadata", None)
@@ -360,8 +511,18 @@ def put_bucket_notifications(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.put_bucket_notification_configuration(
             Bucket=bucket_name,
@@ -381,8 +542,18 @@ def put_bucket_object_lock(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     config: dict = {}
     if enabled is not None:
         config["ObjectLockEnabled"] = "Enabled" if enabled else "Disabled"
@@ -409,8 +580,18 @@ def get_bucket_lifecycle(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> list[dict]:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.get_bucket_lifecycle_configuration(Bucket=bucket_name)
     except ClientError as exc:
@@ -429,8 +610,18 @@ def put_bucket_lifecycle(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.put_bucket_lifecycle_configuration(Bucket=bucket_name, LifecycleConfiguration={"Rules": rules})
     except (BotoCoreError, ClientError) as exc:
@@ -443,8 +634,18 @@ def delete_bucket_lifecycle(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.delete_bucket_lifecycle(Bucket=bucket_name)
     except ClientError as exc:
@@ -462,8 +663,18 @@ def get_bucket_cors(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> list[dict]:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.get_bucket_cors(Bucket=bucket_name)
         return resp.get("CORSRules", []) or []
@@ -482,8 +693,18 @@ def put_bucket_cors(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.put_bucket_cors(Bucket=bucket_name, CORSConfiguration={"CORSRules": rules})
     except (BotoCoreError, ClientError) as exc:
@@ -496,8 +717,18 @@ def delete_bucket_cors(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.delete_bucket_cors(Bucket=bucket_name)
     except ClientError as exc:
@@ -515,8 +746,18 @@ def get_bucket_website(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> Optional[dict]:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.get_bucket_website(Bucket=bucket_name)
     except ClientError as exc:
@@ -539,8 +780,18 @@ def put_bucket_website(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.put_bucket_website(Bucket=bucket_name, WebsiteConfiguration=configuration)
     except (BotoCoreError, ClientError) as exc:
@@ -553,8 +804,18 @@ def delete_bucket_website(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.delete_bucket_website(Bucket=bucket_name)
     except ClientError as exc:
@@ -572,8 +833,18 @@ def get_bucket_policy(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> Optional[dict]:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.get_bucket_policy(Bucket=bucket_name)
     except ClientError as exc:
@@ -598,8 +869,18 @@ def put_bucket_policy(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.put_bucket_policy(Bucket=bucket_name, Policy=json.dumps(policy))
     except (BotoCoreError, ClientError) as exc:
@@ -612,8 +893,18 @@ def delete_bucket_policy(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         client.delete_bucket_policy(Bucket=bucket_name)
     except ClientError as exc:
@@ -687,8 +978,18 @@ def delete_bucket(
     access_key: Optional[str] = None,
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
 ) -> None:
-    client = get_s3_client(access_key, secret_key, endpoint=endpoint)
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
     try:
         resp = client.list_objects_v2(Bucket=bucket_name, MaxKeys=1)
     except (BotoCoreError, ClientError) as exc:

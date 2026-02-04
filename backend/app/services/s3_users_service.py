@@ -29,7 +29,7 @@ from app.models.s3_user import (
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services import s3_client
-from app.utils.s3_endpoint import resolve_s3_endpoint
+from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.quota_stats import bytes_to_gb
 from app.utils.size_units import size_to_bytes
 
@@ -92,11 +92,14 @@ class S3UsersService:
         if not access_key or not secret_key:
             return None
         try:
-            endpoint = resolve_s3_endpoint(s3_user)
+            endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(s3_user)
             buckets = s3_client.list_buckets(
                 access_key=access_key,
                 secret_key=secret_key,
                 endpoint=endpoint,
+                region=region,
+                force_path_style=force_path_style,
+                verify_tls=verify_tls,
             )
             return len([bucket for bucket in buckets if isinstance(bucket, dict) and bucket.get("name")])
         except RuntimeError as exc:
