@@ -91,6 +91,7 @@ nav:
   - Operations:
       - Helm chart: operations/helm.md
       - Billing & collection: operations/billing.md
+      - Admin automation API: operations/admin-automation.md
       - Observability & troubleshooting: operations/ops.md
       - Security hardening: operations/security.md
   - Development:
