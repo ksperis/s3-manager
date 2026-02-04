@@ -381,31 +381,15 @@ class AdminMetricsService:
         return aggregation
 
     def _fetch_usage(self, start: datetime, end: datetime) -> dict:
-        targets: list[Tuple[Optional[str], Optional[str]]] = [(None, None), ("*", None)]
-        last_payload: Optional[dict] = None
-        last_error: Optional[RGWAdminError] = None
-        for uid, tenant in targets:
-            try:
-                payload = self.rgw_admin.get_usage(
-                    uid=uid,
-                    tenant=tenant,
-                    start=start,
-                    end=end,
-                    show_entries=True,
-                    show_summary=False,
-                )
-            except RGWAdminError as exc:
-                last_error = exc
-                continue
-            last_payload = payload
-            entries = flatten_usage_entries(payload)
-            if entries:
-                return payload
-        if last_payload is not None:
-            return last_payload
-        if last_error is not None:
-            raise last_error
-        return {}
+        payload = self.rgw_admin.get_usage(
+            uid=None,
+            tenant=None,
+            start=start,
+            end=end,
+            show_entries=True,
+            show_summary=False,
+        )
+        return payload or {}
 
     def _normalize_identifier(self, value: Optional[str]) -> Optional[str]:
         if value is None:

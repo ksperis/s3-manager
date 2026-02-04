@@ -116,6 +116,8 @@ def _merge_ops_breakdown(rows: Iterable[BillingUsageDaily]) -> dict[str, int]:
     return dict(merged)
 
 
+
+
 def _compute_cost(rate_card: Optional[BillingRateCard], totals: BillingTotals) -> Optional[BillingCost]:
     if not rate_card:
         return None
@@ -225,7 +227,8 @@ class BillingCollector:
                 continue
 
             summary["endpoints"] += 1
-            usage_enabled = bool(flags.usage_enabled)
+            # Usage billing relies on RGW usage logs (traffic), gated by the metrics feature.
+            usage_enabled = bool(flags.metrics_enabled)
             usage_records, usage_errors = (0, [])
             if usage_enabled:
                 usage_records, usage_errors = self._collect_usage_for_endpoint(rgw_admin, endpoint, day)
@@ -257,8 +260,10 @@ class BillingCollector:
         )
         created = 0
         errors: list[dict[str, Any]] = []
+
         for acc in accounts:
-            uid = resolve_admin_uid(acc.rgw_account_id, acc.rgw_user_uid)
+            # RGW usage logs for accounts are keyed by account-id (not the -admin root uid).
+            uid = acc.rgw_account_id or acc.rgw_user_uid
             if not uid:
                 continue
             try:

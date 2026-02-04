@@ -415,14 +415,14 @@ export default function BillingPage() {
           type="button"
           onClick={handleCollectDaily}
           disabled={collectLoading}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-primary hover:text-primary disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+          className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
         >
           {collectLoading ? "Collecting..." : "Collect daily"}
         </button>
         <button
           type="button"
           onClick={handleExport}
-          className="ml-auto rounded-md border border-primary bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary/90"
+          className="ml-auto inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
         >
           Export CSV
         </button>
@@ -443,13 +443,14 @@ export default function BillingPage() {
                 <th className="px-4 py-3 text-left">Name</th>
                 <th className="px-4 py-3 text-left">Storage avg</th>
                 <th className="px-4 py-3 text-left">Egress</th>
+                <th className="px-4 py-3 text-left">Ingress</th>
                 <th className="px-4 py-3 text-left">Requests</th>
                 <th className="px-4 py-3 text-left">Cost</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {subjectsLoading && <TableEmptyState colSpan={5} message="Loading subjects..." />}
-              {!subjectsLoading && subjects.length === 0 && <TableEmptyState colSpan={5} message="No subjects found." />}
+              {subjectsLoading && <TableEmptyState colSpan={6} message="Loading subjects..." />}
+              {!subjectsLoading && subjects.length === 0 && <TableEmptyState colSpan={6} message="No subjects found." />}
               {!subjectsLoading &&
                 subjects.map((subject) => (
                   <tr
@@ -463,6 +464,7 @@ export default function BillingPage() {
                     </td>
                     <td className="px-4 py-3">{formatBytes(subject.storage.avg_bytes)}</td>
                     <td className="px-4 py-3">{formatBytes(subject.usage.bytes_out)}</td>
+                    <td className="px-4 py-3">{formatBytes(subject.usage.bytes_in)}</td>
                     <td className="px-4 py-3">{formatCompactNumber(subject.usage.ops_total)}</td>
                     <td className="px-4 py-3">
                       {subject.cost?.total_cost != null
@@ -539,7 +541,7 @@ export default function BillingPage() {
               </div>
             </div>
             <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800 lg:col-span-3">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <div>
                   <p className="text-xs text-slate-500">Avg storage</p>
                   <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -550,6 +552,12 @@ export default function BillingPage() {
                   <p className="text-xs text-slate-500">Egress</p>
                   <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     {formatBytes(detail.usage.bytes_out)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Ingress</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {formatBytes(detail.usage.bytes_in)}
                   </p>
                 </div>
                 <div>
