@@ -4,15 +4,15 @@ This API provides a single, idempotent endpoint to manage Admin resources in bul
 
 ## Endpoint
 
-`POST /api/v1/admin/automation/apply`
+`POST /api/admin/automation/apply`
 
 Single-item endpoints (one resource per call):
-- `POST /api/v1/admin/automation/storage-endpoints/apply`
-- `POST /api/v1/admin/automation/ui-users/apply`
-- `POST /api/v1/admin/automation/s3-accounts/apply`
-- `POST /api/v1/admin/automation/s3-users/apply`
-- `POST /api/v1/admin/automation/s3-connections/apply`
-- `POST /api/v1/admin/automation/account-links/apply`
+- `POST /api/admin/automation/storage-endpoints/apply`
+- `POST /api/admin/automation/ui-users/apply`
+- `POST /api/admin/automation/s3-accounts/apply`
+- `POST /api/admin/automation/s3-users/apply`
+- `POST /api/admin/automation/s3-connections/apply`
+- `POST /api/admin/automation/account-links/apply`
 
 ## Authentication
 
@@ -63,7 +63,7 @@ If `continue_on_error=false` and an item fails, the API responds with `400` and 
 
 ### Curl (single payload, mixed resources)
 ```bash
-curl -X POST https://example/api/v1/admin/automation/apply \
+curl -X POST https://example/api/admin/automation/apply \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -118,7 +118,7 @@ curl -X POST https://example/api/v1/admin/automation/apply \
 ```yaml
 - name: Apply admin automation
   ansible.builtin.uri:
-    url: "https://example/api/v1/admin/automation/apply"
+    url: "https://example/api/admin/automation/apply"
     method: POST
     headers:
       Authorization: "Bearer {{ token }}"
