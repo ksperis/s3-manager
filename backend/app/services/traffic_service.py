@@ -69,6 +69,17 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
     return None
 
 
+def _align_down(value: datetime, step: timedelta) -> datetime:
+    """Align `value` down to the closest `step` boundary in UTC."""
+    dt = value.astimezone(timezone.utc)
+    seconds = int(step.total_seconds())
+    if seconds <= 0:
+        return dt
+    epoch = int(dt.timestamp())
+    aligned = epoch - (epoch % seconds)
+    return datetime.fromtimestamp(aligned, tz=timezone.utc)
+
+
 def flatten_usage_entries(payload: Any) -> list[dict]:
     if payload is None:
         return []
@@ -328,9 +339,37 @@ class TrafficService:
             raise ValueError(f"Unsupported window '{window}'.")
         reference = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(microsecond=0)
         start = reference - WINDOW_DELTAS[window]
-        payload = self._fetch_usage(start=start, end=reference, bucket=bucket)
-        entries = flatten_usage_entries(payload)
-        aggregation = aggregate_usage(entries, start=start, end=reference, bucket_filter=bucket)
+
+        # Bucket traffic views are sensitive to RGW usage log aggregation delays.
+        # Querying narrow slices (hour/day) produces deterministic results and a meaningful time series
+        # without relying on the `bucket=` parameter (which is unreliable on some RGW deployments).
+        entries: list[dict]
+        if bucket and window in {TrafficWindow.DAY, TrafficWindow.WEEK}:
+            step = timedelta(hours=1) if window == TrafficWindow.DAY else timedelta(days=1)
+            aligned_start = _align_down(start, step)
+            entries = []
+            cursor = aligned_start
+            while cursor < reference:
+                next_cursor = cursor + step
+                query_start = start if cursor < start else cursor
+                query_end = reference if next_cursor > reference else next_cursor
+                if query_start >= query_end:
+                    cursor = next_cursor
+                    continue
+                payload = self._fetch_usage(start=query_start, end=query_end, bucket=None)
+                segment_entries = flatten_usage_entries(payload)
+                # Use the slice boundary as the canonical timestamp to build a stable series.
+                slice_time = cursor.strftime("%Y-%m-%d %H:%M:%S")
+                for entry in segment_entries:
+                    copied = dict(entry)
+                    copied["time"] = slice_time
+                    entries.append(copied)
+                cursor = next_cursor
+            aggregation = aggregate_usage(entries, start=aligned_start, end=reference, bucket_filter=bucket)
+        else:
+            payload = self._fetch_usage(start=start, end=reference, bucket=bucket)
+            entries = flatten_usage_entries(payload)
+            aggregation = aggregate_usage(entries, start=start, end=reference, bucket_filter=bucket)
         aggregation.update(
             {
                 "window": window.value if isinstance(window, TrafficWindow) else str(window),
