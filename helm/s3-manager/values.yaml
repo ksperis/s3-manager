@@ -68,5 +68,14 @@ billingCronJob:
   internalToken: ""
   extraEnv: []
 
+healthcheckCronJob:
+  enabled: false
+  schedule: "*/5 * * * *"
+  backoffLimit: 1
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  internalToken: ""
+  extraEnv: []
+
 nameOverride: ""
 fullnameOverride: ""

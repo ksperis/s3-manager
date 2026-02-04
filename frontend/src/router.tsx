@@ -27,6 +27,7 @@ import ManagerDashboard from "./features/manager/ManagerDashboard";
 import PoliciesPage from "./features/manager/PoliciesPage";
 import ManagerLayout from "./features/manager/ManagerLayout";
 import StorageEndpointsPage from "./features/admin/StorageEndpointsPage";
+import EndpointStatusPage from "./features/admin/EndpointStatusPage";
 import ManagerUsersPage from "./features/manager/ManagerUsersPage";
 import ManagerUserKeysPage from "./features/manager/ManagerUserKeysPage";
 import BucketDetailPage from "./features/manager/BucketDetailPage";
@@ -104,7 +105,10 @@ const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean, billingE
     },
     {
       label: "Connectivity",
-      links: [{ to: "/admin/storage-endpoints", label: "S3 Endpoints" }],
+      links: [
+        { to: "/admin/storage-endpoints", label: "S3 Endpoints" },
+        { to: "/admin/endpoint-status", label: "Endpoint Status" },
+      ],
     },
     {
       label: "Governance",
@@ -248,6 +252,7 @@ export default function AppRouter() {
               <Route path="s3-connections" element={<S3ConnectionsPage />} />
               <Route path="s3-users/:userId/keys" element={<S3UserKeysPage />} />
               <Route path="storage-endpoints" element={<StorageEndpointsPage />} />
+              <Route path="endpoint-status" element={<EndpointStatusPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="metrics" element={<AdminMetricsPage />} />

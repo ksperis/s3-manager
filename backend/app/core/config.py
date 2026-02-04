@@ -154,6 +154,31 @@ class Settings(BaseSettings):
         description="Default billing rate card name when no explicit assignment exists",
     )
 
+    healthcheck_enabled: bool = Field(
+        True,
+        description="Enable endpoint healthchecks (HEALTHCHECK_ENABLED)",
+    )
+    healthcheck_timeout_seconds: int = Field(
+        5,
+        description="HTTP timeout for endpoint healthchecks in seconds (HEALTHCHECK_TIMEOUT_SECONDS)",
+    )
+    healthcheck_interval_seconds: int = Field(
+        300,
+        description="Expected healthcheck interval in seconds (HEALTHCHECK_INTERVAL_SECONDS)",
+    )
+    healthcheck_retention_days: int = Field(
+        30,
+        description="Retention for raw healthcheck rows in days (HEALTHCHECK_RETENTION_DAYS)",
+    )
+    healthcheck_degraded_latency_ms: int = Field(
+        2000,
+        description="Latency threshold (ms) for degraded status, 0 disables (HEALTHCHECK_DEGRADED_LATENCY_MS)",
+    )
+    healthcheck_verify_ssl: bool = Field(
+        True,
+        description="Verify TLS certificates for healthchecks (HEALTHCHECK_VERIFY_SSL)",
+    )
+
     @field_validator("jwt_keys", "credential_keys", mode="before")
     @classmethod
     def parse_key_list(cls, value):

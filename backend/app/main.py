@@ -25,7 +25,9 @@ from app.routers.admin import storage_endpoints as admin_storage_endpoints
 from app.routers.admin import settings as admin_settings
 from app.routers.admin import onboarding as admin_onboarding
 from app.routers.admin import automation as admin_automation
+from app.routers.admin import healthchecks as admin_healthchecks
 from app.routers.internal import billing_collect as internal_billing
+from app.routers.internal import healthchecks as internal_healthchecks
 from app.routers.manager import s3_accounts as manager_accounts
 from app.routers.manager import browser as manager_browser
 from app.routers.manager import buckets as manager_buckets
@@ -92,7 +94,9 @@ app.include_router(admin_storage_endpoints.router, prefix=settings.api_v1_prefix
 app.include_router(admin_settings.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_onboarding.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_automation.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_billing.router, prefix=settings.api_v1_prefix)
+app.include_router(internal_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(
     manager_accounts.router,
     prefix=settings.api_v1_prefix,

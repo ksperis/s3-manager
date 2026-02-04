@@ -18,3 +18,10 @@ class AccountRole(str, Enum):
 class StorageProvider(str, Enum):
     CEPH = "ceph"
     OTHER = "other"
+
+
+class HealthCheckStatus(str, Enum):
+    UNKNOWN = "unknown"
+    UP = "up"
+    DEGRADED = "degraded"
+    DOWN = "down"
