@@ -398,6 +398,46 @@ def put_bucket_tags(
         raise RuntimeError(f"Unable to update bucket tags for '{bucket_name}': {exc}") from exc
 
 
+def get_bucket_tags(
+    bucket_name: str,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
+) -> list[dict]:
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
+    try:
+        resp = client.get_bucket_tagging(Bucket=bucket_name)
+        tag_set = resp.get("TagSet", []) or []
+        if not isinstance(tag_set, list):
+            return []
+        tags: list[dict] = []
+        for tag in tag_set:
+            if not isinstance(tag, dict):
+                continue
+            key = str(tag.get("Key") or "").strip()
+            if not key:
+                continue
+            tags.append({"key": key, "value": str(tag.get("Value") or "")})
+        return tags
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
+        if code.lower() in {"nosuchtags", "nosuchtagset", "nosuchtagseterror", "nosuchbucket"}:
+            return []
+        raise RuntimeError(f"Unable to fetch bucket tags for '{bucket_name}': {exc}") from exc
+    except BotoCoreError as exc:
+        raise RuntimeError(f"Unable to fetch bucket tags for '{bucket_name}': {exc}") from exc
+
+
 def delete_bucket_tags(
     bucket_name: str,
     access_key: Optional[str] = None,

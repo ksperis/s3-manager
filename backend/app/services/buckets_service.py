@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from typing import List, Optional
+from typing import List, Optional, Set
 import logging
 
 from app.db import S3Account
@@ -12,6 +12,7 @@ from app.models.bucket import (
     BucketAclGrant,
     BucketAclGrantee,
     BucketAclUpdate,
+    BucketFeatureStatus,
     BucketLifecycleConfig,
     BucketLoggingConfiguration,
     BucketNotificationConfiguration,
@@ -20,6 +21,7 @@ from app.models.bucket import (
     BucketProperties,
     BucketPublicAccessBlock,
     BucketQuotaUpdate,
+    BucketTag,
     BucketWebsiteConfiguration,
     BucketWebsiteRedirectAllRequestsTo,
     LifecycleRule,
@@ -90,7 +92,7 @@ class BucketsService:
             "verify_tls": verify_tls,
         }
 
-    def list_buckets(self, account: S3Account) -> List[Bucket]:
+    def list_buckets(self, account: S3Account, include: Optional[Set[str]] = None) -> List[Bucket]:
         access_key, secret_key = self._account_credentials(account)
         buckets = s3_client.list_buckets(access_key=access_key, secret_key=secret_key, **self._client_kwargs(account))
         account_uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
@@ -149,7 +151,183 @@ class BucketsService:
                     quota_max_objects=quota_objects,
                 )
             )
-        return enriched
+        if not include:
+            return enriched
+
+        allowed = {
+            "tags",
+            "versioning",
+            "object_lock",
+            "block_public_access",
+            "lifecycle_rules",
+            "static_website",
+            "bucket_policy",
+            "cors",
+            "access_logging",
+        }
+        requested = {key for key in include if key in allowed}
+        if not requested:
+            return enriched
+
+        wants_tags = "tags" in requested
+        wants_props = bool(
+            requested
+            & {"versioning", "object_lock", "block_public_access", "lifecycle_rules", "cors"}
+        )
+        wants_website = "static_website" in requested
+        wants_policy = "bucket_policy" in requested
+        wants_logging = "access_logging" in requested
+
+        def unavailable() -> BucketFeatureStatus:
+            return BucketFeatureStatus(state="Unavailable", tone="unknown")
+
+        def inactive(state: str) -> BucketFeatureStatus:
+            return BucketFeatureStatus(state=state, tone="inactive")
+
+        def active(state: str) -> BucketFeatureStatus:
+            return BucketFeatureStatus(state=state, tone="active")
+
+        result: list[Bucket] = []
+        for bucket in enriched:
+            tags: Optional[list[BucketTag]] = None
+            features: Optional[dict[str, BucketFeatureStatus]] = None
+            if wants_tags:
+                try:
+                    tags = self.get_bucket_tags(bucket.name, account)
+                except RuntimeError:
+                    tags = []
+
+            feature_map: dict[str, BucketFeatureStatus] = {}
+            props: Optional[BucketProperties] = None
+            props_error = False
+            if wants_props:
+                try:
+                    props = self.get_bucket_properties(bucket.name, account)
+                except RuntimeError:
+                    props_error = True
+
+            if "versioning" in requested:
+                if props_error:
+                    feature_map["versioning"] = unavailable()
+                else:
+                    raw = (props.versioning_status if props else None) or "Disabled"
+                    normalized = str(raw).strip().lower()
+                    if normalized == "enabled":
+                        feature_map["versioning"] = active(raw)
+                    elif normalized == "suspended":
+                        feature_map["versioning"] = BucketFeatureStatus(state=raw, tone="unknown")
+                    else:
+                        feature_map["versioning"] = inactive(raw)
+
+            if "object_lock" in requested:
+                if props_error:
+                    feature_map["object_lock"] = unavailable()
+                else:
+                    enabled = bool((props.object_lock_enabled if props else None) is True)
+                    feature_map["object_lock"] = active("Enabled") if enabled else inactive("Disabled")
+
+            if "block_public_access" in requested:
+                if props_error:
+                    feature_map["block_public_access"] = unavailable()
+                else:
+                    cfg = props.public_access_block if props else None
+                    if not cfg:
+                        feature_map["block_public_access"] = inactive("Disabled")
+                    else:
+                        keys = [
+                            cfg.block_public_acls,
+                            cfg.ignore_public_acls,
+                            cfg.block_public_policy,
+                            cfg.restrict_public_buckets,
+                        ]
+                        fully_enabled = all(val is True for val in keys)
+                        partially_enabled = not fully_enabled and any(val is True for val in keys)
+                        if fully_enabled:
+                            feature_map["block_public_access"] = active("Enabled")
+                        elif partially_enabled:
+                            feature_map["block_public_access"] = active("Partial")
+                        else:
+                            feature_map["block_public_access"] = inactive("Disabled")
+
+            if "lifecycle_rules" in requested:
+                if props_error:
+                    feature_map["lifecycle_rules"] = unavailable()
+                else:
+                    rules = props.lifecycle_rules if props else []
+                    has_rules = bool(rules and len(rules) > 0)
+                    feature_map["lifecycle_rules"] = active("Enabled") if has_rules else inactive("Disabled")
+
+            if "cors" in requested:
+                if props_error:
+                    feature_map["cors"] = unavailable()
+                else:
+                    rules = props.cors_rules if props else []
+                    has_rules = bool(rules and len(rules) > 0)
+                    feature_map["cors"] = active("Configured") if has_rules else inactive("Not set")
+
+            if wants_website and "static_website" in requested:
+                try:
+                    website = self.get_bucket_website(bucket.name, account)
+                    routing_rules = website.routing_rules or []
+                    configured = bool(
+                        (website.redirect_all_requests_to and (website.redirect_all_requests_to.host_name or "").strip())
+                        or (website.index_document or "").strip()
+                        or (isinstance(routing_rules, list) and len(routing_rules) > 0)
+                    )
+                    feature_map["static_website"] = active("Enabled") if configured else inactive("Disabled")
+                except RuntimeError:
+                    feature_map["static_website"] = unavailable()
+
+            if wants_policy and "bucket_policy" in requested:
+                try:
+                    policy = self.get_policy(bucket.name, account)
+                    configured = bool(policy and isinstance(policy, dict) and len(policy.keys()) > 0)
+                    feature_map["bucket_policy"] = active("Configured") if configured else inactive("Not set")
+                except RuntimeError:
+                    feature_map["bucket_policy"] = unavailable()
+
+            if wants_logging and "access_logging" in requested:
+                try:
+                    logging_config = self.get_bucket_logging(bucket.name, account)
+                    enabled = bool(logging_config.enabled and (logging_config.target_bucket or "").strip())
+                    feature_map["access_logging"] = active("Enabled") if enabled else inactive("Disabled")
+                except RuntimeError:
+                    feature_map["access_logging"] = unavailable()
+
+            if feature_map:
+                features = feature_map
+
+            if hasattr(bucket, "model_dump"):
+                base = bucket.model_dump(exclude={"tags", "features"})
+            else:
+                base = bucket.dict(exclude={"tags", "features"})
+            result.append(
+                Bucket(
+                    **base,
+                    tags=tags,
+                    features=features,
+                )
+            )
+
+        return result
+
+    def get_bucket_tags(self, name: str, account: S3Account) -> list[BucketTag]:
+        access_key, secret_key = self._account_credentials(account)
+        tags_raw = s3_client.get_bucket_tags(
+            name,
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._client_kwargs(account),
+        )
+        tags: list[BucketTag] = []
+        for entry in tags_raw or []:
+            if not isinstance(entry, dict):
+                continue
+            key = str(entry.get("key") or "").strip()
+            if not key:
+                continue
+            tags.append(BucketTag(key=key, value=str(entry.get("value") or "")))
+        return tags
 
     def create_bucket(
         self,

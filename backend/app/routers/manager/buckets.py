@@ -38,12 +38,21 @@ router = APIRouter(prefix="/manager/buckets", tags=["manager-buckets"])
 
 @router.get("", response_model=list[Bucket])
 def list_buckets(
+    include: list[str] = Query(default=[], description="Optional extra fields to include (e.g. tags, versioning, cors)"),
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> list[Bucket]:
     try:
-        return service.list_buckets(account)
+        include_set: set[str] = set()
+        for item in include:
+            if not isinstance(item, str):
+                continue
+            for part in item.split(","):
+                normalized = part.strip()
+                if normalized:
+                    include_set.add(normalized)
+        return service.list_buckets(account, include=include_set)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

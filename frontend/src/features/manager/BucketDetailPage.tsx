@@ -61,6 +61,7 @@ import Modal from "../../components/Modal";
 import { formatCompactNumber } from "../../utils/format";
 import { useS3AccountContext } from "./S3AccountContext";
 import TrafficAnalytics from "./TrafficAnalytics";
+import PropertySummaryChip, { PropertySummaryTone } from "../../components/PropertySummaryChip";
 
 function getUserRole(): string | null {
   if (typeof window === "undefined") return null;
@@ -111,7 +112,7 @@ type Row =
 type PropertySummary = {
   label: string;
   state: string;
-  tone: "active" | "inactive" | "unknown";
+  tone: PropertySummaryTone;
 };
 
 type SimpleLifecycleRule = {
@@ -135,18 +136,6 @@ const featureStateChipClasses: Record<FeatureState, string> = {
   enabled: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100",
   disabled: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-100",
   unknown: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
-};
-
-const propertyToneChipClasses: Record<PropertySummary["tone"], string> = {
-  active: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-100",
-  inactive: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-  unknown: "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-100",
-};
-
-const propertyToneDotClasses: Record<PropertySummary["tone"], string> = {
-  active: "bg-emerald-500",
-  inactive: "bg-slate-400",
-  unknown: "bg-amber-500",
 };
 
 const defaultPublicAccessBlock: BucketPublicAccessBlock = {
@@ -958,8 +947,9 @@ export default function BucketDetailPage() {
       : propsError
         ? "Unavailable"
         : properties?.versioning_status ?? "Disabled";
+    const versioningNormalized = String(versioningState || "").trim().toLowerCase();
     const versioningTone: PropertySummary["tone"] =
-      propsLoading || propsError ? "unknown" : versioningIsEnabled ? "active" : "inactive";
+      propsLoading || propsError ? "unknown" : versioningIsEnabled ? "active" : versioningNormalized === "suspended" ? "unknown" : "inactive";
 
     const hasObjectLockData = !(propsLoading || propsError);
     let objectLockState = "Disabled";
@@ -1731,14 +1721,7 @@ export default function BucketDetailPage() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {propertySummary.map((item) => (
-                      <span
-                        key={item.label}
-                        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 ui-caption font-semibold ${propertyToneChipClasses[item.tone]}`}
-                      >
-                        <span className={`h-2 w-2 rounded-full ${propertyToneDotClasses[item.tone]}`} />
-                        <span>{item.label}</span>
-                        <span className="ui-caption uppercase tracking-wide">{item.state}</span>
-                      </span>
+                      <PropertySummaryChip key={item.label} label={item.label} state={item.state} tone={item.tone} />
                     ))}
                   </div>
                 </div>

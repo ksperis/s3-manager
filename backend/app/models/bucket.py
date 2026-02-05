@@ -1,9 +1,19 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 from pydantic import BaseModel, Field, root_validator, validator
+
+
+class BucketTag(BaseModel):
+    key: str
+    value: str
+
+
+class BucketFeatureStatus(BaseModel):
+    state: str
+    tone: Literal["active", "inactive", "unknown"]
 
 
 class Bucket(BaseModel):
@@ -13,6 +23,8 @@ class Bucket(BaseModel):
     object_count: Optional[int] = None
     quota_max_size_bytes: Optional[int] = None
     quota_max_objects: Optional[int] = None
+    tags: Optional[List[BucketTag]] = None
+    features: Optional[dict[str, BucketFeatureStatus]] = None
 
 
 class BucketPublicAccessBlock(BaseModel):
@@ -47,11 +59,6 @@ class LifecycleRule(BaseModel):
 
 class BucketLifecycleConfig(BaseModel):
     rules: List[dict] = Field(default_factory=list)
-
-
-class BucketTag(BaseModel):
-    key: str
-    value: str
 
 
 class BucketTagsUpdate(BaseModel):

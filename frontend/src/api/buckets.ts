@@ -5,6 +5,9 @@
 import client from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 
+export type BucketFeatureTone = "active" | "inactive" | "unknown";
+export type BucketFeatureStatus = { state: string; tone: BucketFeatureTone };
+
 export type Bucket = {
   name: string;
   creation_date?: string;
@@ -12,10 +15,17 @@ export type Bucket = {
   object_count?: number;
   quota_max_size_bytes?: number | null;
   quota_max_objects?: number | null;
+  tags?: BucketTag[] | null;
+  features?: Record<string, BucketFeatureStatus> | null;
 };
 
-export async function listBuckets(accountId: S3AccountSelector): Promise<Bucket[]> {
-  const { data } = await client.get<Bucket[]>("/manager/buckets", { params: withS3AccountParam(undefined, accountId) });
+export async function listBuckets(
+  accountId: S3AccountSelector,
+  options?: { include?: string[] }
+): Promise<Bucket[]> {
+  const { data } = await client.get<Bucket[]>("/manager/buckets", {
+    params: withS3AccountParam({ include: options?.include?.join(",") }, accountId),
+  });
   return data;
 }
 
