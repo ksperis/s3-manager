@@ -4,12 +4,9 @@
  */
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -28,6 +25,7 @@ import {
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import TrafficBytesChart from "../../components/TrafficBytesChart";
 import UsageBreakdown from "../../components/UsageBreakdown";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 
@@ -444,29 +442,19 @@ function TrafficOverview({ traffic, timeline, window, onWindowChange, loading, e
       {!showEmpty && (
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <ChartCard title="Bandwidth" subtitle="Ingress vs egress" loading={loading} hasData={hasData}>
-              <ResponsiveContainer width="100%" height={280}>
-                <AreaChart
-                  data={timeline}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                  key={`${traffic?.start ?? ""}-${traffic?.end ?? ""}-${window}`}
-                >
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                  <XAxis
-                    dataKey="timestampMs"
-                    type="number"
-                    domain={domain ?? ["auto", "auto"]}
-                    tickFormatter={formatTimestamp}
-                    stroke="#94A3B8"
-                    minTickGap={32}
-                  />
-                  <YAxis tickFormatter={formatYAxisBytes} stroke="#94A3B8" />
-                  <Tooltip content={<BytesTooltip />} />
-                  <Legend />
-                  <Area type="monotone" dataKey="bytes_in" name="Ingress" stackId="bytes" stroke="#0EA5E9" fill="#0EA5E9" fillOpacity={0.25} />
-                  <Area type="monotone" dataKey="bytes_out" name="Egress" stackId="bytes" stroke="#4F46E5" fill="#4F46E5" fillOpacity={0.25} />
-                </AreaChart>
-              </ResponsiveContainer>
+            <ChartCard
+              title={window === "week" ? "Daily traffic" : "Hourly traffic"}
+              subtitle="Ingress vs egress comparison"
+              loading={loading}
+              hasData={hasData}
+            >
+              <TrafficBytesChart
+                window={window}
+                series={traffic?.series ?? []}
+                start={traffic?.start}
+                end={traffic?.end}
+                chartKey={`${traffic?.start ?? ""}-${traffic?.end ?? ""}-${window}`}
+              />
             </ChartCard>
           </div>
           <div>
@@ -478,12 +466,12 @@ function TrafficOverview({ traffic, timeline, window, onWindowChange, loading, e
                     dataKey="timestampMs"
                     type="number"
                     domain={domain ?? ["auto", "auto"]}
-                    tickFormatter={formatTimestampShort}
+                    tickFormatter={(value) => formatOpsAxisTimestamp(value, window)}
                     stroke="#94A3B8"
                     minTickGap={26}
                   />
                   <YAxis tickFormatter={(value) => formatCompactNumber(Number(value) || 0)} stroke="#94A3B8" />
-                  <Tooltip content={<OpsTooltip />} />
+                  <Tooltip content={<OpsTooltip window={window} />} />
                   <Bar dataKey="ops" name="Ops" fill="#14B8A6" />
                 </BarChart>
               </ResponsiveContainer>
@@ -496,7 +484,7 @@ function TrafficOverview({ traffic, timeline, window, onWindowChange, loading, e
         <div className="grid gap-4 lg:grid-cols-3">
           <RankingCard title="Most active buckets" items={(traffic?.bucket_rankings ?? []).slice(0, 5)} loading={loading} />
           <RankingCard
-            title="Most active users"
+            title="Most active accounts"
             items={(traffic?.user_rankings ?? []).slice(0, 5)}
             loading={loading}
             type="user"
@@ -543,53 +531,37 @@ function EmptyState() {
   );
 }
 
-function formatTimestamp(value: string | number) {
+function formatOpsAxisTimestamp(value: string | number, window: TrafficWindow) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short", hour: "2-digit" }).format(date);
-}
-
-function formatTimestampShort(value: string | number) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
+  if (window === "week") {
+    return new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short" }).format(date);
+  }
   return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-function formatYAxisBytes(value: number) {
-  if (!Number.isFinite(value)) return "0";
-  if (value === 0) return "0";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let idx = 0;
-  let sized = value;
-  while (sized >= 1024 && idx < units.length - 1) {
-    sized /= 1024;
-    idx += 1;
-  }
-  const decimals = sized >= 10 ? 0 : 1;
-  return `${sized.toFixed(decimals)} ${units[idx]}`;
-}
+const opsTooltipFormatterHourly = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
-function BytesTooltip({ payload, label }: any) {
+const opsTooltipFormatterDaily = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  day: "2-digit",
+  month: "short",
+});
+
+function OpsTooltip({ payload, label, window }: any) {
   if (!payload || payload.length === 0) return null;
   const date = new Date(label);
-  const formatted = Number.isNaN(date.getTime()) ? label : new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
-  return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-      <p className="font-semibold">{formatted}</p>
-      {payload.map((entry: any) => (
-        <p key={entry.name} className="ui-caption">
-          <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-          {entry.name}: {formatBytes(entry.value)}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-function OpsTooltip({ payload, label }: any) {
-  if (!payload || payload.length === 0) return null;
-  const date = new Date(label);
-  const formatted = Number.isNaN(date.getTime()) ? label : new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
+  const formatted = Number.isNaN(date.getTime())
+    ? label
+    : window === "week"
+      ? opsTooltipFormatterDaily.format(date)
+      : opsTooltipFormatterHourly.format(date);
   const entry = payload[0];
   return (
     <div className="rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">

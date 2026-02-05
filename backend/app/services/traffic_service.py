@@ -69,6 +69,28 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
     return None
 
 
+def _bucket_timestamp(timestamp: datetime, window: Optional[TrafficWindow]) -> datetime:
+    if not window:
+        return timestamp
+    if window == TrafficWindow.WEEK:
+        return timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
+    if window == TrafficWindow.DAY:
+        return timestamp.replace(minute=0, second=0, microsecond=0)
+    return timestamp.replace(microsecond=0)
+
+
+def window_start(reference: datetime, window: TrafficWindow) -> datetime:
+    """Compute the time boundary for a given window.
+
+    Notes:
+    - For the 'week' window (7d charts), we align to day buckets so the UI renders daily points (7 buckets incl. today).
+    """
+    if window == TrafficWindow.WEEK:
+        today = reference.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        return today - timedelta(days=6)
+    return (reference - WINDOW_DELTAS[window]).astimezone(timezone.utc)
+
+
 def flatten_usage_entries(payload: Any) -> list[dict]:
     if payload is None:
         return []
@@ -149,6 +171,7 @@ def aggregate_usage(
     start: datetime,
     end: datetime,
     bucket_filter: Optional[str] = None,
+    window: Optional[TrafficWindow] = None,
 ) -> Dict[str, Any]:
     normalized_filter = _normalize_bucket_name(bucket_filter) if bucket_filter else None
     timeline: dict[str, dict[str, int]] = defaultdict(
@@ -167,6 +190,7 @@ def aggregate_usage(
         timestamp = _parse_timestamp(entry.get("time") or entry.get("timestamp") or entry.get("date"))
         if timestamp is None or timestamp < start or timestamp > end:
             continue
+        bucketed_timestamp = _bucket_timestamp(timestamp, window)
         bucket_value = entry.get("bucket") or entry.get("bucket_name") or "unknown"
         if not isinstance(bucket_value, str):
             bucket_value = str(bucket_value)
@@ -183,7 +207,7 @@ def aggregate_usage(
             ops = _safe_int(category_entry.get("ops") or category_entry.get("operations"))
             success_ops = _safe_int(category_entry.get("successful_ops") or category_entry.get("success"))
 
-            timeline_key = timestamp.isoformat()
+            timeline_key = bucketed_timestamp.isoformat()
             timeline[timeline_key]["bytes_in"] += bytes_in
             timeline[timeline_key]["bytes_out"] += bytes_out
             timeline[timeline_key]["ops"] += ops
@@ -327,10 +351,10 @@ class TrafficService:
         if window not in WINDOW_DELTAS:
             raise ValueError(f"Unsupported window '{window}'.")
         reference = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(microsecond=0)
-        start = reference - WINDOW_DELTAS[window]
+        start = window_start(reference, window)
         payload = self._fetch_usage(start=start, end=reference, bucket=bucket)
         entries = flatten_usage_entries(payload)
-        aggregation = aggregate_usage(entries, start=start, end=reference, bucket_filter=bucket)
+        aggregation = aggregate_usage(entries, start=start, end=reference, bucket_filter=bucket, window=window)
         aggregation.update(
             {
                 "window": window.value if isinstance(window, TrafficWindow) else str(window),

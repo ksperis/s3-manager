@@ -26,6 +26,7 @@ from app.services.traffic_service import (
     WINDOW_RESOLUTION_LABELS,
     aggregate_usage,
     flatten_usage_entries,
+    window_start,
 )
 from app.utils.rgw import extract_bucket_list, resolve_admin_uid
 from app.utils.usage_stats import extract_usage_stats
@@ -359,7 +360,7 @@ class AdminMetricsService:
         if window not in WINDOW_DELTAS:
             raise ValueError(f"Unsupported window '{window}'.")
         reference = datetime.now(timezone.utc).replace(microsecond=0)
-        start = reference - WINDOW_DELTAS[window]
+        start = window_start(reference, window)
         payload = self._fetch_usage(start=start, end=reference)
         entries = flatten_usage_entries(payload)
         _, _, allowed_identifiers = self._load_scope_targets()
@@ -367,7 +368,7 @@ class AdminMetricsService:
             entries = self._filter_usage_entries(entries, allowed_identifiers)
         else:
             entries = []
-        aggregation = aggregate_usage(entries, start=start, end=reference)
+        aggregation = aggregate_usage(entries, start=start, end=reference, window=window)
         aggregation.update(
             {
                 "window": window.value if isinstance(window, TrafficWindow) else str(window),

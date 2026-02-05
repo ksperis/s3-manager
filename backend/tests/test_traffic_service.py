@@ -192,3 +192,47 @@ def test_traffic_service_summary_only_payload_has_no_timeline():
     assert result["data_points"] == 0
     assert result["totals"]["bytes_in"] == 0
     assert result["totals"]["bytes_out"] == 0
+
+
+def test_traffic_service_week_window_returns_daily_series():
+    account = _make_account()
+    payload = {
+        "entries": [
+            {
+                "bucket": "alpha",
+                "time": "2024-03-09 10:00:00",
+                "categories": [
+                    {"category": "get_obj", "bytes_sent": 100, "bytes_received": 0, "ops": 1, "successful_ops": 1}
+                ],
+            },
+            {
+                "bucket": "alpha",
+                "time": "2024-03-09 11:00:00",
+                "categories": [
+                    {"category": "get_obj", "bytes_sent": 200, "bytes_received": 0, "ops": 2, "successful_ops": 2}
+                ],
+            },
+            {
+                "bucket": "alpha",
+                "time": "2024-03-10 01:00:00",
+                "categories": [
+                    {"category": "put_obj", "bytes_sent": 0, "bytes_received": 300, "ops": 3, "successful_ops": 3}
+                ],
+            },
+        ]
+    }
+    fake_client = FakeRGWClient([payload])
+    service = TrafficService(account, rgw_client=fake_client, admin_client=fake_client)
+    reference = datetime(2024, 3, 10, 12, 0, tzinfo=timezone.utc)
+
+    result = service.get_traffic(TrafficWindow.WEEK, now=reference)
+
+    assert result["window"] == "week"
+    assert result["resolution"] == "daily"
+    assert result["data_points"] == 2
+    assert [point["timestamp"] for point in result["series"]] == [
+        "2024-03-09T00:00:00+00:00",
+        "2024-03-10T00:00:00+00:00",
+    ]
+    assert result["totals"]["bytes_out"] == 100 + 200
+    assert result["totals"]["bytes_in"] == 300

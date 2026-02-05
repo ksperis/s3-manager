@@ -13,8 +13,6 @@ import {
   YAxis,
   Bar,
   BarChart,
-  Line,
-  LineChart,
 } from "recharts";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -86,6 +84,11 @@ export default function PortalBillingPage() {
         hint: "Outgoing bytes",
       },
       {
+        label: "Ingress",
+        value: formatBytes(detail?.usage.bytes_in ?? null),
+        hint: "Incoming bytes",
+      },
+      {
         label: "Requests",
         value: formatCompactNumber(detail?.usage.ops_total ?? null),
         hint: "Total API calls",
@@ -102,6 +105,7 @@ export default function PortalBillingPage() {
     return (detail?.daily ?? []).map((point) => ({
       ...point,
       label: point.day.slice(5),
+      traffic_bytes: (point.bytes_in ?? 0) + (point.bytes_out ?? 0),
     }));
   }, [detail]);
 
@@ -126,7 +130,7 @@ export default function PortalBillingPage() {
       )}
       {loading && <PageBanner tone="info">Loading billing data...</PageBanner>}
       {error && <PageBanner tone="warning">{error}</PageBanner>}
-      {!loading && !error && <StatCards stats={stats} columns={2} />}
+      {!loading && !error && <StatCards stats={stats} columns={3} />}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="grid gap-4 lg:grid-cols-3">
@@ -143,7 +147,11 @@ export default function PortalBillingPage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value) => formatBytes(Number(value) || 0)}
+                    domain={["dataMin", "dataMax"]}
+                  />
                   <Tooltip formatter={(value) => formatBytes(value as number)} />
                   <Area type="monotone" dataKey="storage_bytes" stroke="#3b82f6" fill="url(#portalStorageFill)" />
                 </AreaChart>
@@ -151,15 +159,15 @@ export default function PortalBillingPage() {
             </div>
           </div>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">Egress (daily)</h4>
+            <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">Traffic (daily)</h4>
             <div className="mt-3 h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dailySeries}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatBytes(Number(value) || 0)} />
                   <Tooltip formatter={(value) => formatBytes(value as number)} />
-                  <Bar dataKey="bytes_out" fill="#0ea5e9" />
+                  <Bar dataKey="traffic_bytes" fill="#0ea5e9" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -168,13 +176,13 @@ export default function PortalBillingPage() {
             <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">Requests (daily)</h4>
             <div className="mt-3 h-48">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={dailySeries}>
+                <BarChart data={dailySeries}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatCompactNumber(Number(value) || 0)} />
                   <Tooltip formatter={(value) => formatCompactNumber(value as number)} />
-                  <Line type="monotone" dataKey="ops_total" stroke="#22c55e" strokeWidth={2} dot={false} />
-                </LineChart>
+                  <Bar dataKey="ops_total" fill="#22c55e" />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>

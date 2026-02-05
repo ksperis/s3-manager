@@ -13,13 +13,13 @@ import {
   fetchManagerTraffic,
 } from "../../api/stats";
 import { fetchPortalTraffic } from "../../api/portal";
+import TrafficBytesChart from "../../components/TrafficBytesChart";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -43,8 +43,6 @@ const REQUEST_COLORS: Record<string, string> = {
 };
 
 const CATEGORY_COLORS = ["#4F46E5", "#14B8A6", "#F97316", "#0EA5E9", "#F59E0B", "#EC4899"];
-type ChartPoint = TrafficSeriesPoint & { total_bytes: number; timestampMs: number };
-
 type TrafficAnalyticsProps = {
   accountId: S3AccountSelector;
   bucketName?: string;
@@ -95,53 +93,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
   }, [accountId, window, bucketName, scope, enabled]);
 
   const totals = traffic?.totals;
-  const chartData = useMemo<ChartPoint[]>(() => {
-    const raw: ChartPoint[] = (traffic?.series ?? []).map((point) => ({
-      ...point,
-      total_bytes: point.bytes_in + point.bytes_out,
-      timestampMs: new Date(point.timestamp).getTime(),
-    }));
-    if (!traffic?.start || !traffic?.end) {
-      return raw;
-    }
-    const sorted = [...raw].sort((a, b) => a.timestampMs - b.timestampMs);
-    const step = inferStepMs(window, sorted);
-    if (!step) {
-      return sorted;
-    }
-    const startBoundary = normalizeTimestamp(new Date(traffic.start).getTime(), step);
-    const endBoundary = normalizeTimestamp(new Date(traffic.end).getTime(), step);
-    const entries = new Map<number, ChartPoint>();
-    sorted.forEach((point) => {
-      const key = normalizeTimestamp(point.timestampMs, step);
-      entries.set(key, { ...point, timestampMs: key });
-    });
-    const filled: ChartPoint[] = [];
-    for (let ts = startBoundary; ts <= endBoundary; ts += step) {
-      const existing = entries.get(ts);
-      if (existing) {
-        filled.push(existing);
-      } else {
-        filled.push({
-          timestamp: new Date(ts).toISOString(),
-          timestampMs: ts,
-          bytes_in: 0,
-          bytes_out: 0,
-          ops: 0,
-          success_ops: 0,
-          total_bytes: 0,
-        });
-      }
-    }
-    return filled;
-  }, [traffic, window]);
-
-  const chartDomain = useMemo(() => {
-    if (!traffic?.start || !traffic?.end) {
-      return undefined;
-    }
-    return [new Date(traffic.start).getTime(), new Date(traffic.end).getTime()] as [number, number];
-  }, [traffic?.start, traffic?.end]);
+  const hasSeries = (traffic?.series ?? []).length > 0;
 
   const primaryBuckets = useMemo(() => (traffic?.bucket_rankings ?? []).slice(0, 5), [traffic]);
   const topCategories = useMemo(() => (traffic?.category_breakdown ?? []).slice(0, 6), [traffic]);
@@ -207,25 +159,14 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <ChartCard title="Hourly traffic" subtitle="Ingress vs egress comparison" loading={loading} hasData={(chartData?.length ?? 0) > 0}>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartData} key={`${traffic?.start ?? ""}-${traffic?.end ?? ""}-${window}-${bucketName ?? "all"}`}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis
-                  dataKey="timestampMs"
-                  type="number"
-                  domain={chartDomain ?? ["auto", "auto"]}
-                  tickFormatter={(value) => formatTimestamp(value)}
-                  stroke="#94A3B8"
-                  minTickGap={32}
-                />
-                <YAxis tickFormatter={(value) => formatYAxisBytes(value)} stroke="#94A3B8" />
-                <Tooltip content={<TrafficTooltip />} />
-                <Legend />
-                <Bar dataKey="bytes_in" name="Ingress" stackId="traffic" fill="#0EA5E9" />
-                <Bar dataKey="bytes_out" name="Egress" stackId="traffic" fill="#4F46E5" />
-              </BarChart>
-            </ResponsiveContainer>
+          <ChartCard title={window === "week" ? "Daily traffic" : "Hourly traffic"} subtitle="Ingress vs egress comparison" loading={loading} hasData={hasSeries}>
+            <TrafficBytesChart
+              window={window}
+              series={traffic?.series ?? []}
+              start={traffic?.start}
+              end={traffic?.end}
+              chartKey={`${traffic?.start ?? ""}-${traffic?.end ?? ""}-${window}-${bucketName ?? "all"}`}
+            />
           </ChartCard>
         </div>
         <div>
@@ -425,76 +366,4 @@ function BucketBar({ label, color, value, max }: { label: string; color: string;
   );
 }
 
-const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
-
-function inferStepMs(windowValue: TrafficWindow, points: ChartPoint[]): number {
-  if (points.length >= 2) {
-    const diffs: number[] = [];
-    for (let i = 1; i < points.length; i += 1) {
-      const diff = points[i].timestampMs - points[i - 1].timestampMs;
-      if (diff > 0) {
-        diffs.push(diff);
-      }
-    }
-    if (diffs.length > 0) {
-      return Math.min(...diffs);
-    }
-  }
-  return windowValue === "week" ? DAY_MS : HOUR_MS;
-}
-
-function normalizeTimestamp(timestamp: number, step: number): number {
-  if (step <= 0) {
-    return timestamp;
-  }
-  return Math.floor(timestamp / step) * step;
-}
-
-function formatTimestamp(value: string | number) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
-}
-
-function formatYAxisBytes(value: number) {
-  if (!Number.isFinite(value)) return "0";
-  if (value === 0) return "0";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let idx = 0;
-  let sized = value;
-  while (sized >= 1024 && idx < units.length - 1) {
-    sized /= 1024;
-    idx += 1;
-  }
-  const decimals = sized >= 10 ? 0 : 1;
-  return `${sized.toFixed(decimals)} ${units[idx]}`;
-}
-
-const tooltipFormatter = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-function TrafficTooltip({ payload, label }: any) {
-  if (!payload || payload.length === 0) {
-    return null;
-  }
-  const date = tooltipFormatter.format(new Date(label));
-  return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-      <p className="font-semibold">{date}</p>
-      {payload.map((entry: any) => (
-        <p key={entry.name} className="ui-caption">
-          <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-          {entry.name}: {formatBytes(entry.value)}
-        </p>
-      ))}
-    </div>
-  );
-}
+// Traffic bytes axis formatting is handled by the shared TrafficBytesChart component.
