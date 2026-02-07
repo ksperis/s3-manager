@@ -835,9 +835,9 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
     if (activeTab === "overview" || activeTab === "permissions") {
       loadPolicy();
       loadCors();
+      loadBucketAcl();
     }
     if (activeTab === "permissions") {
-      loadBucketAcl();
       loadPublicAccessBlock();
     }
   }, [activeTab, loadBucketAcl, loadCors, loadPolicy, loadPublicAccessBlock]);
@@ -1036,6 +1036,13 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
     }),
     [bucket]
   );
+  const bucketOwner = useMemo(() => {
+    const ownerFromBucket = (bucket?.owner ?? "").trim();
+    if (ownerFromBucket) return ownerFromBucket;
+    const ownerFromAcl = (bucketAcl?.owner ?? "").trim();
+    if (ownerFromAcl) return ownerFromAcl;
+    return null;
+  }, [bucket?.owner, bucketAcl?.owner]);
 
   const lifecycleRuleCount = lifecycle.rules?.length ?? 0;
   const hasLifecycleRules = lifecycleRuleCount > 0;
@@ -1887,6 +1894,9 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
                   <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
                     {bucketName ? `Bucket ${bucketName}` : "Bucket overview"}
                   </h3>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    Owner: <span className="font-semibold text-slate-700 dark:text-slate-200">{bucketOwner ?? (loadingBucket || bucketAclLoading ? "Loading..." : "Unknown")}</span>
+                  </p>
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
                     High-level usage and which advanced properties are currently active.
                   </p>
