@@ -2999,6 +2999,9 @@ export default function BrowserPage({
 
   const handleUploadFiles = (items: UploadCandidate[]) => {
     if (!bucketName || !hasS3AccountContext || !accountIdForApi || items.length === 0) return;
+    if (items.length > 1) {
+      setShowOperationsModal(true);
+    }
     setWarningMessage(null);
     const batchId = makeId();
     const previousQueueCount = uploadQueueRef.current.length;
@@ -3603,6 +3606,7 @@ export default function BrowserPage({
 
   const deleteFolderRecursive = async (folderItem: BrowserItem) => {
     if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder") return;
+    setShowOperationsModal(true);
     const folderPrefix = normalizePrefix(folderItem.key);
     const operationId = startOperation(
       "deleting",
@@ -3700,6 +3704,7 @@ export default function BrowserPage({
 
   const handleDownloadFolder = async (folderItem: BrowserItem) => {
     if (!bucketName || !hasS3AccountContext || folderItem.type !== "folder") return;
+    setShowOperationsModal(true);
     setWarningMessage(null);
     const folderPrefix = normalizePrefix(folderItem.key);
     const rawLabel = folderItem.name || folderPrefix.replace(/\/$/, "") || "folder";
@@ -3948,6 +3953,7 @@ export default function BrowserPage({
       await handleDownloadItems(files);
       return;
     }
+    setShowOperationsModal(true);
     const operationId = startOperation(
       "downloading",
       `Downloading ${files.length} files`,
@@ -4130,6 +4136,9 @@ export default function BrowserPage({
         : `Delete ${fileTargets.length} object(s)?`
     );
     if (!confirmed) return;
+    if (fileTargets.length > 1 || folderTargets.length > 0) {
+      setShowOperationsModal(true);
+    }
     try {
       if (fileTargets.length > 0) {
         const targetPath =
@@ -4242,6 +4251,9 @@ export default function BrowserPage({
       if (keys.length === 0) {
         setBulkAttributesError("No objects to update.");
         return;
+      }
+      if (keys.length > 1) {
+        setShowOperationsModal(true);
       }
       const operationId = startOperation(
         "copying",
@@ -4457,6 +4469,9 @@ export default function BrowserPage({
         return;
       }
 
+      if (total > 1) {
+        setShowOperationsModal(true);
+      }
       const operationId = startOperation(
         "copying",
         "Restoring snapshot",
@@ -4551,6 +4566,10 @@ export default function BrowserPage({
     setCleanupLoading(true);
     setCleanupError(null);
     setCleanupSummary(null);
+    setShowOperationsModal(true);
+    const operationId = startOperation("deleting", "Cleaning versions", currentPath || bucketName, { kind: "other" }, 0);
+    let cleanupCompletionStatus: OperationCompletionStatus = "done";
+    let cleanupCompletionError: string | undefined;
     try {
       const result = await cleanupObjectVersions(accountIdForApi, bucketName, {
         prefix: normalizedPrefix,
@@ -4563,8 +4582,11 @@ export default function BrowserPage({
       setStatusMessage(summary);
       requestObjectsRefresh(prefix);
     } catch (err) {
+      cleanupCompletionStatus = "failed";
+      cleanupCompletionError = "Unable to clean versions for this prefix.";
       setCleanupError("Unable to clean versions for this prefix.");
     } finally {
+      completeOperation(operationId, cleanupCompletionStatus, cleanupCompletionError);
       setCleanupLoading(false);
     }
   };
@@ -4689,6 +4711,9 @@ export default function BrowserPage({
       return;
     }
 
+    if (copyTasks.length > 1) {
+      setShowOperationsModal(true);
+    }
     const operationId = startOperation(
       "copying",
       isMove ? "Moving items" : "Copying items",
