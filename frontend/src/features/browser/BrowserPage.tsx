@@ -4749,6 +4749,91 @@ export default function BrowserPage({
     }
   };
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const shortcutsBlocked =
+      showAdvancedModal ||
+      showOperationsModal ||
+      showBulkAttributesModal ||
+      showBulkRestoreModal ||
+      showCleanupModal ||
+      showPrefixVersions ||
+      showObjectVersionsModal ||
+      Boolean(previewItem);
+    const isEditableTarget = (target: EventTarget | null) => {
+      const element = target as HTMLElement | null;
+      if (!element) return false;
+      if (element.isContentEditable) return true;
+      return Boolean(
+        element.closest(
+          "input, textarea, select, [contenteditable='true'], [contenteditable=''], [role='textbox']"
+        )
+      );
+    };
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (shortcutsBlocked) return;
+      if (event.defaultPrevented) return;
+      if (event.altKey) return;
+      if (isEditableTarget(event.target)) return;
+      if (!hasS3AccountContext || !bucketName) return;
+      const hasModifier = event.metaKey || event.ctrlKey;
+      if (!hasModifier) return;
+      const key = event.key.toLowerCase();
+
+      if (key === "a") {
+        if (listItems.length === 0) return;
+        event.preventDefault();
+        setSelectedIds(listItems.map((item) => item.id));
+        setInspectorTab("selection");
+        setInspectorVisible(true);
+        return;
+      }
+
+      if (key === "c") {
+        const targets = selectedItems.length > 0 ? selectedItems : inspectedItem ? [inspectedItem] : [];
+        if (targets.length === 0) return;
+        event.preventDefault();
+        handleCopyItems(targets);
+        return;
+      }
+
+      if (key === "x") {
+        const targets = selectedItems.length > 0 ? selectedItems : inspectedItem ? [inspectedItem] : [];
+        if (targets.length === 0) return;
+        event.preventDefault();
+        handleCutItems(targets);
+        return;
+      }
+
+      if (key === "v") {
+        if (!canPaste) return;
+        event.preventDefault();
+        void handlePasteItems();
+      }
+    };
+    document.addEventListener("keydown", handleShortcut);
+    return () => document.removeEventListener("keydown", handleShortcut);
+  }, [
+    bucketName,
+    canPaste,
+    handleCopyItems,
+    handleCutItems,
+    handlePasteItems,
+    hasS3AccountContext,
+    inspectedItem,
+    listItems,
+    previewItem,
+    selectedItems,
+    setInspectorVisible,
+    showAdvancedModal,
+    showBulkAttributesModal,
+    showBulkRestoreModal,
+    showCleanupModal,
+    showObjectVersionsModal,
+    showOperationsModal,
+    showPrefixVersions,
+  ]);
+
   const refreshInspectedObject = async (targetKey?: string) => {
     if (!bucketName || !hasS3AccountContext || !targetKey) return;
     setMetadataLoading(true);
