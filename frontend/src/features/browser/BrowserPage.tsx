@@ -10,6 +10,7 @@ import axios from "axios";
 import TableEmptyState from "../../components/TableEmptyState";
 import { formatBytes } from "../../utils/format";
 import { withS3AccountParam, type S3AccountSelector } from "../../api/accountParams";
+import { getBucketLogging, getBucketPolicy, getBucketProperties, getBucketWebsite, listBuckets } from "../../api/buckets";
 import {
   BrowserBucket,
   BrowserObject,
@@ -190,9 +191,57 @@ type BrowserPageProps = {
 };
 
 type OperationDetailsKind = "download" | "delete" | "copy" | "upload" | "other";
+type BucketInspectorTone = "active" | "inactive" | "unknown";
+type BucketInspectorFeature = {
+  state: string;
+  tone: BucketInspectorTone;
+};
+type BucketInspectorData = {
+  creation_date?: string | null;
+  used_bytes?: number | null;
+  object_count?: number | null;
+  quota_max_size_bytes?: number | null;
+  quota_max_objects?: number | null;
+  features: Record<string, BucketInspectorFeature>;
+};
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
+const BUCKET_INSPECTOR_FEATURE_ORDER = [
+  "versioning",
+  "object_lock",
+  "block_public_access",
+  "lifecycle_rules",
+  "static_website",
+  "quota",
+  "bucket_policy",
+  "cors",
+  "access_logging",
+] as const;
+const BUCKET_INSPECTOR_FEATURE_LABELS: Record<string, string> = {
+  versioning: "Versioning",
+  object_lock: "Object Lock",
+  block_public_access: "Block public access",
+  lifecycle_rules: "Lifecycle rules",
+  static_website: "Static website",
+  quota: "Quota",
+  bucket_policy: "Bucket policy",
+  cors: "CORS",
+  access_logging: "Access logging",
+};
+const BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES: Record<BucketInspectorTone, string> = {
+  active: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100",
+  inactive: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-100",
+  unknown: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+};
+const inspectorTabPanelClasses = "space-y-4 ui-caption text-slate-600 dark:text-slate-300";
+const inspectorSectionCardClasses =
+  "rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/40";
+const inspectorSectionTitleClasses = "ui-caption font-semibold uppercase tracking-wide text-slate-400";
+const inspectorEmptyStateClasses =
+  "rounded-lg border border-dashed border-slate-200 px-3 py-3 ui-caption text-slate-500 dark:border-slate-800 dark:text-slate-400";
+const inspectorInlineActionClasses =
+  "ui-caption font-semibold text-slate-500 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200 dark:disabled:text-slate-500";
 
 export default function BrowserPage({
   accountIdForApi: accountIdOverride,
@@ -225,7 +274,7 @@ export default function BrowserPage({
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
   const [showFolders, setShowFolders] = useState(Boolean(allowFoldersPanel && defaultShowFolders));
   const [showInspector, setShowInspector] = useState(Boolean(allowInspectorPanel && defaultShowInspector));
-  const [inspectorTab, setInspectorTab] = useState<"context" | "selection" | "details">("context");
+  const [inspectorTab, setInspectorTab] = useState<"context" | "bucket" | "selection" | "details">("context");
   const [compactMode, setCompactMode] = useState(true);
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
   const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
@@ -273,6 +322,9 @@ export default function BrowserPage({
   } | null>(null);
   const [contextCountsLoading, setContextCountsLoading] = useState(false);
   const [contextCountsError, setContextCountsError] = useState<string | null>(null);
+  const [bucketInspectorByName, setBucketInspectorByName] = useState<Record<string, BucketInspectorData>>({});
+  const [bucketInspectorLoading, setBucketInspectorLoading] = useState(false);
+  const [bucketInspectorError, setBucketInspectorError] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
@@ -384,6 +436,7 @@ export default function BrowserPage({
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
   const skipNextObjectsLoadRef = useRef(false);
   const contextCountIdRef = useRef(0);
+  const bucketInspectorRequestIdRef = useRef(0);
   const selectionStatsRequestIdRef = useRef(0);
   const browserPathRef = useRef("");
   const browserHistoryStateRef = useRef<{ bucketName: string; prefix: string } | null>(null);
@@ -746,6 +799,12 @@ export default function BrowserPage({
   useEffect(() => {
     setInspectorTab("context");
   }, [bucketName, prefix]);
+
+  useEffect(() => {
+    bucketInspectorRequestIdRef.current += 1;
+    setBucketInspectorLoading(false);
+    setBucketInspectorError(null);
+  }, [bucketName, hasS3AccountContext]);
 
   useEffect(() => {
     if (!showBucketMenu) return;
@@ -1611,6 +1670,43 @@ export default function BrowserPage({
     return { totalBytes, files, deletedFiles, folders, deletedFolders, storageCounts };
   }, [items]);
 
+  const bucketInspectorData = useMemo(
+    () => (bucketName ? bucketInspectorByName[bucketName] ?? null : null),
+    [bucketInspectorByName, bucketName]
+  );
+  const bucketInspectorFeatures = useMemo(() => {
+    const featureMap = bucketInspectorData?.features ?? null;
+    if (!featureMap) return [];
+    const seen = new Set<string>();
+    const keys: string[] = [];
+    BUCKET_INSPECTOR_FEATURE_ORDER.forEach((featureKey) => {
+      if (featureMap[featureKey]) {
+        seen.add(featureKey);
+        keys.push(featureKey);
+      }
+    });
+    Object.keys(featureMap).forEach((featureKey) => {
+      if (seen.has(featureKey)) return;
+      keys.push(featureKey);
+    });
+    return keys.map((featureKey) => {
+      const feature = featureMap[featureKey];
+      const label =
+        BUCKET_INSPECTOR_FEATURE_LABELS[featureKey] ??
+        featureKey
+          .split("_")
+          .filter(Boolean)
+          .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+          .join(" ");
+      return {
+        key: featureKey,
+        label,
+        state: feature?.state ?? "Unknown",
+        tone: feature?.tone ?? "unknown",
+      };
+    });
+  }, [bucketInspectorData]);
+
   const inspectedItem = useMemo(() => {
     if (activeItem && items.some((entry) => entry.id === activeItem.id)) {
       return activeItem;
@@ -1994,6 +2090,161 @@ export default function BrowserPage({
     loadObjectVersions({ append: false, keyMarker: null, versionIdMarker: null, targetKey: inspectedItem.key });
   }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.key, inspectedItem?.type]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const loadBucketInspectorData = useCallback(
+    async (force = false) => {
+      if (!bucketName || !hasS3AccountContext) return;
+      if (!force && bucketInspectorByName[bucketName]) {
+        setBucketInspectorError(null);
+        return;
+      }
+      const requestId = bucketInspectorRequestIdRef.current + 1;
+      bucketInspectorRequestIdRef.current = requestId;
+      setBucketInspectorLoading(true);
+      setBucketInspectorError(null);
+      try {
+        const staticWebsiteEnabled = effectiveCaps?.static_website ?? true;
+        const results = await Promise.allSettled([
+          listBuckets(accountIdForApi),
+          getBucketProperties(accountIdForApi, bucketName),
+          getBucketPolicy(accountIdForApi, bucketName),
+          getBucketLogging(accountIdForApi, bucketName),
+          staticWebsiteEnabled ? getBucketWebsite(accountIdForApi, bucketName) : Promise.resolve(null),
+        ]);
+        if (bucketInspectorRequestIdRef.current !== requestId) return;
+        const bucketsResult = results[0];
+        const propertiesResult = results[1];
+        const policyResult = results[2];
+        const loggingResult = results[3];
+        const websiteResult = results[4];
+
+        const bucketList = bucketsResult.status === "fulfilled" ? bucketsResult.value : [];
+        const selectedBucket = bucketList.find((entry) => entry.name === bucketName) ?? null;
+
+        const unavailableFeature = (state = "Unavailable"): BucketInspectorFeature => ({ state, tone: "unknown" });
+        const activeFeature = (state: string): BucketInspectorFeature => ({ state, tone: "active" });
+        const inactiveFeature = (state: string): BucketInspectorFeature => ({ state, tone: "inactive" });
+
+        const features: Record<string, BucketInspectorFeature> = {};
+
+        if (propertiesResult.status === "fulfilled") {
+          const properties = propertiesResult.value;
+          const versioningRaw = (properties.versioning_status ?? "Disabled").trim();
+          const versioningNormalized = versioningRaw.toLowerCase();
+          if (versioningNormalized === "enabled") {
+            features.versioning = activeFeature("Enabled");
+          } else if (versioningNormalized === "suspended") {
+            features.versioning = unavailableFeature(versioningRaw || "Suspended");
+          } else {
+            features.versioning = inactiveFeature(versioningRaw || "Disabled");
+          }
+
+          const objectLockEnabled = Boolean(properties.object_lock?.enabled ?? properties.object_lock_enabled);
+          features.object_lock = objectLockEnabled ? activeFeature("Enabled") : inactiveFeature("Disabled");
+
+          const publicBlock = properties.public_access_block;
+          if (!publicBlock) {
+            features.block_public_access = inactiveFeature("Disabled");
+          } else {
+            const flags = [
+              publicBlock.block_public_acls,
+              publicBlock.ignore_public_acls,
+              publicBlock.block_public_policy,
+              publicBlock.restrict_public_buckets,
+            ];
+            const fullyEnabled = flags.every((flag) => flag === true);
+            const partiallyEnabled = !fullyEnabled && flags.some((flag) => flag === true);
+            features.block_public_access = fullyEnabled
+              ? activeFeature("Enabled")
+              : partiallyEnabled
+                ? activeFeature("Partial")
+                : inactiveFeature("Disabled");
+          }
+
+          const lifecycleRules = properties.lifecycle_rules ?? [];
+          features.lifecycle_rules = lifecycleRules.length > 0 ? activeFeature("Enabled") : inactiveFeature("Disabled");
+
+          const corsRules = properties.cors_rules ?? [];
+          features.cors = corsRules.length > 0 ? activeFeature("Configured") : inactiveFeature("Not set");
+        } else {
+          features.versioning = unavailableFeature();
+          features.object_lock = unavailableFeature();
+          features.block_public_access = unavailableFeature();
+          features.lifecycle_rules = unavailableFeature();
+          features.cors = unavailableFeature();
+        }
+
+        if (policyResult.status === "fulfilled") {
+          const policy = policyResult.value.policy;
+          const configured = Boolean(policy && Object.keys(policy).length > 0);
+          features.bucket_policy = configured ? activeFeature("Configured") : inactiveFeature("Not set");
+        } else {
+          features.bucket_policy = unavailableFeature();
+        }
+
+        if (loggingResult.status === "fulfilled") {
+          const logging = loggingResult.value;
+          const enabled = Boolean(logging.enabled && (logging.target_bucket ?? "").trim().length > 0);
+          features.access_logging = enabled ? activeFeature("Enabled") : inactiveFeature("Disabled");
+        } else {
+          features.access_logging = unavailableFeature();
+        }
+
+        if (!staticWebsiteEnabled) {
+          features.static_website = unavailableFeature();
+        } else if (websiteResult.status === "fulfilled") {
+          const website = websiteResult.value;
+          const routingRules = Array.isArray(website?.routing_rules) ? website.routing_rules : [];
+          const configured = Boolean(
+            (website?.redirect_all_requests_to?.host_name ?? "").trim() ||
+              (website?.index_document ?? "").trim() ||
+              routingRules.length > 0
+          );
+          features.static_website = configured ? activeFeature("Enabled") : inactiveFeature("Disabled");
+        } else {
+          features.static_website = unavailableFeature();
+        }
+
+        const quotaConfigured = Boolean(
+          (selectedBucket?.quota_max_size_bytes ?? 0) > 0 || (selectedBucket?.quota_max_objects ?? 0) > 0
+        );
+        features.quota = selectedBucket
+          ? quotaConfigured
+            ? activeFeature("Configured")
+            : inactiveFeature("Not set")
+          : unavailableFeature();
+
+        const payload: BucketInspectorData = {
+          creation_date: selectedBucket?.creation_date ?? null,
+          used_bytes: selectedBucket?.used_bytes ?? null,
+          object_count: selectedBucket?.object_count ?? null,
+          quota_max_size_bytes: selectedBucket?.quota_max_size_bytes ?? null,
+          quota_max_objects: selectedBucket?.quota_max_objects ?? null,
+          features,
+        };
+
+        setBucketInspectorByName((prev) => ({
+          ...prev,
+          [bucketName]: payload,
+        }));
+      } catch {
+        if (bucketInspectorRequestIdRef.current !== requestId) return;
+        setBucketInspectorError("Unable to load bucket stats and features.");
+      } finally {
+        if (bucketInspectorRequestIdRef.current === requestId) {
+          setBucketInspectorLoading(false);
+        }
+      }
+    },
+    [accountIdForApi, bucketInspectorByName, bucketName, effectiveCaps?.static_website, hasS3AccountContext]
+  );
+
+  const handleOpenBucketInspector = useCallback(() => {
+    setInspectorTab("bucket");
+    if (!bucketName || !hasS3AccountContext || bucketInspectorLoading) return;
+    if (bucketInspectorByName[bucketName]) return;
+    void loadBucketInspectorData();
+  }, [bucketInspectorByName, bucketInspectorLoading, bucketName, hasS3AccountContext, loadBucketInspectorData]);
+
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => {
       const isSelected = prev.includes(id);
@@ -2143,12 +2394,22 @@ export default function BrowserPage({
   };
 
   const handleContextCount = async () => {
-    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled) return;
+    if (!bucketName || !hasS3AccountContext) return;
     const requestId = contextCountIdRef.current + 1;
     contextCountIdRef.current = requestId;
     setContextCountsLoading(true);
     setContextCountsError(null);
     try {
+      if (!isVersioningEnabled) {
+        const objects = await listAllObjectsForPrefix(normalizedPrefix);
+        if (contextCountIdRef.current !== requestId) return;
+        setContextCounts({
+          objects: objects.length,
+          versions: 0,
+          deleteMarkers: 0,
+        });
+        return;
+      }
       const stats = await listVersionStats({ prefix: normalizedPrefix });
       if (contextCountIdRef.current !== requestId) return;
       setContextCounts({
@@ -2158,7 +2419,7 @@ export default function BrowserPage({
       });
     } catch (err) {
       if (contextCountIdRef.current !== requestId) return;
-      setContextCountsError("Unable to count versions for this prefix.");
+      setContextCountsError("Unable to count objects for this prefix.");
     } finally {
       if (contextCountIdRef.current === requestId) {
         setContextCountsLoading(false);
@@ -6256,6 +6517,17 @@ export default function BrowserPage({
                         <button
                           type="button"
                           role="tab"
+                          id="inspector-tab-bucket"
+                          aria-selected={inspectorTab === "bucket"}
+                          aria-controls="inspector-panel-bucket"
+                          onClick={handleOpenBucketInspector}
+                          className={`${filterChipClasses} ${inspectorTab === "bucket" ? filterChipActiveClasses : ""}`}
+                        >
+                          Bucket
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
                           id="inspector-tab-selection"
                           aria-selected={inspectorTab === "selection"}
                           aria-controls="inspector-panel-selection"
@@ -6273,17 +6545,17 @@ export default function BrowserPage({
                             role="tabpanel"
                             id="inspector-panel-context"
                             aria-labelledby="inspector-tab-context"
-                            className="space-y-4 ui-caption text-slate-600 dark:text-slate-300"
+                            className={inspectorTabPanelClasses}
                           >
-                            <div className="space-y-1">
-                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Current location</p>
+                            <div className={inspectorSectionCardClasses}>
+                              <p className={inspectorSectionTitleClasses}>Current location</p>
                               <p className="break-all ui-caption text-slate-500 dark:text-slate-400">
                                 {currentPath || "Select a bucket to get started."}
                               </p>
                             </div>
                             <div className="space-y-3">
-                              <div>
-                                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Actions</p>
+                              <div className={inspectorSectionCardClasses}>
+                                <p className={inspectorSectionTitleClasses}>Actions</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   <button
                                     type="button"
@@ -6358,8 +6630,8 @@ export default function BrowserPage({
                                   </button>
                                 </div>
                               </div>
-                              <div>
-                                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Prefix summary</p>
+                              <div className={inspectorSectionCardClasses}>
+                                <p className={inspectorSectionTitleClasses}>Prefix summary</p>
                                 <div className="mt-2 grid gap-2">
                                   <div className="flex items-center justify-between">
                                     <span className="text-slate-500">Files</span>
@@ -6385,9 +6657,9 @@ export default function BrowserPage({
                                   </div>
                                 </div>
                               </div>
-                              <div>
+                              <div className={inspectorSectionCardClasses}>
                                 <div className="flex items-center justify-between gap-2">
-                                  <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Counts</p>
+                                  <p className={inspectorSectionTitleClasses}>Counts</p>
                                   <button
                                     type="button"
                                     className={bulkActionClasses}
@@ -6395,8 +6667,7 @@ export default function BrowserPage({
                                     disabled={
                                       !bucketName ||
                                       !hasS3AccountContext ||
-                                      contextCountsLoading ||
-                                      !isVersioningEnabled
+                                      contextCountsLoading
                                     }
                                   >
                                     <RefreshIcon className="h-3.5 w-3.5" />
@@ -6438,8 +6709,8 @@ export default function BrowserPage({
                                   )}
                                 </div>
                               </div>
-                              <div>
-                                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Storage classes</p>
+                              <div className={inspectorSectionCardClasses}>
+                                <p className={inspectorSectionTitleClasses}>Storage classes</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {Object.keys(pathStats.storageCounts).length === 0 ? (
                                     <span className="ui-caption text-slate-500 dark:text-slate-400">No file data yet.</span>
@@ -6462,18 +6733,129 @@ export default function BrowserPage({
                           </div>
                         )}
 
+                        {inspectorTab === "bucket" && (
+                          <div
+                            role="tabpanel"
+                            id="inspector-panel-bucket"
+                            aria-labelledby="inspector-tab-bucket"
+                            className={inspectorTabPanelClasses}
+                          >
+                            <div className={`${inspectorSectionCardClasses} flex items-start justify-between gap-2`}>
+                              <div className="space-y-1">
+                                <p className={inspectorSectionTitleClasses}>Bucket overview</p>
+                                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                  {bucketName || "Select a bucket to inspect."}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                className={inspectorInlineActionClasses}
+                                onClick={() => void loadBucketInspectorData(true)}
+                                disabled={!bucketName || !hasS3AccountContext || bucketInspectorLoading}
+                              >
+                                {bucketInspectorLoading ? "Loading..." : "Refresh"}
+                              </button>
+                            </div>
+
+                            {!bucketName || !hasS3AccountContext ? (
+                              <div className={inspectorEmptyStateClasses}>
+                                Select a bucket to load bucket stats and features.
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {bucketInspectorLoading && !bucketInspectorData && (
+                                  <p className="ui-caption text-slate-500 dark:text-slate-400">Loading bucket overview...</p>
+                                )}
+                                {bucketInspectorError && (
+                                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+                                    {bucketInspectorError}
+                                  </p>
+                                )}
+                                <div className={inspectorSectionCardClasses}>
+                                  <p className={inspectorSectionTitleClasses}>Stats</p>
+                                  <div className="mt-2 grid gap-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-slate-500">Created</span>
+                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                        {bucketInspectorData?.creation_date
+                                          ? formatDateTime(bucketInspectorData.creation_date)
+                                          : "-"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-slate-500">Used bytes</span>
+                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                        {formatBytes(bucketInspectorData?.used_bytes ?? null)}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-slate-500">Object count</span>
+                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                        {bucketInspectorData?.object_count != null
+                                          ? bucketInspectorData.object_count.toLocaleString()
+                                          : "-"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-slate-500">Quota size</span>
+                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                        {(bucketInspectorData?.quota_max_size_bytes ?? 0) > 0
+                                          ? formatBytes(bucketInspectorData?.quota_max_size_bytes ?? null)
+                                          : "Not set"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-slate-500">Quota objects</span>
+                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                        {(bucketInspectorData?.quota_max_objects ?? 0) > 0
+                                          ? (bucketInspectorData?.quota_max_objects ?? 0).toLocaleString()
+                                          : "Not set"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className={inspectorSectionCardClasses}>
+                                  <p className={inspectorSectionTitleClasses}>Features</p>
+                                  <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                    States mirror the Manager bucket overview when available.
+                                  </p>
+                                  <div className="mt-2 space-y-2">
+                                    {bucketInspectorFeatures.length === 0 ? (
+                                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                        No feature data available for this context.
+                                      </p>
+                                    ) : (
+                                      bucketInspectorFeatures.map((feature) => (
+                                        <div key={feature.key} className="flex items-center justify-between gap-2">
+                                          <span className="text-slate-500">{feature.label}</span>
+                                          <span
+                                            className={`rounded-full px-2 py-1 ui-caption font-semibold ${BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES[feature.tone]}`}
+                                          >
+                                            {feature.state}
+                                          </span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                       {inspectorTab === "selection" && (
                         <div
                           role="tabpanel"
                           id="inspector-panel-selection"
                           aria-labelledby="inspector-tab-selection"
-                          className="space-y-4"
+                          className={inspectorTabPanelClasses}
                         >
                           {canSelectionActions ? (
-                          <div className="space-y-3 ui-caption text-slate-600 dark:text-slate-300">
-                            <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-3">
+                            <div className={`${inspectorSectionCardClasses} flex items-start justify-between gap-2`}>
                               <div>
-                                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Selection</p>
+                                <p className={inspectorSectionTitleClasses}>Selection</p>
                                 <p className="mt-1 ui-caption text-slate-400">
                                   {selectedCount > 0
                                     ? `${selectedCount} selected`
@@ -6501,15 +6883,15 @@ export default function BrowserPage({
                                 <button
                                   type="button"
                                   onClick={() => setSelectedIds([])}
-                                  className="ui-caption font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                  className={inspectorInlineActionClasses}
                                 >
                                   Clear
                                 </button>
                               )}
                             </div>
-                            <div className="mt-2 space-y-3">
-                              <div>
-                                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Actions</p>
+                            <div className="space-y-3">
+                              <div className={inspectorSectionCardClasses}>
+                                <p className={inspectorSectionTitleClasses}>Actions</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {canSelectionDownloadFolder && selectionPrimary && (
                                     <button
@@ -6576,8 +6958,8 @@ export default function BrowserPage({
                                   )}
                                 </div>
                               </div>
-                              <div>
-                                <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Bulk Actions</p>
+                              <div className={inspectorSectionCardClasses}>
+                                <p className={inspectorSectionTitleClasses}>Bulk actions</p>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   <button
                                     type="button"
@@ -6628,9 +7010,9 @@ export default function BrowserPage({
                                 </div>
                               </div>
                             </div>
-                            <div className="rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/40">
+                            <div className={inspectorSectionCardClasses}>
                               <div className="flex items-center justify-between gap-2">
-                                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Selection stats</p>
+                                <p className={inspectorSectionTitleClasses}>Selection stats</p>
                                 <button
                                   type="button"
                                   className={bulkActionClasses}
@@ -6670,7 +7052,7 @@ export default function BrowserPage({
                             </div>
                           </div>
                         ) : (
-                          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-3 ui-caption text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                          <div className={inspectorEmptyStateClasses}>
                             Select one or more objects to see selection actions.
                           </div>
                         )}
@@ -6682,16 +7064,16 @@ export default function BrowserPage({
                         role="tabpanel"
                         id="inspector-panel-details"
                         aria-labelledby="inspector-tab-details"
-                        className="space-y-4"
+                        className={inspectorTabPanelClasses}
                       >
                         {inspectedItem ? (
                           <div className="space-y-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Object details</p>
+                            <div className={`${inspectorSectionCardClasses} flex items-center justify-between gap-2`}>
+                              <p className={inspectorSectionTitleClasses}>Object details</p>
                               <button
                                 type="button"
                                 onClick={() => setActiveItem(null)}
-                                className="ui-caption font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                className={inspectorInlineActionClasses}
                               >
                                 Clear
                               </button>
@@ -6724,8 +7106,8 @@ export default function BrowserPage({
                                 </div>
                               </div>
                             </div>
-                            <div className="space-y-2">
-                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Metadata</p>
+                            <div className={inspectorSectionCardClasses}>
+                              <p className={inspectorSectionTitleClasses}>Metadata</p>
                               {metadataLoading && (
                                 <p className="ui-caption text-slate-500 dark:text-slate-400">Loading metadata...</p>
                               )}
@@ -6767,8 +7149,8 @@ export default function BrowserPage({
                                 </div>
                               </div>
                             </div>
-                            <div className="space-y-2">
-                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Tags</p>
+                            <div className={inspectorSectionCardClasses}>
+                              <p className={inspectorSectionTitleClasses}>Tags</p>
                               <div className="flex flex-wrap gap-2">
                                 {inspectedTags.length ? (
                                   inspectedTags.map((tag) => (
@@ -6800,7 +7182,7 @@ export default function BrowserPage({
                             )}
                           </div>
                         ) : (
-                          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-3 ui-caption text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                          <div className={inspectorEmptyStateClasses}>
                             Select a single object to view details.
                           </div>
                         )}

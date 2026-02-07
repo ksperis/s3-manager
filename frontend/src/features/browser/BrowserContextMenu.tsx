@@ -126,6 +126,18 @@ export default function BrowserContextMenu({
             className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
+              onNewFolder();
+            }}
+            disabled={!bucketName || !hasS3AccountContext}
+          >
+            <FolderPlusIcon className="h-3.5 w-3.5" />
+            New folder
+          </button>
+          <button
+            type="button"
+            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+            onClick={() => {
+              onClose();
               fileInputRef.current?.click();
             }}
             disabled={!bucketName || !hasS3AccountContext}
@@ -144,18 +156,6 @@ export default function BrowserContextMenu({
           >
             <FolderIcon className="h-3.5 w-3.5" />
             Upload folder
-          </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onNewFolder();
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            <FolderPlusIcon className="h-3.5 w-3.5" />
-            New folder
           </button>
           <button
             type="button"
