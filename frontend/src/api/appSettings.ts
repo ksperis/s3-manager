@@ -17,6 +17,7 @@ export type PortalSettings = {
 
 export type GeneralSettings = {
   manager_enabled: boolean;
+  ceph_admin_enabled: boolean;
   browser_enabled: boolean;
   browser_root_enabled: boolean;
   browser_manager_enabled: boolean;

@@ -53,6 +53,8 @@ class S3Account(Base):
             delattr(self, "_session_access_key")
         if hasattr(self, "_session_secret_key"):
             delattr(self, "_session_secret_key")
+        if hasattr(self, "_session_token"):
+            delattr(self, "_session_token")
 
     def effective_rgw_credentials(self) -> tuple[Optional[str], Optional[str]]:
         override_access = getattr(self, "_session_access_key", None)
@@ -60,6 +62,9 @@ class S3Account(Base):
         if override_access and override_secret:
             return override_access, override_secret
         return self.rgw_access_key, self.rgw_secret_key
+
+    def session_token(self) -> Optional[str]:
+        return getattr(self, "_session_token", None)
 
 
 class UserS3Account(Base):

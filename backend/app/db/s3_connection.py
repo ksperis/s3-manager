@@ -39,6 +39,9 @@ class S3Connection(Base):
     secret_access_key = Column(EncryptedString, nullable=False)
     session_token = Column(EncryptedString, nullable=True)
     expires_at = Column(DateTime, nullable=True)
+    is_temporary = Column(Boolean, nullable=False, default=False, server_default="0")
+    temp_user_uid = Column(String, nullable=True)
+    temp_access_key_id = Column(String, nullable=True)
 
     # Cached capability profile (JSON) computed from probes (optional)
     capabilities_json = Column(Text, nullable=True)

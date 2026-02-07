@@ -32,6 +32,7 @@ class S3ConnectionsService:
             self.db.query(DBS3Connection)
             .outerjoin(UserS3Connection, UserS3Connection.s3_connection_id == DBS3Connection.id)
             .filter(
+                DBS3Connection.is_temporary.is_(False),
                 (DBS3Connection.is_public.is_(True))
                 | (DBS3Connection.owner_user_id == user_id)
                 | (UserS3Connection.user_id == user_id)
@@ -72,13 +73,13 @@ class S3ConnectionsService:
             .filter(DBS3Connection.owner_user_id == user_id, DBS3Connection.id == connection_id)
             .first()
         )
-        if not row:
+        if not row or row.is_temporary:
             raise KeyError("S3Connection not found")
         return row
 
     def get_visible(self, user_id: int, connection_id: int) -> DBS3Connection:
         row = self.db.query(DBS3Connection).filter(DBS3Connection.id == connection_id).first()
-        if not row:
+        if not row or row.is_temporary:
             raise KeyError("S3Connection not found")
         if not row.is_public and row.owner_user_id != user_id:
             link = (
@@ -91,6 +92,43 @@ class S3ConnectionsService:
             )
             if not link:
                 raise KeyError("S3Connection not found")
+        return row
+
+    def create_temporary(
+        self,
+        *,
+        owner_user_id: int,
+        name: str,
+        storage_endpoint_id: int,
+        access_key_id: str,
+        secret_access_key: str,
+        session_token: Optional[str],
+        expires_at: Optional[datetime],
+        temp_user_uid: Optional[str],
+        temp_access_key_id: Optional[str],
+    ) -> DBS3Connection:
+        now = datetime.utcnow()
+        row = DBS3Connection(
+            owner_user_id=owner_user_id,
+            name=name,
+            storage_endpoint_id=storage_endpoint_id,
+            custom_endpoint_config=None,
+            is_public=False,
+            is_temporary=True,
+            access_key_id=access_key_id,
+            secret_access_key=secret_access_key,
+            session_token=session_token,
+            expires_at=expires_at,
+            temp_user_uid=temp_user_uid,
+            temp_access_key_id=temp_access_key_id,
+            capabilities_json=json.dumps({}),
+            created_at=now,
+            updated_at=now,
+            last_used_at=now,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
         return row
 
     def create(self, user_id: int, payload: S3ConnectionCreate) -> S3Connection:

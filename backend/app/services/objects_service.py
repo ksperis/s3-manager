@@ -19,11 +19,13 @@ class ObjectsService:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
             raise RuntimeError("S3Account root keys missing")
+        session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
         endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
         return get_s3_client(
             access_key,
             secret_key,
             endpoint=endpoint,
+            session_token=session_token,
             region=region,
             force_path_style=force_path_style,
             verify_tls=verify_tls,

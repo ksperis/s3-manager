@@ -48,12 +48,21 @@ def resolve_account_scope(identifier: Optional[str]) -> Tuple[Optional[str], Opt
 
 
 def extract_bucket_list(payload: Any) -> list[dict]:
+    def normalize(entries: list[Any]) -> list[dict]:
+        normalized: list[dict] = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                normalized.append(entry)
+            elif isinstance(entry, str):
+                normalized.append({"name": entry})
+        return normalized
+
     if isinstance(payload, list):
-        return [entry for entry in payload if isinstance(entry, dict)]
+        return normalize(payload)
     if isinstance(payload, dict):
         buckets = payload.get("buckets")
         if isinstance(buckets, list):
-            return [entry for entry in buckets if isinstance(entry, dict)]
+            return normalize(buckets)
     return []
 
 

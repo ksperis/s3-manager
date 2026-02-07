@@ -121,6 +121,7 @@ class PortalBucketDefaults(BaseModel):
 
 class GeneralSettings(BaseModel):
     manager_enabled: bool = True
+    ceph_admin_enabled: bool = False
     browser_enabled: bool = True
     browser_root_enabled: bool = False
     browser_manager_enabled: bool = True

@@ -17,6 +17,7 @@ function isS3UserId(id: string | null): boolean {
 
 export default function ManagerS3AccountSelector({ accounts, selectedS3AccountId, onChange }: Props) {
   const isS3Selection = isS3UserId(selectedS3AccountId);
+  const visibleAccounts = accounts.filter((acc) => !acc.hidden || acc.id === selectedS3AccountId);
   return (
     <div className="flex items-center gap-2">
       <label className="ui-body font-medium text-slate-700 dark:text-slate-200">
@@ -28,9 +29,9 @@ export default function ManagerS3AccountSelector({ accounts, selectedS3AccountId
         onChange={(e) => onChange(e.target.value || null)}
       >
         <option value="">Select account</option>
-        {accounts.map((acc) => (
+        {visibleAccounts.map((acc) => (
           <option key={acc.id} value={acc.id}>
-            {acc.display_name}
+            {acc.hidden ? `${acc.display_name} (temp)` : acc.display_name}
           </option>
         ))}
       </select>

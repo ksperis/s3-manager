@@ -97,6 +97,7 @@ def list_manager_accounts(
             | (S3Connection.owner_user_id == user.id)
             | (S3Connection.id.in_(user_connection_ids))
         )
+        .filter(S3Connection.is_temporary.is_(False))
         .all()
     )
 

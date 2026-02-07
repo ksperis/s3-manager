@@ -26,8 +26,13 @@ from app.routers.admin import settings as admin_settings
 from app.routers.admin import onboarding as admin_onboarding
 from app.routers.admin import automation as admin_automation
 from app.routers.admin import healthchecks as admin_healthchecks
+from app.routers.ceph_admin import endpoints as ceph_admin_endpoints
+from app.routers.ceph_admin import accounts as ceph_admin_accounts
+from app.routers.ceph_admin import users as ceph_admin_users
+from app.routers.ceph_admin import buckets as ceph_admin_buckets
 from app.routers.internal import billing_collect as internal_billing
 from app.routers.internal import healthchecks as internal_healthchecks
+from app.routers.internal import s3_connections as internal_s3_connections
 from app.routers.manager import s3_accounts as manager_accounts
 from app.routers.manager import browser as manager_browser
 from app.routers.manager import buckets as manager_buckets
@@ -40,6 +45,7 @@ from app.routers.manager import topics as manager_topics
 from app.routers.manager import stats as manager_stats
 from app.routers.dependencies import (
     require_browser_enabled,
+    require_ceph_admin_enabled,
     require_manager_context_enabled,
     require_manager_enabled,
     require_portal_enabled,
@@ -95,8 +101,13 @@ app.include_router(admin_settings.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_onboarding.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_automation.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_healthchecks.router, prefix=settings.api_v1_prefix)
+app.include_router(ceph_admin_endpoints.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_accounts.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_users.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(internal_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_healthchecks.router, prefix=settings.api_v1_prefix)
+app.include_router(internal_s3_connections.router, prefix=settings.api_v1_prefix)
 app.include_router(
     manager_accounts.router,
     prefix=settings.api_v1_prefix,

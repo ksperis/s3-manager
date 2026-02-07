@@ -15,6 +15,7 @@ class ExecutionContext(BaseModel):
     kind: Literal["account", "connection", "legacy_user"]
     id: str
     display_name: str
+    hidden: bool = False
     rgw_account_id: Optional[str] = None
     quota_max_size_gb: Optional[float] = None
     quota_max_objects: Optional[int] = None

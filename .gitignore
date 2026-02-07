@@ -11,6 +11,8 @@ backend/app/data/
 __pycache__/
 *.py[cod]
 .venv/
+.venv312/
+.venv313/
 venv/
 .coverage
 coverage.xml

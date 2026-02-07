@@ -85,11 +85,13 @@ class BucketsService:
 
     def _client_kwargs(self, account: S3Account) -> dict:
         endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+        session_token = account.session_token() if hasattr(account, "session_token") else getattr(account, "_session_token", None)
         return {
             "endpoint": endpoint,
             "region": region,
             "force_path_style": force_path_style,
             "verify_tls": verify_tls,
+            "session_token": session_token,
         }
 
     def list_buckets(self, account: S3Account, include: Optional[Set[str]] = None) -> List[Bucket]:
@@ -424,6 +426,32 @@ class BucketsService:
             public_access_block=public_access_block,
             lifecycle_rules=lifecycle_rules,
             cors_rules=cors_rules,
+        )
+
+    def get_bucket_versioning_status(self, name: str, account: S3Account) -> str | None:
+        access_key, secret_key = self._account_credentials(account)
+        return s3_client.get_bucket_versioning(
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
+
+    def get_bucket_object_lock(self, name: str, account: S3Account) -> BucketObjectLock | None:
+        access_key, secret_key = self._account_credentials(account)
+        object_lock_raw = s3_client.get_bucket_object_lock(
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
+        if not isinstance(object_lock_raw, dict):
+            return None
+        return BucketObjectLock(
+            enabled=object_lock_raw.get("enabled"),
+            mode=object_lock_raw.get("mode"),
+            days=object_lock_raw.get("days"),
+            years=object_lock_raw.get("years"),
+        )
+
+    def get_bucket_cors(self, name: str, account: S3Account) -> list[dict]:
+        access_key, secret_key = self._account_credentials(account)
+        return s3_client.get_bucket_cors(
+            name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
 
     def get_public_access_block(self, name: str, account: S3Account) -> BucketPublicAccessBlock:

@@ -42,6 +42,8 @@ def _mask_access_key(value: str) -> str:
 
 
 def _ensure_editable(conn: S3Connection, current_user: User) -> None:
+    if conn.is_temporary:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
     if conn.is_public:
         return
     if conn.owner_user_id != current_user.id:
@@ -83,6 +85,7 @@ def list_s3_connections(
         .group_by(S3Connection.id)
     )
     q = q.filter(
+        S3Connection.is_temporary.is_(False),
         (S3Connection.is_public.is_(True))
         | (S3Connection.owner_user_id == current_user.id)
         | (access_link.user_id == current_user.id)
@@ -162,6 +165,7 @@ def list_s3_connections_minimal(
         )
         .outerjoin(access_link, access_link.s3_connection_id == S3Connection.id)
         .filter(
+            S3Connection.is_temporary.is_(False),
             (S3Connection.is_public.is_(True))
             | (S3Connection.owner_user_id == current_user.id)
             | (access_link.user_id == current_user.id)

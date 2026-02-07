@@ -46,6 +46,34 @@ import {
   updateBucketPublicAccessBlock,
 } from "../../api/buckets";
 import {
+  deleteCephAdminBucketCors,
+  deleteCephAdminBucketLifecycle,
+  deleteCephAdminBucketLogging,
+  deleteCephAdminBucketNotifications,
+  deleteCephAdminBucketPolicy,
+  deleteCephAdminBucketWebsite,
+  getCephAdminBucketAcl,
+  getCephAdminBucketCors,
+  getCephAdminBucketLifecycle,
+  getCephAdminBucketLogging,
+  getCephAdminBucketNotifications,
+  getCephAdminBucketPolicy,
+  getCephAdminBucketProperties,
+  getCephAdminBucketPublicAccessBlock,
+  getCephAdminBucketWebsite,
+  listCephAdminBuckets,
+  putCephAdminBucketCors,
+  putCephAdminBucketLifecycle,
+  putCephAdminBucketLogging,
+  putCephAdminBucketNotifications,
+  putCephAdminBucketPolicy,
+  putCephAdminBucketWebsite,
+  setCephAdminBucketVersioning,
+  updateCephAdminBucketAcl,
+  updateCephAdminBucketObjectLock,
+  updateCephAdminBucketPublicAccessBlock,
+} from "../../api/cephAdmin";
+import {
   createFolder,
   deleteObjects,
   getObjectDownloadUrl,
@@ -62,6 +90,7 @@ import { formatCompactNumber } from "../../utils/format";
 import { useS3AccountContext } from "./S3AccountContext";
 import TrafficAnalytics from "./TrafficAnalytics";
 import PropertySummaryChip, { PropertySummaryTone } from "../../components/PropertySummaryChip";
+import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 
 function getUserRole(): string | null {
   if (typeof window === "undefined") return null;
@@ -197,9 +226,13 @@ function randomLifecycleId() {
   return `rule-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export default function BucketDetailPage() {
+type BucketDetailMode = "manager" | "ceph-admin";
+
+export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDetailMode }) {
   const { bucketName } = useParams<{ bucketName: string }>();
+  const isCephAdmin = mode === "ceph-admin";
   const { accounts, selectedS3AccountId, accountIdForApi, requiresS3AccountSelection } = useS3AccountContext();
+  const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
   const [bucket, setBucket] = useState<Bucket | null>(null);
   const [loadingBucket, setLoadingBucket] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
@@ -312,7 +345,21 @@ export default function BucketDetailPage() {
   const [objectLockError, setObjectLockError] = useState<string | null>(null);
   const [savingObjectLock, setSavingObjectLock] = useState(false);
   const [objectLockConfig, setObjectLockConfig] = useState<BucketObjectLockConfiguration | null>(null);
+
+  const availableTabs = useMemo(() => {
+    if (isCephAdmin) {
+      return ["overview", "properties", "permissions", "advanced", "metrics", "ceph"];
+    }
+    return ["overview", "objects", "properties", "permissions", "advanced", "metrics", "ceph"];
+  }, [isCephAdmin]);
+
+  useEffect(() => {
+    if (!availableTabs.includes(activeTab)) {
+      setActiveTab(availableTabs[0]);
+    }
+  }, [activeTab, availableTabs]);
   const selectedS3Account = useMemo(() => {
+    if (isCephAdmin) return null;
     if (selectedS3AccountId) {
       return accounts.find((account) => account.id === selectedS3AccountId) ?? null;
     }
@@ -320,13 +367,18 @@ export default function BucketDetailPage() {
       return accounts[0];
     }
     return null;
-  }, [accounts, requiresS3AccountSelection, selectedS3AccountId]);
-  const staticWebsiteEnabled = useMemo(
-    () => selectedS3Account?.storage_endpoint_capabilities?.static_website ?? false,
-    [selectedS3Account]
-  );
+  }, [accounts, isCephAdmin, requiresS3AccountSelection, selectedS3AccountId]);
+  const staticWebsiteEnabled = useMemo(() => {
+    if (isCephAdmin) {
+      return selectedEndpoint?.capabilities?.static_website ?? true;
+    }
+    return selectedS3Account?.storage_endpoint_capabilities?.static_website ?? false;
+  }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
   const accountId = accountIdForApi ?? null;
   const hasAccountContext = !requiresS3AccountSelection || accountId !== null;
+  const endpointId = selectedEndpointId ?? null;
+  const hasCephContext = Boolean(endpointId);
+  const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
   const staticWebsiteBlocked = !staticWebsiteEnabled;
   const exampleS3AccountId = selectedS3Account?.rgw_account_id || "RGW00000000000000001";
   const notificationExample = `{
@@ -455,22 +507,37 @@ export default function BucketDetailPage() {
   );
 
   const refreshBucketMeta = useCallback(async () => {
-    if (!bucketName || !hasAccountContext) {
+    if (!bucketName || !hasContext) {
       setBucket(null);
       return;
     }
     setLoadingBucket(true);
     setBucketError(null);
     try {
-      const data = await listBuckets(accountId);
-      const found = data.find((b) => b.name === bucketName) ?? null;
-      setBucket(found);
+      if (isCephAdmin) {
+        if (!endpointId) {
+          setBucket(null);
+          return;
+        }
+        const response = await listCephAdminBuckets(endpointId, {
+          page: 1,
+          page_size: 50,
+          filter: bucketName,
+          with_stats: true,
+        });
+        const found = response.items.find((b) => b.name === bucketName) ?? null;
+        setBucket(found ?? null);
+      } else {
+        const data = await listBuckets(accountId);
+        const found = data.find((b) => b.name === bucketName) ?? null;
+        setBucket(found);
+      }
     } catch (err) {
       setBucketError("Unable to load bucket details.");
     } finally {
       setLoadingBucket(false);
     }
-  }, [accountId, bucketName, hasAccountContext]);
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   useEffect(() => {
     if (activeTab !== "overview" && activeTab !== "metrics") return;
@@ -478,7 +545,7 @@ export default function BucketDetailPage() {
   }, [activeTab, refreshBucketMeta]);
 
   const loadProperties = useCallback(async () => {
-    if (!bucketName || !hasAccountContext) {
+    if (!bucketName || !hasContext) {
       setProperties(null);
       applyObjectLockState(null);
       return;
@@ -488,7 +555,17 @@ export default function BucketDetailPage() {
     setObjectLockError(null);
     setObjectLockStatus(null);
     try {
-      const data = await getBucketProperties(accountId, bucketName);
+      let data: BucketProperties;
+      if (isCephAdmin) {
+        if (!endpointId) {
+          setProperties(null);
+          applyObjectLockState(null);
+          return;
+        }
+        data = await getCephAdminBucketProperties(endpointId, bucketName);
+      } else {
+        data = await getBucketProperties(accountId, bucketName);
+      }
       setProperties(data);
       const lockConfig = data.object_lock ?? (data.object_lock_enabled !== undefined ? { enabled: data.object_lock_enabled } : null);
       applyObjectLockState(lockConfig);
@@ -499,14 +576,14 @@ export default function BucketDetailPage() {
     } finally {
       setPropsLoading(false);
     }
-  }, [accountId, applyObjectLockState, bucketName, hasAccountContext]);
+  }, [accountId, applyObjectLockState, bucketName, endpointId, hasContext, isCephAdmin]);
 
   useEffect(() => {
     loadProperties();
   }, [loadProperties]);
 
   const loadLifecycle = useCallback(async () => {
-    if (!bucketName || !hasAccountContext) {
+    if (!bucketName || !hasContext) {
       setLifecycle({ rules: [] });
       setLifecycleText("[]");
       setSimpleLifecycleRules([emptySimpleLifecycleRule()]);
@@ -517,7 +594,11 @@ export default function BucketDetailPage() {
     setLifecycleError(null);
     setLifecycleStatus(null);
     try {
-      const data = await getBucketLifecycle(accountId, bucketName);
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketLifecycle(endpointId, bucketName)
+          : { rules: [] }
+        : await getBucketLifecycle(accountId, bucketName);
       const rules = data.rules ?? [];
       setLifecycle(data);
       setLifecycleText(rules.length > 0 ? JSON.stringify(rules, null, 2) : "[]");
@@ -536,10 +617,10 @@ export default function BucketDetailPage() {
     } finally {
       setLifecycleLoading(false);
     }
-  }, [accountId, bucketName, emptySimpleLifecycleRule, hasAccountContext]);
+  }, [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin]);
 
   const loadPolicy = useCallback(async () => {
-    if (!bucketName || !hasAccountContext) {
+    if (!bucketName || !hasContext) {
       setPolicy(null);
       setPolicyText("");
       return;
@@ -547,7 +628,11 @@ export default function BucketDetailPage() {
     setPolicyLoading(true);
     setPolicyError(null);
     try {
-      const data = await getBucketPolicy(accountId, bucketName);
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketPolicy(endpointId, bucketName)
+          : { policy: null }
+        : await getBucketPolicy(accountId, bucketName);
       setPolicy(data);
       setPolicyText(data.policy ? JSON.stringify(data.policy, null, 2) : "");
     } catch (err) {
@@ -557,10 +642,10 @@ export default function BucketDetailPage() {
     } finally {
       setPolicyLoading(false);
     }
-  }, [accountId, bucketName, hasAccountContext]);
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadCors = useCallback(async () => {
-    if (!bucketName || !hasAccountContext) {
+    if (!bucketName || !hasContext) {
       setCors(null);
       setCorsText("");
       return;
@@ -568,7 +653,11 @@ export default function BucketDetailPage() {
     setCorsLoading(true);
     setCorsError(null);
     try {
-      const data = await getBucketCors(accountId, bucketName);
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketCors(endpointId, bucketName)
+          : { rules: [] }
+        : await getBucketCors(accountId, bucketName);
       setCors(data);
       setCorsText(data.rules && data.rules.length > 0 ? JSON.stringify(data.rules, null, 2) : "[]");
     } catch (err) {
@@ -578,10 +667,10 @@ export default function BucketDetailPage() {
     } finally {
       setCorsLoading(false);
     }
-  }, [accountId, bucketName, hasAccountContext]);
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadPublicAccessBlock = useCallback(async () => {
-    if (!bucketName || !hasAccountContext) {
+    if (!bucketName || !hasContext) {
       setPublicAccessBlock({ ...defaultPublicAccessBlock });
       setPublicAccessError(null);
       setPublicAccessStatus(null);
@@ -591,7 +680,11 @@ export default function BucketDetailPage() {
     setPublicAccessError(null);
     setPublicAccessStatus(null);
     try {
-      const data = await getBucketPublicAccessBlock(accountId, bucketName);
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketPublicAccessBlock(endpointId, bucketName)
+          : defaultPublicAccessBlock
+        : await getBucketPublicAccessBlock(accountId, bucketName);
       setPublicAccessBlock({
         ...defaultPublicAccessBlock,
         block_public_acls: Boolean(data.block_public_acls),
@@ -608,10 +701,10 @@ export default function BucketDetailPage() {
     } finally {
       setPublicAccessLoading(false);
     }
-  }, [accountId, bucketName, hasAccountContext]);
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadNotifications = useCallback(async () => {
-    if (!bucketName || !hasAccountContext) {
+    if (!bucketName || !hasContext) {
       setNotificationText(defaultNotificationTemplate);
       return;
     }
@@ -619,7 +712,11 @@ export default function BucketDetailPage() {
     setNotificationsError(null);
     setNotificationsStatus(null);
     try {
-      const data = await getBucketNotifications(accountId, bucketName);
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketNotifications(endpointId, bucketName)
+          : { configuration: {} }
+        : await getBucketNotifications(accountId, bucketName);
       const config = data.configuration ?? {};
       const hasConfig = Object.keys(config).length > 0;
       setNotificationText(hasConfig ? JSON.stringify(config, null, 2) : defaultNotificationTemplate);
@@ -629,10 +726,10 @@ export default function BucketDetailPage() {
     } finally {
       setNotificationsLoading(false);
     }
-  }, [accountId, bucketName, hasAccountContext]);
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadAccessLogging = useCallback(async () => {
-    if (!bucketName || !hasAccountContext) {
+    if (!bucketName || !hasContext) {
       applyAccessLoggingState(null);
       setAccessLoggingError(null);
       setAccessLoggingStatus(null);
@@ -642,7 +739,11 @@ export default function BucketDetailPage() {
     setAccessLoggingError(null);
     setAccessLoggingStatus(null);
     try {
-      const data = await getBucketLogging(accountId, bucketName);
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketLogging(endpointId, bucketName)
+          : { enabled: false }
+        : await getBucketLogging(accountId, bucketName);
       applyAccessLoggingState(data);
     } catch (err) {
       applyAccessLoggingState(null);
@@ -650,10 +751,10 @@ export default function BucketDetailPage() {
     } finally {
       setAccessLoggingLoading(false);
     }
-  }, [accountId, applyAccessLoggingState, bucketName, hasAccountContext]);
+  }, [accountId, applyAccessLoggingState, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadWebsite = useCallback(async () => {
-    if (!bucketName || !hasAccountContext || !staticWebsiteEnabled) {
+    if (!bucketName || !hasContext || !staticWebsiteEnabled) {
       applyWebsiteState(null);
       setWebsiteError(null);
       setWebsiteStatus(null);
@@ -663,7 +764,11 @@ export default function BucketDetailPage() {
     setWebsiteError(null);
     setWebsiteStatus(null);
     try {
-      const data = await getBucketWebsite(accountId, bucketName);
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketWebsite(endpointId, bucketName)
+          : null
+        : await getBucketWebsite(accountId, bucketName);
       applyWebsiteState(data);
     } catch (err) {
       applyWebsiteState(null);
@@ -671,10 +776,10 @@ export default function BucketDetailPage() {
     } finally {
       setWebsiteLoading(false);
     }
-  }, [accountId, applyWebsiteState, bucketName, hasAccountContext, staticWebsiteEnabled]);
+  }, [accountId, applyWebsiteState, bucketName, endpointId, hasContext, isCephAdmin, staticWebsiteEnabled]);
 
   const loadBucketAcl = useCallback(async () => {
-    if (!bucketName || !hasAccountContext) {
+    if (!bucketName || !hasContext) {
       setBucketAcl(null);
       return;
     }
@@ -682,7 +787,11 @@ export default function BucketDetailPage() {
     setBucketAclError(null);
     setBucketAclStatus(null);
     try {
-      const data = await getBucketAcl(accountId, bucketName);
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketAcl(endpointId, bucketName)
+          : null
+        : await getBucketAcl(accountId, bucketName);
       setBucketAcl(data);
       const inferred = inferBucketAclPreset(data);
       setBucketAclPreset(inferred);
@@ -693,11 +802,11 @@ export default function BucketDetailPage() {
     } finally {
       setBucketAclLoading(false);
     }
-  }, [accountId, bucketName, hasAccountContext]);
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
   const loadObjects = useCallback(
     async (prefix: string) => {
-      if (!bucketName || !hasAccountContext) return;
+      if (isCephAdmin || !bucketName || !hasAccountContext) return;
       setObjectsLoading(true);
       setObjectsError(null);
       setActionMessage(null);
@@ -713,13 +822,14 @@ export default function BucketDetailPage() {
         setObjectsLoading(false);
       }
     },
-    [accountId, bucketName, hasAccountContext]
+    [accountId, bucketName, hasAccountContext, isCephAdmin]
   );
 
   useEffect(() => {
     setSelectedKeys([]);
+    if (isCephAdmin) return;
     loadObjects(currentPrefix);
-  }, [currentPrefix, loadObjects]);
+  }, [currentPrefix, isCephAdmin, loadObjects]);
 
   useEffect(() => {
     if (activeTab === "overview" || activeTab === "permissions") {
@@ -789,20 +899,29 @@ export default function BucketDetailPage() {
 
   const persistLifecycleRules = useCallback(
     async (rules: Record<string, unknown>[]) => {
-      if (!bucketName || !hasAccountContext) return;
+      if (!bucketName || !hasContext) return;
       setSavingLifecycle(true);
       setLifecycleError(null);
       setLifecycleStatus(null);
       try {
         if (rules.length === 0) {
-          await deleteBucketLifecycle(accountId, bucketName);
+          if (isCephAdmin) {
+            if (!endpointId) return;
+            await deleteCephAdminBucketLifecycle(endpointId, bucketName);
+          } else {
+            await deleteBucketLifecycle(accountId, bucketName);
+          }
           setLifecycle({ rules: [] });
           setLifecycleText("[]");
           setSimpleLifecycleRules([emptySimpleLifecycleRule()]);
           setSimpleLifecycleWarning(null);
           setLifecycleStatus("Lifecycle deleted");
         } else {
-          const saved = await putBucketLifecycle(accountId, bucketName, rules);
+          const saved = isCephAdmin
+            ? endpointId
+              ? await putCephAdminBucketLifecycle(endpointId, bucketName, rules)
+              : { rules }
+            : await putBucketLifecycle(accountId, bucketName, rules);
           const normalized = saved.rules ?? rules;
           setLifecycle({ rules: normalized });
           setLifecycleText(JSON.stringify(normalized, null, 2));
@@ -826,11 +945,11 @@ export default function BucketDetailPage() {
         setSavingLifecycle(false);
       }
     },
-    [accountId, bucketName, emptySimpleLifecycleRule, hasAccountContext, loadProperties]
+    [accountId, bucketName, emptySimpleLifecycleRule, endpointId, hasContext, isCephAdmin, loadProperties]
   );
 
   const updateLifecycleRules = async (updater: (rules: Record<string, unknown>[]) => Record<string, unknown>[]) => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     const current = lifecycle.rules ?? [];
     const next = updater(current);
     await persistLifecycleRules(next);
@@ -858,7 +977,7 @@ export default function BucketDetailPage() {
   };
 
   const handleAddExampleRule = async (rule: Record<string, unknown>) => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     try {
       const current = lifecycle.rules ?? [];
       const ruleWithId = { ID: (rule as any).ID || randomLifecycleId(), ...rule }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -1042,17 +1161,20 @@ export default function BucketDetailPage() {
     const publicAccessTone: PropertySummary["tone"] =
       propsLoading || propsError ? "unknown" : publicAccessBlockEnabled || publicAccessBlockPartial ? "active" : "inactive";
 
-    return [
+    const summary: PropertySummary[] = [
       { label: "Versioning", state: versioningState, tone: versioningTone },
       { label: "Object Lock", state: objectLockState, tone: objectLockTone },
       { label: "Block public access", state: publicAccessState, tone: publicAccessTone },
       { label: "Lifecycle rules", state: lifecycleState, tone: lifecycleTone },
-      { label: "Static website", state: websiteState, tone: websiteTone },
-      { label: "Quota", state: quotaState, tone: quotaTone },
       { label: "Bucket policy", state: policyState, tone: policyTone },
       { label: "CORS", state: corsState, tone: corsTone },
-      { label: "Access logging", state: accessLoggingState, tone: accessLoggingTone },
     ];
+
+    summary.splice(4, 0, { label: "Static website", state: websiteState, tone: websiteTone });
+    summary.splice(5, 0, { label: "Quota", state: quotaState, tone: quotaTone });
+    summary.push({ label: "Access logging", state: accessLoggingState, tone: accessLoggingTone });
+
+    return summary;
   }, [
     bucket,
     accessLoggingConfigured,
@@ -1081,10 +1203,17 @@ export default function BucketDetailPage() {
     websiteLoading,
   ]);
 
-  const breadcrumbs = [{ label: "Manager" }, { label: "Buckets", to: "/manager/buckets" }, { label: bucketName ?? "" }];
+  const basePath = isCephAdmin ? "/ceph-admin/buckets" : "/manager/buckets";
+  const rootPath = isCephAdmin ? "/ceph-admin" : "/manager";
+  const rootLabel = isCephAdmin ? "Ceph Admin" : "Manager";
+  const breadcrumbs = [
+    { label: rootLabel, to: rootPath },
+    { label: "Buckets", to: basePath },
+    { label: bucketName ?? "" },
+  ];
 
   const handleNewFolder = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (isCephAdmin || !bucketName || !hasAccountContext) return;
     const name = window.prompt("Folder name (no trailing slash):");
     if (!name) return;
     const prefix = `${currentPrefix}${name}`.replace(/\/+$/, "");
@@ -1102,7 +1231,7 @@ export default function BucketDetailPage() {
   };
 
   const handleDelete = async () => {
-    if (!bucketName || !hasAccountContext || selectedKeys.length === 0) return;
+    if (isCephAdmin || !bucketName || !hasAccountContext || selectedKeys.length === 0) return;
     const confirmDelete = window.confirm(`Delete ${selectedKeys.length} object(s)?`);
     if (!confirmDelete) return;
     setObjectsLoading(true);
@@ -1128,7 +1257,7 @@ export default function BucketDetailPage() {
   };
 
   const handleDownload = async () => {
-    if (!bucketName || !hasAccountContext || selectedKeys.length === 0) {
+    if (isCephAdmin || !bucketName || !hasAccountContext || selectedKeys.length === 0) {
       setObjectsError("Select a single object to download.");
       return;
     }
@@ -1147,7 +1276,7 @@ export default function BucketDetailPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bucketName || !hasAccountContext || !uploadFile) {
+    if (isCephAdmin || !bucketName || !hasAccountContext || !uploadFile) {
       setUploadError("Choose a file before uploading.");
       return;
     }
@@ -1168,13 +1297,18 @@ export default function BucketDetailPage() {
   };
 
   const toggleVersioning = async () => {
-    if (!bucketName || !hasAccountContext || !properties) return;
+    if (!bucketName || !hasContext || !properties) return;
     if (versioningIsEnabled && objectLockActive) return;
     setUpdatingVersioning(true);
     setPropsError(null);
     try {
       const enabled = (properties.versioning_status ?? "").toLowerCase() !== "enabled";
-      await setBucketVersioning(accountId, bucketName, enabled);
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await setCephAdminBucketVersioning(endpointId, bucketName, enabled);
+      } else {
+        await setBucketVersioning(accountId, bucketName, enabled);
+      }
       await loadProperties();
     } catch (err) {
       setPropsError("Failed to update versioning.");
@@ -1184,7 +1318,7 @@ export default function BucketDetailPage() {
   };
 
   const savePublicAccessBlock = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     setSavingPublicAccess(true);
     setPublicAccessError(null);
     setPublicAccessStatus(null);
@@ -1195,7 +1329,11 @@ export default function BucketDetailPage() {
       restrict_public_buckets: Boolean(publicAccessBlock.restrict_public_buckets),
     };
     try {
-      const saved = await updateBucketPublicAccessBlock(accountId, bucketName, payload);
+      const saved = isCephAdmin
+        ? endpointId
+          ? await updateCephAdminBucketPublicAccessBlock(endpointId, bucketName, payload)
+          : payload
+        : await updateBucketPublicAccessBlock(accountId, bucketName, payload);
       setPublicAccessBlock({
         ...defaultPublicAccessBlock,
         block_public_acls: Boolean(saved.block_public_acls),
@@ -1216,12 +1354,16 @@ export default function BucketDetailPage() {
   };
 
   const savePolicy = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     setSavingPolicy(true);
     setPolicyError(null);
     try {
       const parsed = policyText.trim() ? JSON.parse(policyText) : {};
-      const saved = await putBucketPolicy(accountId, bucketName, parsed);
+      const saved = isCephAdmin
+        ? endpointId
+          ? await putCephAdminBucketPolicy(endpointId, bucketName, parsed)
+          : { policy: parsed }
+        : await putBucketPolicy(accountId, bucketName, parsed);
       setPolicy(saved);
       setPolicyText(JSON.stringify(saved.policy ?? parsed, null, 2));
     } catch (err) {
@@ -1232,7 +1374,7 @@ export default function BucketDetailPage() {
   };
 
   const saveCors = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     setSavingCors(true);
     setCorsError(null);
     try {
@@ -1240,7 +1382,11 @@ export default function BucketDetailPage() {
       if (!Array.isArray(parsed)) {
         throw new Error("CORS must be an array of rules.");
       }
-      const saved = await putBucketCors(accountId, bucketName, parsed as Record<string, unknown>[]);
+      const saved = isCephAdmin
+        ? endpointId
+          ? await putCephAdminBucketCors(endpointId, bucketName, parsed as Record<string, unknown>[])
+          : { rules: parsed as Record<string, unknown>[] }
+        : await putBucketCors(accountId, bucketName, parsed as Record<string, unknown>[]);
       setCors(saved);
       setCorsText(JSON.stringify(saved.rules ?? parsed, null, 2));
     } catch (err) {
@@ -1251,13 +1397,18 @@ export default function BucketDetailPage() {
   };
 
   const removeCors = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     const confirmDelete = window.confirm("Delete the CORS configuration?");
     if (!confirmDelete) return;
     setDeletingCors(true);
     setCorsError(null);
     try {
-      await deleteBucketCors(accountId, bucketName);
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await deleteCephAdminBucketCors(endpointId, bucketName);
+      } else {
+        await deleteBucketCors(accountId, bucketName);
+      }
       setCors({ rules: [] });
       setCorsText("[]");
     } catch (err) {
@@ -1268,7 +1419,7 @@ export default function BucketDetailPage() {
   };
 
   const saveAccessLogging = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     setAccessLoggingError(null);
     setAccessLoggingStatus(null);
     if (accessLoggingEnabled && !accessLoggingTargetBucket.trim()) {
@@ -1282,7 +1433,11 @@ export default function BucketDetailPage() {
         target_bucket: accessLoggingTargetBucket.trim() || null,
         target_prefix: accessLoggingTargetPrefix.trim() || null,
       };
-      const saved = await putBucketLogging(accountId, bucketName, payload);
+      const saved = isCephAdmin
+        ? endpointId
+          ? await putCephAdminBucketLogging(endpointId, bucketName, payload)
+          : payload
+        : await putBucketLogging(accountId, bucketName, payload);
       applyAccessLoggingState(saved);
       setAccessLoggingStatus(accessLoggingEnabled ? "Access logging updated." : "Access logging disabled.");
     } catch (err) {
@@ -1293,12 +1448,17 @@ export default function BucketDetailPage() {
   };
 
   const clearAccessLogging = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     setClearingAccessLogging(true);
     setAccessLoggingError(null);
     setAccessLoggingStatus(null);
     try {
-      await deleteBucketLogging(accountId, bucketName);
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await deleteCephAdminBucketLogging(endpointId, bucketName);
+      } else {
+        await deleteBucketLogging(accountId, bucketName);
+      }
       applyAccessLoggingState({ enabled: false });
       setAccessLoggingStatus("Access logging disabled.");
     } catch (err) {
@@ -1309,7 +1469,7 @@ export default function BucketDetailPage() {
   };
 
   const saveNotifications = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     let parsed: Record<string, unknown>;
     setNotificationsError(null);
     setNotificationsStatus(null);
@@ -1321,7 +1481,12 @@ export default function BucketDetailPage() {
     }
     setSavingNotifications(true);
     try {
-      await putBucketNotifications(accountId, bucketName, parsed);
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await putCephAdminBucketNotifications(endpointId, bucketName, parsed);
+      } else {
+        await putBucketNotifications(accountId, bucketName, parsed);
+      }
       setNotificationsStatus("Notifications updated.");
       await loadNotifications();
     } catch (err) {
@@ -1332,14 +1497,19 @@ export default function BucketDetailPage() {
   };
 
   const clearNotifications = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     const confirmDelete = window.confirm("Delete the notification configuration?");
     if (!confirmDelete) return;
     setClearingNotifications(true);
     setNotificationsError(null);
     setNotificationsStatus(null);
     try {
-      await deleteBucketNotifications(accountId, bucketName);
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await deleteCephAdminBucketNotifications(endpointId, bucketName);
+      } else {
+        await deleteBucketNotifications(accountId, bucketName);
+      }
       await loadNotifications();
       setNotificationsStatus("Notifications cleared.");
     } catch (err) {
@@ -1350,7 +1520,7 @@ export default function BucketDetailPage() {
   };
 
   const saveBucketAcl = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     const aclValue = bucketAclPreset === "custom" ? bucketAclCustom.trim() : bucketAclPreset;
     if (!aclValue) {
       setBucketAclError("ACL value is required.");
@@ -1360,7 +1530,11 @@ export default function BucketDetailPage() {
     setBucketAclError(null);
     setBucketAclStatus(null);
     try {
-      const updated = await updateBucketAcl(accountId, bucketName, aclValue);
+      const updated = isCephAdmin
+        ? endpointId
+          ? await updateCephAdminBucketAcl(endpointId, bucketName, aclValue)
+          : null
+        : await updateBucketAcl(accountId, bucketName, aclValue);
       setBucketAcl(updated);
       setBucketAclStatus("Bucket ACL updated.");
       const inferred = inferBucketAclPreset(updated);
@@ -1379,7 +1553,7 @@ export default function BucketDetailPage() {
   };
 
   const saveWebsite = async () => {
-    if (!bucketName || !hasAccountContext || !staticWebsiteEnabled) return;
+    if (!bucketName || !hasContext || !staticWebsiteEnabled) return;
     setWebsiteError(null);
     setWebsiteStatus(null);
 
@@ -1429,7 +1603,11 @@ export default function BucketDetailPage() {
             : null,
         routing_rules: mode === "hosting" ? routingRules : [],
       };
-      const saved = await putBucketWebsite(accountId, bucketName, payload);
+      const saved = isCephAdmin
+        ? endpointId
+          ? await putCephAdminBucketWebsite(endpointId, bucketName, payload)
+          : payload
+        : await putBucketWebsite(accountId, bucketName, payload);
       applyWebsiteState(saved);
       setWebsiteStatus("Website configuration updated.");
     } catch (err) {
@@ -1445,14 +1623,19 @@ export default function BucketDetailPage() {
   };
 
   const clearWebsite = async () => {
-    if (!bucketName || !hasAccountContext || !staticWebsiteEnabled) return;
+    if (!bucketName || !hasContext || !staticWebsiteEnabled) return;
     const confirmDelete = window.confirm("Delete the static website configuration?");
     if (!confirmDelete) return;
     setClearingWebsite(true);
     setWebsiteError(null);
     setWebsiteStatus(null);
     try {
-      await deleteBucketWebsite(accountId, bucketName);
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await deleteCephAdminBucketWebsite(endpointId, bucketName);
+      } else {
+        await deleteBucketWebsite(accountId, bucketName);
+      }
       applyWebsiteState(null);
       setWebsiteStatus("Website configuration cleared.");
     } catch (err) {
@@ -1463,13 +1646,18 @@ export default function BucketDetailPage() {
   };
 
   const removePolicy = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     const confirmDelete = window.confirm("Delete the bucket policy?");
     if (!confirmDelete) return;
     setDeletingPolicy(true);
     setPolicyError(null);
     try {
-      await deleteBucketPolicyApi(accountId, bucketName);
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await deleteCephAdminBucketPolicy(endpointId, bucketName);
+      } else {
+        await deleteBucketPolicyApi(accountId, bucketName);
+      }
       setPolicy({ policy: null });
       setPolicyText("");
     } catch (err) {
@@ -1480,7 +1668,7 @@ export default function BucketDetailPage() {
   };
 
   const saveLifecycle = async () => {
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     try {
       let payloadRules: Record<string, unknown>[] = [];
       if (lifecycleMode === "json") {
@@ -1569,7 +1757,7 @@ export default function BucketDetailPage() {
 
   const handleUpdateQuota = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bucketName || !hasAccountContext) return;
+    if (isCephAdmin || !bucketName || !hasAccountContext) return;
     setUpdatingQuota(true);
     setQuotaStatus(null);
     setQuotaError(null);
@@ -1597,7 +1785,7 @@ export default function BucketDetailPage() {
 
   const handleSaveObjectLock = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bucketName || !hasAccountContext) return;
+    if (!bucketName || !hasContext) return;
     setSavingObjectLock(true);
     setObjectLockStatus(null);
     setObjectLockError(null);
@@ -1630,7 +1818,11 @@ export default function BucketDetailPage() {
         days: parsedDays,
         years: parsedYears,
       };
-      const updated = await updateBucketObjectLock(accountId, bucketName, payload);
+      const updated = isCephAdmin
+        ? endpointId
+          ? await updateCephAdminBucketObjectLock(endpointId, bucketName, payload)
+          : null
+        : await updateBucketObjectLock(accountId, bucketName, payload);
       applyObjectLockState(updated);
       setProperties((prev) =>
         prev
@@ -1654,10 +1846,21 @@ export default function BucketDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={bucketName ?? "Bucket"}
-        description={bucketError || "Bucket overview, objects, properties, permissions, metrics."}
+        description={
+          bucketError ||
+          (isCephAdmin
+            ? "Bucket configuration and permissions (Admin Ops + S3)."
+            : "Bucket overview, objects, properties, permissions, metrics.")
+        }
         breadcrumbs={breadcrumbs}
-        actions={[{ label: "← Back to buckets", to: "/manager/buckets", variant: "ghost" }]}
+        actions={[{ label: "← Back to buckets", to: basePath, variant: "ghost" }]}
       />
+
+      {isCephAdmin && !endpointId && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+          Select a Ceph endpoint before managing this bucket.
+        </div>
+      )}
 
       {loadingBucket && (
         <div className="rounded-md bg-slate-100 px-4 py-3 ui-body text-slate-600 dark:bg-slate-800 dark:text-slate-200">
@@ -1728,12 +1931,14 @@ export default function BucketDetailPage() {
               </section>
             ),
           },
-          {
-            id: "objects",
-            label: "Objects / S3 Console",
-            content: (
-              <SplitView
-                left={
+          ...(!isCephAdmin
+            ? [
+                {
+                  id: "objects",
+                  label: "Objects / S3 Console",
+                  content: (
+                    <SplitView
+                      left={
                   <div className="p-3 space-y-2">
                     <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Prefixes</p>
                     <div className="space-y-1">
@@ -1927,6 +2132,8 @@ export default function BucketDetailPage() {
               />
             ),
           },
+        ]
+      : []),
           {
             id: "properties",
             label: "Properties",
@@ -2458,153 +2665,153 @@ export default function BucketDetailPage() {
                       )}
                     </div>
                     <div className={`${bucketCardClass} space-y-3 ${staticWebsiteBlocked ? "opacity-60" : ""}`}>
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Static website</p>
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">
-                            Host a static website from this bucket or redirect all requests.
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={loadWebsite}
-                            className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                            disabled={websiteLoading || staticWebsiteBlocked}
-                          >
-                            {websiteLoading ? "Loading..." : "Refresh"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={saveWebsite}
-                            disabled={savingWebsite || websiteLoading || staticWebsiteBlocked}
-                            className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                          >
-                            {savingWebsite ? "Saving..." : "Save"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={clearWebsite}
-                            disabled={clearingWebsite || staticWebsiteBlocked}
-                            className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                          >
-                            {clearingWebsite ? "Deleting..." : "Delete"}
-                          </button>
-                        </div>
-                      </div>
-                      {staticWebsiteBlocked && (
-                        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
-                          Static website is disabled for this endpoint. Enable it in the Ceph endpoint configuration.
-                        </div>
-                      )}
-                      {websiteError && (
-                        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                          {websiteError}
-                        </div>
-                      )}
-                      {websiteStatus && (
-                        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                          {websiteStatus}
-                        </div>
-                      )}
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
-                          <input
-                            type="radio"
-                            checked={websiteMode === "hosting"}
-                            onChange={() => {
-                              setWebsiteMode("hosting");
-                              setWebsiteStatus(null);
-                              setWebsiteError(null);
-                            }}
-                            disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                            className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
-                          />
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div>
-                            <p className="font-semibold text-slate-900 dark:text-slate-100">Host a website</p>
+                            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Static website</p>
                             <p className="ui-caption text-slate-500 dark:text-slate-400">
-                              Serve index and error documents from this bucket.
+                              Host a static website from this bucket or redirect all requests.
                             </p>
                           </div>
-                        </label>
-                        <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
-                          <input
-                            type="radio"
-                            checked={websiteMode === "redirect"}
-                            onChange={() => {
-                              setWebsiteMode("redirect");
-                              setWebsiteStatus(null);
-                              setWebsiteError(null);
-                            }}
-                            disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                            className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
-                          />
-                          <div>
-                            <p className="font-semibold text-slate-900 dark:text-slate-100">Redirect all requests</p>
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">
-                              Point every request to another host or domain.
-                            </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={loadWebsite}
+                              className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                              disabled={websiteLoading || staticWebsiteBlocked}
+                            >
+                              {websiteLoading ? "Loading..." : "Refresh"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={saveWebsite}
+                              disabled={savingWebsite || websiteLoading || staticWebsiteBlocked}
+                              className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                            >
+                              {savingWebsite ? "Saving..." : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={clearWebsite}
+                              disabled={clearingWebsite || staticWebsiteBlocked}
+                              className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                            >
+                              {clearingWebsite ? "Deleting..." : "Delete"}
+                            </button>
                           </div>
-                        </label>
-                      </div>
-                      {websiteMode === "hosting" ? (
-                        <div className="space-y-3">
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                              Index document
-                              <input
-                                type="text"
-                                value={websiteIndexDocument}
-                                onChange={(e) => {
-                                  setWebsiteIndexDocument(e.target.value);
-                                  setWebsiteStatus(null);
-                                }}
-                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                placeholder="index.html"
-                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                              Error document (optional)
-                              <input
-                                type="text"
-                                value={websiteErrorDocument}
-                                onChange={(e) => {
-                                  setWebsiteErrorDocument(e.target.value);
-                                  setWebsiteStatus(null);
-                                }}
-                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                placeholder="error.html"
-                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                              />
-                            </label>
+                        </div>
+                        {staticWebsiteBlocked && (
+                          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+                            Static website is disabled for this endpoint. Enable it in the Ceph endpoint configuration.
                           </div>
-                          <div className="space-y-2">
-                            <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">
-                              Routing rules (JSON array)
-                            </label>
-                            <textarea
-                              value={websiteRoutingRules}
-                              onChange={(e) => {
-                                setWebsiteRoutingRules(e.target.value);
+                        )}
+                        {websiteError && (
+                          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                            {websiteError}
+                          </div>
+                        )}
+                        {websiteStatus && (
+                          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                            {websiteStatus}
+                          </div>
+                        )}
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                            <input
+                              type="radio"
+                              checked={websiteMode === "hosting"}
+                              onChange={() => {
+                                setWebsiteMode("hosting");
                                 setWebsiteStatus(null);
+                                setWebsiteError(null);
                               }}
-                              rows={6}
-                              className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              placeholder="[]"
-                              spellCheck={false}
                               disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                              className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
                             />
-                            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
-                              <button
-                                type="button"
-                                onClick={() => setShowWebsiteRulesExample((prev) => !prev)}
-                                className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
-                              >
-                                {showWebsiteRulesExample ? "Hide example" : "Show example"}
-                              </button>
-                              {showWebsiteRulesExample && (
-                                <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
+                            <div>
+                              <p className="font-semibold text-slate-900 dark:text-slate-100">Host a website</p>
+                              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                Serve index and error documents from this bucket.
+                              </p>
+                            </div>
+                          </label>
+                          <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                            <input
+                              type="radio"
+                              checked={websiteMode === "redirect"}
+                              onChange={() => {
+                                setWebsiteMode("redirect");
+                                setWebsiteStatus(null);
+                                setWebsiteError(null);
+                              }}
+                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                              className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
+                            />
+                            <div>
+                              <p className="font-semibold text-slate-900 dark:text-slate-100">Redirect all requests</p>
+                              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                Point every request to another host or domain.
+                              </p>
+                            </div>
+                          </label>
+                        </div>
+                        {websiteMode === "hosting" ? (
+                          <div className="space-y-3">
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                Index document
+                                <input
+                                  type="text"
+                                  value={websiteIndexDocument}
+                                  onChange={(e) => {
+                                    setWebsiteIndexDocument(e.target.value);
+                                    setWebsiteStatus(null);
+                                  }}
+                                  className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  placeholder="index.html"
+                                  disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                                />
+                              </label>
+                              <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                Error document (optional)
+                                <input
+                                  type="text"
+                                  value={websiteErrorDocument}
+                                  onChange={(e) => {
+                                    setWebsiteErrorDocument(e.target.value);
+                                    setWebsiteStatus(null);
+                                  }}
+                                  className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  placeholder="error.html"
+                                  disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                                />
+                              </label>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                Routing rules (JSON array)
+                              </label>
+                              <textarea
+                                value={websiteRoutingRules}
+                                onChange={(e) => {
+                                  setWebsiteRoutingRules(e.target.value);
+                                  setWebsiteStatus(null);
+                                }}
+                                rows={6}
+                                className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                placeholder="[]"
+                                spellCheck={false}
+                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                              />
+                              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowWebsiteRulesExample((prev) => !prev)}
+                                  className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
+                                >
+                                  {showWebsiteRulesExample ? "Hide example" : "Show example"}
+                                </button>
+                                {showWebsiteRulesExample && (
+                                  <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
 {`[
   {
     "Condition": { "KeyPrefixEquals": "docs/" },
@@ -2615,47 +2822,47 @@ export default function BucketDetailPage() {
     "Redirect": { "ReplaceKeyWith": "error.html" }
   }
 ]`}
-                                </pre>
-                              )}
+                                  </pre>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                            Redirect hostname
-                            <input
-                              type="text"
-                              value={websiteRedirectHost}
-                              onChange={(e) => {
-                                setWebsiteRedirectHost(e.target.value);
-                                setWebsiteStatus(null);
-                              }}
-                              className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              placeholder="www.example.com"
-                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                            />
-                          </label>
-                          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                            Protocol (optional)
-                            <input
-                              type="text"
-                              value={websiteRedirectProtocol}
-                              onChange={(e) => {
-                                setWebsiteRedirectProtocol(e.target.value);
-                                setWebsiteStatus(null);
-                              }}
-                              className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              placeholder="https"
-                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                            />
-                          </label>
-                          <p className="md:col-span-2 ui-caption text-slate-500 dark:text-slate-400">
-                            All requests will redirect to the host above. Index and routing rules are ignored.
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                        ) : (
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                              Redirect hostname
+                              <input
+                                type="text"
+                                value={websiteRedirectHost}
+                                onChange={(e) => {
+                                  setWebsiteRedirectHost(e.target.value);
+                                  setWebsiteStatus(null);
+                                }}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                placeholder="www.example.com"
+                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                              Protocol (optional)
+                              <input
+                                type="text"
+                                value={websiteRedirectProtocol}
+                                onChange={(e) => {
+                                  setWebsiteRedirectProtocol(e.target.value);
+                                  setWebsiteStatus(null);
+                                }}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                placeholder="https"
+                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                              />
+                            </label>
+                            <p className="md:col-span-2 ui-caption text-slate-500 dark:text-slate-400">
+                              All requests will redirect to the host above. Index and routing rules are ignored.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                   </>
                 )}
               </div>

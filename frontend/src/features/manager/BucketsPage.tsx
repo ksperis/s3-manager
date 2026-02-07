@@ -266,7 +266,7 @@ export default function BucketsPage() {
     setError(null);
     setLoading(true);
     try {
-      const data = await listBuckets(accountId, { include: includeParams });
+      const data = await listBuckets(accountId, { include: includeParams.length > 0 ? includeParams : undefined });
       setBuckets(data);
     } catch (err) {
       console.error(err);
@@ -539,7 +539,7 @@ export default function BucketsPage() {
       render: (bucket) => (
         <div className="flex flex-wrap justify-end gap-2">
           <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className={tableActionButtonClasses}>
-            View
+            Configure
           </Link>
           <button onClick={() => handleDelete(bucket.name)} className={tableDeleteActionClasses} disabled={deletingBucket === bucket.name}>
             {deletingBucket === bucket.name ? "Deleting..." : "Delete"}

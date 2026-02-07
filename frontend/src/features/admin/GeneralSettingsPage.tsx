@@ -34,6 +34,7 @@ export default function GeneralSettingsPage() {
   const handleToggle = (
     field:
       | "manager_enabled"
+      | "ceph_admin_enabled"
       | "browser_enabled"
       | "portal_enabled"
       | "billing_enabled"
@@ -133,6 +134,17 @@ export default function GeneralSettingsPage() {
                       checked={Boolean(settings.general.manager_enabled)}
                       onChange={(value) => handleToggle("manager_enabled", value)}
                       ariaLabel="Manager feature"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Ceph Admin feature"
+                  description="Enables the /ceph-admin workspace for UI admins (RGW accounts, users, buckets)."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.ceph_admin_enabled)}
+                      onChange={(value) => handleToggle("ceph_admin_enabled", value)}
+                      ariaLabel="Ceph Admin feature"
                     />
                   }
                 />

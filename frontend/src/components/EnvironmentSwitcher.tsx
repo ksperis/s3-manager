@@ -21,13 +21,14 @@ type StoredUser = {
 };
 
 type EnvironmentOption = {
-  id: "admin" | "manager" | "browser" | "portal";
+  id: "admin" | "ceph-admin" | "manager" | "browser" | "portal";
   label: string;
   path: string;
 };
 
 const ALL_ENVIRONMENTS: EnvironmentOption[] = [
   { id: "admin", label: "Admin (plateforme)", path: "/admin" },
+  { id: "ceph-admin", label: "Ceph Admin (RGW)", path: "/ceph-admin" },
   { id: "manager", label: "Manager (admin tenant)", path: "/manager" },
   { id: "browser", label: "Browser (objets)", path: "/browser" },
   { id: "portal", label: "Portail (self-service)", path: "/portal" },
@@ -48,7 +49,8 @@ function getStoredWorkspaceId(): EnvironmentOption["id"] | null {
   if (typeof window === "undefined") return null;
   const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY);
   if (!stored) return null;
-  if (stored === "admin" || stored === "manager" || stored === "browser" || stored === "portal") return stored;
+  if (stored === "admin" || stored === "ceph-admin" || stored === "manager" || stored === "browser" || stored === "portal")
+    return stored;
   return null;
 }
 
@@ -138,6 +140,7 @@ export default function EnvironmentSwitcher() {
 function resolveAvailableEnvironmentsWithFlags(user: StoredUser | null, generalSettings: GeneralSettings): EnvironmentOption[] {
   const filtered = resolveAvailableEnvironments(user);
   return filtered.filter((env) => {
+    if (env.id === "ceph-admin") return generalSettings.ceph_admin_enabled;
     if (env.id === "manager") return generalSettings.manager_enabled;
     if (env.id === "browser") return generalSettings.browser_enabled && generalSettings.browser_root_enabled;
     if (env.id === "portal") return generalSettings.portal_enabled;

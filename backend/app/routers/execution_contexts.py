@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends
@@ -70,7 +71,7 @@ def _build_legacy_user_context(
     )
 
 
-def _build_connection_context(connection: S3Connection) -> ExecutionContext:
+def _build_connection_context(connection: S3Connection, *, hidden: bool = False) -> ExecutionContext:
     details = resolve_connection_details(connection)
     sns_enabled = False
     if connection.storage_endpoint:
@@ -83,6 +84,7 @@ def _build_connection_context(connection: S3Connection) -> ExecutionContext:
         kind="connection",
         id=f"conn-{connection.id}",
         display_name=connection.name,
+        hidden=hidden,
         endpoint_id=None,
         endpoint_name=(details.endpoint_name or details.provider or "Custom endpoint"),
         endpoint_url=details.endpoint_url,
@@ -137,12 +139,18 @@ def list_execution_contexts(
         db.query(UserS3Connection.s3_connection_id)
         .filter(UserS3Connection.user_id == user.id)
     )
+    now = datetime.utcnow()
     connections = (
         db.query(S3Connection)
         .filter(
             (S3Connection.is_public.is_(True))
             | (S3Connection.owner_user_id == user.id)
             | (S3Connection.id.in_(user_connection_ids))
+        )
+        .filter(
+            (S3Connection.is_temporary.is_(False))
+            | (S3Connection.expires_at.is_(None))
+            | (S3Connection.expires_at > now)
         )
         .all()
     )
@@ -154,5 +162,5 @@ def list_execution_contexts(
         quota_max_size_gb, quota_max_objects = s3_users_service.get_user_quota(s3_user)
         results.append(_build_legacy_user_context(s3_user, quota_max_size_gb, quota_max_objects))
     for connection in connections:
-        results.append(_build_connection_context(connection))
+        results.append(_build_connection_context(connection, hidden=bool(connection.is_temporary)))
     return results

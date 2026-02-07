@@ -50,6 +50,12 @@ import PortalSettingsPage from "./features/portal/PortalSettingsPage";
 import PortalBillingPage from "./features/portal/BillingPage";
 import BrowserLayout from "./features/browser/BrowserLayout";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
+import CephAdminLayout from "./features/cephAdmin/CephAdminLayout";
+import CephAdminDashboard from "./features/cephAdmin/CephAdminDashboard";
+import CephAdminAccountsPage from "./features/cephAdmin/CephAdminAccountsPage";
+import CephAdminUsersPage from "./features/cephAdmin/CephAdminUsersPage";
+import CephAdminBucketsPage from "./features/cephAdmin/CephAdminBucketsPage";
+import CephAdminBucketDetailPage from "./features/cephAdmin/CephAdminBucketDetailPage";
 
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
@@ -218,6 +224,14 @@ function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal"
   return <Outlet />;
 }
 
+function RequireCephAdminFeature() {
+  const { generalSettings } = useGeneralSettings();
+  if (!generalSettings.ceph_admin_enabled) {
+    return <FeatureDisabledPage feature="Ceph Admin" />;
+  }
+  return <Outlet />;
+}
+
 function isBrowserSurfaceEnabled(
   generalSettings: ReturnType<typeof useGeneralSettings>["generalSettings"],
   surface: "root" | "manager" | "portal"
@@ -261,6 +275,18 @@ export default function AppRouter() {
               <Route path="manager-settings" element={<ManagerSettingsPage />} />
               <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
               <Route path="browser-settings" element={<BrowserSettingsPage />} />
+            </Route>
+          </Route>
+
+          <Route element={<RequireRole roles={[ADMIN_ROLE]} />}>
+            <Route element={<RequireCephAdminFeature />}>
+              <Route path="/ceph-admin" element={<CephAdminLayout />}>
+                <Route index element={<CephAdminDashboard />} />
+                <Route path="accounts" element={<CephAdminAccountsPage />} />
+                <Route path="users" element={<CephAdminUsersPage />} />
+                <Route path="buckets" element={<CephAdminBucketsPage />} />
+                <Route path="buckets/:bucketName" element={<CephAdminBucketDetailPage />} />
+              </Route>
             </Route>
           </Route>
 

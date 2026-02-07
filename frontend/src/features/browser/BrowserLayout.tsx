@@ -19,8 +19,9 @@ function BrowserShell() {
   } = useBrowserContext();
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
   const [identityAccessMode, setIdentityAccessMode] = useState<ManagerAccessMode | null>(null);
+  const visibleContexts = contexts.filter((ctx) => !ctx.hidden || ctx.id === selectedContextId);
   const selected = contexts.find((a) => a.id === selectedContextId);
-  const showSelector = contexts.length > 1;
+  const showSelector = visibleContexts.length > 1;
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const identityLabel = iamIdentity
     ? identityAccessMode === "connection"
@@ -78,7 +79,7 @@ function BrowserShell() {
                   No account selected
                 </option>
               )}
-              {contexts.map((ctx) => (
+              {visibleContexts.map((ctx) => (
                 <option key={ctx.id} value={ctx.id} title={ctx.endpoint_url || undefined}>
                   {formatAccountLabel(ctx, defaultEndpointId, defaultEndpointName)}
                 </option>

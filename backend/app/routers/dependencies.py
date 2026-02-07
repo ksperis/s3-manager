@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from dataclasses import dataclass
+from datetime import datetime
 import logging
 from typing import Optional, Union
 
@@ -175,6 +176,8 @@ def _resolve_connection_context(db: Session, user: User, connection_id: int, *, 
     conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
+    if conn.is_temporary and conn.expires_at and conn.expires_at <= datetime.utcnow():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Connection expired")
     if not conn.is_public and conn.owner_user_id != user.id:
         link = (
             db.query(UserS3Connection)
@@ -189,8 +192,6 @@ def _resolve_connection_context(db: Session, user: User, connection_id: int, *, 
 
     # Keep a minimal usage signal for UX (recently used sorting / hints).
     try:
-        from datetime import datetime
-
         now = datetime.utcnow()
         conn.last_used_at = now
         conn.updated_at = now
@@ -625,6 +626,12 @@ def require_manager_enabled() -> None:
     settings = load_app_settings()
     if not settings.general.manager_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager feature is disabled")
+
+
+def require_ceph_admin_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.ceph_admin_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ceph admin feature is disabled")
 
 
 def require_browser_enabled() -> None:
