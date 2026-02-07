@@ -82,9 +82,9 @@ const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean, billingE
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
     { to: "/admin/manager-settings", label: "Manager" },
-    { to: "/admin/api-tokens", label: "API Tokens" },
     { to: "/admin/browser-settings", label: "Browser", disabled: !browserEnabled },
     { to: "/admin/portal-settings", label: "Portal", disabled: !portalEnabled },
+    { to: "/admin/api-tokens", label: "API Tokens" },
   ];
 
   return [
