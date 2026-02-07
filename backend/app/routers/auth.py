@@ -3,7 +3,7 @@
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import create_access_token
 from app.db import User
+from app.models.api_token import ApiTokenCreateRequest, ApiTokenCreateResponse, ApiTokenInfo
 from app.models.session import S3KeyLogin, SessionDescriptor
 from app.models.oidc import (
     OIDCCallbackRequest,
@@ -22,6 +23,7 @@ from app.models.oidc import (
 from app.models.user import UserCreate, UserOut
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService
+from app.services.api_token_service import ApiTokenError, ApiTokenNotFoundError, ApiTokenService
 from app.services.oidc_service import (
     OIDCAuthenticationError,
     OIDCConfigurationError,
@@ -63,6 +65,17 @@ def _clear_refresh_cookie(response: Response) -> None:
     )
 
 
+def _to_api_token_info(payload) -> ApiTokenInfo:
+    return ApiTokenInfo(
+        id=payload.id,
+        name=payload.name,
+        created_at=payload.created_at,
+        last_used_at=payload.last_used_at,
+        expires_at=payload.expires_at,
+        revoked_at=payload.revoked_at,
+    )
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -78,6 +91,69 @@ class SessionLoginResponse(Token):
 
 class OidcCallbackResponse(LoginResponse):
     redirect_path: Optional[str] = None
+
+
+@router.get("/api-tokens", response_model=list[ApiTokenInfo])
+def list_api_tokens(
+    include_revoked: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+) -> list[ApiTokenInfo]:
+    service = ApiTokenService(db)
+    rows = service.list_for_user(current_user.id, include_revoked=include_revoked)
+    return [_to_api_token_info(row) for row in rows]
+
+
+@router.post("/api-tokens", response_model=ApiTokenCreateResponse, status_code=status.HTTP_201_CREATED)
+def create_api_token(
+    payload: ApiTokenCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> ApiTokenCreateResponse:
+    service = ApiTokenService(db)
+    try:
+        token, row = service.create_for_user(
+            current_user,
+            name=payload.name,
+            expires_in_days=payload.expires_in_days,
+        )
+    except ApiTokenError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_service.record_action(
+        user=current_user,
+        scope="auth",
+        action="create_api_token",
+        entity_type="api_token",
+        entity_id=row.id,
+        metadata={
+            "name": row.name,
+            "expires_at": row.expires_at.isoformat(),
+        },
+    )
+    return ApiTokenCreateResponse(access_token=token, api_token=_to_api_token_info(row))
+
+
+@router.delete("/api-tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_api_token(
+    token_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    service = ApiTokenService(db)
+    try:
+        row = service.revoke_for_user(user_id=current_user.id, token_id=token_id)
+    except ApiTokenNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    audit_service.record_action(
+        user=current_user,
+        scope="auth",
+        action="revoke_api_token",
+        entity_type="api_token",
+        entity_id=row.id,
+        metadata={"name": row.name},
+    )
 
 
 @router.post("/register-admin", response_model=UserOut, status_code=status.HTTP_201_CREATED)

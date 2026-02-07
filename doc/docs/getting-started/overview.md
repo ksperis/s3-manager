@@ -12,6 +12,7 @@ s3-manager consists of:
 s3-manager is organized into distinct UX surfaces with different intents and capabilities:
 
 - **Admin** (`/admin/*`): platform administration (storage endpoints, accounts, global settings, audit)
+- **Ceph Admin** (`/ceph-admin/*`): Ceph RGW cluster-level administration (endpoint-scoped)
 - **Manager** (`/manager/*`): account-scoped operations aligned with S3/IAM semantics
 - **Browser** (`/browser/*`): credential-first, lightweight S3 browsing and bucket/object management
 - **Portal** (`/portal/*`): optional managed workflows (enabled/disabled via settings)

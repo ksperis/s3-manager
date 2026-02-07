@@ -17,6 +17,13 @@ Single-item endpoints (one resource per call):
 ## Authentication
 
 Requires an Admin session (same as other `/admin/*` endpoints).
+For non-interactive automation (Ansible, CI), you can create a long-lived admin API token:
+
+- `POST /api/auth/api-tokens` with an existing admin bearer token
+- Use the returned `access_token` as `Authorization: Bearer ...`
+- Revoke with `DELETE /api/auth/api-tokens/{token_id}` when no longer needed
+
+See [Admin API tokens](api-tokens.md) for complete cURL and Ansible token-management examples.
 
 ## Request Structure
 

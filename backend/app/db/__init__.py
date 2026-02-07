@@ -8,6 +8,7 @@ from .user import User
 from .audit import AuditLog
 from .session import RgwSession
 from .refresh_session import RefreshSession
+from .api_token import ApiToken
 from .s3_user import S3User, UserS3User
 from .s3_connection import S3Connection, UserS3Connection
 from .oidc import OidcLoginState
@@ -28,6 +29,7 @@ __all__ = [
     "AuditLog",
     "RgwSession",
     "RefreshSession",
+    "ApiToken",
     "S3User",
     "UserS3User",
     "S3Connection",

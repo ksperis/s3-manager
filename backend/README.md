@@ -66,6 +66,8 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `CREDENTIAL_KEYS` (optional JSON list or comma-separated; overrides `CREDENTIAL_KEY`)
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `60`)
 - `REFRESH_TOKEN_EXPIRE_MINUTES` (default: `20160`)
+- `API_TOKEN_DEFAULT_EXPIRE_DAYS` (default: `90`)
+- `API_TOKEN_MAX_EXPIRE_DAYS` (default: `365`)
 - `REFRESH_TOKEN_COOKIE_NAME` (default: `refresh_token`)
 - `REFRESH_TOKEN_COOKIE_PATH` (default: `/api/auth`)
 - `REFRESH_TOKEN_COOKIE_DOMAIN` (default: unset)
@@ -124,6 +126,7 @@ export OIDC_PROVIDERS__google__scopes='["openid","email","profile"]'
 ## Included endpoints (MVP)
 
 - Common: `GET /health`, `POST /api/auth/login`, `GET /api/users/me`
+- Admin API tokens: `GET/POST /api/auth/api-tokens`, `DELETE /api/auth/api-tokens/{token_id}`
 - Admin space (`super_admin`): `GET/POST /api/admin/accounts`, `GET /api/admin/stats/overview`
 - Admin users (`super_admin`): `GET/POST /api/admin/users`, `PUT /api/admin/users/{id}`, `DELETE /api/admin/users/{id}`
 - Manager space (`account_admin` or `super_admin`): `GET/POST/DELETE /api/manager/buckets`, `GET /api/manager/iam/policies`, `GET /api/manager/stats/buckets`

@@ -1,5 +1,5 @@
 
-# Surfaces (Admin / Manager / Browser / Portal)
+# Surfaces (Admin / Ceph Admin / Manager / Browser / Portal)
 
 s3-manager exposes multiple user experiences (“surfaces”). They share a common backend but differ in intent,
 capabilities, and required inputs.
@@ -17,6 +17,17 @@ Typical responsibilities:
 - manage **S3 Accounts** (Ceph RGW Accounts model) and administrative users
 - manage global settings and feature toggles
 - review **audit** and global statistics
+
+## Ceph Admin (`/ceph-admin/*`)
+
+Target audience: platform administrators managing Ceph RGW at cluster scope.
+
+Typical responsibilities:
+
+- select the active Ceph endpoint when multiple clusters/endpoints are configured
+- list and inspect RGW **Accounts** and **Users**
+- list and configure **Buckets** directly through Admin Ops + S3 APIs
+- perform cross-account operational tasks that do not fit account-context flows
 
 ## Manager (`/manager/*`)
 

@@ -21,6 +21,7 @@ import GeneralSettingsPage from "./features/admin/GeneralSettingsPage";
 import ManagerSettingsPage from "./features/admin/ManagerSettingsPage";
 import AdminPortalSettingsPage from "./features/admin/PortalSettingsPage";
 import BrowserSettingsPage from "./features/admin/BrowserSettingsPage";
+import ApiTokensPage from "./features/admin/ApiTokensPage";
 import FeatureDisabledPage from "./features/shared/FeatureDisabledPage";
 import BucketsPage from "./features/manager/BucketsPage";
 import ManagerDashboard from "./features/manager/ManagerDashboard";
@@ -81,6 +82,7 @@ const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean, billingE
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
     { to: "/admin/manager-settings", label: "Manager" },
+    { to: "/admin/api-tokens", label: "API Tokens" },
     { to: "/admin/browser-settings", label: "Browser", disabled: !browserEnabled },
     { to: "/admin/portal-settings", label: "Portal", disabled: !portalEnabled },
   ];
@@ -273,6 +275,7 @@ export default function AppRouter() {
               <Route path="billing" element={<AdminBillingRoute />} />
               <Route path="general-settings" element={<GeneralSettingsPage />} />
               <Route path="manager-settings" element={<ManagerSettingsPage />} />
+              <Route path="api-tokens" element={<ApiTokensPage />} />
               <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
               <Route path="browser-settings" element={<BrowserSettingsPage />} />
             </Route>

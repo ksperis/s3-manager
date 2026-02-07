@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     )
     access_token_expire_minutes: int = 60
     refresh_token_expire_minutes: int = Field(60 * 24 * 14, description="Refresh token expiry (minutes)")
+    api_token_default_expire_days: int = Field(
+        90,
+        description="Default API token expiry (days)",
+    )
+    api_token_max_expire_days: int = Field(
+        365,
+        description="Maximum API token expiry (days)",
+    )
     refresh_token_cookie_name: str = Field("refresh_token", description="Cookie name for refresh token")
     refresh_token_cookie_path: str = Field("/api/auth", description="Cookie path for refresh token")
     refresh_token_cookie_domain: Optional[str] = Field(None, description="Cookie domain for refresh token")
@@ -202,6 +210,12 @@ class Settings(BaseSettings):
             self.jwt_keys = [self.fernet_key]
         if not self.credential_keys:
             self.credential_keys = [self.credential_key]
+        if self.api_token_default_expire_days < 1:
+            raise ValueError("api_token_default_expire_days must be >= 1")
+        if self.api_token_max_expire_days < 1:
+            raise ValueError("api_token_max_expire_days must be >= 1")
+        if self.api_token_default_expire_days > self.api_token_max_expire_days:
+            raise ValueError("api_token_default_expire_days must be <= api_token_max_expire_days")
         return self
 
 @lru_cache

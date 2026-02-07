@@ -17,7 +17,7 @@ It targets two complementary usage modes:
 - **Getting started**: run locally with Docker Compose, run in dev mode, configure the application
 - **Concepts**: non-negotiable principles, surfaces, S3 Accounts vs S3 Connections, identity model
 - **Architecture**: backend, frontend, database, migrations
-- **Features**: grouped by surface (Admin / Manager / Browser / Portal)
+- **Features**: grouped by surface (Admin / Ceph Admin / Manager / Browser / Portal)
 - **Backends**: Ceph RGW specifics and compatibility notes
 
 ## Guiding principles

@@ -18,6 +18,7 @@ from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_
 from app.services.app_settings_service import load_app_settings
 from app.services.portal_service import get_portal_service
 from app.services.audit_service import AuditService, get_audit_service as build_audit_service
+from app.services.api_token_service import ApiTokenService
 from app.services.session_service import SessionService
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.rgw import has_supervision_credentials
@@ -59,6 +60,11 @@ def _resolve_actor(db: Session, token: str) -> ManagerActor:
         if not principal:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
         return principal
+    api_token_user = ApiTokenService(db).resolve_user_from_claims(payload)
+    if api_token_user:
+        return api_token_user
+    if payload.get("typ") == "api_admin" or payload.get("auth_type") == "api_token":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API token expired or invalid")
     if "sub" not in payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     email = payload["sub"]
