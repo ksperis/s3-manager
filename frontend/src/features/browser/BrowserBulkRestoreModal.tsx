@@ -25,6 +25,8 @@ type BrowserBulkRestoreModalProps = {
   setBulkRestoreDate: (value: string) => void;
   bulkRestoreDeleteMissing: boolean;
   setBulkRestoreDeleteMissing: (value: boolean) => void;
+  bulkRestoreRestoreDeleted: boolean;
+  setBulkRestoreRestoreDeleted: (value: boolean) => void;
   bulkRestoreLoading: boolean;
   onApply: () => void;
   onClose: () => void;
@@ -43,6 +45,8 @@ export default function BrowserBulkRestoreModal({
   setBulkRestoreDate,
   bulkRestoreDeleteMissing,
   setBulkRestoreDeleteMissing,
+  bulkRestoreRestoreDeleted,
+  setBulkRestoreRestoreDeleted,
   bulkRestoreLoading,
   onApply,
   onClose,
@@ -84,6 +88,15 @@ export default function BrowserBulkRestoreModal({
               className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
             />
             Delete objects not present at the selected date
+          </label>
+          <label className="mt-3 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
+            <input
+              type="checkbox"
+              checked={bulkRestoreRestoreDeleted}
+              onChange={(event) => setBulkRestoreRestoreDeleted(event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+            />
+            Restore deleted objects to their latest version
           </label>
           <label className="mt-3 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
             <input
@@ -159,7 +172,7 @@ export default function BrowserBulkRestoreModal({
         )}
         <p className="ui-caption text-slate-500 dark:text-slate-400">
           Restores the latest version at or before the selected date. Objects with a delete marker at that date are
-          skipped unless deletion is enabled.
+          skipped unless deletion is enabled or deleted-object restore is selected.
         </p>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <button type="button" className={bulkActionClasses} onClick={onClose}>

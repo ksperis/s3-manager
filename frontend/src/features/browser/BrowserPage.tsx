@@ -217,6 +217,8 @@ export default function BrowserPage({
   const requestedBucket = useMemo(() => searchParams.get("bucket")?.trim() ?? "", [searchParams]);
   const [prefix, setPrefix] = useState("");
   const [objects, setObjects] = useState<BrowserObject[]>([]);
+  const [deletedObjects, setDeletedObjects] = useState<BrowserObject[]>([]);
+  const [deletedPrefixes, setDeletedPrefixes] = useState<string[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [objectsNextToken, setObjectsNextToken] = useState<string | null>(null);
   const [objectsIsTruncated, setObjectsIsTruncated] = useState(false);
@@ -274,6 +276,7 @@ export default function BrowserPage({
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [showDeletedObjects, setShowDeletedObjects] = useState(false);
   const [showFolderItems, setShowFolderItems] = useState(true);
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "folder">("all");
   const [storageFilter, setStorageFilter] = useState<string>("all");
@@ -345,6 +348,7 @@ export default function BrowserPage({
   const [bulkRetentionBypass, setBulkRetentionBypass] = useState(false);
   const [bulkRestoreDate, setBulkRestoreDate] = useState("");
   const [bulkRestoreDeleteMissing, setBulkRestoreDeleteMissing] = useState(false);
+  const [bulkRestoreRestoreDeleted, setBulkRestoreRestoreDeleted] = useState(false);
   const [bulkRestoreDryRun, setBulkRestoreDryRun] = useState(false);
   const [bulkRestoreLoading, setBulkRestoreLoading] = useState(false);
   const [bulkRestoreError, setBulkRestoreError] = useState<string | null>(null);
@@ -834,6 +838,8 @@ export default function BrowserPage({
       setBuckets([]);
       setBucketName("");
       setPrefix("");
+      setDeletedObjects([]);
+      setDeletedPrefixes([]);
       return;
     }
     let isMounted = true;
@@ -866,6 +872,8 @@ export default function BrowserPage({
         setBuckets([]);
         setBucketName("");
         setPrefix("");
+        setDeletedObjects([]);
+        setDeletedPrefixes([]);
       })
       .finally(() => {
         if (isMounted) {
@@ -899,6 +907,90 @@ export default function BrowserPage({
     };
   }, [accountIdForApi, accessMode, hasS3AccountContext]);
 
+  const listDeletedObjectsForPrefix = async (
+    targetPrefix: string,
+    existingObjects: BrowserObject[],
+    existingPrefixes: string[],
+    queryValue: string
+  ) => {
+    if (!bucketName || !hasS3AccountContext || !isVersioningEnabled || !showDeletedObjects) {
+      return { deletedObjects: [] as BrowserObject[], deletedPrefixes: [] as string[] };
+    }
+    if (storageFilter !== "all") {
+      return { deletedObjects: [] as BrowserObject[], deletedPrefixes: [] as string[] };
+    }
+    const activeKeys = new Set(existingObjects.map((item) => item.key));
+    const activePrefixes = new Set(existingPrefixes);
+    const latestMarkersByKey = new Map<string, BrowserObjectVersion>();
+    const markerPrefixes = new Set<string>();
+    let keyMarker: string | null = null;
+    let versionIdMarker: string | null = null;
+    let hasMore = true;
+    let pageGuard = 0;
+
+    const matchesQuery = (key: string) => {
+      if (!queryValue) return true;
+      let relative = key;
+      if (targetPrefix && relative.startsWith(targetPrefix)) {
+        relative = relative.slice(targetPrefix.length);
+      }
+      if (relative.endsWith("/")) {
+        relative = relative.slice(0, -1);
+      }
+      return relative.toLowerCase().includes(queryValue);
+    };
+
+    while (hasMore) {
+      const data = await listObjectVersions(accountIdForApi, bucketName, {
+        prefix: targetPrefix,
+        keyMarker: keyMarker ?? undefined,
+        versionIdMarker: versionIdMarker ?? undefined,
+        maxKeys: VERSIONS_PAGE_SIZE,
+      });
+      data.delete_markers.forEach((marker) => {
+        if (!marker.is_latest) return;
+        if (!marker.key || !marker.key.startsWith(targetPrefix)) return;
+        const relative = marker.key.slice(targetPrefix.length);
+        if (!relative) return;
+        if (relative.includes("/")) {
+          if (typeFilter === "file") return;
+          const child = relative.split("/")[0];
+          if (!child) return;
+          const childPrefix = `${targetPrefix}${child}/`;
+          if (activePrefixes.has(childPrefix)) return;
+          if (!matchesQuery(childPrefix)) return;
+          markerPrefixes.add(childPrefix);
+          return;
+        }
+        if (typeFilter === "folder") return;
+        if (activeKeys.has(marker.key)) return;
+        if (!matchesQuery(marker.key)) return;
+        latestMarkersByKey.set(marker.key, marker);
+      });
+      keyMarker = data.next_key_marker ?? null;
+      versionIdMarker = data.next_version_id_marker ?? null;
+      hasMore = Boolean(data.is_truncated && (keyMarker || versionIdMarker));
+      pageGuard += 1;
+      if (pageGuard > 1000) {
+        hasMore = false;
+      }
+    }
+
+    const deletedObjectRows = Array.from(latestMarkersByKey.values())
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((marker) => ({
+        key: marker.key,
+        size: 0,
+        last_modified: marker.last_modified ?? null,
+        etag: null,
+        storage_class: null,
+        is_delete_marker: true,
+        version_id: marker.version_id ?? null,
+      }));
+    const deletedFolderRows = Array.from(markerPrefixes.values()).sort((a, b) => a.localeCompare(b));
+    return { deletedObjects: deletedObjectRows, deletedPrefixes: deletedFolderRows };
+  };
+
   const loadObjects = async (opts?: {
     append?: boolean;
     continuationToken?: string | null;
@@ -930,7 +1022,33 @@ export default function BrowserPage({
         type: typeFilter,
         storageClass: storageFilter,
       });
+      let deletedObjectsResult: BrowserObject[] = [];
+      let deletedPrefixesResult: string[] = [];
+      if (!opts?.append) {
+        if (showDeletedObjects && isVersioningEnabled && storageFilter === "all") {
+          try {
+            const deletedResult = await listDeletedObjectsForPrefix(
+              targetPrefix,
+              data.objects,
+              data.prefixes,
+              query.toLowerCase()
+            );
+            deletedObjectsResult = deletedResult.deletedObjects;
+            deletedPrefixesResult = deletedResult.deletedPrefixes;
+          } catch {
+            deletedObjectsResult = [];
+            deletedPrefixesResult = [];
+          }
+        } else {
+          deletedObjectsResult = [];
+          deletedPrefixesResult = [];
+        }
+      }
       setObjects((prev) => (opts?.append ? [...prev, ...data.objects] : data.objects));
+      if (!opts?.append) {
+        setDeletedObjects(deletedObjectsResult);
+        setDeletedPrefixes(deletedPrefixesResult);
+      }
       setPrefixes((prev) => {
         if (!opts?.append) {
           return data.prefixes;
@@ -944,6 +1062,8 @@ export default function BrowserPage({
       setObjectsError("Unable to list objects for this prefix.");
       if (!isAppend && !isSilent) {
         setObjects([]);
+        setDeletedObjects([]);
+        setDeletedPrefixes([]);
         setPrefixes([]);
         setObjectsNextToken(null);
         setObjectsIsTruncated(false);
@@ -1082,6 +1202,8 @@ export default function BrowserPage({
     setBucketName("");
     setPrefix("");
     setActiveItem(null);
+    setDeletedObjects([]);
+    setDeletedPrefixes([]);
   }, [accountIdForApi]);
 
   useEffect(() => {
@@ -1091,6 +1213,8 @@ export default function BrowserPage({
     }
     if (!bucketName || !hasS3AccountContext) {
       setObjects([]);
+      setDeletedObjects([]);
+      setDeletedPrefixes([]);
       setPrefixes([]);
       setObjectsNextToken(null);
       setObjectsIsTruncated(false);
@@ -1098,7 +1222,7 @@ export default function BrowserPage({
       return;
     }
     loadObjects({ prefixOverride: prefix });
-  }, [accountIdForApi, accessMode, bucketName, filter, hasS3AccountContext, prefix, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [accountIdForApi, accessMode, bucketName, filter, hasS3AccountContext, isVersioningEnabled, prefix, showDeletedObjects, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!showPrefixVersions || !bucketName || !hasS3AccountContext || !isVersioningEnabled) {
@@ -1136,6 +1260,9 @@ export default function BrowserPage({
 
   useEffect(() => {
     if (isVersioningEnabled) return;
+    setShowDeletedObjects(false);
+    setDeletedObjects([]);
+    setDeletedPrefixes([]);
     setShowPrefixVersions(false);
     closeObjectVersionsModal();
     setPrefixVersions([]);
@@ -1149,6 +1276,12 @@ export default function BrowserPage({
     setObjectVersionKeyMarker(null);
     setObjectVersionIdMarker(null);
   }, [bucketName, isVersioningEnabled]);
+
+  useEffect(() => {
+    if (showDeletedObjects) return;
+    setDeletedObjects([]);
+    setDeletedPrefixes([]);
+  }, [showDeletedObjects]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext) {
@@ -1305,14 +1438,18 @@ export default function BrowserPage({
   }, [bucketName, corsStatus, hasS3AccountContext, proxyAllowed]);
 
   const items = useMemo(() => {
-    const folderItems = prefixes.map((prefixKey) => {
+    const activePrefixSet = new Set(prefixes);
+    const combinedPrefixes = Array.from(new Set([...prefixes, ...deletedPrefixes]));
+    const folderItems = combinedPrefixes.map((prefixKey) => {
       const rawName = shortName(prefixKey, normalizedPrefix);
       const name = rawName.endsWith("/") ? rawName.slice(0, -1) : rawName;
+      const isDeletedFolder = !activePrefixSet.has(prefixKey);
       return {
-        id: prefixKey,
+        id: isDeletedFolder ? `${prefixKey}::deleted-prefix` : prefixKey,
         key: prefixKey,
         name: name || prefixKey,
         type: "folder",
+        isDeleted: isDeletedFolder,
         size: "-",
         sizeBytes: null,
         modified: "-",
@@ -1335,8 +1472,24 @@ export default function BrowserPage({
         storageClass: obj.storage_class ?? undefined,
       } satisfies BrowserItem;
     });
-    return [...folderItems, ...objectItems];
-  }, [normalizedPrefix, objects, prefixes]);
+    const deletedItemRows = deletedObjects.map((obj) => {
+      const modifiedAt = obj.last_modified ? new Date(obj.last_modified).getTime() : null;
+      return {
+        id: `${obj.key}::deleted::${obj.version_id ?? "null"}`,
+        key: obj.key,
+        name: shortName(obj.key, normalizedPrefix),
+        type: "file",
+        isDeleted: true,
+        deleteMarkerVersionId: obj.version_id ?? null,
+        size: "-",
+        sizeBytes: null,
+        modified: formatDateTime(obj.last_modified),
+        modifiedAt,
+        owner: "-",
+      } satisfies BrowserItem;
+    });
+    return [...folderItems, ...objectItems, ...deletedItemRows];
+  }, [deletedObjects, deletedPrefixes, normalizedPrefix, objects, prefixes]);
 
   const sortOptions = [
     { id: "name-asc", label: "Name (A-Z)", key: "name", direction: "asc" as const },
@@ -1434,11 +1587,20 @@ export default function BrowserPage({
   const pathStats = useMemo(() => {
     let totalBytes = 0;
     let files = 0;
+    let deletedFiles = 0;
     let folders = 0;
+    let deletedFolders = 0;
     const storageCounts: Record<string, number> = {};
     items.forEach((item) => {
       if (item.type === "folder") {
         folders += 1;
+        if (item.isDeleted) {
+          deletedFolders += 1;
+        }
+        return;
+      }
+      if (item.isDeleted) {
+        deletedFiles += 1;
         return;
       }
       files += 1;
@@ -1446,7 +1608,7 @@ export default function BrowserPage({
       const storage = item.storageClass ?? "STANDARD";
       storageCounts[storage] = (storageCounts[storage] ?? 0) + 1;
     });
-    return { totalBytes, files, folders, storageCounts };
+    return { totalBytes, files, deletedFiles, folders, deletedFolders, storageCounts };
   }, [items]);
 
   const inspectedItem = useMemo(() => {
@@ -1477,6 +1639,11 @@ export default function BrowserPage({
   const canSelectionOpen = selectionInfo.canOpen;
   const canSelectionCopyUrl = selectionInfo.canCopyUrl;
   const canSelectionAdvanced = selectionInfo.canAdvanced;
+  const canSelectionCopyItems = selectionInfo.canCopyItems;
+  const canSelectionCutItems = selectionInfo.canCutItems;
+  const canSelectionBulkAttributes = selectionInfo.canBulkAttributes;
+  const canSelectionDelete = selectionInfo.canDelete;
+  const selectionHasDeleted = selectionInfo.hasDeleted;
   const canSelectionActions = selectionInfo.items.length > 0;
 
   const previewKind = useMemo(() => {
@@ -1556,10 +1723,17 @@ export default function BrowserPage({
       handleOpenItem(item);
       return;
     }
+    if (item.isDeleted) {
+      if (isVersioningEnabled) {
+        openObjectVersionsModal(item);
+      }
+      return;
+    }
     handlePreviewItem(item);
   };
 
   const openAdvancedForItem = (item: BrowserItem) => {
+    if (item.isDeleted) return;
     setActiveItem(item);
     setShowAdvancedModal(true);
   };
@@ -1586,6 +1760,13 @@ export default function BrowserPage({
 
   const handlePreviewItem = (item: BrowserItem) => {
     if (item.type !== "file") return;
+    if (item.isDeleted) {
+      setWarningMessage("This object is deleted. Open versions to inspect or restore it.");
+      if (isVersioningEnabled) {
+        openObjectVersionsModal(item);
+      }
+      return;
+    }
     setActiveItem(item);
     setInspectorVisible(true);
     clearPreviewObjectUrl();
@@ -1677,6 +1858,14 @@ export default function BrowserPage({
       setMetadataLoading(false);
       return;
     }
+    if (inspectedItem.isDeleted) {
+      setInspectedMetadata(null);
+      setInspectedTags([]);
+      setInspectedTagsVersionId(inspectedItem.deleteMarkerVersionId ?? null);
+      setMetadataError("Latest state: deleted (delete marker). Open versions to restore or remove marker.");
+      setMetadataLoading(false);
+      return;
+    }
     let isMounted = true;
     setMetadataLoading(true);
     setMetadataError(null);
@@ -1705,14 +1894,16 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.key, inspectedItem?.type]);
+  }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.isDeleted, inspectedItem?.key, inspectedItem?.type]);
 
   useEffect(() => {
     if (!previewItem || !bucketName || !hasS3AccountContext || !accountIdForApi) {
       return;
     }
-    if (previewItem.type !== "file") {
-      setPreviewError("Preview is available for files only.");
+    if (previewItem.type !== "file" || previewItem.isDeleted) {
+      setPreviewError(
+        previewItem.isDeleted ? "Preview unavailable for deleted objects." : "Preview is available for files only."
+      );
       setPreviewLoading(false);
       return;
     }
@@ -2305,6 +2496,7 @@ export default function BrowserPage({
   const resetBulkRestoreDraft = () => {
     setBulkRestoreDate(formatLocalDateTime(new Date()));
     setBulkRestoreDeleteMissing(false);
+    setBulkRestoreRestoreDeleted(false);
     setBulkRestoreDryRun(false);
     setBulkRestoreError(null);
     setBulkRestoreSummary(null);
@@ -2313,7 +2505,17 @@ export default function BrowserPage({
   };
 
   const openBulkAttributesModal = (items: BrowserItem[]) => {
-    setBulkActionItems(items);
+    const eligibleItems = items.filter((item) => !item.isDeleted);
+    if (eligibleItems.length === 0) {
+      setStatusMessage("Deleted objects cannot receive bulk attributes.");
+      return;
+    }
+    if (eligibleItems.length !== items.length) {
+      setWarningMessage("Deleted objects were skipped for bulk attributes.");
+    } else {
+      setWarningMessage(null);
+    }
+    setBulkActionItems(eligibleItems);
     resetBulkAttributesDraft();
     setShowBulkAttributesModal(true);
   };
@@ -3046,16 +3248,29 @@ export default function BrowserPage({
     return Array.from(keys);
   };
 
+  const getVersionEntryTime = (entry: BrowserObjectVersion) => {
+    if (!entry.last_modified) return 0;
+    const parsed = new Date(entry.last_modified).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const sortVersionEntriesByDateDesc = (entries: BrowserObjectVersion[]) =>
+    entries.slice().sort((a, b) => getVersionEntryTime(b) - getVersionEntryTime(a));
+
   const findVersionForDate = (entries: BrowserObjectVersion[], targetTime: number) => {
-    const sorted = entries.slice().sort((a, b) => {
-      const timeA = a.last_modified ? new Date(a.last_modified).getTime() : 0;
-      const timeB = b.last_modified ? new Date(b.last_modified).getTime() : 0;
-      return timeB - timeA;
-    });
+    const sorted = sortVersionEntriesByDateDesc(entries);
     return sorted.find((entry) => {
       if (!entry.last_modified) return false;
       return new Date(entry.last_modified).getTime() <= targetTime;
     });
+  };
+
+  const findLatestRestorableVersion = (entries: BrowserObjectVersion[]) => {
+    const sorted = sortVersionEntriesByDateDesc(entries);
+    return (
+      sorted.find((entry) => !entry.is_delete_marker && typeof entry.version_id === "string" && entry.version_id.length > 0) ??
+      null
+    );
   };
 
   const updateDeleteDetailsStatus = (
@@ -3467,8 +3682,7 @@ export default function BrowserPage({
 
   const handleDownloadMultipleFiles = async (targets: BrowserItem[]) => {
     if (!bucketName || !hasS3AccountContext) return;
-    setWarningMessage(null);
-    const files = targets.filter((item) => item.type === "file");
+    const files = targets.filter((item) => item.type === "file" && !item.isDeleted);
     if (files.length <= 1) {
       await handleDownloadItems(files);
       return;
@@ -3580,14 +3794,25 @@ export default function BrowserPage({
 
   const handleDownloadItems = async (targets: BrowserItem[]) => {
     if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
-    if (targets.length > 1) {
-      await handleDownloadMultipleFiles(targets);
+    const files = targets.filter((item) => item.type === "file" && !item.isDeleted);
+    const deletedCount = targets.filter((item) => item.type === "file" && item.isDeleted).length;
+    if (files.length === 0) {
+      if (deletedCount > 0) {
+        setWarningMessage("Deleted objects cannot be downloaded directly.");
+      }
       return;
     }
-    setWarningMessage(null);
+    if (deletedCount > 0) {
+      setWarningMessage("Deleted objects were skipped. Open versions to restore before download.");
+    } else {
+      setWarningMessage(null);
+    }
+    if (files.length > 1) {
+      await handleDownloadMultipleFiles(files);
+      return;
+    }
     try {
-      for (const item of targets) {
-        if (item.type !== "file") continue;
+      for (const item of files) {
         if (useProxyTransfers) {
           const blob = await proxyDownload(accountIdForApi, bucketName, item.key);
           const url = window.URL.createObjectURL(blob);
@@ -3613,6 +3838,13 @@ export default function BrowserPage({
   };
 
   const handleDownloadTarget = (item: BrowserItem) => {
+    if (item.isDeleted) {
+      setWarningMessage("This item is deleted. Open it or use versions to restore content before downloading.");
+      if (item.type === "file" && isVersioningEnabled) {
+        openObjectVersionsModal(item);
+      }
+      return;
+    }
     if (item.type === "folder") {
       void handleDownloadFolder(item);
       return;
@@ -3622,10 +3854,15 @@ export default function BrowserPage({
 
   const handleDeleteItems = async (targets: BrowserItem[]) => {
     if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
-    const fileTargets = targets.filter((item) => item.type === "file");
-    const folderTargets = targets.filter((item) => item.type === "folder");
+    const fileTargets = targets.filter((item) => item.type === "file" && !item.isDeleted);
+    const folderTargets = targets.filter((item) => item.type === "folder" && !item.isDeleted);
+    const hasDeletedTargets = targets.some((item) => item.isDeleted);
+    if (hasDeletedTargets) {
+      setWarningMessage("Deleted items are shown from delete markers. Use versions to restore or remove markers.");
+    } else {
+      setWarningMessage(null);
+    }
     if (fileTargets.length === 0 && folderTargets.length === 0) return;
-    setWarningMessage(null);
     const confirmed = window.confirm(
       folderTargets.length > 0
         ? `Delete ${fileTargets.length} object(s) and ${folderTargets.length} folder(s)? This removes all objects within the selected folders.`
@@ -3678,8 +3915,9 @@ export default function BrowserPage({
       for (const folder of folderTargets) {
         await deleteFolderRecursive(folder);
       }
+      const processedTargets = [...fileTargets, ...folderTargets];
       setSelectedIds((prev) =>
-        prev.filter((id) => !targets.some((item) => item.id === id))
+        prev.filter((id) => !processedTargets.some((item) => item.id === id))
       );
       await loadObjects({ prefixOverride: prefix });
       loadTreeChildren(prefix);
@@ -3861,6 +4099,7 @@ export default function BrowserPage({
           const allEntries = [...versions, ...deleteMarkers];
           const match = findVersionForDate(allEntries, targetTime);
           const latest = allEntries.find((entry) => entry.is_latest);
+          const latestRestorable = findLatestRestorableVersion(allEntries);
           if (match && !match.is_delete_marker && match.version_id) {
             if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
               unchangedKeys.add(item.key);
@@ -3868,6 +4107,8 @@ export default function BrowserPage({
               restoreCandidates.set(item.key, match.version_id);
             }
             presentAtDate.add(item.key);
+          } else if (bulkRestoreRestoreDeleted && latest?.is_delete_marker && latestRestorable?.version_id) {
+            restoreCandidates.set(item.key, latestRestorable.version_id);
           } else if (bulkRestoreDeleteMissing) {
             deleteCandidates.add(item.key);
           }
@@ -3885,6 +4126,7 @@ export default function BrowserPage({
           byKey.forEach((entries, key) => {
             const match = findVersionForDate(entries, targetTime);
             const latest = entries.find((entry) => entry.is_latest);
+            const latestRestorable = findLatestRestorableVersion(entries);
             if (match && !match.is_delete_marker && match.version_id) {
               if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
                 unchangedKeys.add(key);
@@ -3892,6 +4134,8 @@ export default function BrowserPage({
                 restoreCandidates.set(key, match.version_id);
               }
               presentAtDate.add(key);
+            } else if (bulkRestoreRestoreDeleted && latest?.is_delete_marker && latestRestorable?.version_id) {
+              restoreCandidates.set(key, latestRestorable.version_id);
             }
           });
           if (bulkRestoreDeleteMissing) {
@@ -4066,13 +4310,33 @@ export default function BrowserPage({
 
   const handleCopyItems = (items: BrowserItem[]) => {
     if (!bucketName || items.length === 0) return;
-    setClipboard({ items, sourceBucket: bucketName, sourceAccountId: accountIdForApi ?? null, mode: "copy" });
+    const eligible = items.filter((item) => !item.isDeleted);
+    if (eligible.length === 0) {
+      setWarningMessage("Deleted objects cannot be copied directly.");
+      return;
+    }
+    if (eligible.length !== items.length) {
+      setWarningMessage("Deleted objects were skipped.");
+    } else {
+      setWarningMessage(null);
+    }
+    setClipboard({ items: eligible, sourceBucket: bucketName, sourceAccountId: accountIdForApi ?? null, mode: "copy" });
     setStatusMessage("Items copied.");
   };
 
   const handleCutItems = (items: BrowserItem[]) => {
     if (!bucketName || items.length === 0) return;
-    setClipboard({ items, sourceBucket: bucketName, sourceAccountId: accountIdForApi ?? null, mode: "move" });
+    const eligible = items.filter((item) => !item.isDeleted);
+    if (eligible.length === 0) {
+      setWarningMessage("Deleted objects cannot be moved directly.");
+      return;
+    }
+    if (eligible.length !== items.length) {
+      setWarningMessage("Deleted objects were skipped.");
+    } else {
+      setWarningMessage(null);
+    }
+    setClipboard({ items: eligible, sourceBucket: bucketName, sourceAccountId: accountIdForApi ?? null, mode: "move" });
     setStatusMessage("Items ready to move.");
   };
 
@@ -4326,7 +4590,12 @@ export default function BrowserPage({
   };
 
   const handleCopyUrl = async (item: BrowserItem | null) => {
-    if (!bucketName || !hasS3AccountContext || !item || item.type !== "file") return;
+    if (!bucketName || !hasS3AccountContext || !item || item.type !== "file" || item.isDeleted) {
+      if (item?.isDeleted) {
+        setWarningMessage("Deleted objects do not have a direct download URL.");
+      }
+      return;
+    }
     try {
       const presign = await presignObjectRequest(bucketName, {
         key: item.key,
@@ -5439,20 +5708,6 @@ export default function BrowserPage({
                                           className="h-6 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 normal-case"
                                         />
                                       </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => setShowFolderItems((prev) => !prev)}
-                                        aria-pressed={showFolderItems}
-                                        aria-label={showFolderItems ? "Hide folders" : "Show folders"}
-                                        title={showFolderItems ? "Hide folders" : "Show folders"}
-                                        className={`inline-flex h-6 w-6 items-center justify-center rounded-md border text-slate-500 transition hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-                                          showFolderItems
-                                            ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
-                                            : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                                        }`}
-                                      >
-                                        <FolderIcon className="h-3.5 w-3.5" />
-                                      </button>
                                     </div>
                                   )}
                                 </div>
@@ -5526,6 +5781,7 @@ export default function BrowserPage({
                             {listItems.map((item) => {
                               const isFocused = inspectedItem?.id === item.id;
                               const isSelected = selectedSet.has(item.id);
+                              const isDeleted = Boolean(item.isDeleted);
                               return (
                               <tr
                                 key={item.id}
@@ -5548,6 +5804,8 @@ export default function BrowserPage({
                                 className={`${rowHeightClasses} transition-colors ${
                                   isSelected
                                     ? "bg-primary-100/80 hover:bg-primary-100 dark:bg-primary-500/30 dark:hover:bg-primary-500/40"
+                                    : isDeleted
+                                      ? "bg-rose-50/60 hover:bg-rose-100/70 dark:bg-rose-900/10 dark:hover:bg-rose-900/20"
                                     : isFocused
                                       ? "bg-primary-50/70 hover:bg-primary-50 dark:bg-primary-500/15 dark:hover:bg-primary-500/20"
                                       : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
@@ -5563,17 +5821,21 @@ export default function BrowserPage({
                                   />
                                 </td>
                                 <td
-                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} align-middle ui-body text-slate-700 dark:text-slate-200`}
+                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} align-middle ui-body ${
+                                    isDeleted ? "text-rose-700 dark:text-rose-200" : "text-slate-700 dark:text-slate-200"
+                                  }`}
                                 >
                                   <div className={`flex min-w-0 items-center ${nameGapClasses}`}>
                                     <span
                                       className={`inline-flex ${iconBoxClasses} items-center justify-center rounded-lg border ${
-                                        item.type === "folder"
-                                          ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
+                                        isDeleted
+                                          ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-900/20 dark:text-rose-200"
+                                          : item.type === "folder"
+                                            ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
                                           : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200"
                                       }`}
                                     >
-                                      {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
+                                      {item.type === "folder" ? <FolderIcon /> : isDeleted ? <TrashIcon /> : <FileIcon />}
                                     </span>
                                     <div className="min-w-0 flex-1">
                                       <button
@@ -5584,18 +5846,44 @@ export default function BrowserPage({
                                             handleOpenItem(item);
                                             return;
                                           }
+                                          if (item.isDeleted) {
+                                            if (isVersioningEnabled) {
+                                              openObjectVersionsModal(item);
+                                            }
+                                            return;
+                                          }
                                           handlePreviewItem(item);
                                         }}
-                                        className="block w-full truncate text-left font-semibold text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
+                                        className={`flex w-full min-w-0 items-baseline gap-1 text-left font-semibold ${
+                                          isDeleted
+                                            ? "text-rose-700 hover:text-rose-800 dark:text-rose-200 dark:hover:text-rose-100"
+                                            : "text-slate-900 hover:text-primary-700 dark:text-slate-100 dark:hover:text-primary-200"
+                                        }`}
                                         title={item.name}
                                       >
-                                        {item.name}
+                                        <span className="truncate">{item.name}</span>
+                                        {isDeleted && (
+                                          <span className="shrink-0 ui-caption font-semibold text-rose-500 dark:text-rose-300">
+                                            (deleted)
+                                          </span>
+                                        )}
                                       </button>
                                       {!compactMode && (
                                         <div className="mt-1 flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden ui-caption text-slate-500 dark:text-slate-400">
                                           <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
-                                            {item.type === "folder" ? "Prefix" : "Object"}
+                                            {item.type === "folder"
+                                              ? isDeleted
+                                                ? "Deleted folder"
+                                                : "Prefix"
+                                              : isDeleted
+                                                ? "Deleted object"
+                                                : "Object"}
                                           </span>
+                                          {isDeleted && (
+                                            <span className="rounded-full border border-rose-200 px-2 py-0.5 font-semibold text-rose-700 dark:border-rose-500/40 dark:text-rose-200">
+                                              {item.type === "folder" ? "Delete markers" : "Delete marker"}
+                                            </span>
+                                          )}
                                           {item.storageClass && (
                                             <span
                                               className={`rounded-full border px-2 py-0.5 font-semibold ${
@@ -5630,7 +5918,7 @@ export default function BrowserPage({
                                         <OpenIcon />
                                       </button>
                                     )}
-                                    {item.type === "file" && (
+                                    {item.type === "file" && !isDeleted && (
                                       <button
                                         type="button"
                                         className={iconButtonClasses}
@@ -5641,21 +5929,34 @@ export default function BrowserPage({
                                         <EyeIcon />
                                       </button>
                                     )}
+                                    {item.type === "file" && isDeleted && isVersioningEnabled && (
+                                      <button
+                                        type="button"
+                                        className={iconButtonClasses}
+                                        aria-label="Versions"
+                                        title="Versions"
+                                        onClick={() => openObjectVersionsModal(item)}
+                                      >
+                                        <HistoryIcon />
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
-                                      className={iconButtonClasses}
+                                      className={`${iconButtonClasses} ${isDeleted ? "opacity-50" : ""}`}
                                       aria-label="Download"
-                                      title="Download"
+                                      title={isDeleted ? "Restore from versions before download" : "Download"}
                                       onClick={() => handleDownloadTarget(item)}
+                                      disabled={isDeleted}
                                     >
                                       <DownloadIcon />
                                     </button>
                                     <button
                                       type="button"
-                                      className={iconButtonDangerClasses}
+                                      className={`${iconButtonDangerClasses} ${isDeleted ? "opacity-50" : ""}`}
                                       aria-label="Delete"
-                                      title="Delete"
+                                      title={isDeleted ? "Delete marker entries are managed in versions." : "Delete"}
                                       onClick={() => handleDeleteItems([item])}
+                                      disabled={isDeleted}
                                     >
                                       <TrashIcon />
                                     </button>
@@ -5698,13 +5999,14 @@ export default function BrowserPage({
                             {objectsError}
                           </div>
                         )}
-                        {!objectsLoading && bucketName && !objectsError && filteredItems.length === 0 && (
+                        {!objectsLoading && bucketName && !objectsError && listItems.length === 0 && (
                           <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             No objects found for this path.
                           </div>
                         )}
-                        {filteredItems.map((item) => {
+                        {listItems.map((item) => {
                           const selected = selectedSet.has(item.id);
+                          const isDeleted = Boolean(item.isDeleted);
                           return (
                             <div
                               key={item.id}
@@ -5712,6 +6014,8 @@ export default function BrowserPage({
                               className={`group relative flex ${gridCardGapClasses} ${gridCardHeightClasses} flex-col overflow-hidden rounded-2xl border p-4 shadow-sm transition ${
                                 selected
                                   ? "border-primary-200 bg-primary-50/60 shadow-[0_12px_24px_-16px_rgba(79,70,229,0.45)] dark:border-primary-700/60 dark:bg-primary-500/20"
+                                  : isDeleted
+                                    ? "border-rose-200 bg-rose-50/70 dark:border-rose-500/40 dark:bg-rose-900/20"
                                   : "border-slate-200 bg-white/90 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-primary-700/60"
                               }`}
                               onDoubleClick={(event) => handleItemDoubleClick(event, item)}
@@ -5745,36 +6049,62 @@ export default function BrowserPage({
                                     handleOpenItem(item);
                                     return;
                                   }
+                                  if (item.isDeleted) {
+                                    if (isVersioningEnabled) {
+                                      openObjectVersionsModal(item);
+                                    }
+                                    return;
+                                  }
                                   handlePreviewItem(item);
                                 }}
                                 className="relative flex min-w-0 flex-1 items-start gap-3 text-left"
                               >
                                 <span
                                   className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border shadow-sm ${
-                                    item.type === "folder"
-                                      ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
+                                    isDeleted
+                                      ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-900/20 dark:text-rose-200"
+                                      : item.type === "folder"
+                                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
                                       : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200"
                                   }`}
                                 >
-                                  {item.type === "folder" ? <FolderIcon /> : <FileIcon />}
+                                  {item.type === "folder" ? <FolderIcon /> : isDeleted ? <TrashIcon /> : <FileIcon />}
                                 </span>
                                 <span className="min-w-0">
                                   <span
-                                    className="block min-w-0 break-words ui-body font-semibold leading-snug text-slate-900 dark:text-slate-100"
+                                    className={`flex min-w-0 items-baseline gap-1 break-words ui-body font-semibold leading-snug ${
+                                      isDeleted ? "text-rose-700 dark:text-rose-200" : "text-slate-900 dark:text-slate-100"
+                                    }`}
                                     style={gridTitleClampStyle}
                                     title={item.name}
                                   >
-                                    {item.name}
+                                    <span className="min-w-0">{item.name}</span>
+                                    {isDeleted && (
+                                      <span className="shrink-0 ui-caption font-semibold text-rose-500 dark:text-rose-300">
+                                        (deleted)
+                                      </span>
+                                    )}
                                   </span>
-                                  <span className="mt-1 block ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    {item.type === "folder" ? "Folder" : "File"}
-                                  </span>
+                                  {!isDeleted && (
+                                    <span className="mt-1 block ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                      {item.type === "folder" ? "Folder" : "File"}
+                                    </span>
+                                  )}
                                 </span>
                               </button>
                               <div className="flex flex-wrap items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
                                 <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
-                                  {item.type === "folder" ? "Prefix" : "Object"}
+                                  {item.type === "folder"
+                                    ? (isDeleted ? "Deleted folder" : "Prefix")
+                                    : isDeleted
+                                      ? "Deleted object"
+                                      : "Object"}
                                 </span>
+                                {isDeleted && (
+                                  <span className="rounded-full border border-rose-200 px-2 py-0.5 font-semibold text-rose-700 dark:border-rose-500/40 dark:text-rose-200">
+                                    {item.type === "folder" ? "Delete markers" : "Delete marker"}
+                                  </span>
+                                )}
                                 {item.storageClass && (
                                   <span
                                     className={`rounded-full border px-2 py-0.5 font-semibold ${
@@ -5818,7 +6148,7 @@ export default function BrowserPage({
                                     <span className="min-w-0 truncate">Open</span>
                                   </button>
                                 )}
-                                {item.type === "file" && (
+                                {item.type === "file" && !isDeleted && (
                                   <button
                                     type="button"
                                     className={gridQuickActionClasses}
@@ -5830,12 +6160,25 @@ export default function BrowserPage({
                                     <span className="min-w-0 truncate">Preview</span>
                                   </button>
                                 )}
+                                {item.type === "file" && isDeleted && isVersioningEnabled && (
+                                  <button
+                                    type="button"
+                                    className={gridQuickActionClasses}
+                                    aria-label="Versions"
+                                    title="Versions"
+                                    onClick={() => openObjectVersionsModal(item)}
+                                  >
+                                    <HistoryIcon className="h-3.5 w-3.5" />
+                                    <span className="min-w-0 truncate">Versions</span>
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   className={gridQuickActionClasses}
                                   aria-label="Download"
-                                  title="Download"
+                                  title={isDeleted ? "Restore from versions before download" : "Download"}
                                   onClick={() => handleDownloadTarget(item)}
+                                  disabled={isDeleted}
                                 >
                                   <DownloadIcon className="h-3.5 w-3.5" />
                                   <span className="min-w-0 truncate">Download</span>
@@ -5844,8 +6187,9 @@ export default function BrowserPage({
                                   type="button"
                                   className={gridQuickActionDangerClasses}
                                   aria-label="Delete"
-                                  title="Delete"
+                                  title={isDeleted ? "Delete marker entries are managed in versions." : "Delete"}
                                   onClick={() => handleDeleteItems([item])}
+                                  disabled={isDeleted}
                                 >
                                   <TrashIcon className="h-3.5 w-3.5" />
                                   <span className="min-w-0 truncate">Delete</span>
@@ -6025,6 +6369,14 @@ export default function BrowserPage({
                                     <span className="text-slate-500">Folders</span>
                                     <span className="font-semibold text-slate-700 dark:text-slate-100">{pathStats.folders}</span>
                                   </div>
+                                  {isVersioningEnabled && showDeletedObjects && (
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-slate-500">Deleted shown</span>
+                                      <span className="font-semibold text-rose-700 dark:text-rose-200">
+                                        {pathStats.deletedFiles + pathStats.deletedFolders}
+                                      </span>
+                                    </div>
+                                  )}
                                   <div className="flex items-center justify-between">
                                     <span className="text-slate-500">Total size</span>
                                     <span className="font-semibold text-slate-700 dark:text-slate-100">
@@ -6136,6 +6488,11 @@ export default function BrowserPage({
                                       : `${selectionFiles.length} files · ${selectionFolders.length} folders`}
                                   </p>
                                 )}
+                                {selectionHasDeleted && (
+                                  <p className="ui-caption font-semibold text-amber-600 dark:text-amber-200">
+                                    Contains deleted items (derived from delete markers).
+                                  </p>
+                                )}
                                 {selectedCount > 0 && (
                                   <p className="ui-caption text-slate-400">Total size: {formatBytes(selectedBytes)}</p>
                                 )}
@@ -6226,7 +6583,7 @@ export default function BrowserPage({
                                     type="button"
                                     className={bulkActionClasses}
                                     onClick={() => handleCopyItems(selectionItems)}
-                                    disabled={!canSelectionActions}
+                                    disabled={!canSelectionCopyItems}
                                   >
                                     <CopyIcon className="h-3.5 w-3.5" />
                                     Copy
@@ -6235,7 +6592,7 @@ export default function BrowserPage({
                                     type="button"
                                     className={bulkActionClasses}
                                     onClick={() => handleCutItems(selectionItems)}
-                                    disabled={!canSelectionActions}
+                                    disabled={!canSelectionCutItems}
                                   >
                                     <CutIcon className="h-3.5 w-3.5" />
                                     Cut
@@ -6244,6 +6601,7 @@ export default function BrowserPage({
                                     type="button"
                                     className={bulkActionClasses}
                                     onClick={() => openBulkAttributesModal(selectionItems)}
+                                    disabled={!canSelectionBulkAttributes}
                                   >
                                     <SlidersIcon className="h-3.5 w-3.5" />
                                     Bulk attributes
@@ -6262,7 +6620,7 @@ export default function BrowserPage({
                                     type="button"
                                     className={bulkDangerClasses}
                                     onClick={() => handleDeleteItems(selectionItems)}
-                                    disabled={!hasS3AccountContext}
+                                    disabled={!hasS3AccountContext || !canSelectionDelete}
                                   >
                                     <TrashIcon className="h-3.5 w-3.5" />
                                     Delete
@@ -6354,7 +6712,14 @@ export default function BrowserPage({
                                     {inspectedItem.name}
                                   </p>
                                   <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                    {inspectedItem.type === "folder" ? "Prefix" : "Object"} | {inspectedItem.size}
+                                    {inspectedItem.type === "folder"
+                                      ? inspectedItem.isDeleted
+                                        ? "Deleted folder"
+                                        : "Prefix"
+                                      : inspectedItem.isDeleted
+                                        ? "Deleted object"
+                                        : "Object"}{" "}
+                                    | {inspectedItem.size}
                                   </p>
                                 </div>
                               </div>
@@ -6454,6 +6819,8 @@ export default function BrowserPage({
           bucketName={bucketName}
           hasS3AccountContext={hasS3AccountContext}
           versioningEnabled={isVersioningEnabled}
+          showFolderItems={showFolderItems}
+          showDeletedObjects={showDeletedObjects}
           allowInspectorPanel={allowInspectorPanel}
           canPaste={canPaste}
           clipboard={clipboard}
@@ -6479,6 +6846,8 @@ export default function BrowserPage({
         onDownloadItems={handleDownloadItems}
         onOpenItem={handleOpenItem}
         onOpenDetails={openItemDetails}
+        onToggleShowFolders={() => setShowFolderItems((prev) => !prev)}
+        onToggleShowDeleted={() => setShowDeletedObjects((prev) => !prev)}
       />
       <BrowserPreviewModal
         previewItem={previewItem}
@@ -6597,6 +6966,8 @@ export default function BrowserPage({
           setBulkRestoreDate={setBulkRestoreDate}
           bulkRestoreDeleteMissing={bulkRestoreDeleteMissing}
           setBulkRestoreDeleteMissing={setBulkRestoreDeleteMissing}
+          bulkRestoreRestoreDeleted={bulkRestoreRestoreDeleted}
+          setBulkRestoreRestoreDeleted={setBulkRestoreRestoreDeleted}
           bulkRestoreLoading={bulkRestoreLoading}
           onApply={handleBulkRestoreApply}
           onClose={() => setShowBulkRestoreModal(false)}

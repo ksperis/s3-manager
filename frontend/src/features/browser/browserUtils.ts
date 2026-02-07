@@ -288,23 +288,32 @@ export const buildVersionRows = (versions: BrowserObjectVersion[], deleteMarkers
 
 export const getSelectionInfo = (items: BrowserItem[]) => {
   const files = items.filter((item) => item.type === "file");
+  const activeFiles = files.filter((item) => !item.isDeleted);
+  const deletedFiles = files.filter((item) => item.isDeleted);
   const folders = items.filter((item) => item.type === "folder");
   const isSingle = items.length === 1;
   const primary = isSingle ? items[0] : null;
   const hasFolder = folders.length > 0;
-  const hasFile = files.length > 0;
+  const hasFile = activeFiles.length > 0;
+  const hasDeleted = items.some((item) => item.isDeleted);
   return {
     items,
-    files,
+    files: activeFiles,
+    deletedFiles,
     folders,
     isSingle,
     primary,
     hasFolder,
     hasFile,
-    canDownloadFiles: hasFile && !hasFolder,
-    canDownloadFolder: isSingle && primary?.type === "folder",
+    hasDeleted,
+    canDownloadFiles: hasFile && !hasFolder && !hasDeleted,
+    canDownloadFolder: isSingle && primary?.type === "folder" && !primary.isDeleted,
     canOpen: primary?.type === "folder",
-    canCopyUrl: primary?.type === "file",
-    canAdvanced: primary?.type === "file",
+    canCopyUrl: primary?.type === "file" && !primary.isDeleted,
+    canAdvanced: primary?.type === "file" && !primary.isDeleted,
+    canCopyItems: items.length > 0 && !hasDeleted,
+    canCutItems: items.length > 0 && !hasDeleted,
+    canBulkAttributes: items.length > 0 && !hasDeleted,
+    canDelete: items.length > 0 && !hasDeleted,
   };
 };

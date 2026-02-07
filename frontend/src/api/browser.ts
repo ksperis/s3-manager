@@ -21,6 +21,8 @@ export type BrowserObject = {
   last_modified?: string | null;
   etag?: string | null;
   storage_class?: string | null;
+  is_delete_marker?: boolean;
+  version_id?: string | null;
 };
 
 export type ListBrowserObjectsResponse = {

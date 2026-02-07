@@ -7,6 +7,8 @@ export type BrowserItem = {
   key: string;
   name: string;
   type: "folder" | "file";
+  isDeleted?: boolean;
+  deleteMarkerVersionId?: string | null;
   size: string;
   sizeBytes?: number | null;
   modified: string;

@@ -11,6 +11,8 @@ export type BucketFeatureStatus = { state: string; tone: BucketFeatureTone };
 export type Bucket = {
   name: string;
   creation_date?: string;
+  owner?: string | null;
+  owner_name?: string | null;
   used_bytes?: number;
   object_count?: number;
   quota_max_size_bytes?: number | null;

@@ -36,6 +36,8 @@ type BrowserContextMenuProps = {
   bucketName: string;
   hasS3AccountContext: boolean;
   versioningEnabled: boolean;
+  showFolderItems: boolean;
+  showDeletedObjects: boolean;
   allowInspectorPanel?: boolean;
   canPaste: boolean;
   clipboard: ClipboardState | null;
@@ -61,6 +63,8 @@ type BrowserContextMenuProps = {
   onDownloadItems: (items: BrowserItem[]) => void;
   onOpenItem: (item: BrowserItem) => void;
   onOpenDetails: (item: BrowserItem) => void;
+  onToggleShowFolders: () => void;
+  onToggleShowDeleted: () => void;
 };
 
 export default function BrowserContextMenu({
@@ -69,6 +73,8 @@ export default function BrowserContextMenu({
   bucketName,
   hasS3AccountContext,
   versioningEnabled,
+  showFolderItems,
+  showDeletedObjects,
   allowInspectorPanel = true,
   canPaste,
   clipboard,
@@ -94,6 +100,8 @@ export default function BrowserContextMenu({
   onDownloadItems,
   onOpenItem,
   onOpenDetails,
+  onToggleShowFolders,
+  onToggleShowDeleted,
 }: BrowserContextMenuProps) {
   if (!contextMenu) return null;
 
@@ -101,6 +109,7 @@ export default function BrowserContextMenu({
   const contextSelectionInfo = contextMenu.kind === "selection"
     ? getSelectionInfo(contextMenu.items ?? [])
     : null;
+  const contextItemDeleted = Boolean(contextItem?.isDeleted);
   const pasteLabel = clipboard?.mode === "move" ? "Paste (Move)" : "Paste";
 
   return (
@@ -200,6 +209,31 @@ export default function BrowserContextMenu({
               </button>
             </>
           )}
+          <div className={contextMenuSeparatorClasses} />
+          <button
+            type="button"
+            className={contextMenuItemClasses}
+            onClick={() => {
+              onClose();
+              onToggleShowFolders();
+            }}
+          >
+            <FolderIcon className="h-3.5 w-3.5" />
+            {showFolderItems ? "Hide folders" : "Show folders"}
+          </button>
+          {versioningEnabled && (
+            <button
+              type="button"
+              className={contextMenuItemClasses}
+              onClick={() => {
+                onClose();
+                onToggleShowDeleted();
+              }}
+            >
+              <TrashIcon className="h-3.5 w-3.5" />
+              {showDeletedObjects ? "Hide deleted" : "Show deleted"}
+            </button>
+          )}
         </>
       )}
       {contextMenu.kind === "item" && contextItem && (
@@ -246,12 +280,12 @@ export default function BrowserContextMenu({
           ) : (
             <button
               type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
                 onClose();
                 onPreviewItem(contextItem);
               }}
-              disabled={!bucketName || !hasS3AccountContext}
+              disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
             >
               <EyeIcon className="h-3.5 w-3.5" />
               Preview
@@ -259,12 +293,12 @@ export default function BrowserContextMenu({
           )}
           <button
             type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onDownloadTarget(contextItem);
             }}
-            disabled={!bucketName || !hasS3AccountContext}
+            disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
           >
             <DownloadIcon className="h-3.5 w-3.5" />
             {contextItem.type === "folder" ? "Download folder" : "Download"}
@@ -272,12 +306,12 @@ export default function BrowserContextMenu({
           {contextItem.type === "file" && (
             <button
               type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
                 onClose();
                 onCopyUrl(contextItem);
               }}
-              disabled={!bucketName || !hasS3AccountContext}
+              disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
             >
               <LinkIcon className="h-3.5 w-3.5" />
               Copy URL
@@ -285,24 +319,24 @@ export default function BrowserContextMenu({
           )}
           <button
             type="button"
-            className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
+            className={`${contextMenuItemClasses} ${!bucketName || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onCopyItems([contextItem]);
             }}
-            disabled={!bucketName}
+            disabled={!bucketName || contextItemDeleted}
           >
             <CopyIcon className="h-3.5 w-3.5" />
             Copy
           </button>
           <button
             type="button"
-            className={`${contextMenuItemClasses} ${!bucketName ? contextMenuItemDisabledClasses : ""}`}
+            className={`${contextMenuItemClasses} ${!bucketName || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onCutItems([contextItem]);
             }}
-            disabled={!bucketName}
+            disabled={!bucketName || contextItemDeleted}
           >
             <CutIcon className="h-3.5 w-3.5" />
             Cut
@@ -310,12 +344,12 @@ export default function BrowserContextMenu({
           <div className={contextMenuSeparatorClasses} />
           <button
             type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onOpenBulkAttributes([contextItem]);
             }}
-            disabled={!bucketName || !hasS3AccountContext}
+            disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
           >
             <SlidersIcon className="h-3.5 w-3.5" />
             Bulk attributes
@@ -335,12 +369,12 @@ export default function BrowserContextMenu({
           {contextItem.type === "file" && (
             <button
               type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
               onClick={() => {
                 onClose();
                 onOpenAdvanced(contextItem);
               }}
-              disabled={!bucketName || !hasS3AccountContext}
+              disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
             >
               <SettingsIcon className="h-3.5 w-3.5" />
               Advanced
@@ -349,12 +383,12 @@ export default function BrowserContextMenu({
           <div className={contextMenuSeparatorClasses} />
           <button
             type="button"
-            className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+            className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onDeleteItems([contextItem]);
             }}
-            disabled={!bucketName || !hasS3AccountContext}
+            disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
           >
             <TrashIcon className="h-3.5 w-3.5" />
             Delete
@@ -420,24 +454,24 @@ export default function BrowserContextMenu({
           )}
           <button
             type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || contextSelectionInfo.items.length === 0 ? contextMenuItemDisabledClasses : ""}`}
+            className={`${contextMenuItemClasses} ${!bucketName || !contextSelectionInfo.canCopyItems ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onCopyItems(contextSelectionInfo.items);
             }}
-            disabled={!bucketName || contextSelectionInfo.items.length === 0}
+            disabled={!bucketName || !contextSelectionInfo.canCopyItems}
           >
             <CopyIcon className="h-3.5 w-3.5" />
             Copy
           </button>
           <button
             type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || contextSelectionInfo.items.length === 0 ? contextMenuItemDisabledClasses : ""}`}
+            className={`${contextMenuItemClasses} ${!bucketName || !contextSelectionInfo.canCutItems ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onCutItems(contextSelectionInfo.items);
             }}
-            disabled={!bucketName || contextSelectionInfo.items.length === 0}
+            disabled={!bucketName || !contextSelectionInfo.canCutItems}
           >
             <CutIcon className="h-3.5 w-3.5" />
             Cut
@@ -445,12 +479,12 @@ export default function BrowserContextMenu({
           <div className={contextMenuSeparatorClasses} />
           <button
             type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || !contextSelectionInfo.canBulkAttributes ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onOpenBulkAttributes(contextSelectionInfo.items);
             }}
-            disabled={!bucketName || !hasS3AccountContext}
+            disabled={!bucketName || !hasS3AccountContext || !contextSelectionInfo.canBulkAttributes}
           >
             <SlidersIcon className="h-3.5 w-3.5" />
             Bulk attributes
@@ -484,12 +518,12 @@ export default function BrowserContextMenu({
           <div className={contextMenuSeparatorClasses} />
           <button
             type="button"
-            className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+            className={`${contextMenuItemDangerClasses} ${!bucketName || !hasS3AccountContext || !contextSelectionInfo.canDelete ? contextMenuItemDisabledClasses : ""}`}
             onClick={() => {
               onClose();
               onDeleteItems(contextSelectionInfo.items);
             }}
-            disabled={!bucketName || !hasS3AccountContext}
+            disabled={!bucketName || !hasS3AccountContext || !contextSelectionInfo.canDelete}
           >
             <TrashIcon className="h-3.5 w-3.5" />
             Delete

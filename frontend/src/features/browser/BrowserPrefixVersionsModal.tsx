@@ -37,6 +37,79 @@ export default function BrowserPrefixVersionsModal({
   onRestoreVersion,
   onDeleteVersion,
 }: BrowserPrefixVersionsModalProps) {
+  const sanitizeFilename = (value: string) => {
+    const cleaned = value.replace(/[^a-zA-Z0-9-_]+/g, "_").replace(/^_+|_+$/g, "");
+    return cleaned || "prefix-versions";
+  };
+
+  const triggerDownload = (filename: string, content: string, mimeType: string) => {
+    if (typeof window === "undefined") return;
+    const blob = new Blob([content], { type: mimeType });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const buildExportRows = () =>
+    prefixVersionRows.map((ver) => ({
+      key: ver.key,
+      version_id: ver.version_id ?? "",
+      is_delete_marker: ver.is_delete_marker,
+      is_latest: ver.is_latest,
+      last_modified: ver.last_modified ?? "",
+      size: ver.size ?? "",
+      etag: ver.etag ?? "",
+      storage_class: ver.storage_class ?? "",
+    }));
+
+  const handleExportJson = () => {
+    const exportedAt = new Date().toISOString();
+    const timestamp = exportedAt.replace(/[:.]/g, "-");
+    const baseName = sanitizeFilename(`prefix-versions-${bucketName}-${normalizedPrefix || "root"}`);
+    const payload = {
+      exportedAt,
+      bucket: bucketName,
+      prefix: normalizedPrefix || "",
+      items: buildExportRows(),
+    };
+    triggerDownload(
+      `${baseName}-${timestamp}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json"
+    );
+  };
+
+  const handleExportCsv = () => {
+    const exportedAt = new Date().toISOString();
+    const timestamp = exportedAt.replace(/[:.]/g, "-");
+    const baseName = sanitizeFilename(`prefix-versions-${bucketName}-${normalizedPrefix || "root"}`);
+    const headers = [
+      "key",
+      "version_id",
+      "is_delete_marker",
+      "is_latest",
+      "last_modified",
+      "size",
+      "etag",
+      "storage_class",
+    ];
+    const escapeCsv = (value: string | number | boolean) => {
+      const text = `${value ?? ""}`;
+      const escaped = text.replace(/"/g, "\"\"");
+      return `"${escaped}"`;
+    };
+    const rows = buildExportRows().map((entry) =>
+      headers.map((header) => escapeCsv(entry[header as keyof typeof entry] ?? "")).join(",")
+    );
+    const csv = [headers.join(","), ...rows].join("\n");
+    triggerDownload(`${baseName}-${timestamp}.csv`, csv, "text/csv;charset=utf-8");
+  };
+
   return (
     <Modal
       title={`Prefix versions${normalizedPrefix ? ` · ${normalizedPrefix}` : ""}`}
@@ -50,6 +123,22 @@ export default function BrowserPrefixVersionsModal({
           </span>
           <div className="flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
             {prefixVersionsLoading && <span>Loading...</span>}
+            <button
+              type="button"
+              className={toolbarButtonClasses}
+              onClick={handleExportCsv}
+              disabled={prefixVersionsLoading || prefixVersionRows.length === 0}
+            >
+              Export CSV
+            </button>
+            <button
+              type="button"
+              className={toolbarButtonClasses}
+              onClick={handleExportJson}
+              disabled={prefixVersionsLoading || prefixVersionRows.length === 0}
+            >
+              Export JSON
+            </button>
             <button
               type="button"
               className={toolbarButtonClasses}
