@@ -522,9 +522,10 @@ class RGWAdminClient:
         if account_id:
             params["account-id"] = account_id
         if max_size_bytes is not None:
-            params["max-size"] = int(max_size_bytes)
+            # RGW Admin Ops expects bucket quota sizes in KiB, not bytes.
+            params["max-size-kb"] = int(max_size_bytes // 1024)
         elif max_size_gb is not None:
-            params["max-size"] = int(max_size_gb * 1024 * 1024 * 1024)
+            params["max-size-kb"] = int(max_size_gb * 1024 * 1024)
         if max_objects is not None:
             params["max-objects"] = int(max_objects)
         if enabled:

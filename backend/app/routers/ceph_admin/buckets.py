@@ -23,6 +23,7 @@ from app.models.bucket import (
     BucketPublicAccessBlock,
     BucketTag,
     BucketFeatureStatus,
+    BucketQuotaUpdate,
     BucketTagsUpdate,
     BucketVersioningUpdate,
     BucketWebsiteConfiguration,
@@ -36,7 +37,7 @@ from app.models.ceph_admin import (
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.services.buckets_service import BucketsService
 from app.services.rgw_admin import RGWAdminError
-from app.utils.rgw import extract_bucket_list
+from app.utils.rgw import extract_bucket_list, is_rgw_account_id
 from app.utils.usage_stats import extract_usage_stats
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/buckets", tags=["ceph-admin-buckets"])
@@ -78,6 +79,27 @@ def _normalize_optional_str(value: object) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _extract_bucket_owner_scope(entry: dict) -> tuple[str | None, str | None]:
+    if not isinstance(entry, dict):
+        return None, None
+    bucket_value = entry.get("bucket")
+    tenant_value = entry.get("tenant")
+    if tenant_value is None and isinstance(bucket_value, dict):
+        tenant_value = bucket_value.get("tenant")
+    tenant = _normalize_optional_str(tenant_value)
+
+    owner_value = entry.get("owner") or entry.get("owner_id") or entry.get("user") or entry.get("uid")
+    if not owner_value and isinstance(bucket_value, dict):
+        owner_value = bucket_value.get("owner") or bucket_value.get("owner_id") or bucket_value.get("user") or bucket_value.get("uid")
+    owner = _normalize_optional_str(owner_value)
+    if owner and "$" in owner:
+        split_tenant, split_uid = _split_tenant_uid(owner)
+        if split_tenant:
+            tenant = split_tenant
+        owner = split_uid or None
+    return tenant, owner
 
 
 def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
@@ -323,11 +345,18 @@ def _match_feature_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFil
             return False
         return False
     if desired in {"disabled", "inactive"}:
+        if feature == "versioning":
+            # Keep disabled distinct from suspended for versioning filters.
+            return state_norm == "disabled" or (status.tone == "inactive" and state_norm != "suspended")
         if status.tone == "inactive":
             return True
         if state_norm == "suspended":
             return True
         return False
+    if desired == "disabled_or_suspended":
+        if feature == "versioning":
+            return state_norm in {"disabled", "suspended"} or status.tone == "inactive"
+        return status.tone == "inactive" or state_norm == "suspended"
     if desired == "unknown":
         return status.tone == "unknown"
     if desired == "partial":
@@ -686,6 +715,44 @@ def update_versioning(
     try:
         service.set_versioning(bucket_name, account, enabled=payload.enabled)
         return {"message": f"Versioning updated for {bucket_name}", "enabled": payload.enabled}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/{bucket_name}/quota", status_code=status.HTTP_200_OK)
+def update_quota(
+    bucket_name: str,
+    payload: BucketQuotaUpdate,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+):
+    service = BucketsService()
+    account = _build_endpoint_account(ctx)
+    try:
+        bucket_info = ctx.rgw_admin.get_bucket_info(bucket_name, stats=False, allow_not_found=True)
+    except RGWAdminError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    if not bucket_info or (isinstance(bucket_info, dict) and bucket_info.get("not_found")):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bucket not found")
+
+    tenant, owner = _extract_bucket_owner_scope(bucket_info)
+    if not owner:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to resolve bucket owner for quota update",
+        )
+
+    if is_rgw_account_id(owner):
+        account.rgw_account_id = owner
+        account.rgw_user_uid = None
+    else:
+        account.rgw_account_id = tenant
+        account.rgw_user_uid = owner
+
+    try:
+        service.set_bucket_quota(bucket_name, account, payload)
+        return {"message": "Bucket quota updated"}
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

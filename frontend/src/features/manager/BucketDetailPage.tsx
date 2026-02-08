@@ -71,6 +71,7 @@ import {
   setCephAdminBucketVersioning,
   updateCephAdminBucketAcl,
   updateCephAdminBucketObjectLock,
+  updateCephAdminBucketQuota,
   updateCephAdminBucketPublicAccessBlock,
 } from "../../api/cephAdmin";
 import {
@@ -346,18 +347,6 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
   const [savingObjectLock, setSavingObjectLock] = useState(false);
   const [objectLockConfig, setObjectLockConfig] = useState<BucketObjectLockConfiguration | null>(null);
 
-  const availableTabs = useMemo(() => {
-    if (isCephAdmin) {
-      return ["overview", "properties", "permissions", "advanced", "metrics", "ceph"];
-    }
-    return ["overview", "objects", "properties", "permissions", "advanced", "metrics", "ceph"];
-  }, [isCephAdmin]);
-
-  useEffect(() => {
-    if (!availableTabs.includes(activeTab)) {
-      setActiveTab(availableTabs[0]);
-    }
-  }, [activeTab, availableTabs]);
   const selectedS3Account = useMemo(() => {
     if (isCephAdmin) return null;
     if (selectedS3AccountId) {
@@ -368,6 +357,23 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
     }
     return null;
   }, [accounts, isCephAdmin, requiresS3AccountSelection, selectedS3AccountId]);
+  const isCephEndpoint = isCephAdmin || selectedS3Account?.endpoint_provider === "ceph";
+  const availableTabs = useMemo(() => {
+    if (isCephAdmin) {
+      return ["overview", "properties", "permissions", "advanced", "metrics", "ceph"];
+    }
+    const tabs = ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
+    if (isCephEndpoint) {
+      tabs.push("ceph");
+    }
+    return tabs;
+  }, [isCephAdmin, isCephEndpoint]);
+
+  useEffect(() => {
+    if (!availableTabs.includes(activeTab)) {
+      setActiveTab(availableTabs[0]);
+    }
+  }, [activeTab, availableTabs]);
   const staticWebsiteEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.static_website ?? true;
@@ -398,7 +404,8 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
   ]
 }`;
   const userRole = getUserRole();
-  const isAdmin = false;
+  const isAdmin = userRole === "ui_admin" || userRole === "super_admin";
+  const canEditQuota = isCephAdmin && isAdmin && hasCephContext;
   const objectLockPersistentlyEnabled =
     (objectLockConfig?.enabled ?? null) === true || (properties?.object_lock_enabled ?? null) === true;
   const objectLockActive = (objectLockEnabled ?? null) === true || objectLockPersistentlyEnabled;
@@ -1764,23 +1771,34 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
 
   const handleUpdateQuota = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isCephAdmin || !bucketName || !hasAccountContext) return;
+    if (!bucketName || !canEditQuota) return;
     setUpdatingQuota(true);
     setQuotaStatus(null);
     setQuotaError(null);
     try {
       const maxSizeGb = quotaSizeGb.trim() === "" ? null : Number(quotaSizeGb);
       const maxObjects = quotaObjects.trim() === "" ? null : Number(quotaObjects);
-      if ((maxSizeGb !== null && Number.isNaN(maxSizeGb)) || (maxObjects !== null && Number.isNaN(maxObjects))) {
+      if (
+        (maxSizeGb !== null && Number.isNaN(maxSizeGb)) ||
+        (maxObjects !== null && Number.isNaN(maxObjects)) ||
+        (maxSizeGb !== null && maxSizeGb < 0) ||
+        (maxObjects !== null && maxObjects < 0)
+      ) {
         setQuotaError("Invalid quota values.");
         setUpdatingQuota(false);
         return;
       }
-      await updateBucketQuota(accountId, bucketName, {
+      const payload = {
         max_size_gb: maxSizeGb ?? undefined,
         max_size_unit: maxSizeGb != null ? quotaSizeUnit : undefined,
         max_objects: maxObjects ?? undefined,
-      });
+      };
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await updateCephAdminBucketQuota(endpointId, bucketName, payload);
+      } else {
+        await updateBucketQuota(accountId, bucketName, payload);
+      }
       setQuotaStatus("Quota updated");
       await refreshBucketMeta();
     } catch (err) {
@@ -3449,22 +3467,24 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
               </div>
             ),
           },
-          {
-            id: "ceph",
-            label: "Ceph",
-            content: (
-              <div className="space-y-3">
-                <div className={`${bucketCardClass} opacity-50 pointer-events-none`}>
+          ...(isCephEndpoint
+            ? [
+                {
+                  id: "ceph",
+                  label: "Ceph",
+                  content: (
+                    <div className="space-y-3">
+                      <div className={`${bucketCardClass} ${!canEditQuota ? "opacity-50 pointer-events-none" : ""}`}>
                   <div className="flex items-center justify-between">
                     <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Quota</p>
-                    {!isAdmin && (
+                    {!canEditQuota && (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                         Restricted
                       </span>
                     )}
                   </div>
                   <p className="ui-caption text-slate-500 dark:text-slate-400">Allowed bucket size and object count.</p>
-                  <form className={`mt-2 space-y-2 ${!isAdmin ? "pointer-events-none" : ""}`} onSubmit={handleUpdateQuota}>
+                  <form className={`mt-2 space-y-2 ${!canEditQuota ? "pointer-events-none" : ""}`} onSubmit={handleUpdateQuota}>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                         Size
@@ -3477,13 +3497,13 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
                             onChange={(e) => setQuotaSizeGb(e.target.value)}
                             className="flex-1 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                             placeholder="e.g. 100"
-                            disabled={!isAdmin}
+                            disabled={!canEditQuota}
                           />
                           <select
                             value={quotaSizeUnit}
                             onChange={(e) => setQuotaSizeUnit(e.target.value as "MiB" | "GiB" | "TiB")}
                             className="w-20 rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                            disabled={!isAdmin}
+                            disabled={!canEditQuota}
                           >
                             <option value="MiB">MiB</option>
                             <option value="GiB">GiB</option>
@@ -3501,7 +3521,7 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
                           onChange={(e) => setQuotaObjects(e.target.value)}
                           className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           placeholder="e.g. 1000000"
-                          disabled={!isAdmin}
+                          disabled={!canEditQuota}
                         />
                       </label>
                     </div>
@@ -3518,26 +3538,28 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
                     <div className="flex justify-end">
                       <button
                         type="submit"
-                        disabled={updatingQuota || !isAdmin}
+                        disabled={updatingQuota || !canEditQuota}
                         className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                        title={!isAdmin ? "Admins only" : undefined}
+                        title={!canEditQuota ? "Admins only" : undefined}
                       >
                         {updatingQuota ? "Updating..." : "Save"}
                       </button>
                     </div>
                   </form>
                   <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                    Leave empty to remove the quota. {isAdmin ? "" : "(Read-only for this role.)"}
+                    Leave empty to remove the quota. {canEditQuota ? "" : "(Read-only for this role.)"}
                   </p>
-                </div>
-                <InfoCard
-                  title="Replication / multisite"
-                  description="Set up inter-cluster replication."
-                  disabled
-                />
-              </div>
-            ),
-          },
+                      </div>
+                      <InfoCard
+                        title="Replication / multisite"
+                        description="Set up inter-cluster replication."
+                        disabled
+                      />
+                    </div>
+                  ),
+                },
+              ]
+            : []),
         ]}
       />
 

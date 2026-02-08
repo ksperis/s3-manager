@@ -8,6 +8,7 @@ import type {
   BucketFeatureStatus,
   BucketLoggingConfiguration,
   BucketNotificationConfiguration,
+  BucketQuotaUpdate,
   BucketTag,
   BucketWebsiteConfiguration,
 } from "./buckets";
@@ -399,4 +400,12 @@ export async function updateCephAdminBucketObjectLock(
     payload
   );
   return data;
+}
+
+export async function updateCephAdminBucketQuota(
+  endpointId: number,
+  bucketName: string,
+  payload: BucketQuotaUpdate
+): Promise<void> {
+  await client.put(`/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/quota`, payload);
 }

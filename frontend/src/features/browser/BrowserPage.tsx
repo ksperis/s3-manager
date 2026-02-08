@@ -2268,6 +2268,22 @@ export default function BrowserPage({
     });
   };
 
+  const handleItemSelectionClick = (event: ReactMouseEvent<HTMLElement>, itemId: string) => {
+    if (event.detail > 1) return;
+    if (event.metaKey || event.ctrlKey) {
+      toggleSelection(itemId);
+      return;
+    }
+    selectSingleRow(itemId);
+  };
+
+  const handleItemNameClick = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
+    handleItemSelectionClick(event, item.id);
+    if (event.detail > 1) return;
+    if (event.metaKey || event.ctrlKey) return;
+    openItemDetails(item);
+  };
+
   const toggleAllSelection = () => {
     if (allSelected) {
       setSelectedIds([]);
@@ -6161,14 +6177,7 @@ export default function BrowserPage({
                                   if (isInteractiveTarget(event.target)) {
                                     return;
                                   }
-                                  if (event.detail > 1) {
-                                    return;
-                                  }
-                                  if (event.metaKey || event.ctrlKey) {
-                                    toggleSelection(item.id);
-                                  } else {
-                                    selectSingleRow(item.id);
-                                  }
+                                  handleItemSelectionClick(event, item.id);
                                 }}
                                 onDoubleClick={(event) => handleItemDoubleClick(event, item)}
                                 onContextMenu={(event) => handleItemContextMenu(event, item)}
@@ -6211,7 +6220,7 @@ export default function BrowserPage({
                                     <div className="min-w-0 flex-1">
                                       <button
                                         type="button"
-                                        onClick={() => openItemDetails(item)}
+                                        onClick={(event) => handleItemNameClick(event, item)}
                                         onDoubleClick={() => {
                                           if (item.type === "folder") {
                                             handleOpenItem(item);
@@ -6414,7 +6423,7 @@ export default function BrowserPage({
                               </div>
                               <button
                                 type="button"
-                                onClick={() => openItemDetails(item)}
+                                onClick={(event) => handleItemNameClick(event, item)}
                                 onDoubleClick={() => {
                                   if (item.type === "folder") {
                                     handleOpenItem(item);

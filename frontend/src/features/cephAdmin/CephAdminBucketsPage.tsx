@@ -22,11 +22,14 @@ import {
   getCephAdminBucketLifecycle,
   getCephAdminBucketPolicy,
   getCephAdminBucketProperties,
+  getCephAdminBucketPublicAccessBlock,
   listCephAdminBuckets,
   putCephAdminBucketCors,
   putCephAdminBucketLifecycle,
   putCephAdminBucketPolicy,
   setCephAdminBucketVersioning,
+  updateCephAdminBucketPublicAccessBlock,
+  updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
@@ -61,6 +64,9 @@ const BULK_CONCURRENCY_LIMIT = 6;
 
 type BulkOperation =
   | ""
+  | "set_quota"
+  | "add_public_access_block"
+  | "remove_public_access_block"
   | "enable_versioning"
   | "disable_versioning"
   | "add_lifecycle"
@@ -77,6 +83,140 @@ type BulkPreviewItem = {
   after: BulkPreviewLine[];
   changed: boolean;
   error?: string;
+};
+type BulkApplyProgress = {
+  completed: number;
+  total: number;
+  failed: number;
+};
+
+type QuotaSizeUnit = "MiB" | "GiB" | "TiB";
+
+type ParsedQuotaInput = {
+  applySize: boolean;
+  applyObjects: boolean;
+  maxSizeValue: number | null;
+  maxSizeUnit: QuotaSizeUnit;
+  maxSizeBytes: number | null;
+  maxObjects: number | null;
+};
+
+const QUOTA_UNIT_TO_BYTES: Record<QuotaSizeUnit, number> = {
+  MiB: 1024 ** 2,
+  GiB: 1024 ** 3,
+  TiB: 1024 ** 4,
+};
+
+const normalizeQuotaLimit = (value?: number | null) => {
+  if (value === null || value === undefined) return null;
+  return value > 0 ? value : null;
+};
+
+const bytesToGiB = (value: number) => value / 1024 ** 3;
+
+const hasConfiguredQuota = (quota: { maxSizeBytes: number | null; maxObjects: number | null }) =>
+  quota.maxSizeBytes !== null || quota.maxObjects !== null;
+
+const parseQuotaInput = (
+  rawMaxSizeValue: string,
+  maxSizeUnit: QuotaSizeUnit,
+  rawMaxObjects: string,
+  applySize: boolean,
+  applyObjects: boolean
+): { error: string } | ParsedQuotaInput => {
+  if (!applySize && !applyObjects) {
+    return { error: "Select at least one quota target (storage or objects)." };
+  }
+  const maxSizeText = rawMaxSizeValue.trim();
+  const maxObjectsText = rawMaxObjects.trim();
+
+  let maxSizeValue: number | null = null;
+  let maxSizeBytes: number | null = null;
+  if (applySize) {
+    if (maxSizeText) {
+      const parsed = Number(maxSizeText);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        return { error: "Quota size must be a positive number or zero." };
+      }
+      maxSizeValue = parsed;
+      maxSizeBytes = Math.floor(parsed * QUOTA_UNIT_TO_BYTES[maxSizeUnit]);
+    }
+  }
+
+  let maxObjects: number | null = null;
+  if (applyObjects) {
+    if (maxObjectsText) {
+      const parsed = Number(maxObjectsText);
+      if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
+        return { error: "Object quota must be a whole number (0 or greater)." };
+      }
+      maxObjects = parsed;
+    }
+  }
+
+  return {
+    applySize,
+    applyObjects,
+    maxSizeValue,
+    maxSizeUnit,
+    maxSizeBytes: normalizeQuotaLimit(maxSizeBytes),
+    maxObjects: normalizeQuotaLimit(maxObjects),
+  };
+};
+
+type PublicAccessBlockState = {
+  block_public_acls: boolean;
+  ignore_public_acls: boolean;
+  block_public_policy: boolean;
+  restrict_public_buckets: boolean;
+};
+
+type PublicAccessBlockOptionKey = keyof PublicAccessBlockState;
+
+const PUBLIC_ACCESS_BLOCK_OPTIONS: Array<{ key: PublicAccessBlockOptionKey; label: string }> = [
+  { key: "block_public_acls", label: "BlockPublicAcls" },
+  { key: "ignore_public_acls", label: "IgnorePublicAcls" },
+  { key: "block_public_policy", label: "BlockPublicPolicy" },
+  { key: "restrict_public_buckets", label: "RestrictPublicBuckets" },
+];
+
+const normalizePublicAccessBlockState = (value?: Partial<PublicAccessBlockState> | null): PublicAccessBlockState => ({
+  block_public_acls: Boolean(value?.block_public_acls),
+  ignore_public_acls: Boolean(value?.ignore_public_acls),
+  block_public_policy: Boolean(value?.block_public_policy),
+  restrict_public_buckets: Boolean(value?.restrict_public_buckets),
+});
+
+const isPublicAccessBlockEquivalent = (a: PublicAccessBlockState, b: PublicAccessBlockState) =>
+  a.block_public_acls === b.block_public_acls &&
+  a.ignore_public_acls === b.ignore_public_acls &&
+  a.block_public_policy === b.block_public_policy &&
+  a.restrict_public_buckets === b.restrict_public_buckets;
+
+const formatPublicAccessBlockState = (state: PublicAccessBlockState) => {
+  const enabledCount = [
+    state.block_public_acls,
+    state.ignore_public_acls,
+    state.block_public_policy,
+    state.restrict_public_buckets,
+  ].filter(Boolean).length;
+  if (enabledCount === 4) return "Enabled";
+  if (enabledCount === 0) return "Disabled";
+  return `Partial (${enabledCount}/4)`;
+};
+
+const formatPublicAccessBlockFlag = (value: boolean) => (value ? "Blocked" : "Unblocked");
+
+const applyPublicAccessBlockTargets = (
+  current: PublicAccessBlockState,
+  desiredEnabled: boolean,
+  targets: PublicAccessBlockOptionKey[]
+): PublicAccessBlockState => {
+  const next: PublicAccessBlockState = { ...current };
+  targets.forEach((key) => {
+    next[key] = desiredEnabled;
+  });
+  return next;
 };
 
 const runWithConcurrency = async <T, R>(
@@ -102,7 +242,8 @@ const runWithConcurrency = async <T, R>(
 const runWithConcurrencySettled = async <T, R>(
   items: T[],
   limit: number,
-  handler: (item: T, index: number) => Promise<R>
+  handler: (item: T, index: number) => Promise<R>,
+  onSettled?: (result: PromiseSettledResult<R>, index: number) => void
 ): Promise<PromiseSettledResult<R>[]> => {
   const results: PromiseSettledResult<R>[] = new Array(items.length);
   let cursor = 0;
@@ -114,9 +255,13 @@ const runWithConcurrencySettled = async <T, R>(
       cursor += 1;
       try {
         const value = await handler(items[index], index);
-        results[index] = { status: "fulfilled", value };
+        const result: PromiseSettledResult<R> = { status: "fulfilled", value };
+        results[index] = result;
+        onSettled?.(result, index);
       } catch (err) {
-        results[index] = { status: "rejected", reason: err };
+        const result: PromiseSettledResult<R> = { status: "rejected", reason: err };
+        results[index] = result;
+        onSettled?.(result, index);
       }
     }
   });
@@ -610,18 +755,19 @@ const mergeCorsRules = (
 };
 
 const normalizeVersioningStatus = (status?: string | null): boolean | null => {
-  if (!status) return null;
-  const normalized = status.toLowerCase();
+  if (!status || !status.trim()) return false;
+  const normalized = status.trim().toLowerCase();
   if (normalized === "enabled") return true;
   if (normalized === "suspended" || normalized === "disabled") return false;
   return null;
 };
 
 const formatVersioningStatus = (status?: string | null) => {
-  if (!status) return "Unknown";
-  const normalized = status.toLowerCase();
+  if (!status || !status.trim()) return "Disabled";
+  const normalized = status.trim().toLowerCase();
   if (normalized === "enabled") return "Enabled";
-  if (normalized === "suspended" || normalized === "disabled") return "Suspended";
+  if (normalized === "suspended") return "Suspended";
+  if (normalized === "disabled") return "Disabled";
   return status;
 };
 
@@ -689,7 +835,7 @@ type FeatureKey =
   | "bucket_policy"
   | "cors"
   | "access_logging";
-type FeatureFilterState = "any" | "enabled" | "disabled";
+type FeatureFilterState = "any" | "enabled" | "disabled" | "suspended" | "disabled_or_suspended";
 
 type AdvancedFilterState = {
   tenant: string;
@@ -901,7 +1047,13 @@ const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
     const rawFeatures = data.features as Record<string, unknown>;
     (Object.keys(features) as FeatureKey[]).forEach((key) => {
       const raw = rawFeatures[key];
-      if (raw === "any" || raw === "enabled" || raw === "disabled") {
+      if (
+        raw === "any" ||
+        raw === "enabled" ||
+        raw === "disabled" ||
+        raw === "suspended" ||
+        raw === "disabled_or_suspended"
+      ) {
         features[key] = raw;
       }
     });
@@ -1040,6 +1192,20 @@ export default function CephAdminBucketsPage() {
   const [orphanedTagBuckets, setOrphanedTagBuckets] = useState<string[]>([]);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
+  const [bulkQuotaSizeValue, setBulkQuotaSizeValue] = useState("");
+  const [bulkQuotaSizeUnit, setBulkQuotaSizeUnit] = useState<QuotaSizeUnit>("GiB");
+  const [bulkQuotaObjects, setBulkQuotaObjects] = useState("");
+  const [bulkQuotaApplySize, setBulkQuotaApplySize] = useState(true);
+  const [bulkQuotaApplyObjects, setBulkQuotaApplyObjects] = useState(true);
+  const [bulkQuotaSkipConfigured, setBulkQuotaSkipConfigured] = useState(false);
+  const [bulkPublicAccessBlockTargets, setBulkPublicAccessBlockTargets] = useState<
+    Record<PublicAccessBlockOptionKey, boolean>
+  >(() => ({
+    block_public_acls: true,
+    ignore_public_acls: true,
+    block_public_policy: true,
+    restrict_public_buckets: true,
+  }));
   const [bulkLifecycleRuleText, setBulkLifecycleRuleText] = useState("");
   const [bulkLifecycleUpdateOnlyExisting, setBulkLifecycleUpdateOnlyExisting] = useState(false);
   const [bulkLifecycleDeleteIds, setBulkLifecycleDeleteIds] = useState("");
@@ -1074,6 +1240,7 @@ export default function CephAdminBucketsPage() {
   const [bulkApplyLoading, setBulkApplyLoading] = useState(false);
   const [bulkApplyError, setBulkApplyError] = useState<string | null>(null);
   const [bulkApplySummary, setBulkApplySummary] = useState<string | null>(null);
+  const [bulkApplyProgress, setBulkApplyProgress] = useState<BulkApplyProgress | null>(null);
   const [showTagEditor, setShowTagEditor] = useState(false);
   const [tagTargets, setTagTargets] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
@@ -1532,8 +1699,16 @@ export default function CephAdminBucketsPage() {
     resetBulkPreview();
     setBulkApplyError(null);
     setBulkApplySummary(null);
+    setBulkApplyProgress(null);
   }, [
     bulkOperation,
+    bulkQuotaSizeValue,
+    bulkQuotaSizeUnit,
+    bulkQuotaObjects,
+    bulkQuotaApplySize,
+    bulkQuotaApplyObjects,
+    bulkQuotaSkipConfigured,
+    bulkPublicAccessBlockTargets,
     bulkLifecycleRuleText,
     bulkLifecycleUpdateOnlyExisting,
     bulkLifecycleDeleteIds,
@@ -1553,6 +1728,18 @@ export default function CephAdminBucketsPage() {
   const openBulkUpdateModal = () => {
     setShowBulkUpdateModal(true);
     setBulkOperation("");
+    setBulkQuotaSizeValue("");
+    setBulkQuotaSizeUnit("GiB");
+    setBulkQuotaObjects("");
+    setBulkQuotaApplySize(true);
+    setBulkQuotaApplyObjects(true);
+    setBulkQuotaSkipConfigured(false);
+    setBulkPublicAccessBlockTargets({
+      block_public_acls: true,
+      ignore_public_acls: true,
+      block_public_policy: true,
+      restrict_public_buckets: true,
+    });
     setBulkLifecycleRuleText("");
     setBulkLifecycleUpdateOnlyExisting(false);
     setBulkLifecycleDeleteIds("");
@@ -1583,6 +1770,7 @@ export default function CephAdminBucketsPage() {
     resetBulkPreview();
     setBulkApplyError(null);
     setBulkApplySummary(null);
+    setBulkApplyProgress(null);
   };
 
   const closeBulkUpdateModal = () => {
@@ -1590,6 +1778,7 @@ export default function CephAdminBucketsPage() {
     resetBulkPreview();
     setBulkApplyError(null);
     setBulkApplySummary(null);
+    setBulkApplyProgress(null);
   };
 
   const buildVersioningPreview = async (bucketName: string, desiredEnabled: boolean): Promise<BulkPreviewItem> => {
@@ -1597,7 +1786,7 @@ export default function CephAdminBucketsPage() {
     const currentStatus = formatVersioningStatus(props.versioning_status);
     const currentEnabled = normalizeVersioningStatus(props.versioning_status);
     const changed = currentEnabled === null ? true : currentEnabled !== desiredEnabled;
-    const afterStatus = desiredEnabled ? "Enabled" : "Suspended";
+    const afterStatus = changed ? (desiredEnabled ? "Enabled" : "Suspended") : currentStatus;
     return {
       bucket: bucketName,
       changed,
@@ -1611,6 +1800,112 @@ export default function CephAdminBucketsPage() {
         {
           text: afterStatus,
           tone: changed ? "added" : undefined,
+        },
+      ],
+    };
+  };
+
+  const buildPublicAccessBlockPreview = async (
+    bucketName: string,
+    desiredEnabled: boolean,
+    targets: PublicAccessBlockOptionKey[]
+  ): Promise<BulkPreviewItem> => {
+    const current = normalizePublicAccessBlockState(await getCephAdminBucketPublicAccessBlock(selectedEndpointId!, bucketName));
+    const target = applyPublicAccessBlockTargets(current, desiredEnabled, targets);
+    const changed = !isPublicAccessBlockEquivalent(current, target);
+    const beforeState = formatPublicAccessBlockState(current);
+    const afterState = formatPublicAccessBlockState(target);
+    return {
+      bucket: bucketName,
+      changed,
+      before: [
+        { text: `State: ${beforeState}`, tone: changed ? "removed" : undefined },
+        ...PUBLIC_ACCESS_BLOCK_OPTIONS.map((option) => ({
+          text: `${option.label}: ${formatPublicAccessBlockFlag(current[option.key])}`,
+          tone: current[option.key] !== target[option.key] ? "removed" : undefined,
+        })),
+      ],
+      after: [
+        { text: `State: ${afterState}`, tone: changed ? "added" : undefined },
+        ...PUBLIC_ACCESS_BLOCK_OPTIONS.map((option) => ({
+          text: `${option.label}: ${formatPublicAccessBlockFlag(target[option.key])}`,
+          tone: current[option.key] !== target[option.key] ? "added" : undefined,
+        })),
+      ],
+    };
+  };
+
+  const fetchBucketQuota = async (bucketName: string) => {
+    const advancedFilter = JSON.stringify({
+      match: "all",
+      rules: [{ field: "name", op: "in", value: [bucketName] }],
+    });
+    const response = await listCephAdminBuckets(selectedEndpointId!, {
+      page: 1,
+      page_size: 5,
+      advanced_filter: advancedFilter,
+      with_stats: true,
+    });
+    const match =
+      response.items.find((item) => normalizeBucketName(item.name) === normalizeBucketName(bucketName)) ??
+      response.items[0] ??
+      null;
+    return {
+      maxSizeBytes: normalizeQuotaLimit(match?.quota_max_size_bytes),
+      maxObjects: normalizeQuotaLimit(match?.quota_max_objects),
+    };
+  };
+
+  const buildQuotaPreview = async (
+    bucketName: string,
+    payload: ParsedQuotaInput,
+    skipConfigured: boolean
+  ): Promise<BulkPreviewItem> => {
+    const currentQuota = await fetchBucketQuota(bucketName);
+    if (skipConfigured && hasConfiguredQuota(currentQuota)) {
+      return {
+        bucket: bucketName,
+        changed: false,
+        before: [
+          { text: `Size: ${currentQuota.maxSizeBytes != null ? formatBytes(currentQuota.maxSizeBytes) : "Not set"}` },
+          { text: `Objects: ${currentQuota.maxObjects != null ? formatNumber(currentQuota.maxObjects) : "Not set"}` },
+        ],
+        after: [
+          { text: `Size: ${currentQuota.maxSizeBytes != null ? formatBytes(currentQuota.maxSizeBytes) : "Not set"}` },
+          { text: `Objects: ${currentQuota.maxObjects != null ? formatNumber(currentQuota.maxObjects) : "Not set"}` },
+          { text: "(existing quota preserved)" },
+        ],
+      };
+    }
+    const beforeSize = currentQuota.maxSizeBytes;
+    const beforeObjects = currentQuota.maxObjects;
+    const afterSize = payload.applySize ? payload.maxSizeBytes : currentQuota.maxSizeBytes;
+    const afterObjects = payload.applyObjects ? payload.maxObjects : currentQuota.maxObjects;
+    const sizeChanged = beforeSize !== afterSize;
+    const objectsChanged = beforeObjects !== afterObjects;
+    const changed = sizeChanged || objectsChanged;
+
+    return {
+      bucket: bucketName,
+      changed,
+      before: [
+        {
+          text: `Size: ${beforeSize != null ? formatBytes(beforeSize) : "Not set"}`,
+          tone: sizeChanged ? "removed" : undefined,
+        },
+        {
+          text: `Objects: ${beforeObjects != null ? formatNumber(beforeObjects) : "Not set"}`,
+          tone: objectsChanged ? "removed" : undefined,
+        },
+      ],
+      after: [
+        {
+          text: `Size: ${afterSize != null ? formatBytes(afterSize) : "Not set"}`,
+          tone: sizeChanged ? "added" : undefined,
+        },
+        {
+          text: `Objects: ${afterObjects != null ? formatNumber(afterObjects) : "Not set"}`,
+          tone: objectsChanged ? "added" : undefined,
         },
       ],
     };
@@ -1872,6 +2167,7 @@ export default function CephAdminBucketsPage() {
       setBulkPreviewError("Select an operation first.");
       return;
     }
+    let parsedQuota: ParsedQuotaInput | null = null;
     let parsedRules: Record<string, unknown>[] | null = null;
     let parsedCorsRules: Record<string, unknown>[] | null = null;
     let parsedPolicyStatements: Record<string, unknown>[] | null = null;
@@ -1882,6 +2178,21 @@ export default function CephAdminBucketsPage() {
     let deleteCorsTypes: Set<CorsRuleTypeKey> | null = null;
     let deletePolicyIds: Set<string> | null = null;
     let deletePolicyTypes: Set<PolicyRuleTypeKey> | null = null;
+    let publicAccessBlockTargets: PublicAccessBlockOptionKey[] | null = null;
+    if (bulkOperation === "set_quota") {
+      const parsed = parseQuotaInput(
+        bulkQuotaSizeValue,
+        bulkQuotaSizeUnit,
+        bulkQuotaObjects,
+        bulkQuotaApplySize,
+        bulkQuotaApplyObjects
+      );
+      if ("error" in parsed) {
+        setBulkPreviewError(parsed.error);
+        return;
+      }
+      parsedQuota = parsed;
+    }
     if (bulkOperation === "add_lifecycle") {
       const parsed = parseLifecycleRules(bulkLifecycleRuleText);
       if ("error" in parsed) {
@@ -1953,6 +2264,16 @@ export default function CephAdminBucketsPage() {
       deletePolicyIds = new Set(parsedIds);
       deletePolicyTypes = new Set(parsedTypes);
     }
+    if (bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") {
+      const parsedTargets = PUBLIC_ACCESS_BLOCK_OPTIONS.filter((option) => bulkPublicAccessBlockTargets[option.key]).map(
+        (option) => option.key
+      );
+      if (parsedTargets.length === 0) {
+        setBulkPreviewError("Select at least one block public access option.");
+        return;
+      }
+      publicAccessBlockTargets = parsedTargets;
+    }
 
     setBulkPreviewLoading(true);
     setBulkPreviewError(null);
@@ -1962,11 +2283,21 @@ export default function CephAdminBucketsPage() {
     setBulkApplySummary(null);
 
     const desiredEnabled = bulkOperation === "enable_versioning";
+    const desiredPublicAccessBlockEnabled = bulkOperation === "add_public_access_block";
     const previewItems = await runWithConcurrency(
       selectedBucketList,
       BULK_CONCURRENCY_LIMIT,
       async (bucketName) => {
         try {
+          if (bulkOperation === "set_quota" && parsedQuota) {
+            return await buildQuotaPreview(bucketName, parsedQuota, bulkQuotaSkipConfigured);
+          }
+          if (
+            (bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") &&
+            publicAccessBlockTargets
+          ) {
+            return await buildPublicAccessBlockPreview(bucketName, desiredPublicAccessBlockEnabled, publicAccessBlockTargets);
+          }
           if (bulkOperation === "enable_versioning" || bulkOperation === "disable_versioning") {
             return await buildVersioningPreview(bucketName, desiredEnabled);
           }
@@ -2017,6 +2348,7 @@ export default function CephAdminBucketsPage() {
       setBulkApplyError("Select an operation first.");
       return;
     }
+    let parsedQuota: ParsedQuotaInput | null = null;
     let parsedRules: Record<string, unknown>[] | null = null;
     let parsedCorsRules: Record<string, unknown>[] | null = null;
     let parsedPolicyStatements: Record<string, unknown>[] | null = null;
@@ -2026,6 +2358,21 @@ export default function CephAdminBucketsPage() {
     let deleteCorsTypes: Set<CorsRuleTypeKey> | null = null;
     let deletePolicyIds: Set<string> | null = null;
     let deletePolicyTypes: Set<PolicyRuleTypeKey> | null = null;
+    let publicAccessBlockTargets: PublicAccessBlockOptionKey[] | null = null;
+    if (bulkOperation === "set_quota") {
+      const parsed = parseQuotaInput(
+        bulkQuotaSizeValue,
+        bulkQuotaSizeUnit,
+        bulkQuotaObjects,
+        bulkQuotaApplySize,
+        bulkQuotaApplyObjects
+      );
+      if ("error" in parsed) {
+        setBulkApplyError(parsed.error);
+        return;
+      }
+      parsedQuota = parsed;
+    }
     if (bulkOperation === "add_lifecycle") {
       const parsed = parseLifecycleRules(bulkLifecycleRuleText);
       if ("error" in parsed) {
@@ -2098,16 +2445,73 @@ export default function CephAdminBucketsPage() {
       deletePolicyIds = new Set(parsedIds);
       deletePolicyTypes = new Set(parsedTypes);
     }
+    if (bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") {
+      const parsedTargets = PUBLIC_ACCESS_BLOCK_OPTIONS.filter((option) => bulkPublicAccessBlockTargets[option.key]).map(
+        (option) => option.key
+      );
+      if (parsedTargets.length === 0) {
+        setBulkApplyError("Select at least one block public access option.");
+        return;
+      }
+      publicAccessBlockTargets = parsedTargets;
+    }
 
     setBulkApplyLoading(true);
     setBulkApplyError(null);
     setBulkApplySummary(null);
+    setBulkApplyProgress({ completed: 0, total: selectedBucketList.length, failed: 0 });
 
     const desiredEnabled = bulkOperation === "enable_versioning";
+    const desiredPublicAccessBlockEnabled = bulkOperation === "add_public_access_block";
     const results = await runWithConcurrencySettled(
       selectedBucketList,
       BULK_CONCURRENCY_LIMIT,
       async (bucketName) => {
+        if (bulkOperation === "set_quota" && parsedQuota) {
+          const currentQuota = await fetchBucketQuota(bucketName);
+          if (bulkQuotaSkipConfigured && hasConfiguredQuota(currentQuota)) {
+            return { changed: false };
+          }
+          const currentSize = currentQuota.maxSizeBytes;
+          const currentObjects = currentQuota.maxObjects;
+          const nextSize = parsedQuota.applySize ? parsedQuota.maxSizeBytes : currentSize;
+          const nextObjects = parsedQuota.applyObjects ? parsedQuota.maxObjects : currentObjects;
+          if (currentSize === nextSize && currentObjects === nextObjects) {
+            return { changed: false };
+          }
+          const payloadSizeGb =
+            nextSize != null
+              ? parsedQuota.applySize && parsedQuota.maxSizeValue != null
+                ? parsedQuota.maxSizeValue
+                : bytesToGiB(nextSize)
+              : null;
+          const payloadSizeUnit =
+            nextSize != null
+              ? parsedQuota.applySize && parsedQuota.maxSizeValue != null
+                ? parsedQuota.maxSizeUnit
+                : "GiB"
+              : null;
+          await updateCephAdminBucketQuota(selectedEndpointId, bucketName, {
+            max_size_gb: payloadSizeGb,
+            max_size_unit: payloadSizeUnit,
+            max_objects: nextObjects,
+          });
+          return { changed: true };
+        }
+        if (
+          (bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") &&
+          publicAccessBlockTargets
+        ) {
+          const current = normalizePublicAccessBlockState(
+            await getCephAdminBucketPublicAccessBlock(selectedEndpointId, bucketName)
+          );
+          const target = applyPublicAccessBlockTargets(current, desiredPublicAccessBlockEnabled, publicAccessBlockTargets);
+          if (isPublicAccessBlockEquivalent(current, target)) {
+            return { changed: false };
+          }
+          await updateCephAdminBucketPublicAccessBlock(selectedEndpointId, bucketName, target);
+          return { changed: true };
+        }
         if (bulkOperation === "enable_versioning" || bulkOperation === "disable_versioning") {
           const props = await getCephAdminBucketProperties(selectedEndpointId, bucketName);
           const currentEnabled = normalizeVersioningStatus(props.versioning_status);
@@ -2230,6 +2634,16 @@ export default function CephAdminBucketsPage() {
           return { changed: true };
         }
         return { changed: false };
+      },
+      (result) => {
+        setBulkApplyProgress((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            completed: Math.min(prev.total, prev.completed + 1),
+            failed: prev.failed + (result.status === "rejected" ? 1 : 0),
+          };
+        });
       }
     );
 
@@ -2312,12 +2726,17 @@ export default function CephAdminBucketsPage() {
     const unchanged = bulkPreview.length - changed - errors;
     return { changed, unchanged, errors };
   }, [bulkPreview]);
+  const bulkApplyProgressPercent = useMemo(() => {
+    if (!bulkApplyProgress || bulkApplyProgress.total <= 0) return 0;
+    return Math.min(100, Math.round((bulkApplyProgress.completed / bulkApplyProgress.total) * 100));
+  }, [bulkApplyProgress]);
   const hasDeleteCriteria =
     bulkLifecycleDeleteIds.trim().length > 0 || Object.values(bulkLifecycleDeleteTypes).some(Boolean);
   const hasCorsDeleteCriteria =
     bulkCorsDeleteIds.trim().length > 0 || Object.values(bulkCorsDeleteTypes).some(Boolean);
   const hasPolicyDeleteCriteria =
     bulkPolicyDeleteIds.trim().length > 0 || Object.values(bulkPolicyDeleteTypes).some(Boolean);
+  const hasPublicAccessBlockTargetCriteria = Object.values(bulkPublicAccessBlockTargets).some(Boolean);
 
   const diffToneClasses = (tone?: BulkPreviewTone) => {
     if (tone === "added") {
@@ -2971,9 +3390,21 @@ export default function CephAdminBucketsPage() {
                             isActive ? activeFieldClass : ""
                           }`}
                         >
-                          <option value="any">Any</option>
-                          <option value="enabled">Enabled</option>
-                          <option value="disabled">Disabled</option>
+                          {feature.id === "versioning" ? (
+                            <>
+                              <option value="any">Any</option>
+                              <option value="enabled">Enabled</option>
+                              <option value="disabled">Disabled</option>
+                              <option value="suspended">Suspended</option>
+                              <option value="disabled_or_suspended">Disabled or Suspended</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="any">Any</option>
+                              <option value="enabled">Enabled</option>
+                              <option value="disabled">Disabled</option>
+                            </>
+                          )}
                         </select>
                       </label>
                     );
@@ -3144,6 +3575,9 @@ export default function CephAdminBucketsPage() {
                   className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 >
                   <option value="">Select an operation</option>
+                  <option value="set_quota">Set bucket quota</option>
+                  <option value="add_public_access_block">Add block public access</option>
+                  <option value="remove_public_access_block">Remove block public access</option>
                   <option value="enable_versioning">Enable versioning</option>
                   <option value="disable_versioning">Disable versioning</option>
                   <option value="add_lifecycle">Add or update lifecycle rules</option>
@@ -3155,6 +3589,117 @@ export default function CephAdminBucketsPage() {
                 </select>
               </div>
             </div>
+            {bulkOperation === "set_quota" && (
+              <div className="space-y-4">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={bulkQuotaApplySize}
+                      onChange={(event) => setBulkQuotaApplySize(event.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                    />
+                    Update storage quota
+                  </label>
+                  <label className="flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={bulkQuotaApplyObjects}
+                      onChange={(event) => setBulkQuotaApplyObjects(event.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                    />
+                    Update object quota
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                  <div className="space-y-1">
+                    <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Storage quota
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={bulkQuotaSizeValue}
+                      onChange={(event) => setBulkQuotaSizeValue(event.target.value)}
+                      placeholder="Leave empty to clear"
+                      disabled={!bulkQuotaApplySize}
+                      className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Unit
+                    </label>
+                    <select
+                      value={bulkQuotaSizeUnit}
+                      onChange={(event) => setBulkQuotaSizeUnit(event.target.value as QuotaSizeUnit)}
+                      disabled={!bulkQuotaApplySize}
+                      className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    >
+                      <option value="MiB">MiB</option>
+                      <option value="GiB">GiB</option>
+                      <option value="TiB">TiB</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Object quota
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={bulkQuotaObjects}
+                    onChange={(event) => setBulkQuotaObjects(event.target.value)}
+                    placeholder="Leave empty to clear"
+                    disabled={!bulkQuotaApplyObjects}
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                </div>
+                <label className="flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={bulkQuotaSkipConfigured}
+                    onChange={(event) => setBulkQuotaSkipConfigured(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  />
+                  Do not change buckets that already have a quota.
+                </label>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  Leave both fields empty to remove quotas from the selected buckets.
+                </p>
+              </div>
+            )}
+            {(bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") && (
+              <div className="space-y-3">
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Options to {bulkOperation === "add_public_access_block" ? "block" : "unblock"}
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {PUBLIC_ACCESS_BLOCK_OPTIONS.map((option) => (
+                    <label
+                      key={option.key}
+                      className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={bulkPublicAccessBlockTargets[option.key]}
+                        onChange={(event) =>
+                          setBulkPublicAccessBlockTargets((prev) => ({ ...prev, [option.key]: event.target.checked }))
+                        }
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  Only selected options are updated. Unselected options remain unchanged.
+                </p>
+              </div>
+            )}
             {bulkOperation === "add_lifecycle" && (
               <div className="space-y-2">
                 <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -3364,13 +3909,34 @@ export default function CephAdminBucketsPage() {
             {bulkPreviewError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkPreviewError}</p>}
             {bulkApplyError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkApplyError}</p>}
             {bulkApplySummary && <p className="ui-caption font-semibold text-emerald-600 dark:text-emerald-200">{bulkApplySummary}</p>}
+            {bulkApplyLoading && bulkApplyProgress && (
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                <div className="flex flex-wrap items-center justify-between gap-2 ui-caption text-slate-600 dark:text-slate-300">
+                  <span>
+                    Processing {bulkApplyProgress.completed} / {bulkApplyProgress.total} buckets
+                  </span>
+                  <span>{bulkApplyProgressPercent}%</span>
+                </div>
+                <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                  <div className="h-full bg-primary-500 transition-[width] duration-200" style={{ width: `${bulkApplyProgressPercent}%` }} />
+                </div>
+                {bulkApplyProgress.failed > 0 && (
+                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+                    Failures so far: {bulkApplyProgress.failed}
+                  </p>
+                )}
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={runBulkPreview}
                 disabled={
                   bulkPreviewLoading ||
+                  bulkApplyLoading ||
                   !bulkOperation ||
+                  ((bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") &&
+                    !hasPublicAccessBlockTargetCriteria) ||
                   (bulkOperation === "add_lifecycle" && !bulkLifecycleRuleText.trim()) ||
                   (bulkOperation === "delete_lifecycle" && !hasDeleteCriteria) ||
                   (bulkOperation === "add_cors" && !bulkCorsRuleText.trim()) ||

@@ -21,6 +21,7 @@ class ExecutionContext(BaseModel):
     quota_max_objects: Optional[int] = None
     endpoint_id: Optional[int] = None
     endpoint_name: Optional[str] = None
+    endpoint_provider: Optional[str] = None
     endpoint_url: Optional[str] = None
     storage_endpoint_capabilities: Optional[dict[str, bool]] = None
     capabilities: ExecutionContextCapabilities

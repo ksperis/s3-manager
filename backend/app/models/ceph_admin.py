@@ -103,6 +103,7 @@ BucketFeatureKey = Literal[
 BucketFeatureState = Literal[
     "enabled",
     "disabled",
+    "disabled_or_suspended",
     "unknown",
     "partial",
     "suspended",

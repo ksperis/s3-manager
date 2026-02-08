@@ -17,6 +17,14 @@ from app.utils.storage_endpoint_features import features_to_capabilities, normal
 router = APIRouter(prefix="/me", tags=["me"])
 
 
+def _provider_value(provider: object | None) -> Optional[str]:
+    if provider is None:
+        return None
+    value = getattr(provider, "value", provider)
+    text = str(value).strip().lower()
+    return text or None
+
+
 def _build_account_context(account: S3Account) -> ExecutionContext:
     endpoint = account.storage_endpoint
     endpoint_caps = (
@@ -32,6 +40,7 @@ def _build_account_context(account: S3Account) -> ExecutionContext:
         rgw_account_id=account.rgw_account_id,
         endpoint_id=endpoint.id if endpoint else None,
         endpoint_name=endpoint.name if endpoint else None,
+        endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
         endpoint_url=endpoint.endpoint_url if endpoint else None,
         storage_endpoint_capabilities=endpoint_caps,
         capabilities=ExecutionContextCapabilities(
@@ -61,6 +70,7 @@ def _build_legacy_user_context(
         quota_max_objects=quota_max_objects,
         endpoint_id=endpoint.id if endpoint else None,
         endpoint_name=endpoint.name if endpoint else None,
+        endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
         endpoint_url=endpoint.endpoint_url if endpoint else None,
         storage_endpoint_capabilities=endpoint_caps,
         capabilities=ExecutionContextCapabilities(
