@@ -672,6 +672,7 @@ export default function UsersPage() {
   const MAX_VISIBLE_OPTIONS = 10;
   const { generalSettings } = useGeneralSettings();
   const portalEnabled = generalSettings.portal_enabled;
+  const cephAdminFeatureEnabled = generalSettings.ceph_admin_enabled;
   const [users, setUsers] = useState<User[]>([]);
   const [accounts, setS3Accounts] = useState<S3AccountSummary[]>([]);
   const [s3AccountsLoaded, setS3AccountsLoaded] = useState(false);
@@ -690,6 +691,7 @@ export default function UsersPage() {
     email: "",
     password: "",
     role: "ui_user",
+    can_access_ceph_admin: false,
   });
   const [form, setForm] = useState<CreateUserPayload>(() => createFormTemplate());
   const [createSelectedS3Accounts, setCreateSelectedS3Accounts] = useState<{ id: number; role: string; account_admin?: boolean }[]>([]);
@@ -900,7 +902,10 @@ export default function UsersPage() {
     },
     [s3ConnectionLabelById, s3Connections]
   );
-  const editRoleValue = editForm.role ?? editingUser?.role ?? "ui_user";
+  const editRoleValue = normalizeUiRoleValue(editForm.role ?? editingUser?.role ?? "ui_user");
+  const createRoleValue = normalizeUiRoleValue(form.role);
+  const createCanGrantCephAdmin = createRoleValue === "ui_admin";
+  const editCanGrantCephAdmin = editRoleValue === "ui_admin";
 
   const formatLastLogin = (value?: string | null) => {
     if (!value) return "-";
@@ -1122,6 +1127,10 @@ export default function UsersPage() {
   }, [fetchUsers]);
 
   useEffect(() => {
+    ensureS3Accounts();
+  }, [ensureS3Accounts]);
+
+  useEffect(() => {
     if (showCreateModal) {
       if (createAssociationsTab === "accounts") {
         ensureS3Accounts();
@@ -1196,10 +1205,12 @@ export default function UsersPage() {
       setActionError("Email and password are required.");
       return;
     }
+    const normalizedRole = normalizeUiRoleValue(form.role);
     const payload: CreateUserPayload = {
       email: form.email,
       password: form.password,
-      role: form.role,
+      role: normalizedRole,
+      can_access_ceph_admin: normalizedRole === "ui_admin" ? Boolean(form.can_access_ceph_admin) : false,
     };
     try {
       const created = await createUser(payload);
@@ -1255,11 +1266,13 @@ export default function UsersPage() {
   };
 
   const startEdit = (user: User) => {
+    const normalizedRole = normalizeUiRoleValue(user.role);
     setEditingUser(user);
     setEditForm({
       email: user.email,
       password: "",
-      role: normalizeUiRoleValue(user.role),
+      role: normalizedRole,
+      can_access_ceph_admin: normalizedRole === "ui_admin" ? Boolean(user.can_access_ceph_admin) : false,
     });
     const accountRoles = new Map<number, string | null>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), link.account_role ?? null])
@@ -1310,6 +1323,7 @@ export default function UsersPage() {
     setActionMessage(null);
     try {
       const payload: UpdateUserPayload = {};
+      const nextRole = normalizeUiRoleValue(editForm.role ?? editingUser.role);
       if (editForm.email) {
         payload.email = editForm.email;
       }
@@ -1317,8 +1331,12 @@ export default function UsersPage() {
         payload.password = editForm.password;
       }
       if (editForm.role) {
-        payload.role = editForm.role;
+        payload.role = nextRole;
       }
+      payload.can_access_ceph_admin =
+        nextRole === "ui_admin"
+          ? Boolean(editForm.can_access_ceph_admin ?? editingUser.can_access_ceph_admin)
+          : false;
       payload.s3_user_ids = editSelectedS3Users;
       payload.s3_connection_ids = editSelectedS3Connections;
       await updateUser(editingUser.id, payload);
@@ -1502,12 +1520,13 @@ export default function UsersPage() {
               <label className="ui-body font-medium text-slate-700">Role</label>
               <select
                 className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                value={form.role}
+                value={createRoleValue}
                 onChange={(e) => {
-                  const value = e.target.value;
+                  const value = normalizeUiRoleValue(e.target.value);
                   setForm((f) => ({
                     ...f,
                     role: value,
+                    can_access_ceph_admin: value === "ui_admin" ? Boolean(f.can_access_ceph_admin) : false,
                   }));
                 }}
               >
@@ -1515,6 +1534,27 @@ export default function UsersPage() {
                 <option value="ui_user">User</option>
                 <option value="ui_admin">Admin</option>
               </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="ui-body font-medium text-slate-700">Ceph Admin access</label>
+              <label className="inline-flex items-center gap-2 ui-body text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={createCanGrantCephAdmin && Boolean(form.can_access_ceph_admin)}
+                  disabled={!createCanGrantCephAdmin}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      can_access_ceph_admin: e.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                />
+                <span>Allow access to /ceph-admin</span>
+              </label>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                Available only for role "Admin". Grants access to advanced Ceph cluster operations.
+              </p>
             </div>
             <div className="md:col-span-2">
               <AssociationsTabs
@@ -1665,21 +1705,21 @@ export default function UsersPage() {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {loading && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
+                  <td colSpan={5} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
                     Loading...
                   </td>
                 </tr>
               )}
               {error && !loading && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 ui-body text-rose-600 dark:text-rose-200">
+                  <td colSpan={5} className="px-6 py-4 ui-body text-rose-600 dark:text-rose-200">
                     {error}
                   </td>
                 </tr>
               )}
               {!loading && !error && totalUsers === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
+                  <td colSpan={5} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
                     No users.
                   </td>
                 </tr>
@@ -1699,7 +1739,18 @@ export default function UsersPage() {
                         </button>
                       </div>
                     </td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{displayUiRole(user.role)}</td>
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>{displayUiRole(user.role)}</span>
+                        {cephAdminFeatureEnabled &&
+                          normalizeUiRoleValue(user.role) === "ui_admin" &&
+                          user.can_access_ceph_admin && (
+                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
+                              Ceph Admin
+                            </span>
+                          )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {formatLastLogin(user.last_login_at)}
                     </td>
@@ -1794,10 +1845,11 @@ export default function UsersPage() {
                 className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                 value={editRoleValue}
                 onChange={(e) => {
-                  const value = e.target.value;
+                  const value = normalizeUiRoleValue(e.target.value);
                   setEditForm((f) => ({
                     ...f,
                     role: value,
+                    can_access_ceph_admin: value === "ui_admin" ? Boolean(f.can_access_ceph_admin) : false,
                   }));
                 }}
               >
@@ -1805,6 +1857,27 @@ export default function UsersPage() {
                 <option value="ui_user">User</option>
                 <option value="ui_admin">Admin</option>
               </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="ui-body font-medium text-slate-700">Ceph Admin access</label>
+              <label className="inline-flex items-center gap-2 ui-body text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={editCanGrantCephAdmin && Boolean(editForm.can_access_ceph_admin)}
+                  disabled={!editCanGrantCephAdmin}
+                  onChange={(e) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      can_access_ceph_admin: e.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                />
+                <span>Allow access to /ceph-admin</span>
+              </label>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                Available only for role "Admin". Grants access to advanced Ceph cluster operations.
+              </p>
             </div>
             <div className="md:col-span-2">
               <AssociationsTabs

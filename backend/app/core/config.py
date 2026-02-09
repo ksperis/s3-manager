@@ -129,6 +129,14 @@ class Settings(BaseSettings):
         None,
         description="Seed secret key dedicated to supervision usage stats",
     )
+    seed_ceph_admin_access_key: Optional[str] = Field(
+        None,
+        description="Seed access key dedicated to Ceph Admin advanced operations",
+    )
+    seed_ceph_admin_secret_key: Optional[str] = Field(
+        None,
+        description="Seed secret key dedicated to Ceph Admin advanced operations",
+    )
 
     # Default super-admin seed
     seed_super_admin_email: str = Field(

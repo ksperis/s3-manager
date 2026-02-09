@@ -62,7 +62,11 @@ def rotate_credentials(*, new_key: str) -> int:
     session = SessionLocal()
     try:
         updated = 0
-        updated += _rotate_encrypted_fields(session, StorageEndpoint, ["admin_secret_key", "supervision_secret_key"])
+        updated += _rotate_encrypted_fields(
+            session,
+            StorageEndpoint,
+            ["admin_secret_key", "supervision_secret_key", "ceph_admin_secret_key"],
+        )
         updated += _rotate_encrypted_fields(session, S3Account, ["rgw_secret_key"])
         updated += _rotate_encrypted_fields(session, AccountIAMUser, ["active_secret_key"])
         updated += _rotate_encrypted_fields(session, S3User, ["rgw_secret_key"])

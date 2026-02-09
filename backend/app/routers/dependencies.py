@@ -93,6 +93,12 @@ def get_current_super_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def get_current_ceph_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != UserRole.UI_ADMIN.value or not bool(user.can_access_ceph_admin):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    return user
+
+
 def get_current_account_admin(actor: ManagerActor = Depends(get_current_actor)) -> ManagerActor:
     if isinstance(actor, User):
         if actor.role not in {UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:

@@ -141,6 +141,11 @@ def resolve_admin_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
     flags = resolve_feature_flags(endpoint)
     if not flags.admin_enabled:
         return None
+    return resolve_rgw_admin_api_endpoint(endpoint)
+
+
+def resolve_rgw_admin_api_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
+    flags = resolve_feature_flags(endpoint)
     return flags.admin_endpoint or _normalize_url(endpoint.endpoint_url)
 
 

@@ -21,6 +21,13 @@ export type StorageEndpointFeatures = {
   sns: StorageEndpointFeature;
 };
 
+export type StorageEndpointAdminOpsPermissions = {
+  users_read: boolean;
+  users_write: boolean;
+  accounts_read: boolean;
+  accounts_write: boolean;
+};
+
 export type StorageEndpoint = {
   id: number;
   name: string;
@@ -32,7 +39,10 @@ export type StorageEndpoint = {
   has_admin_secret: boolean;
   supervision_access_key?: string | null;
   has_supervision_secret: boolean;
+  ceph_admin_access_key?: string | null;
+  has_ceph_admin_secret: boolean;
   capabilities?: Record<string, boolean> | null;
+  admin_ops_permissions?: StorageEndpointAdminOpsPermissions | null;
   features_config?: string | null;
   features?: StorageEndpointFeatures;
   is_default: boolean;
@@ -55,6 +65,8 @@ export type StorageEndpointPayload = {
   admin_secret_key?: string | null;
   supervision_access_key?: string | null;
   supervision_secret_key?: string | null;
+  ceph_admin_access_key?: string | null;
+  ceph_admin_secret_key?: string | null;
   features_config?: string | null;
 };
 

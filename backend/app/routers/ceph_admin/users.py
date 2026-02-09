@@ -17,7 +17,7 @@ from app.models.ceph_admin import (
     PaginatedCephAdminUsersResponse,
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
-from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.dependencies import get_audit_logger, get_current_ceph_admin
 from app.services.audit_service import AuditService
 from app.services.rgw_admin import RGWAdminError
 from app.services.s3_connections_service import S3ConnectionsService
@@ -236,7 +236,7 @@ def assume_rgw_user(
     user_id: str,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
     db: Session = Depends(get_db),
-    actor: User = Depends(get_current_super_admin),
+    actor: User = Depends(get_current_ceph_admin),
     audit: AuditService = Depends(get_audit_logger),
 ) -> CephAdminAssumeUserResponse:
     uid = user_id.strip()

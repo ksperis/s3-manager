@@ -5,7 +5,7 @@ from typing import Optional
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db import S3Account, UserS3Account
+from app.db import S3Account, StorageEndpoint, StorageProvider, UserS3Account
 from app.services import s3_accounts_service, s3_client
 
 
@@ -197,3 +197,28 @@ def test_manager_create_bucket_with_versioning(monkeypatch, client: TestClient, 
 def test_admin_create_user_requires_email_format(client: TestClient):
     resp = client.post("/api/admin/users", json={"email": "not-an-email", "password": "x"})
     assert resp.status_code == 422
+
+
+def test_get_account_detail_without_admin_ops_returns_200(client: TestClient, db_session):
+    endpoint = StorageEndpoint(
+        name="ceph-no-admin",
+        endpoint_url="https://ceph-no-admin.example.test",
+        provider=StorageProvider.CEPH.value,
+        features_config="features:\n  admin:\n    enabled: false\n",
+        is_default=True,
+    )
+    db_session.add(endpoint)
+    db_session.flush()
+    account = S3Account(
+        name="no-admin-ops-account",
+        rgw_account_id="RGW00000000000000011",
+        storage_endpoint_id=endpoint.id,
+    )
+    db_session.add(account)
+    db_session.commit()
+
+    resp = client.get(f"/api/admin/accounts/{account.id}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["db_id"] == account.id
+    assert body["name"] == "no-admin-ops-account"

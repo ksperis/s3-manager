@@ -196,16 +196,33 @@ export default function S3UsersPage() {
     () => cephEndpoints.filter((ep) => Boolean(ep.capabilities?.admin)),
     [cephEndpoints]
   );
+  const editingEndpoint = useMemo(() => {
+    if (!editingUser?.storage_endpoint_id) return null;
+    return storageEndpoints.find((endpoint) => endpoint.id === editingUser.storage_endpoint_id) ?? null;
+  }, [editingUser?.storage_endpoint_id, storageEndpoints]);
+  const allowUserQuotaUpdates = Boolean(editingEndpoint?.admin_ops_permissions?.users_write);
+  const userWritableCephEndpoints = useMemo(
+    () => adminCephEndpoints.filter((ep) => Boolean(ep.admin_ops_permissions?.users_write)),
+    [adminCephEndpoints]
+  );
 
   useEffect(() => {
-    const defaultCeph = adminCephEndpoints.find((ep) => ep.is_default) || adminCephEndpoints[0];
+    const defaultCeph =
+      userWritableCephEndpoints.find((ep) => ep.is_default) || userWritableCephEndpoints[0];
     const firstCephId = defaultCeph ? String(defaultCeph.id) : "";
-    setCreateForm((prev) => ({ ...prev, storage_endpoint_id: prev.storage_endpoint_id || firstCephId }));
-    setImportEndpointId((prev) => prev || firstCephId);
+    setCreateForm((prev) => ({
+      ...prev,
+      storage_endpoint_id: userWritableCephEndpoints.some((endpoint) => String(endpoint.id) === prev.storage_endpoint_id)
+        ? prev.storage_endpoint_id
+        : firstCephId,
+    }));
+    setImportEndpointId((prev) =>
+      userWritableCephEndpoints.some((endpoint) => String(endpoint.id) === prev) ? prev : firstCephId
+    );
     if (!editForm.storage_endpoint_id && firstCephId) {
       setEditForm((prev) => ({ ...prev, storage_endpoint_id: firstCephId }));
     }
-  }, [adminCephEndpoints, editForm.storage_endpoint_id]);
+  }, [userWritableCephEndpoints, editForm.storage_endpoint_id]);
 
   const toggleEditPortalUserSelection = (userId: number) => {
     setEditPortalUserSelections((prev) =>
@@ -265,14 +282,24 @@ export default function S3UsersPage() {
     setEditBusy(true);
     setEditError(null);
     try {
-      await updateS3User(editingUser.id, {
+      const payload: {
+        name?: string;
+        email?: string;
+        user_ids?: number[];
+        quota_max_size_gb?: number | null;
+        quota_max_size_unit?: string | null;
+        quota_max_objects?: number | null;
+      } = {
         name: editForm.name || undefined,
         email: editForm.email || undefined,
         user_ids: editForm.user_ids,
-        quota_max_size_gb: editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null,
-        quota_max_size_unit: editForm.quota_max_size_gb !== "" ? editForm.quota_max_size_unit : null,
-        quota_max_objects: editForm.quota_max_objects !== "" ? Number(editForm.quota_max_objects) : null,
-      });
+      };
+      if (allowUserQuotaUpdates) {
+        payload.quota_max_size_gb = editForm.quota_max_size_gb !== "" ? Number(editForm.quota_max_size_gb) : null;
+        payload.quota_max_size_unit = editForm.quota_max_size_gb !== "" ? editForm.quota_max_size_unit : null;
+        payload.quota_max_objects = editForm.quota_max_objects !== "" ? Number(editForm.quota_max_objects) : null;
+      }
+      await updateS3User(editingUser.id, payload);
       await fetchUsers();
       setEditingUser(null);
       setPortalUserSearch("");
@@ -289,7 +316,7 @@ export default function S3UsersPage() {
   const submitCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!canProvisionUsers) {
-      setCreateError("Admin is disabled for all Ceph endpoints.");
+      setCreateError("Admin Ops credentials require users=write on at least one Ceph endpoint.");
       return;
     }
     if (!createForm.name.trim()) {
@@ -332,7 +359,7 @@ export default function S3UsersPage() {
 
   const submitImport = async () => {
     if (!canProvisionUsers) {
-      setImportError("Admin is disabled for all Ceph endpoints.");
+      setImportError("Admin Ops credentials require users=write on at least one Ceph endpoint.");
       setImportMessage(null);
       return;
     }
@@ -396,7 +423,7 @@ export default function S3UsersPage() {
   };
 
   const deleteModalBusy = userToDelete ? deleteBusyId === userToDelete.id : false;
-  const canProvisionUsers = adminCephEndpoints.length > 0;
+  const canProvisionUsers = userWritableCephEndpoints.length > 0;
 
   const confirmDeleteUser = async () => {
     if (!userToDelete) return;
@@ -552,7 +579,7 @@ export default function S3UsersPage() {
         <Modal title="Create user" onClose={() => setShowCreateModal(false)}>
           {!canProvisionUsers && (
             <PageBanner tone="warning" className="mb-3">
-              Admin is disabled for all Ceph endpoints. Enable admin features before provisioning users.
+              No Ceph endpoint has Admin Ops capability <code>users=write</code>. User provisioning is disabled.
             </PageBanner>
           )}
           {createError && (
@@ -585,13 +612,17 @@ export default function S3UsersPage() {
                 className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={createForm.storage_endpoint_id}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, storage_endpoint_id: e.target.value }))}
-                disabled={loadingEndpoints || adminCephEndpoints.length === 0}
+                disabled={loadingEndpoints || userWritableCephEndpoints.length === 0}
                 required
               >
                 <option value="" disabled>
-                  {loadingEndpoints ? "Loading..." : adminCephEndpoints.length === 0 ? "No admin-enabled Ceph endpoint" : "Select"}
+                  {loadingEndpoints
+                    ? "Loading..."
+                    : userWritableCephEndpoints.length === 0
+                      ? "No Ceph endpoint with users=write"
+                      : "Select"}
                 </option>
-                {adminCephEndpoints.map((ep) => (
+                {userWritableCephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
                     {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
@@ -673,7 +704,7 @@ export default function S3UsersPage() {
           <p className="mb-3 ui-body text-slate-500">Enter RGW user IDs, one per line. The platform will fetch or generate keys.</p>
           {!canProvisionUsers && (
             <PageBanner tone="warning" className="mb-3">
-              Admin is disabled for all Ceph endpoints. User import requires admin access.
+              No Ceph endpoint has Admin Ops capability <code>users=write</code>. User import is disabled.
             </PageBanner>
           )}
           {importError && (
@@ -699,13 +730,17 @@ export default function S3UsersPage() {
               className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               value={importEndpointId}
               onChange={(e) => setImportEndpointId(e.target.value)}
-              disabled={loadingEndpoints || adminCephEndpoints.length === 0}
+              disabled={loadingEndpoints || userWritableCephEndpoints.length === 0}
               required
             >
               <option value="" disabled>
-                {loadingEndpoints ? "Loading..." : adminCephEndpoints.length === 0 ? "No admin-enabled Ceph endpoint" : "Select"}
+                {loadingEndpoints
+                  ? "Loading..."
+                  : userWritableCephEndpoints.length === 0
+                    ? "No Ceph endpoint with users=write"
+                    : "Select"}
               </option>
-              {adminCephEndpoints.map((ep) => (
+              {userWritableCephEndpoints.map((ep) => (
                 <option key={ep.id} value={ep.id}>
                   {ep.name} {ep.is_default ? "(default)" : ""}
                 </option>
@@ -805,23 +840,24 @@ export default function S3UsersPage() {
               <div className="flex flex-col gap-1">
                 <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Quota max size</label>
                 <div className="flex gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step="any"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={editForm.quota_max_size_gb}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
-                    placeholder="e.g. 500"
-                  />
-                  <select
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={editForm.quota_max_size_unit}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
-                    disabled={!editForm.quota_max_size_gb}
-                  >
-                    {["MiB", "GiB", "TiB"].map((u) => (
-                      <option key={u} value={u}>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
+                  value={editForm.quota_max_size_gb}
+                  disabled={!allowUserQuotaUpdates}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
+                  placeholder="e.g. 500"
+                />
+                <select
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
+                  value={editForm.quota_max_size_unit}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
+                  disabled={!allowUserQuotaUpdates || !editForm.quota_max_size_gb}
+                >
+                  {["MiB", "GiB", "TiB"].map((u) => (
+                    <option key={u} value={u}>
                         {u}
                       </option>
                     ))}
@@ -834,8 +870,9 @@ export default function S3UsersPage() {
                   type="number"
                   min={0}
                   step={1}
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                   value={editForm.quota_max_objects}
+                  disabled={!allowUserQuotaUpdates}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}
                   placeholder="e.g. 1000000"
                 />

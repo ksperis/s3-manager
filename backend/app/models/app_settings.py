@@ -128,13 +128,14 @@ class GeneralSettings(BaseModel):
     browser_portal_enabled: bool = True
     portal_enabled: bool = False
     billing_enabled: bool = False
-    allow_login_access_keys: bool = True
+    endpoint_status_enabled: bool = False
+    allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False
 
 
 class LoginSettings(BaseModel):
-    allow_login_access_keys: bool = True
+    allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False
     default_endpoint_url: Optional[str] = None

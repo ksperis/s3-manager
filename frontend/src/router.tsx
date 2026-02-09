@@ -64,6 +64,7 @@ const UNASSIGNED_ROLE = "ui_none";
 
 type StoredUser = {
   role?: string | null;
+  can_access_ceph_admin?: boolean | null;
   email?: string | null;
   accounts?: number[] | null;
   account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
@@ -78,7 +79,12 @@ type StoredUser = {
   };
 };
 
-const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean, billingEnabled: boolean) => {
+const buildAdminNav = (
+  portalEnabled: boolean,
+  browserEnabled: boolean,
+  billingEnabled: boolean,
+  endpointStatusEnabled: boolean
+) => {
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
     { to: "/admin/manager-settings", label: "Manager" },
@@ -112,10 +118,10 @@ const buildAdminNav = (portalEnabled: boolean, browserEnabled: boolean, billingE
       links: [{ to: "/admin/s3-connections", label: "S3 Connections" }],
     },
     {
-      label: "Connectivity",
+      label: "Storage Backends",
       links: [
         { to: "/admin/storage-endpoints", label: "S3 Endpoints" },
-        { to: "/admin/endpoint-status", label: "Endpoint Status" },
+        ...(endpointStatusEnabled ? [{ to: "/admin/endpoint-status", label: "Endpoint Status" }] : []),
       ],
     },
     {
@@ -152,7 +158,8 @@ function AdminLayoutShell() {
   const adminNav = buildAdminNav(
     generalSettings.portal_enabled,
     generalSettings.browser_enabled,
-    generalSettings.billing_enabled
+    generalSettings.billing_enabled,
+    generalSettings.endpoint_status_enabled
   );
   return (
     <Layout
@@ -177,6 +184,13 @@ function AdminBillingRoute() {
 function PortalBillingRoute() {
   const { generalSettings } = useGeneralSettings();
   return generalSettings.billing_enabled ? <PortalBillingPage /> : <FeatureDisabledPage feature="Billing" />;
+}
+
+function AdminEndpointStatusRoute() {
+  const { generalSettings } = useGeneralSettings();
+  return generalSettings.endpoint_status_enabled
+    ? <EndpointStatusPage />
+    : <FeatureDisabledPage feature="Endpoint Status" />;
 }
 
 function RequireRole({ roles }: { roles: string[] }) {
@@ -228,6 +242,10 @@ function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal"
 
 function RequireCephAdminFeature() {
   const { generalSettings } = useGeneralSettings();
+  const user = getStoredUser();
+  if (!user || user.role !== ADMIN_ROLE || !user.can_access_ceph_admin) {
+    return <Navigate to="/unauthorized" replace />;
+  }
   if (!generalSettings.ceph_admin_enabled) {
     return <FeatureDisabledPage feature="Ceph Admin" />;
   }
@@ -268,7 +286,7 @@ export default function AppRouter() {
               <Route path="s3-connections" element={<S3ConnectionsPage />} />
               <Route path="s3-users/:userId/keys" element={<S3UserKeysPage />} />
               <Route path="storage-endpoints" element={<StorageEndpointsPage />} />
-              <Route path="endpoint-status" element={<EndpointStatusPage />} />
+              <Route path="endpoint-status" element={<AdminEndpointStatusRoute />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="metrics" element={<AdminMetricsPage />} />

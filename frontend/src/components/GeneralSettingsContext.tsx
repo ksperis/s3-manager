@@ -14,7 +14,8 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   browser_portal_enabled: true,
   portal_enabled: false,
   billing_enabled: false,
-  allow_login_access_keys: true,
+  endpoint_status_enabled: false,
+  allow_login_access_keys: false,
   allow_login_endpoint_list: false,
   allow_login_custom_endpoint: false,
 };

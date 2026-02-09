@@ -15,6 +15,7 @@ export type User = {
   id: number;
   email: string;
   role?: string | null;
+  can_access_ceph_admin?: boolean;
   accounts?: number[];
   account_links?: AccountMembership[];
   s3_users?: number[];
@@ -35,12 +36,14 @@ export type CreateUserPayload = {
   email: string;
   password: string;
   role?: string;
+  can_access_ceph_admin?: boolean;
 };
 
 export type UpdateUserPayload = {
   email?: string;
   password?: string;
   role?: string;
+  can_access_ceph_admin?: boolean;
   is_active?: boolean;
   s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;

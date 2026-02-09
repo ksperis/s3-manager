@@ -12,9 +12,19 @@ from app.models.healthcheck import (
     EndpointHealthSummaryResponse,
 )
 from app.routers.dependencies import get_current_super_admin
+from app.services.app_settings_service import load_app_settings
 from app.services.healthcheck_service import HealthCheckService, HealthWindow
 
 router = APIRouter(prefix="/admin/health", tags=["admin-healthchecks"])
+
+
+def _ensure_endpoint_status_enabled() -> None:
+    app_settings = load_app_settings()
+    if not app_settings.general.endpoint_status_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Endpoint Status feature is disabled.",
+        )
 
 
 @router.get("/summary", response_model=EndpointHealthSummaryResponse)
@@ -22,6 +32,7 @@ def health_summary(
     _: dict = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> EndpointHealthSummaryResponse:
+    _ensure_endpoint_status_enabled()
     service = HealthCheckService(db)
     return EndpointHealthSummaryResponse(**service.build_summary())
 
@@ -33,6 +44,7 @@ def health_series(
     _: dict = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> EndpointHealthSeries:
+    _ensure_endpoint_status_enabled()
     service = HealthCheckService(db)
     try:
         return EndpointHealthSeries(**service.build_series(endpoint_id, window))
@@ -47,6 +59,7 @@ def health_incidents(
     _: dict = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
     ) -> EndpointHealthIncidentsResponse:
+    _ensure_endpoint_status_enabled()
     service = HealthCheckService(db)
     try:
         return EndpointHealthIncidentsResponse(**service.build_incidents(endpoint_id, window))
@@ -59,6 +72,7 @@ def run_healthchecks(
     _: dict = Depends(get_current_super_admin),
     db: Session = Depends(get_db),
 ) -> dict:
+    _ensure_endpoint_status_enabled()
     service = HealthCheckService(db)
     try:
         return service.run_checks()

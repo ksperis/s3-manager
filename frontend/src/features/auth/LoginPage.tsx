@@ -190,7 +190,7 @@ export default function LoginPage() {
         : "text-slate-500 hover:text-slate-800"
     }`;
 
-  const allowAccessKeys = loginSettings?.allow_login_access_keys ?? true;
+  const allowAccessKeys = loginSettings?.allow_login_access_keys ?? false;
   const allowEndpointList = Boolean(loginSettings?.allow_login_endpoint_list);
   const allowCustomEndpoint = Boolean(loginSettings?.allow_login_custom_endpoint);
   const endpointOptions = loginSettings?.endpoints ?? [];

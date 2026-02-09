@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { useSearchParams } from "react-router-dom";
 import { CephAdminEndpoint, listCephAdminEndpoints } from "../../api/cephAdmin";
 
@@ -34,6 +35,13 @@ function parseEndpointId(value: string | null): number | null {
   return parsed;
 }
 
+function extractError(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    return ((err.response?.data as { detail?: string } | undefined)?.detail || err.message || "Unexpected error");
+  }
+  return err instanceof Error ? err.message : "Unexpected error";
+}
+
 export function CephAdminEndpointProvider({ children }: { children: ReactNode }) {
   const [endpoints, setEndpoints] = useState<CephAdminEndpoint[]>([]);
   const [selectedEndpointId, setSelectedEndpointIdState] = useState<number | null>(null);
@@ -50,7 +58,7 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
     } catch (err) {
       console.error(err);
       setEndpoints([]);
-      setError("Unable to load Ceph endpoints.");
+      setError(extractError(err));
     } finally {
       setLoading(false);
     }

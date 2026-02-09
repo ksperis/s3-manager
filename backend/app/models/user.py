@@ -39,6 +39,7 @@ class User(BaseModel):
     is_active: bool = True
     is_admin: bool = False
     is_root: bool = False
+    can_access_ceph_admin: bool = False
     auth_provider: Optional[str] = None
     last_login_at: Optional[datetime] = None
 
@@ -49,6 +50,7 @@ class UserCreate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[str] = None
     is_root: bool = False
+    can_access_ceph_admin: bool = False
 
 
 class UserUpdate(BaseModel):
@@ -57,6 +59,7 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
     is_root: Optional[bool] = None
+    can_access_ceph_admin: Optional[bool] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
 
@@ -78,6 +81,7 @@ class UserOut(BaseModel):
     is_admin: bool = False
     role: Optional[str] = None
     is_root: bool = False
+    can_access_ceph_admin: bool = False
     accounts: list[int] = []
     account_links: list[AccountMembership] = []
     s3_users: list[int] = []

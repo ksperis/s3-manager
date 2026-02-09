@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 import json
 import logging
+import re
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
@@ -10,15 +11,18 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db import StorageEndpoint, StorageProvider, S3Account, S3User
 from app.models.storage_endpoint import (
+    StorageEndpointAdminOpsPermissions,
     StorageEndpoint as StorageEndpointSchema,
     StorageEndpointCreate,
     StorageEndpointUpdate,
 )
+from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.utils.s3_endpoint import configured_s3_endpoint
 from app.utils.storage_endpoint_features import (
     dump_features_config,
     features_to_capabilities,
     normalize_features_config,
+    resolve_admin_endpoint,
 )
 from app.utils.normalize import normalize_storage_provider
 
@@ -37,6 +41,8 @@ class EnvStorageEndpoint(BaseModel):
     admin_secret_key: Optional[str] = None
     supervision_access_key: Optional[str] = None
     supervision_secret_key: Optional[str] = None
+    ceph_admin_access_key: Optional[str] = None
+    ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
     features: Optional[dict[str, dict[str, object]]] = None
     is_default: bool = False
@@ -105,10 +111,109 @@ class StorageEndpointsService:
         features = normalize_features_config(provider, raw)
         return features, dump_features_config(features)
 
+    @staticmethod
+    def _empty_admin_ops_permissions() -> StorageEndpointAdminOpsPermissions:
+        return StorageEndpointAdminOpsPermissions()
+
+    @staticmethod
+    def _parse_caps_payload(raw_caps: object) -> dict[str, set[str]]:
+        parsed: dict[str, set[str]] = {}
+        if not raw_caps:
+            return parsed
+
+        def _append(scope: str, perms: str) -> None:
+            normalized_scope = scope.strip().lower()
+            if not normalized_scope:
+                return
+            scope_perms = parsed.setdefault(normalized_scope, set())
+            tokens = [token.strip().lower() for token in re.split(r"[,\s]+", perms) if token.strip()]
+            if not tokens:
+                scope_perms.add("*")
+                return
+            scope_perms.update(tokens)
+
+        if isinstance(raw_caps, str):
+            for item in raw_caps.split(";"):
+                scope, sep, perms = item.partition("=")
+                if sep:
+                    _append(scope, perms)
+            return parsed
+
+        if isinstance(raw_caps, list):
+            for item in raw_caps:
+                if isinstance(item, str):
+                    scope, sep, perms = item.partition("=")
+                    if sep:
+                        _append(scope, perms)
+                    continue
+                if isinstance(item, dict):
+                    scope = str(item.get("type") or item.get("scope") or "").strip()
+                    perms = str(item.get("perm") or item.get("permissions") or "*").strip()
+                    _append(scope, perms)
+            return parsed
+
+        if isinstance(raw_caps, dict):
+            for scope, perms in raw_caps.items():
+                _append(str(scope), str(perms))
+        return parsed
+
+    @staticmethod
+    def _perm_allows(scope_perms: set[str], permission: str) -> bool:
+        normalized_permission = permission.strip().lower()
+        if not normalized_permission:
+            return False
+        return "*" in scope_perms or normalized_permission in scope_perms
+
+    def _resolve_admin_ops_permissions(
+        self,
+        endpoint: StorageEndpoint,
+        capabilities: dict[str, bool],
+    ) -> StorageEndpointAdminOpsPermissions:
+        provider = self._normalize_provider(endpoint.provider)
+        if provider != StorageProvider.CEPH:
+            return self._empty_admin_ops_permissions()
+        if not capabilities.get("admin"):
+            return self._empty_admin_ops_permissions()
+        if not endpoint.admin_access_key or not endpoint.admin_secret_key:
+            return self._empty_admin_ops_permissions()
+
+        admin_endpoint = resolve_admin_endpoint(endpoint)
+        if not admin_endpoint:
+            return self._empty_admin_ops_permissions()
+
+        try:
+            admin_client = get_rgw_admin_client(
+                access_key=endpoint.admin_access_key,
+                secret_key=endpoint.admin_secret_key,
+                endpoint=admin_endpoint,
+                region=endpoint.region,
+            )
+            user_payload = admin_client.get_user_by_access_key(endpoint.admin_access_key, allow_not_found=True)
+            if not user_payload:
+                return self._empty_admin_ops_permissions()
+            parsed_caps = self._parse_caps_payload(user_payload.get("caps"))
+            users_perms = parsed_caps.get("users", set())
+            accounts_perms = parsed_caps.get("accounts", set())
+            return StorageEndpointAdminOpsPermissions(
+                users_read=self._perm_allows(users_perms, "read") or self._perm_allows(users_perms, "write"),
+                users_write=self._perm_allows(users_perms, "write"),
+                accounts_read=self._perm_allows(accounts_perms, "read") or self._perm_allows(accounts_perms, "write"),
+                accounts_write=self._perm_allows(accounts_perms, "write"),
+            )
+        except RGWAdminError as exc:
+            logger.warning(
+                "Unable to evaluate admin ops permissions for endpoint id=%s name=%s: %s",
+                endpoint.id,
+                endpoint.name,
+                exc,
+            )
+            return self._empty_admin_ops_permissions()
+
     def _serialize(self, endpoint: StorageEndpoint) -> StorageEndpointSchema:
         provider = self._normalize_provider(endpoint.provider)
         features, _ = self._normalize_features(provider, endpoint.features_config)
         capabilities = features_to_capabilities(features)
+        admin_ops_permissions = self._resolve_admin_ops_permissions(endpoint, capabilities)
         return StorageEndpointSchema(
             id=endpoint.id,
             name=endpoint.name,
@@ -118,13 +223,16 @@ class StorageEndpointsService:
             provider=provider,
             admin_access_key=endpoint.admin_access_key,
             supervision_access_key=endpoint.supervision_access_key,
+            ceph_admin_access_key=endpoint.ceph_admin_access_key,
             capabilities=capabilities,
+            admin_ops_permissions=admin_ops_permissions,
             is_default=bool(endpoint.is_default),
             is_editable=bool(endpoint.is_editable),
             created_at=endpoint.created_at,
             updated_at=endpoint.updated_at,
             has_admin_secret=bool(endpoint.admin_secret_key),
             has_supervision_secret=bool(endpoint.supervision_secret_key),
+            has_ceph_admin_secret=bool(endpoint.ceph_admin_secret_key),
             features_config=endpoint.features_config,
             features=features,
         )
@@ -150,9 +258,11 @@ class StorageEndpointsService:
         admin_secret_key: Optional[str],
         supervision_access_key: Optional[str],
         supervision_secret_key: Optional[str],
+        ceph_admin_access_key: Optional[str],
+        ceph_admin_secret_key: Optional[str],
         admin_enabled: bool,
         supervision_required: bool,
-    ) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    ) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
         if provider == StorageProvider.CEPH:
             if admin_enabled and (not admin_access_key or not admin_secret_key):
                 raise ValueError("Ceph endpoints with admin enabled require an admin access key and secret key.")
@@ -160,9 +270,18 @@ class StorageEndpointsService:
                 raise ValueError(
                     "Ceph endpoints with usage or metrics enabled require a supervision access key and secret key."
                 )
-            return admin_access_key, admin_secret_key, supervision_access_key, supervision_secret_key
-        # Provider is not Ceph: clear admin/supervision credentials
-        return None, None, None, None
+            if bool(ceph_admin_access_key) != bool(ceph_admin_secret_key):
+                raise ValueError("Ceph Admin credentials require both access key and secret key.")
+            return (
+                admin_access_key,
+                admin_secret_key,
+                supervision_access_key,
+                supervision_secret_key,
+                ceph_admin_access_key,
+                ceph_admin_secret_key,
+            )
+        # Provider is not Ceph: clear Ceph-only credentials
+        return None, None, None, None, None, None
 
     def sync_env_endpoints(self) -> list[StorageEndpointSchema]:
         env_endpoints = self._load_env_endpoints()
@@ -209,18 +328,29 @@ class StorageEndpointsService:
             admin_secret = self._clean_optional(entry.admin_secret_key)
             supervision_access = self._clean_optional(entry.supervision_access_key)
             supervision_secret = self._clean_optional(entry.supervision_secret_key)
+            ceph_admin_access = self._clean_optional(entry.ceph_admin_access_key)
+            ceph_admin_secret = self._clean_optional(entry.ceph_admin_secret_key)
             raw_features = entry.features_config
             if entry.features is not None:
                 raw_features = dump_features_config(entry.features)
             features, features_config = self._normalize_features(provider, raw_features)
             admin_endpoint = features.get("admin", {}).get("endpoint")
 
-            admin_access, admin_secret, supervision_access, supervision_secret = self._validate_credentials(
+            (
+                admin_access,
+                admin_secret,
+                supervision_access,
+                supervision_secret,
+                ceph_admin_access,
+                ceph_admin_secret,
+            ) = self._validate_credentials(
                 provider,
                 admin_access,
                 admin_secret,
                 supervision_access,
                 supervision_secret,
+                ceph_admin_access,
+                ceph_admin_secret,
                 bool(features.get("admin", {}).get("enabled")),
                 bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
             )
@@ -237,6 +367,8 @@ class StorageEndpointsService:
                 endpoint.admin_secret_key = admin_secret
                 endpoint.supervision_access_key = supervision_access
                 endpoint.supervision_secret_key = supervision_secret
+                endpoint.ceph_admin_access_key = ceph_admin_access
+                endpoint.ceph_admin_secret_key = ceph_admin_secret
                 endpoint.features_config = features_config
                 endpoint.is_default = bool(entry.is_default)
                 endpoint.is_editable = False
@@ -254,6 +386,8 @@ class StorageEndpointsService:
                     admin_secret_key=admin_secret,
                     supervision_access_key=supervision_access,
                     supervision_secret_key=supervision_secret,
+                    ceph_admin_access_key=ceph_admin_access,
+                    ceph_admin_secret_key=ceph_admin_secret,
                     features_config=features_config,
                     is_default=bool(entry.is_default),
                     is_editable=False,
@@ -312,6 +446,8 @@ class StorageEndpointsService:
         admin_secret = self._clean_optional(payload.admin_secret_key)
         supervision_access = self._clean_optional(payload.supervision_access_key)
         supervision_secret = self._clean_optional(payload.supervision_secret_key)
+        ceph_admin_access = self._clean_optional(payload.ceph_admin_access_key)
+        ceph_admin_secret = self._clean_optional(payload.ceph_admin_secret_key)
         features, features_config = self._normalize_features(provider, payload.features_config)
         admin_endpoint = features.get("admin", {}).get("endpoint")
 
@@ -319,12 +455,21 @@ class StorageEndpointsService:
             raise ValueError("Endpoint URL is required.")
         self._ensure_unique_name(name)
         self._ensure_unique_endpoint(endpoint_url)
-        admin_access, admin_secret, supervision_access, supervision_secret = self._validate_credentials(
+        (
+            admin_access,
+            admin_secret,
+            supervision_access,
+            supervision_secret,
+            ceph_admin_access,
+            ceph_admin_secret,
+        ) = self._validate_credentials(
             provider,
             admin_access,
             admin_secret,
             supervision_access,
             supervision_secret,
+            ceph_admin_access,
+            ceph_admin_secret,
             bool(features.get("admin", {}).get("enabled")),
             bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
         )
@@ -339,6 +484,8 @@ class StorageEndpointsService:
             admin_secret_key=admin_secret,
             supervision_access_key=supervision_access,
             supervision_secret_key=supervision_secret,
+            ceph_admin_access_key=ceph_admin_access,
+            ceph_admin_secret_key=ceph_admin_secret,
             features_config=features_config,
             is_default=False,
             is_editable=True,
@@ -393,6 +540,16 @@ class StorageEndpointsService:
             if "supervision_secret_key" in fields_set
             else endpoint.supervision_secret_key
         )
+        ceph_admin_access = (
+            self._clean_optional(payload.ceph_admin_access_key)
+            if "ceph_admin_access_key" in fields_set
+            else endpoint.ceph_admin_access_key
+        )
+        ceph_admin_secret = (
+            self._clean_optional(payload.ceph_admin_secret_key)
+            if "ceph_admin_secret_key" in fields_set
+            else endpoint.ceph_admin_secret_key
+        )
         raw_features = payload.features_config if payload.features_config is not None else endpoint.features_config
         features, features_config = self._normalize_features(provider, raw_features)
         admin_endpoint = features.get("admin", {}).get("endpoint")
@@ -403,12 +560,21 @@ class StorageEndpointsService:
         self._ensure_unique_name(name, exclude_id=endpoint.id)
         self._ensure_unique_endpoint(endpoint_url, exclude_id=endpoint.id)
 
-        admin_access, admin_secret, supervision_access, supervision_secret = self._validate_credentials(
+        (
+            admin_access,
+            admin_secret,
+            supervision_access,
+            supervision_secret,
+            ceph_admin_access,
+            ceph_admin_secret,
+        ) = self._validate_credentials(
             provider,
             admin_access,
             admin_secret,
             supervision_access,
             supervision_secret,
+            ceph_admin_access,
+            ceph_admin_secret,
             bool(features.get("admin", {}).get("enabled")),
             bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
         )
@@ -422,6 +588,8 @@ class StorageEndpointsService:
         endpoint.admin_secret_key = admin_secret
         endpoint.supervision_access_key = supervision_access
         endpoint.supervision_secret_key = supervision_secret
+        endpoint.ceph_admin_access_key = ceph_admin_access
+        endpoint.ceph_admin_secret_key = ceph_admin_secret
         endpoint.features_config = features_config
         self.db.add(endpoint)
         self.db.commit()
@@ -483,18 +651,29 @@ class StorageEndpointsService:
         admin_secret = settings.seed_rgw_admin_secret_key or settings.seed_s3_secret_key
         supervision_access = settings.seed_supervision_access_key
         supervision_secret = settings.seed_supervision_secret_key
+        ceph_admin_access = settings.seed_ceph_admin_access_key
+        ceph_admin_secret = settings.seed_ceph_admin_secret_key
         provider = (
             StorageProvider.CEPH if admin_access and admin_secret else StorageProvider.OTHER
         )
         features, features_config = self._normalize_features(provider, settings.seed_s3_endpoint_features)
         admin_endpoint = features.get("admin", {}).get("endpoint")
         name = self._env_endpoint_name()
-        admin_access, admin_secret, supervision_access, supervision_secret = self._validate_credentials(
+        (
+            admin_access,
+            admin_secret,
+            supervision_access,
+            supervision_secret,
+            ceph_admin_access,
+            ceph_admin_secret,
+        ) = self._validate_credentials(
             provider,
             admin_access,
             admin_secret,
             supervision_access,
             supervision_secret,
+            ceph_admin_access,
+            ceph_admin_secret,
             bool(features.get("admin", {}).get("enabled")),
             bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
         )
@@ -508,6 +687,8 @@ class StorageEndpointsService:
             admin_secret_key=admin_secret,
             supervision_access_key=supervision_access,
             supervision_secret_key=supervision_secret,
+            ceph_admin_access_key=ceph_admin_access,
+            ceph_admin_secret_key=ceph_admin_secret,
             features_config=features_config,
             is_default=True,
             is_editable=True,

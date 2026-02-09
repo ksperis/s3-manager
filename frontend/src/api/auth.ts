@@ -16,7 +16,9 @@ export type LoginResponse = {
     role?: string | null;
     is_admin?: boolean;
     is_root?: boolean;
+    can_access_ceph_admin?: boolean;
     accounts?: number[];
+    account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
     auth_provider?: string | null;
   };
 };

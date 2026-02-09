@@ -146,11 +146,15 @@ export default function S3AccountsPage() {
   }, [editingS3Account?.storage_endpoint_id, storageEndpoints]);
   const editingCapabilities =
     editingS3Account?.storage_endpoint_capabilities ?? editingEndpoint?.capabilities ?? null;
+  const editingAdminOpsPermissions = editingEndpoint?.admin_ops_permissions ?? null;
   const usageEnabled = Boolean(editingCapabilities?.usage);
   const adminEnabled = Boolean(editingCapabilities?.admin);
   const hasUsageIdentity = Boolean(editingS3Account?.rgw_account_id || editingS3Account?.rgw_user_uid);
   const allowUsageStats = usageEnabled && hasUsageIdentity;
-  const allowQuotaUpdates = adminEnabled && Boolean(editingS3Account?.rgw_account_id);
+  const allowQuotaUpdates =
+    adminEnabled &&
+    Boolean(editingAdminOpsPermissions?.accounts_write) &&
+    Boolean(editingS3Account?.rgw_account_id);
   const effectivePortalSettings = portalAccountSettings?.effective ?? null;
   const adminOverride = portalAccountSettings?.admin_override ?? null;
   const portalManagerOverride = portalAccountSettings?.portal_manager_override ?? null;
@@ -207,6 +211,10 @@ export default function S3AccountsPage() {
   const adminCephEndpoints = useMemo(
     () => cephEndpoints.filter((ep) => Boolean(ep.capabilities?.admin)),
     [cephEndpoints]
+  );
+  const accountWritableCephEndpoints = useMemo(
+    () => adminCephEndpoints.filter((ep) => Boolean(ep.admin_ops_permissions?.accounts_write)),
+    [adminCephEndpoints]
   );
 
   const resolveS3AccountType = (
@@ -453,15 +461,22 @@ export default function S3AccountsPage() {
 
   useEffect(() => {
     if (storageEndpoints.length === 0) return;
-    const defaultCeph = adminCephEndpoints.find((ep) => ep.is_default) || adminCephEndpoints[0];
+    const defaultCeph =
+      accountWritableCephEndpoints.find((ep) => ep.is_default) || accountWritableCephEndpoints[0];
     const firstCephId = defaultCeph ? String(defaultCeph.id) : "";
 
     setForm((prev) => ({
       ...prev,
-      storage_endpoint_id: prev.storage_endpoint_id || firstCephId,
+      storage_endpoint_id: accountWritableCephEndpoints.some(
+        (endpoint) => String(endpoint.id) === prev.storage_endpoint_id
+      )
+        ? prev.storage_endpoint_id
+        : firstCephId,
     }));
-    setImportTenantEndpointId((prev) => prev || firstCephId);
-  }, [storageEndpoints, adminCephEndpoints]);
+    setImportTenantEndpointId((prev) =>
+      accountWritableCephEndpoints.some((endpoint) => String(endpoint.id) === prev) ? prev : firstCephId
+    );
+  }, [storageEndpoints, accountWritableCephEndpoints]);
 
   const loadAccountDetail = useCallback(
     async (account: S3AccountSummary, options?: { includeUsage?: boolean }) => {
@@ -492,7 +507,7 @@ export default function S3AccountsPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canProvisionAccounts) {
-      setActionError("Admin is disabled for all Ceph endpoints.");
+      setActionError("Admin Ops credentials require accounts=write on at least one Ceph endpoint.");
       return;
     }
     if (!form.name) {
@@ -516,7 +531,8 @@ export default function S3AccountsPage() {
         storage_endpoint_id: form.storage_endpoint_id ? Number(form.storage_endpoint_id) : undefined,
       });
       setActionMessage("S3Account created");
-      const defaultCeph = cephEndpoints.find((ep) => ep.is_default) || cephEndpoints[0];
+      const defaultCeph =
+        accountWritableCephEndpoints.find((ep) => ep.is_default) || accountWritableCephEndpoints[0];
       setForm({
         name: "",
         email: "",
@@ -561,8 +577,8 @@ export default function S3AccountsPage() {
       (accountToDelete.rgw_topic_count ?? 0) > 0);
   const deleteModalHasResources = deleteModalUnknownResources || deleteModalHasLinkedResources;
   const deleteModalBusy = accountToDelete ? deletingS3AccountId === accountDbId(accountToDelete) : false;
-  const canProvisionAccounts = adminCephEndpoints.length > 0;
-  const canImportTenants = adminCephEndpoints.length > 0;
+  const canProvisionAccounts = accountWritableCephEndpoints.length > 0;
+  const canImportTenants = accountWritableCephEndpoints.length > 0;
   const importDisabled =
     importBusy || !canImportTenants || !importText.trim() || !importTenantEndpointId;
 
@@ -764,7 +780,8 @@ export default function S3AccountsPage() {
                   setImportMessage(null);
                   setShowImportModal(true);
                 }}
-                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                disabled={!canImportTenants}
+                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
               >
                 Import
               </button>
@@ -788,7 +805,7 @@ export default function S3AccountsPage() {
           </p>
           {!canProvisionAccounts && (
             <PageBanner tone="warning" className="mb-3">
-              Admin is disabled for all Ceph endpoints. Enable admin features before provisioning accounts.
+              No Ceph endpoint has Admin Ops capability <code>accounts=write</code>. Account provisioning is disabled.
             </PageBanner>
           )}
           {actionError && (
@@ -828,12 +845,12 @@ export default function S3AccountsPage() {
                 value={form.storage_endpoint_id}
                 onChange={(e) => setForm((f) => ({ ...f, storage_endpoint_id: e.target.value }))}
                 required
-                disabled={loadingEndpoints || adminCephEndpoints.length === 0}
+                disabled={loadingEndpoints || accountWritableCephEndpoints.length === 0}
               >
                 <option value="" disabled>
-                  {loadingEndpoints ? "Loading..." : "No admin-enabled Ceph endpoint"}
+                  {loadingEndpoints ? "Loading..." : "No Ceph endpoint with accounts=write"}
                 </option>
-                {adminCephEndpoints.map((ep) => (
+                {accountWritableCephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
                     {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
@@ -988,7 +1005,7 @@ export default function S3AccountsPage() {
           </p>
           {!canImportTenants && (
             <PageBanner tone="warning" className="mb-3">
-              Admin is disabled for all Ceph endpoints. Tenant import requires admin access.
+              No Ceph endpoint has Admin Ops capability <code>accounts=write</code>. Tenant import is disabled.
             </PageBanner>
           )}
           {importError && (
@@ -1015,13 +1032,13 @@ export default function S3AccountsPage() {
                 className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={importTenantEndpointId}
                 onChange={(e) => setImportTenantEndpointId(e.target.value)}
-                disabled={adminCephEndpoints.length === 0}
+                disabled={accountWritableCephEndpoints.length === 0}
                 required
               >
                 <option value="" disabled>
-                  {adminCephEndpoints.length === 0 ? "No admin-enabled Ceph endpoint" : "Select"}
+                  {accountWritableCephEndpoints.length === 0 ? "No Ceph endpoint with accounts=write" : "Select"}
                 </option>
-                {adminCephEndpoints.map((ep) => (
+                {accountWritableCephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
                     {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
@@ -1150,11 +1167,6 @@ export default function S3AccountsPage() {
             <form onSubmit={submitEditS3Account} className="space-y-4">
               {showGeneralTab && (
                 <>
-                  {!allowQuotaUpdates && (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Quota updates are disabled for endpoints without admin support.
-                    </p>
-                  )}
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="flex flex-col gap-1">
                       <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Max quota</label>
@@ -1163,14 +1175,14 @@ export default function S3AccountsPage() {
                           type="number"
                           min={0}
                           step="any"
-                          className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className="flex-1 rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                           value={editForm.quota_max_size_gb}
                           disabled={!allowQuotaUpdates}
                           onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_gb: e.target.value }))}
                           placeholder="Leave empty to disable"
                         />
                         <select
-                          className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          className="w-24 rounded-md border border-slate-200 px-2 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                           value={editForm.quota_max_size_unit}
                           disabled={!allowQuotaUpdates}
                           onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_size_unit: e.target.value }))}
@@ -1186,7 +1198,7 @@ export default function S3AccountsPage() {
                       <input
                         type="number"
                         min={0}
-                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                         value={editForm.quota_max_objects}
                         disabled={!allowQuotaUpdates}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, quota_max_objects: e.target.value }))}

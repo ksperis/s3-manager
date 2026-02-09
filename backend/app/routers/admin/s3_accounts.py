@@ -22,7 +22,6 @@ from app.routers.dependencies import (
     get_audit_logger,
     get_current_super_admin,
     get_optional_super_admin_rgw_client,
-    get_super_admin_rgw_client,
 )
 from app.services.s3_accounts_service import S3AccountsService, get_s3_accounts_service
 from app.services.portal_service import get_portal_service
@@ -35,9 +34,10 @@ logger = logging.getLogger(__name__)
 
 def get_admin_accounts_service(
     db: Session = Depends(get_db),
-    rgw_admin_client=Depends(get_super_admin_rgw_client),
+    rgw_admin_client=Depends(get_optional_super_admin_rgw_client),
 ) -> S3AccountsService:
-    return get_s3_accounts_service(db, rgw_admin_client=rgw_admin_client)
+    return get_s3_accounts_service(db, rgw_admin_client=rgw_admin_client, allow_missing_admin=True)
+
 
 def get_admin_accounts_listing_service(
     db: Session = Depends(get_db),

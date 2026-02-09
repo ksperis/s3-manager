@@ -33,6 +33,8 @@ class StorageEndpointSpec(BaseModel):
     admin_secret_key: Optional[str] = None
     supervision_access_key: Optional[str] = None
     supervision_secret_key: Optional[str] = None
+    ceph_admin_access_key: Optional[str] = None
+    ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
     set_default: Optional[bool] = None
 

@@ -746,6 +746,15 @@ class AdminAutomationService:
                     }
             if "supervision_secret_key" in fields_set:
                 diff["supervision_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
+            if "ceph_admin_access_key" in fields_set:
+                desired = self._normalize_optional_str(spec.ceph_admin_access_key)
+                if desired != self._normalize_optional_str(endpoint.ceph_admin_access_key):
+                    diff["ceph_admin_access_key"] = {
+                        "from": self._mask_value(endpoint.ceph_admin_access_key),
+                        "to": self._mask_value(desired),
+                    }
+            if "ceph_admin_secret_key" in fields_set:
+                diff["ceph_admin_secret_key"] = {"from": "<redacted>", "to": "<redacted>"}
         return diff
 
     def _diff_ui_user(self, user: User, item: UiUserApply) -> dict[str, dict[str, Any]]:
@@ -932,6 +941,8 @@ class AdminAutomationService:
             admin_secret_key=spec.admin_secret_key,
             supervision_access_key=spec.supervision_access_key,
             supervision_secret_key=spec.supervision_secret_key,
+            ceph_admin_access_key=spec.ceph_admin_access_key,
+            ceph_admin_secret_key=spec.ceph_admin_secret_key,
             features_config=spec.features_config,
         )
 
@@ -944,6 +955,8 @@ class AdminAutomationService:
             payload.pop("admin_secret_key", None)
             payload.pop("supervision_access_key", None)
             payload.pop("supervision_secret_key", None)
+            payload.pop("ceph_admin_access_key", None)
+            payload.pop("ceph_admin_secret_key", None)
         payload.pop("set_default", None)
         return StorageEndpointUpdate(**payload)
 

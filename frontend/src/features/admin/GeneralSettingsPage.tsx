@@ -14,10 +14,17 @@ import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettin
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { confirmAction } from "../../utils/confirm";
 
+const CEPH_ADMIN_WARNING_MESSAGE =
+  "Ceph Admin is an advanced Ceph cluster mass-management feature (accounts, users, buckets). " +
+  "It is not recommended to enable it on the same s3-manager instance exposed to end users.";
+const BILLING_CRON_REMINDER_MESSAGE =
+  "Billing feature enabled. Think about enabling the billing collection cron job.";
+
 export default function GeneralSettingsPage() {
   const { setGeneralSettings } = useGeneralSettings();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [billingReminder, setBillingReminder] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -38,11 +45,32 @@ export default function GeneralSettingsPage() {
       | "browser_enabled"
       | "portal_enabled"
       | "billing_enabled"
+      | "endpoint_status_enabled"
       | "allow_login_access_keys"
       | "allow_login_endpoint_list"
       | "allow_login_custom_endpoint",
     value: boolean
   ) => {
+    if (field === "billing_enabled") {
+      const wasEnabled = Boolean(settings?.general.billing_enabled);
+      if (value && !wasEnabled) {
+        setBillingReminder(BILLING_CRON_REMINDER_MESSAGE);
+      } else if (!value) {
+        setBillingReminder(null);
+      }
+    }
+    if (field === "ceph_admin_enabled" && value) {
+      const wasEnabled = Boolean(settings?.general.ceph_admin_enabled);
+      if (!wasEnabled) {
+        const confirmed = confirmAction(
+          "Enable Ceph Admin advanced mode?\n\n" +
+            "This enables cluster-wide mass management operations and carries high risk.\n" +
+            "Do not enable this on an instance exposed to end users.\n\n" +
+            "Enable anyway?"
+        );
+        if (!confirmed) return;
+      }
+    }
     setSettings((prev) => (prev ? { ...prev, general: { ...prev.general, [field]: value } } : prev));
   };
 
@@ -55,6 +83,9 @@ export default function GeneralSettingsPage() {
       const saved = await updateAppSettings(settings);
       setSettings(saved);
       setGeneralSettings(saved.general);
+      if (!saved.general.billing_enabled) {
+        setBillingReminder(null);
+      }
       setSavedMessage("Settings saved.");
       setTimeout(() => setSavedMessage(null), 3000);
     } catch (err) {
@@ -116,6 +147,12 @@ export default function GeneralSettingsPage() {
       <form className="space-y-4" onSubmit={handleSave}>
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
+        {billingReminder && <PageBanner tone="info">{billingReminder}</PageBanner>}
+        {settings?.general.ceph_admin_enabled && (
+          <PageBanner tone="warning">
+            Ceph Admin is currently enabled on this instance. {CEPH_ADMIN_WARNING_MESSAGE}
+          </PageBanner>
+        )}
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
           <div className="grid gap-4">
@@ -134,17 +171,6 @@ export default function GeneralSettingsPage() {
                       checked={Boolean(settings.general.manager_enabled)}
                       onChange={(value) => handleToggle("manager_enabled", value)}
                       ariaLabel="Manager feature"
-                    />
-                  }
-                />
-                <PortalSettingsItem
-                  title="Ceph Admin feature"
-                  description="Enables the /ceph-admin workspace for UI admins (RGW accounts, users, buckets)."
-                  action={
-                    <PortalSettingsSwitch
-                      checked={Boolean(settings.general.ceph_admin_enabled)}
-                      onChange={(value) => handleToggle("ceph_admin_enabled", value)}
-                      ariaLabel="Ceph Admin feature"
                     />
                   }
                 />
@@ -178,6 +204,28 @@ export default function GeneralSettingsPage() {
                       checked={Boolean(settings.general.billing_enabled)}
                       onChange={(value) => handleToggle("billing_enabled", value)}
                       ariaLabel="Billing feature"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Endpoint Status feature"
+                  description="Enables the Endpoint Status workspace for endpoint healthchecks."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.endpoint_status_enabled)}
+                      onChange={(value) => handleToggle("endpoint_status_enabled", value)}
+                      ariaLabel="Endpoint Status feature"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Ceph Admin feature"
+                  description="Enables the /ceph-admin workspace for explicitly authorized UI admins."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.ceph_admin_enabled)}
+                      onChange={(value) => handleToggle("ceph_admin_enabled", value)}
+                      ariaLabel="Ceph Admin feature"
                     />
                   }
                 />

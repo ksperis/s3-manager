@@ -17,6 +17,7 @@ import {
 import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
 type FormState = {
   name: string;
@@ -27,6 +28,8 @@ type FormState = {
   admin_secret_key: string;
   supervision_access_key: string;
   supervision_secret_key: string;
+  ceph_admin_access_key: string;
+  ceph_admin_secret_key: string;
   features: FeaturesState;
 };
 
@@ -40,6 +43,24 @@ type FeatureState = {
 type FeaturesState = Record<FeatureKey, FeatureState>;
 
 const FEATURE_KEYS: FeatureKey[] = ["admin", "sts", "usage", "metrics", "static_website", "iam", "sns"];
+const ADMIN_OPS_COMMAND = [
+  "radosgw-admin user create \\",
+  '  --uid="s3m-admin" \\',
+  '  --display-name="S3 Manager Admin Ops" \\',
+  '  --caps="users=read,write;accounts=read,write"',
+].join("\n");
+const SUPERVISION_OPS_COMMAND = [
+  "radosgw-admin user create \\",
+  '  --uid="s3m-supervision" \\',
+  '  --display-name="S3 Manager Supervision Ops" \\',
+  '  --caps="usage=read;buckets=read"',
+].join("\n");
+const CEPH_ADMIN_COMMAND = [
+  "radosgw-admin user create \\",
+  '  --uid="s3m-ceph-admin" \\',
+  '  --display-name="S3 Manager Ceph Admin" \\',
+  '  --admin',
+].join("\n");
 
 function createEmptyFeatures(): FeaturesState {
   return {
@@ -124,6 +145,8 @@ function createEmptyForm(): FormState {
     admin_secret_key: "",
     supervision_access_key: "",
     supervision_secret_key: "",
+    ceph_admin_access_key: "",
+    ceph_admin_secret_key: "",
     features,
   };
 }
@@ -230,12 +253,14 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
 }
 
 export default function StorageEndpointsPage() {
+  const { generalSettings } = useGeneralSettings();
   const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
   const [envManaged, setEnvManaged] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [showOpsHelp, setShowOpsHelp] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -248,6 +273,7 @@ export default function StorageEndpointsPage() {
 
   const resetForm = useCallback(() => {
     setForm(createEmptyForm());
+    setShowOpsHelp(false);
     setFormError(null);
     setEditingId(null);
   }, []);
@@ -272,6 +298,7 @@ export default function StorageEndpointsPage() {
   }, [loadEndpoints]);
 
   const cephMode = useMemo(() => form.provider === "ceph", [form.provider]);
+  const cephAdminConfigEnabled = Boolean(generalSettings.ceph_admin_enabled);
   const defaultEndpoint = useMemo(() => endpoints.find((ep) => ep.is_default), [endpoints]);
   const updateFeatures = useCallback(
     (updater: (current: FeaturesState) => FeaturesState, providerOverride?: StorageProvider) => {
@@ -300,6 +327,8 @@ export default function StorageEndpointsPage() {
         admin_secret_key: provider === "ceph" ? prev.admin_secret_key : "",
         supervision_access_key: provider === "ceph" ? prev.supervision_access_key : "",
         supervision_secret_key: provider === "ceph" ? prev.supervision_secret_key : "",
+        ceph_admin_access_key: provider === "ceph" ? prev.ceph_admin_access_key : "",
+        ceph_admin_secret_key: provider === "ceph" ? prev.ceph_admin_secret_key : "",
         features: constrained,
       };
     });
@@ -324,6 +353,8 @@ export default function StorageEndpointsPage() {
       admin_secret_key: "",
       supervision_access_key: endpoint.supervision_access_key ?? "",
       supervision_secret_key: "",
+      ceph_admin_access_key: endpoint.ceph_admin_access_key ?? "",
+      ceph_admin_secret_key: "",
       features,
     });
     setFormError(null);
@@ -376,6 +407,8 @@ export default function StorageEndpointsPage() {
     const trimmedAdminSecret = form.admin_secret_key.trim();
     const trimmedSupervisionAccess = form.supervision_access_key.trim();
     const trimmedSupervisionSecret = form.supervision_secret_key.trim();
+    const trimmedCephAdminAccess = form.ceph_admin_access_key.trim();
+    const trimmedCephAdminSecret = form.ceph_admin_secret_key.trim();
     const constrainedFeatures = applyFeatureConstraints(form.features, form.provider);
     const featuresConfig = buildFeaturesYaml(constrainedFeatures);
     const adminEnabled = constrainedFeatures.admin.enabled;
@@ -422,11 +455,20 @@ export default function StorageEndpointsPage() {
           payload.supervision_access_key = null;
           payload.supervision_secret_key = null;
         }
+        if (trimmedCephAdminAccess) {
+          payload.ceph_admin_access_key = trimmedCephAdminAccess;
+          if (trimmedCephAdminSecret) payload.ceph_admin_secret_key = trimmedCephAdminSecret;
+        } else {
+          payload.ceph_admin_access_key = null;
+          payload.ceph_admin_secret_key = null;
+        }
       } else {
         payload.admin_access_key = trimmedAdminAccess || null;
         payload.admin_secret_key = trimmedAdminSecret || null;
         payload.supervision_access_key = trimmedSupervisionAccess || null;
         payload.supervision_secret_key = trimmedSupervisionSecret || null;
+        payload.ceph_admin_access_key = trimmedCephAdminAccess || null;
+        payload.ceph_admin_secret_key = trimmedCephAdminSecret || null;
         if (adminEnabled && (!payload.admin_access_key || !payload.admin_secret_key)) {
           setFormError("Admin credentials are required for a Ceph endpoint.");
           return null;
@@ -468,6 +510,7 @@ export default function StorageEndpointsPage() {
 
   const renderEndpointCard = (endpoint: StorageEndpoint) => {
     const showSupervision = endpoint.supervision_access_key || endpoint.has_supervision_secret;
+    const showCephAdmin = endpoint.ceph_admin_access_key || endpoint.has_ceph_admin_secret;
     const features = resolveFeatureState(endpoint, endpoint.provider);
     const adminEnabled = features.admin.enabled;
     const stsEnabled = features.sts.enabled;
@@ -593,6 +636,23 @@ export default function StorageEndpointsPage() {
               <p className="font-semibold text-slate-500">Not set</p>
             )}
           </div>
+          {endpoint.provider === "ceph" && cephAdminConfigEnabled && (
+            <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+              <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Ceph Admin dedicated key
+              </p>
+              {showCephAdmin ? (
+                <p className="font-semibold">
+                  {endpoint.ceph_admin_access_key || "—"}
+                  {endpoint.has_ceph_admin_secret && (
+                    <span className="ml-2 ui-caption text-emerald-500">(secret stored)</span>
+                  )}
+                </p>
+              ) : (
+                <p className="font-semibold text-slate-500">Not set</p>
+              )}
+            </div>
+          )}
           <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
             <div className="mt-1 flex flex-wrap gap-2 ui-caption font-semibold">
@@ -821,42 +881,81 @@ export default function StorageEndpointsPage() {
                   </div>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-caption text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                  <p className="ui-body font-semibold text-slate-700 dark:text-slate-100">What are Admin Ops and Supervision Ops?</p>
-                  <p className="mt-2">
-                    <span className="font-semibold">Admin Ops</span> keys let S3-Manager create RGW accounts and S3 users. If you do not
-                    provide Admin Ops keys, you must create accounts/users outside of S3-Manager and import them manually (or via the
-                    future API).
-                  </p>
-                  <p className="mt-2">
-                    <span className="font-semibold">Supervision Ops</span> keys are read-only credentials used for usage and metrics
-                    collection.
-                  </p>
-                  <p className="mt-3 font-semibold text-slate-700 dark:text-slate-100">Ceph (radosgw-admin) examples</p>
-                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="mb-1 font-semibold text-slate-600 dark:text-slate-300">Admin Ops</p>
-                      <pre className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-100">
-radosgw-admin user create \
-  --uid="s3-manager-admin" \
-  --display-name="S3 Manager Admin Ops" \
-  --access-key="&lt;ADMIN_ACCESS_KEY&gt;" \
-  --secret-key="&lt;ADMIN_SECRET_KEY&gt;" \
-  --caps="users=read,write;metadata=read,write;usage=read,write;buckets=read,write"
-                      </pre>
-                    </div>
-                    <div>
-                      <p className="mb-1 font-semibold text-slate-600 dark:text-slate-300">Supervision Ops</p>
-                      <pre className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-100">
-radosgw-admin user create \
-  --uid="s3-manager-supervision" \
-  --display-name="S3 Manager Supervision Ops" \
-  --access-key="&lt;SUPERVISION_ACCESS_KEY&gt;" \
-  --secret-key="&lt;SUPERVISION_SECRET_KEY&gt;" \
-  --caps="usage=read;metadata=read;buckets=read"
-                      </pre>
-                    </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="ui-body font-semibold text-slate-700 dark:text-slate-100">
+                      What are Admin Ops and Supervision Ops?
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowOpsHelp((prev) => !prev)}
+                      className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200"
+                    >
+                      {showOpsHelp ? "Hide" : "Show"}
+                    </button>
                   </div>
+                  {showOpsHelp && (
+                    <>
+                      <p className="mt-2">
+                        <span className="font-semibold">Admin Ops</span> keys let S3-Manager create RGW accounts and S3 users. If you do not
+                        provide Admin Ops keys, you must create accounts/users outside of S3-Manager and import them manually (or
+                        via the API).
+                      </p>
+                      <p className="mt-2">
+                        <span className="font-semibold">Supervision Ops</span> keys are read-only credentials used for usage and metrics
+                        collection.
+                      </p>
+                      <p className="mt-3 font-semibold text-slate-700 dark:text-slate-100">Ceph (radosgw-admin) examples</p>
+                      <div className="mt-2 space-y-3">
+                        <div>
+                          <p className="mb-1 font-semibold text-slate-600 dark:text-slate-300">Admin Ops</p>
+                          <pre className="overflow-x-auto whitespace-pre rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-100">
+                            {ADMIN_OPS_COMMAND}
+                          </pre>
+                        </div>
+                        <div>
+                          <p className="mb-1 font-semibold text-slate-600 dark:text-slate-300">Supervision Ops</p>
+                          <pre className="overflow-x-auto whitespace-pre rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-100">
+                            {SUPERVISION_OPS_COMMAND}
+                          </pre>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
+                {cephAdminConfigEnabled && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 ui-caption text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
+                    <p className="ui-body font-semibold">Ceph Admin dedicated credentials</p>
+                    <p className="mt-2">
+                      These credentials are used only by the <code>/ceph-admin</code> workspace (advanced
+                      cluster-wide operations). They are isolated from Admin Ops credentials.
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <input
+                        type="text"
+                        value={form.ceph_admin_access_key}
+                        onChange={(e) => setForm((prev) => ({ ...prev, ceph_admin_access_key: e.target.value }))}
+                        className="w-full rounded-lg border border-amber-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-amber-900/40 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder="Ceph Admin access key"
+                      />
+                      <input
+                        type="password"
+                        value={form.ceph_admin_secret_key}
+                        onChange={(e) => setForm((prev) => ({ ...prev, ceph_admin_secret_key: e.target.value }))}
+                        className="w-full rounded-lg border border-amber-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-amber-900/40 dark:bg-slate-800 dark:text-slate-100"
+                        placeholder={editingId ? "Ceph Admin secret key (leave blank to keep)" : "Ceph Admin secret key"}
+                      />
+                    </div>
+                    <p className="mt-2">
+                      {editingId
+                        ? "Leave the secret key empty to keep the current one."
+                        : "Recommended: keep this account dedicated to ceph-admin only."}
+                    </p>
+                    <p className="mt-3 font-semibold text-amber-900 dark:text-amber-100">Ceph (radosgw-admin) example</p>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-100">
+                      {CEPH_ADMIN_COMMAND}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
 

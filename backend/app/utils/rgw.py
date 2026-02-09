@@ -5,7 +5,7 @@ from typing import Any, Optional, Tuple
 
 from app.db import S3Account, StorageEndpoint
 from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
-from app.utils.storage_endpoint_features import resolve_admin_endpoint
+from app.utils.storage_endpoint_features import resolve_rgw_admin_api_endpoint
 
 _ACCOUNT_ID_PATTERN = re.compile(r"^RGW\d{17}$", re.IGNORECASE)
 
@@ -101,7 +101,7 @@ def get_supervision_rgw_client(endpoint: StorageEndpoint) -> RGWAdminClient:
     if not creds:
         raise ValueError("Supervision credentials are not configured for this endpoint")
     access_key, secret_key = creds
-    admin_endpoint = resolve_admin_endpoint(endpoint)
+    admin_endpoint = resolve_rgw_admin_api_endpoint(endpoint)
     if not admin_endpoint:
         raise ValueError("Admin endpoint is not configured for this endpoint")
     return get_rgw_admin_client(

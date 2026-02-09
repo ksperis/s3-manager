@@ -37,6 +37,7 @@ class UsersService:
             hashed_password=get_password_hash(payload.password),
             is_active=True,
             role=UserRole.UI_ADMIN.value,
+            can_access_ceph_admin=False,
         )
         self.db.add(user)
         self.db.commit()
@@ -50,6 +51,7 @@ class UsersService:
             raise ValueError("User already exists")
         role = payload.role or UserRole.UI_USER.value
         is_root = bool(payload.is_root)
+        can_access_ceph_admin = bool(payload.can_access_ceph_admin) if role == UserRole.UI_ADMIN.value else False
         user = User(
             email=payload.email,
             full_name=payload.full_name,
@@ -58,6 +60,7 @@ class UsersService:
             is_active=True,
             role=role,
             is_root=is_root,
+            can_access_ceph_admin=can_access_ceph_admin,
         )
         self.db.add(user)
         self.db.commit()
@@ -76,12 +79,17 @@ class UsersService:
             user.email = payload.email
         if payload.password:
             user.hashed_password = get_password_hash(payload.password)
+        next_role = payload.role or user.role
         if payload.role:
             user.role = payload.role
         if payload.is_active is not None:
             user.is_active = payload.is_active
         if payload.is_root is not None:
             user.is_root = payload.is_root
+        if payload.can_access_ceph_admin is not None:
+            user.can_access_ceph_admin = bool(payload.can_access_ceph_admin) if next_role == UserRole.UI_ADMIN.value else False
+        elif next_role != UserRole.UI_ADMIN.value:
+            user.can_access_ceph_admin = False
         if payload.s3_user_ids is not None:
             self._set_s3_user_links(user, payload.s3_user_ids)
         if payload.s3_connection_ids is not None:
@@ -385,6 +393,7 @@ class UsersService:
             is_admin=user.role == UserRole.UI_ADMIN.value,
             role=user.role,
             is_root=user.is_root,
+            can_access_ceph_admin=bool(user.can_access_ceph_admin),
             accounts=account_ids,
             account_links=account_links,
             s3_users=s3_user_ids,

@@ -13,6 +13,7 @@ function CephAdminShell() {
   const { endpoints, selectedEndpointId, setSelectedEndpointId, selectedEndpoint, loading, error } = useCephAdminEndpoint();
   const showSelector = endpoints.length > 1;
   const selectorEnabled = endpoints.length > 0;
+  const workspaceBlocked = !loading && !selectorEnabled && Boolean(error);
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const next = Number(event.target.value);
@@ -69,7 +70,14 @@ function CephAdminShell() {
     <Layout navSections={navSections} sidebarTitle="CEPH ADMIN" hideHeader topbarContent={topbarContent}>
       <>
         {error && <PageBanner tone="warning" className="mb-4">{error}</PageBanner>}
-        <Outlet />
+        {workspaceBlocked ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+            Ceph Admin pages are hidden until the dedicated credential is mapped to an RGW user with
+            <code> --admin </code> or <code> --system </code> privileges.
+          </div>
+        ) : (
+          <Outlet />
+        )}
       </>
     </Layout>
   );

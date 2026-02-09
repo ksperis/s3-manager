@@ -23,6 +23,13 @@ class StorageEndpointFeatures(BaseModel):
     sns: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
 
 
+class StorageEndpointAdminOpsPermissions(BaseModel):
+    users_read: bool = False
+    users_write: bool = False
+    accounts_read: bool = False
+    accounts_write: bool = False
+
+
 class StorageEndpointBase(BaseModel):
     name: str
     endpoint_url: str
@@ -33,6 +40,8 @@ class StorageEndpointBase(BaseModel):
     admin_secret_key: Optional[str] = None
     supervision_access_key: Optional[str] = None
     supervision_secret_key: Optional[str] = None
+    ceph_admin_access_key: Optional[str] = None
+    ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
@@ -57,6 +66,8 @@ class StorageEndpointUpdate(BaseModel):
     admin_secret_key: Optional[str] = None
     supervision_access_key: Optional[str] = None
     supervision_secret_key: Optional[str] = None
+    ceph_admin_access_key: Optional[str] = None
+    ceph_admin_secret_key: Optional[str] = None
     features_config: Optional[str] = None
 
     @field_validator("name", "endpoint_url", "admin_endpoint", "region", mode="before")
@@ -78,12 +89,17 @@ class StorageEndpoint(StorageEndpointBase):
     updated_at: datetime
     has_admin_secret: bool = False
     has_supervision_secret: bool = False
+    has_ceph_admin_secret: bool = False
     capabilities: dict[str, bool] = Field(default_factory=dict)
+    admin_ops_permissions: StorageEndpointAdminOpsPermissions = Field(
+        default_factory=StorageEndpointAdminOpsPermissions
+    )
     features_config: Optional[str] = None
     features: StorageEndpointFeatures = Field(default_factory=StorageEndpointFeatures)
 
     admin_secret_key: Optional[str] = Field(default=None, exclude=True)
     supervision_secret_key: Optional[str] = Field(default=None, exclude=True)
+    ceph_admin_secret_key: Optional[str] = Field(default=None, exclude=True)
 
 
 class StorageEndpointPublic(BaseModel):
