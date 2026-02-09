@@ -17,6 +17,7 @@ export type SidebarSection = {
   label: string;
   links: SidebarLink[];
   collapsed?: boolean;
+  collapsible?: boolean;
 };
 
 type SidebarProps = {
@@ -29,15 +30,18 @@ type SidebarProps = {
 export default function Sidebar({ title = "s3-manager", sections, links = [], headerAction }: SidebarProps) {
   const effectiveSections: SidebarSection[] =
     sections && sections.length > 0 ? sections : [{ label: "Navigation", links }];
+  const isSectionCollapsible = (section: SidebarSection) =>
+    section.collapsible ?? section.label.trim().toLowerCase() === "settings";
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     effectiveSections.forEach((section) => {
-      initial[section.label] = section.collapsed ?? false;
+      initial[section.label] = isSectionCollapsible(section) ? section.collapsed ?? false : false;
     });
     return initial;
   });
 
-  const toggleSection = (label: string) => {
+  const toggleSection = (label: string, collapsible: boolean) => {
+    if (!collapsible) return;
     setCollapsedSections((prev) => ({
       ...prev,
       [label]: !prev[label],
@@ -61,18 +65,25 @@ export default function Sidebar({ title = "s3-manager", sections, links = [], he
       </div>
       <nav className="flex flex-1 flex-col gap-3 pb-6">
         {effectiveSections.map((section) => {
+          const collapsible = isSectionCollapsible(section);
           const isCollapsed = collapsedSections[section.label];
           return (
             <div key={section.label} className="space-y-1">
-              <button
-                onClick={() => toggleSection(section.label)}
-                className="flex w-full items-center justify-between px-2 ui-badge font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-              >
-                <span>{section.label}</span>
-                <span className={`transition-transform ${isCollapsed ? "rotate-0" : "rotate-90"}`}>
-                  ▶
-                </span>
-              </button>
+              {collapsible ? (
+                <button
+                  onClick={() => toggleSection(section.label, collapsible)}
+                  className="flex w-full items-center justify-between px-2 ui-badge font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  <span>{section.label}</span>
+                  <span className={`transition-transform ${isCollapsed ? "rotate-0" : "rotate-90"}`}>
+                    ▶
+                  </span>
+                </button>
+              ) : (
+                <div className="px-2 ui-badge font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {section.label}
+                </div>
+              )}
               {!isCollapsed && (
                 <ul className="space-y-1 border-l border-slate-200/80 pl-2 dark:border-slate-800">
                   {section.links.map((link) => (
