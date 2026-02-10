@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,7 @@ class FakeRGWAdmin:
     def __init__(self, payload: list[dict]):
         self._payload = payload
         self.get_all_buckets_calls = 0
+        self.get_bucket_info_calls = 0
         self.get_account_calls = 0
         self.get_user_calls = 0
 
@@ -19,6 +21,7 @@ class FakeRGWAdmin:
         return self._payload
 
     def get_bucket_info(self, bucket_name: str, stats: bool = True, allow_not_found: bool = False):
+        self.get_bucket_info_calls += 1
         for entry in self._payload:
             if entry.get("name") == bucket_name or entry.get("bucket") == bucket_name:
                 return entry
@@ -194,3 +197,53 @@ def test_ceph_admin_bucket_listing_cache_is_reused_for_quick_filter_changes():
     assert [item.name for item in first.items] == ["alpha-bucket", "beta-bucket", "gamma-bucket"]
     assert [item.name for item in second.items] == ["alpha-bucket"]
     assert rgw_admin.get_all_buckets_calls == 1
+
+
+def test_ceph_admin_bucket_listing_name_filter_uses_single_bulk_rgw_call():
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+        {"name": "bucket-c", "owner": "owner-c"},
+    ]
+    ctx, rgw_admin = _build_ctx(endpoint_id=109, payload=payload)
+
+    first_filter = json.dumps(
+        {
+            "match": "any",
+            "rules": [{"field": "name", "op": "in", "value": ["bucket-a", "bucket-c"]}],
+        }
+    )
+    second_filter = json.dumps(
+        {
+            "match": "any",
+            "rules": [{"field": "name", "op": "in", "value": ["bucket-b"]}],
+        }
+    )
+
+    first = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=first_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+    second = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=second_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in first.items] == ["bucket-a", "bucket-c"]
+    assert [item.name for item in second.items] == ["bucket-b"]
+    assert rgw_admin.get_all_buckets_calls == 1
+    assert rgw_admin.get_bucket_info_calls == 0

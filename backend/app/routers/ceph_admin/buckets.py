@@ -149,17 +149,10 @@ def _extract_bucket_owner_scope(entry: dict) -> tuple[str | None, str | None]:
 def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
     if not isinstance(entry, dict):
         return None
-    bucket_value = entry.get("bucket")
-    name = None
-    if isinstance(bucket_value, str):
-        name = bucket_value
-    elif isinstance(bucket_value, dict):
-        name = bucket_value.get("name") or bucket_value.get("bucket") or bucket_value.get("bucket_name")
-    if not name:
-        name = entry.get("name") or entry.get("bucket_name") or entry.get("bucket")
-    bucket_name = str(name or "").strip()
+    bucket_name = _extract_bucket_name(entry)
     if not bucket_name:
         return None
+    bucket_value = entry.get("bucket")
     tenant_value = entry.get("tenant")
     if tenant_value is None and isinstance(bucket_value, dict):
         tenant_value = bucket_value.get("tenant")
@@ -193,6 +186,21 @@ def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
         quota_max_size_bytes=quota_size,
         quota_max_objects=quota_objects,
     )
+
+
+def _extract_bucket_name(entry: dict) -> str | None:
+    if not isinstance(entry, dict):
+        return None
+    bucket_value = entry.get("bucket")
+    name = None
+    if isinstance(bucket_value, str):
+        name = bucket_value
+    elif isinstance(bucket_value, dict):
+        name = bucket_value.get("name") or bucket_value.get("bucket") or bucket_value.get("bucket_name")
+    if not name:
+        name = entry.get("name") or entry.get("bucket_name") or entry.get("bucket")
+    bucket_name = str(name or "").strip()
+    return bucket_name or None
 
 
 def _extract_name_candidates(query: CephAdminBucketFilterQuery | None) -> list[str] | None:
@@ -721,12 +729,12 @@ def list_buckets(
                 if not name_candidates:
                     entries: list[dict] = []
                 else:
-                    payload = []
-                    for bucket_name in name_candidates:
-                        entry = ctx.rgw_admin.get_bucket_info(bucket_name, stats=with_stats, allow_not_found=True)
-                        if entry:
-                            payload.append(entry)
-                    entries = extract_bucket_list(payload)
+                    allowed_names = set(name_candidates)
+                    entries = [
+                        entry
+                        for entry in _get_cached_rgw_bucket_entries(ctx, with_stats=with_stats)
+                        if _extract_bucket_name(entry) in allowed_names
+                    ]
             else:
                 entries = _get_cached_rgw_bucket_entries(ctx, with_stats=with_stats)
         except RGWAdminError as exc:
