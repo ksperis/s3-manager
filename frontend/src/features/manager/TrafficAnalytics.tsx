@@ -31,6 +31,7 @@ import {
 const WINDOW_OPTIONS: { label: string; value: TrafficWindow; helper: string }[] = [
   { label: "24h", value: "day", helper: "Last day" },
   { label: "7d", value: "week", helper: "Weekly trend" },
+  { label: "30d", value: "month", helper: "Monthly trend" },
 ];
 
 const REQUEST_COLORS: Record<string, string> = {
@@ -51,7 +52,7 @@ type TrafficAnalyticsProps = {
 };
 
 export default function TrafficAnalytics({ accountId, bucketName, scope = "manager", enabled = true }: TrafficAnalyticsProps) {
-  const [window, setWindow] = useState<TrafficWindow>("day");
+  const [window, setWindow] = useState<TrafficWindow>("week");
   const [traffic, setTraffic] = useState<ManagerTrafficStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +160,12 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <ChartCard title={window === "week" ? "Daily traffic" : "Hourly traffic"} subtitle="Ingress vs egress comparison" loading={loading} hasData={hasSeries}>
+          <ChartCard
+            title={window === "week" || window === "month" ? "Daily traffic" : "Hourly traffic"}
+            subtitle="Ingress vs egress comparison"
+            loading={loading}
+            hasData={hasSeries}
+          >
             <TrafficBytesChart
               window={window}
               series={traffic?.series ?? []}

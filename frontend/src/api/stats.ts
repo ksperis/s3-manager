@@ -130,7 +130,7 @@ export type ManagerTrafficStats = {
   category_breakdown: TrafficCategoryBreakdown[];
 };
 
-export type TrafficWindow = "hour" | "day" | "week";
+export type TrafficWindow = "hour" | "day" | "week" | "month";
 
 export type StorageTotals = {
   used_bytes?: number | null;

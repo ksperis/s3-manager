@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuditLogEntry, listAuditLogs } from "../../api/audit";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 
 type RoleFilter = "all" | "ui_admin" | "ui_user" | "ui_none";
 type ScopeFilter = "all" | "admin" | "manager" | "portal";
@@ -183,12 +184,12 @@ export default function AuditLogsPage() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search by actor, action, target, or message"
-          className="min-w-[220px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className={`${toolbarCompactInputClasses} min-w-[220px] flex-1`}
         />
         <select
           value={actionFilter}
           onChange={(e) => setActionFilter(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className={toolbarCompactSelectClasses}
         >
           <option value="all">All actions</option>
           {actionOptions.map((action) => (
@@ -200,7 +201,7 @@ export default function AuditLogsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className={toolbarCompactSelectClasses}
         >
           <option value="all">All statuses</option>
           {statusOptions.map((status) => (
@@ -212,7 +213,7 @@ export default function AuditLogsPage() {
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className={toolbarCompactSelectClasses}
         >
           {Object.entries(roleLabels).map(([value, label]) => (
             <option key={value} value={value}>
@@ -223,7 +224,7 @@ export default function AuditLogsPage() {
         <select
           value={scopeFilter}
           onChange={(e) => setScopeFilter(e.target.value as ScopeFilter)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          className={toolbarCompactSelectClasses}
         >
           {Object.entries(scopeLabels).map(([value, label]) => (
             <option key={value} value={value}>

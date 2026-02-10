@@ -39,6 +39,7 @@ router = APIRouter(prefix="/manager/buckets", tags=["manager-buckets"])
 @router.get("", response_model=list[Bucket])
 def list_buckets(
     include: list[str] = Query(default=[], description="Optional extra fields to include (e.g. tags, versioning, cors)"),
+    with_stats: bool = Query(True, description="Include usage/quota stats from RGW admin listing"),
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
@@ -52,7 +53,7 @@ def list_buckets(
                 normalized = part.strip()
                 if normalized:
                     include_set.add(normalized)
-        return service.list_buckets(account, include=include_set)
+        return service.list_buckets(account, include=include_set, with_stats=with_stats)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -574,6 +575,20 @@ def delete_website(
             entity_id=bucket_name,
             account=account,
         )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/{bucket_name}/tags")
+def get_tags(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: dict = Depends(get_current_account_admin),
+):
+    try:
+        tags = service.get_bucket_tags(bucket_name, account)
+        return {"tags": [tag.model_dump() for tag in tags]}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

@@ -30,6 +30,7 @@ import { PortalSettingsItem, PortalSettingsSection } from "../../components/Port
 import StorageUsageCard from "../../components/StorageUsageCard";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useAdminAccountStats } from "./useAdminAccountStats";
 import { confirmAction } from "../../utils/confirm";
 
@@ -1882,7 +1883,7 @@ export default function S3AccountsPage() {
               value={filter}
               onChange={(e) => handleFilterChange(e.target.value)}
               placeholder="Search by name or RGW ID"
-              className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
+              className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
             />
           </div>
         </div>

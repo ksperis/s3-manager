@@ -4,6 +4,7 @@
  */
 import client from "./client";
 import type { PaginatedResponse } from "./types";
+import type { ManagerTrafficStats, TrafficWindow } from "./stats";
 import type {
   BucketFeatureStatus,
   BucketLoggingConfiguration,
@@ -54,6 +55,30 @@ export type CephAdminEntityMetrics = {
   bucket_usage: CephAdminBucketUsagePoint[];
   generated_at: string;
 };
+
+export type CephAdminClusterOwnerUsagePoint = {
+  owner: string;
+  used_bytes?: number | null;
+  object_count?: number | null;
+  bucket_count: number;
+};
+
+export type CephAdminClusterStorageTotals = {
+  used_bytes?: number | null;
+  object_count?: number | null;
+  bucket_count?: number | null;
+  owners_with_usage?: number | null;
+};
+
+export type CephAdminClusterStorageMetrics = {
+  total_buckets: number;
+  bucket_usage: CephAdminBucketUsagePoint[];
+  owner_usage: CephAdminClusterOwnerUsagePoint[];
+  storage_totals: CephAdminClusterStorageTotals;
+  generated_at: string;
+};
+
+export type CephAdminClusterTrafficMetrics = ManagerTrafficStats;
 
 export type CephAdminRgwAccountDetail = {
   account_id: string;
@@ -130,6 +155,21 @@ export async function getCephAdminAccountMetrics(endpointId: number, accountId: 
   const { data } = await client.get<CephAdminEntityMetrics>(
     `/ceph-admin/endpoints/${endpointId}/accounts/${encodeURIComponent(accountId)}/metrics`
   );
+  return data;
+}
+
+export async function fetchCephAdminClusterStorage(endpointId: number): Promise<CephAdminClusterStorageMetrics> {
+  const { data } = await client.get<CephAdminClusterStorageMetrics>(`/ceph-admin/endpoints/${endpointId}/metrics/storage`);
+  return data;
+}
+
+export async function fetchCephAdminClusterTraffic(
+  endpointId: number,
+  window: TrafficWindow = "week"
+): Promise<CephAdminClusterTrafficMetrics> {
+  const { data } = await client.get<CephAdminClusterTrafficMetrics>(`/ceph-admin/endpoints/${endpointId}/metrics/traffic`, {
+    params: { window },
+  });
   return data;
 }
 

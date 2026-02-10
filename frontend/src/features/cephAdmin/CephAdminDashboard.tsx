@@ -13,6 +13,7 @@ type CardLink = {
 };
 
 const cards: CardLink[] = [
+  { title: "Metrics", description: "Vue cluster-wide du stockage et du trafic RGW.", to: "/ceph-admin/metrics" },
   { title: "RGW Accounts", description: "Créer/importer des tenants RGW et gérer leurs quotas.", to: "/ceph-admin/accounts" },
   { title: "RGW Users", description: "Administrer les utilisateurs RGW du cluster.", to: "/ceph-admin/users" },
   { title: "Buckets", description: "Lister et configurer les buckets du cluster (Admin Ops + S3).", to: "/ceph-admin/buckets" },
@@ -32,12 +33,13 @@ export default function CephAdminDashboard() {
           <Link
             key={card.to}
             to={card.to}
-            className="group rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:border-primary-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-primary-600"
+            className="group rounded-xl border border-slate-200/80 bg-white px-3 py-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-800 dark:bg-slate-900"
           >
-            <div className="ui-subtitle font-semibold text-slate-900 group-hover:text-primary-700 dark:text-slate-50 dark:group-hover:text-primary-200">
+            <p className="ui-caption font-medium text-slate-500 dark:text-slate-400">Navigation</p>
+            <div className="mt-1.5 ui-title font-semibold text-slate-900 dark:text-white">
               {card.title}
             </div>
-            <div className="mt-1 ui-body text-slate-600 dark:text-slate-300">{card.description}</div>
+            <div className="mt-1 ui-caption text-slate-500 dark:text-slate-400">{card.description}</div>
           </Link>
         ))}
       </div>

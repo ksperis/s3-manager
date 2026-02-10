@@ -478,7 +478,7 @@ def delete_portal_access_key(
 
 @router.get("/traffic")
 def portal_traffic(
-    window: TrafficWindow = Query(TrafficWindow.DAY),
+    window: TrafficWindow = Query(TrafficWindow.WEEK),
     bucket: Optional[str] = Query(None),
     account: S3Account = Depends(get_portal_account_context),
     access: AccountAccess = Depends(get_portal_account_access),

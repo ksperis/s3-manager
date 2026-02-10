@@ -20,18 +20,21 @@ class TrafficWindow(str, Enum):
     HOUR = "hour"
     DAY = "day"
     WEEK = "week"
+    MONTH = "month"
 
 
 WINDOW_DELTAS: dict[TrafficWindow, timedelta] = {
     TrafficWindow.HOUR: timedelta(hours=1),
     TrafficWindow.DAY: timedelta(days=1),
     TrafficWindow.WEEK: timedelta(days=7),
+    TrafficWindow.MONTH: timedelta(days=30),
 }
 
 WINDOW_RESOLUTION_LABELS: dict[TrafficWindow, str] = {
     TrafficWindow.HOUR: "per-entry",
     TrafficWindow.DAY: "hourly",
     TrafficWindow.WEEK: "daily",
+    TrafficWindow.MONTH: "daily",
 }
 
 REQUEST_GROUPS: list[tuple[str, tuple[str, ...]]] = [
@@ -72,7 +75,7 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
 def _bucket_timestamp(timestamp: datetime, window: Optional[TrafficWindow]) -> datetime:
     if not window:
         return timestamp
-    if window == TrafficWindow.WEEK:
+    if window in {TrafficWindow.WEEK, TrafficWindow.MONTH}:
         return timestamp.replace(hour=0, minute=0, second=0, microsecond=0)
     if window == TrafficWindow.DAY:
         return timestamp.replace(minute=0, second=0, microsecond=0)
@@ -88,6 +91,9 @@ def window_start(reference: datetime, window: TrafficWindow) -> datetime:
     if window == TrafficWindow.WEEK:
         today = reference.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         return today - timedelta(days=6)
+    if window == TrafficWindow.MONTH:
+        today = reference.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        return today - timedelta(days=29)
     return (reference - WINDOW_DELTAS[window]).astimezone(timezone.utc)
 
 

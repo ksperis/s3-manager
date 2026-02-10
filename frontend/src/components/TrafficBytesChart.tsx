@@ -20,21 +20,42 @@ type TrafficBytesChartProps = {
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+const MINUTE_MS = 60 * 1000;
+
+function expectedStepMs(windowValue: TrafficWindow): number {
+  if (windowValue === "week" || windowValue === "month") {
+    return DAY_MS;
+  }
+  if (windowValue === "day") {
+    return HOUR_MS;
+  }
+  return MINUTE_MS;
+}
 
 function inferStepMs(windowValue: TrafficWindow, points: ChartPoint[]): number {
-  if (points.length >= 2) {
-    const diffs: number[] = [];
-    for (let i = 1; i < points.length; i += 1) {
-      const diff = points[i].timestampMs - points[i - 1].timestampMs;
-      if (diff > 0) {
-        diffs.push(diff);
-      }
-    }
-    if (diffs.length > 0) {
-      return Math.min(...diffs);
+  const expected = expectedStepMs(windowValue);
+  if (points.length < 2) {
+    return expected;
+  }
+  const diffs: number[] = [];
+  for (let i = 1; i < points.length; i += 1) {
+    const diff = points[i].timestampMs - points[i - 1].timestampMs;
+    if (diff > 0) {
+      diffs.push(diff);
     }
   }
-  return windowValue === "week" ? DAY_MS : HOUR_MS;
+  if (diffs.length === 0) {
+    return expected;
+  }
+  const smallestDiff = Math.min(...diffs);
+  if (!Number.isFinite(smallestDiff) || smallestDiff <= 0) {
+    return expected;
+  }
+  if (windowValue === "week" || windowValue === "month" || windowValue === "day") {
+    // Keep chart density stable for fixed windows (30d/7d = daily bars, 24h = hourly bars).
+    return expected;
+  }
+  return smallestDiff;
 }
 
 function normalizeTimestamp(timestamp: number, step: number): number {
@@ -110,7 +131,7 @@ function formatXAxisTimestamp(value: string | number, window: TrafficWindow) {
     return String(value);
   }
   const options =
-    window === "week"
+    window === "week" || window === "month"
       ? { day: "2-digit", month: "short" }
       : { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" };
   return new Intl.DateTimeFormat(undefined, options).format(date);
@@ -135,7 +156,7 @@ function TrafficTooltip({ payload, label, window }: any) {
     return null;
   }
   const date =
-    window === "week"
+    window === "week" || window === "month"
       ? tooltipFormatterDaily.format(new Date(label))
       : tooltipFormatterHourly.format(new Date(label));
   return (
@@ -154,16 +175,19 @@ function TrafficTooltip({ payload, label, window }: any) {
 export default function TrafficBytesChart({ window, series, start, end, height = 280, chartKey }: TrafficBytesChartProps) {
   const chartData = useMemo(() => buildChartData(window, series, start, end), [end, series, start, window]);
   const domain = useMemo(() => {
-    if (!start || !end) {
+    if (!chartData.length) {
       return undefined;
     }
-    const startMs = new Date(start).getTime();
-    const endMs = new Date(end).getTime();
-    if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    const sorted = [...chartData].sort((a, b) => a.timestampMs - b.timestampMs);
+    const minTs = sorted[0]?.timestampMs;
+    const maxTs = sorted[sorted.length - 1]?.timestampMs;
+    if (!Number.isFinite(minTs) || !Number.isFinite(maxTs)) {
       return undefined;
     }
-    return [startMs, endMs] as [number, number];
-  }, [end, start]);
+    const step = inferStepMs(window, sorted);
+    const halfStep = Math.max(step / 2, 1);
+    return [minTs - halfStep, maxTs + halfStep] as [number, number];
+  }, [chartData, window]);
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -173,6 +197,7 @@ export default function TrafficBytesChart({ window, series, start, end, height =
           dataKey="timestampMs"
           type="number"
           domain={domain ?? ["auto", "auto"]}
+          scale="time"
           tickFormatter={(value) => formatXAxisTimestamp(value, window)}
           stroke="#94A3B8"
           minTickGap={32}
@@ -200,4 +225,3 @@ function formatBytesAxis(value: number) {
   const decimals = sized >= 10 ? 0 : 1;
   return `${sized.toFixed(decimals)} ${units[idx]}`;
 }
-

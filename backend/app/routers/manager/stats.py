@@ -112,7 +112,7 @@ def account_stats(
 
 @router.get("/traffic")
 def account_traffic(
-    window: TrafficWindow = Query(TrafficWindow.DAY),
+    window: TrafficWindow = Query(TrafficWindow.WEEK),
     bucket: Optional[str] = Query(None),
     account: S3Account = Depends(get_account_context),
     _: dict = Depends(require_metrics_capable_manager),

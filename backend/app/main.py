@@ -31,6 +31,7 @@ from app.routers.ceph_admin import endpoints as ceph_admin_endpoints
 from app.routers.ceph_admin import accounts as ceph_admin_accounts
 from app.routers.ceph_admin import users as ceph_admin_users
 from app.routers.ceph_admin import buckets as ceph_admin_buckets
+from app.routers.ceph_admin import metrics as ceph_admin_metrics
 from app.routers.internal import billing_collect as internal_billing
 from app.routers.internal import healthchecks as internal_healthchecks
 from app.routers.internal import s3_connections as internal_s3_connections
@@ -107,6 +108,7 @@ app.include_router(ceph_admin_endpoints.router, prefix=settings.api_v1_prefix, d
 app.include_router(ceph_admin_accounts.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_users.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(ceph_admin_metrics.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(internal_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_s3_connections.router, prefix=settings.api_v1_prefix)

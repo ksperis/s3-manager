@@ -236,3 +236,37 @@ def test_traffic_service_week_window_returns_daily_series():
     ]
     assert result["totals"]["bytes_out"] == 100 + 200
     assert result["totals"]["bytes_in"] == 300
+
+
+def test_traffic_service_month_window_returns_daily_series():
+    account = _make_account()
+    payload = {
+        "entries": [
+            {
+                "bucket": "alpha",
+                "time": "2024-03-10 10:00:00",
+                "categories": [
+                    {"category": "get_obj", "bytes_sent": 100, "bytes_received": 0, "ops": 1, "successful_ops": 1}
+                ],
+            },
+            {
+                "bucket": "alpha",
+                "time": "2024-03-10 11:00:00",
+                "categories": [
+                    {"category": "put_obj", "bytes_sent": 0, "bytes_received": 200, "ops": 2, "successful_ops": 2}
+                ],
+            },
+        ]
+    }
+    fake_client = FakeRGWClient([payload])
+    service = TrafficService(account, rgw_client=fake_client, admin_client=fake_client)
+    reference = datetime(2024, 3, 10, 12, 0, tzinfo=timezone.utc)
+
+    result = service.get_traffic(TrafficWindow.MONTH, now=reference)
+
+    assert result["window"] == "month"
+    assert result["resolution"] == "daily"
+    assert result["data_points"] == 1
+    assert [point["timestamp"] for point in result["series"]] == ["2024-03-10T00:00:00+00:00"]
+    assert result["totals"]["bytes_out"] == 100
+    assert result["totals"]["bytes_in"] == 200

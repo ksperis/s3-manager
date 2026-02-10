@@ -25,7 +25,10 @@ function CephAdminShell() {
   const navSections: SidebarSection[] = [
     {
       label: "Overview",
-      links: [{ to: "/ceph-admin", label: "Dashboard", end: true }],
+      links: [
+        { to: "/ceph-admin", label: "Dashboard", end: true },
+        { to: "/ceph-admin/metrics", label: "Metrics", disabled: !selectorEnabled },
+      ],
     },
     {
       label: "Ceph S3",

@@ -680,7 +680,7 @@ export default function CephAdminAccountsPage() {
                   aria-label="Quick filter"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Search by account id or name"
+                  placeholder="Search by account id"
                   className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
               </div>

@@ -22,6 +22,7 @@ import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 
@@ -369,7 +370,7 @@ export default function ManagerUsersPage() {
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Search by name or ARN"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
+                  className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
                 />
               </div>
             </div>

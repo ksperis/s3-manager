@@ -471,7 +471,7 @@ export default function PortalDashboard() {
       }
       setTrafficLoading(true);
       try {
-        const stats = await fetchPortalTraffic(accountIdForApi, "day");
+        const stats = await fetchPortalTraffic(accountIdForApi, "week");
         if (cancelled) return;
         const points = (stats?.series ?? [])
           .map((point) => ({

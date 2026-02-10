@@ -22,6 +22,7 @@ import Modal from "../../components/Modal";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { confirmAction, confirmDeletion } from "../../utils/confirm";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 
@@ -173,10 +174,12 @@ export default function BucketsPage() {
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
+  const fetchRequestRef = useRef(0);
   const [sort, setSort] = useState<{ field: keyof Bucket; direction: "asc" | "desc" }>({
     field: "used_bytes",
     direction: "desc",
   });
+  const [enrichingColumns, setEnrichingColumns] = useState(false);
 
   const includeParams = useMemo(() => {
     const include: string[] = [];
@@ -196,6 +199,16 @@ export default function BucketsPage() {
     });
     return include;
   }, [visibleColumns]);
+
+  const requiresStats = useMemo(
+    () =>
+      visibleColumns.includes("used_bytes") ||
+      visibleColumns.includes("object_count") ||
+      visibleColumns.includes("quota_max_size_bytes") ||
+      visibleColumns.includes("quota_max_objects") ||
+      visibleColumns.includes("quota_status"),
+    [visibleColumns]
+  );
 
   type ColumnDef = {
     id: string;
@@ -263,27 +276,61 @@ export default function BucketsPage() {
   };
 
   const fetchBuckets = async (accountId: S3AccountSelector) => {
+    const requestId = fetchRequestRef.current + 1;
+    fetchRequestRef.current = requestId;
     setError(null);
     setLoading(true);
+    setEnrichingColumns(false);
     try {
-      const data = await listBuckets(accountId, { include: includeParams.length > 0 ? includeParams : undefined });
-      setBuckets(data);
+      const baseData = await listBuckets(accountId, {
+        with_stats: requiresStats,
+      });
+      if (fetchRequestRef.current !== requestId) return;
+      setBuckets(baseData);
+      setLoading(false);
+
+      if (includeParams.length === 0) return;
+
+      setEnrichingColumns(true);
+      try {
+        const enrichedData = await listBuckets(accountId, {
+          include: includeParams,
+          with_stats: requiresStats,
+        });
+        if (fetchRequestRef.current !== requestId) return;
+        setBuckets(enrichedData);
+      } catch (err) {
+        if (fetchRequestRef.current !== requestId) return;
+        console.error(err);
+        setError(extractError(err));
+      } finally {
+        if (fetchRequestRef.current === requestId) {
+          setEnrichingColumns(false);
+        }
+      }
     } catch (err) {
+      if (fetchRequestRef.current !== requestId) return;
       console.error(err);
       setError("Unable to fetch buckets. Ensure the backend is running.");
+      setBuckets([]);
+      setEnrichingColumns(false);
     } finally {
-      setLoading(false);
+      if (fetchRequestRef.current === requestId) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     if (needsS3AccountSelection) {
+      fetchRequestRef.current += 1;
       setLoading(false);
+      setEnrichingColumns(false);
       setBuckets([]);
       return;
     }
     fetchBuckets(accountIdForApi ?? null);
-  }, [accountIdForApi, needsS3AccountSelection, includeParams.join(",")]);
+  }, [accountIdForApi, needsS3AccountSelection, includeParams.join(","), requiresStats]);
 
   useEffect(() => {
     persistVisibleColumns(visibleColumns);
@@ -591,6 +638,9 @@ export default function BucketsPage() {
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
               <span className="ui-caption text-slate-500 dark:text-slate-400">{filteredBuckets.length} bucket(s)</span>
+              {enrichingColumns && (
+                <span className="ui-caption text-slate-500 dark:text-slate-400">Updating selected columns...</span>
+              )}
               <div className="flex items-center gap-2 sm:justify-end">
                 <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
                 <input
@@ -598,14 +648,14 @@ export default function BucketsPage() {
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Search by name"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
+                  className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
                 />
               </div>
               <div className="relative" ref={columnPickerRef}>
                 <button
                   type="button"
                   onClick={() => setShowColumnPicker((prev) => !prev)}
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                  className={toolbarCompactButtonClasses}
                 >
                   Columns
                 </button>

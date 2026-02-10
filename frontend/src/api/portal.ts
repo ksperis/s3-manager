@@ -265,7 +265,7 @@ export async function revokePortalUserBucket(
 
 export async function fetchPortalTraffic(
   accountId: S3AccountSelector,
-  window: string,
+  window: import("./stats").TrafficWindow,
   bucket?: string
 ): Promise<import("./stats").ManagerTrafficStats> {
   const baseParams: Record<string, string | number> = { window };

@@ -66,13 +66,13 @@ class BucketsService:
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to initialize RGW admin client: {exc}") from exc
 
-    def _admin_bucket_list(self, account: S3Account) -> list[dict]:
+    def _admin_bucket_list(self, account: S3Account, with_stats: bool = True) -> list[dict]:
         uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
         if not uid:
             return []
         rgw_admin = self._rgw_admin_for_account(account)
         try:
-            payload = rgw_admin.get_all_buckets(uid=uid, with_stats=True)
+            payload = rgw_admin.get_all_buckets(uid=uid, with_stats=with_stats)
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to list buckets via RGW admin: {exc}") from exc
         return extract_bucket_list(payload)
@@ -94,14 +94,19 @@ class BucketsService:
             "session_token": session_token,
         }
 
-    def list_buckets(self, account: S3Account, include: Optional[Set[str]] = None) -> List[Bucket]:
+    def list_buckets(
+        self,
+        account: S3Account,
+        include: Optional[Set[str]] = None,
+        with_stats: bool = True,
+    ) -> List[Bucket]:
         access_key, secret_key = self._account_credentials(account)
         buckets = s3_client.list_buckets(access_key=access_key, secret_key=secret_key, **self._client_kwargs(account))
         account_uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
         admin_by_name: dict[str, dict] = {}
-        if account_uid:
+        if account_uid and with_stats:
             try:
-                admin_list = self._admin_bucket_list(account)
+                admin_list = self._admin_bucket_list(account, with_stats=True)
                 logger.debug(
                     "S3Account %s fetched %s bucket stats via RGW admin",
                     account.rgw_account_id or account.id,
@@ -114,6 +119,8 @@ class BucketsService:
                 }
             except RuntimeError as exc:
                 logger.warning("Unable to fetch admin bucket stats for %s: %s", account.rgw_account_id or account.id, exc)
+        elif account_uid and not with_stats:
+            logger.debug("S3Account %s skipped RGW admin stats enrichment", account.rgw_account_id or account.id)
         logger.debug("S3Account %s listed %s buckets", account.rgw_account_id or account.id, len(buckets))
         enriched: list[Bucket] = []
         for b in buckets:
@@ -172,10 +179,9 @@ class BucketsService:
             return enriched
 
         wants_tags = "tags" in requested
-        wants_props = bool(
-            requested
-            & {"versioning", "object_lock", "block_public_access", "lifecycle_rules", "cors"}
-        )
+        props_feature_keys = {"versioning", "object_lock", "block_public_access", "lifecycle_rules", "cors"}
+        requested_props_features = requested & props_feature_keys
+        use_props_bundle = len(requested_props_features) > 1
         wants_website = "static_website" in requested
         wants_policy = "bucket_policy" in requested
         wants_logging = "access_logging" in requested
@@ -202,17 +208,26 @@ class BucketsService:
             feature_map: dict[str, BucketFeatureStatus] = {}
             props: Optional[BucketProperties] = None
             props_error = False
-            if wants_props:
+            if use_props_bundle:
                 try:
                     props = self.get_bucket_properties(bucket.name, account)
                 except RuntimeError:
                     props_error = True
 
             if "versioning" in requested:
-                if props_error:
-                    feature_map["versioning"] = unavailable()
+                raw_versioning: Optional[str] = None
+                if use_props_bundle:
+                    if props_error:
+                        feature_map["versioning"] = unavailable()
+                    else:
+                        raw_versioning = props.versioning_status if props else None
                 else:
-                    raw = (props.versioning_status if props else None) or "Disabled"
+                    try:
+                        raw_versioning = self.get_bucket_versioning_status(bucket.name, account)
+                    except RuntimeError:
+                        feature_map["versioning"] = unavailable()
+                if "versioning" not in feature_map:
+                    raw = raw_versioning or "Disabled"
                     normalized = str(raw).strip().lower()
                     if normalized == "enabled":
                         feature_map["versioning"] = active(raw)
@@ -222,26 +237,37 @@ class BucketsService:
                         feature_map["versioning"] = inactive(raw)
 
             if "object_lock" in requested:
-                if props_error:
-                    feature_map["object_lock"] = unavailable()
+                if use_props_bundle:
+                    if props_error:
+                        feature_map["object_lock"] = unavailable()
+                    else:
+                        enabled = bool((props.object_lock_enabled if props else None) is True)
+                        feature_map["object_lock"] = active("Enabled") if enabled else inactive("Disabled")
                 else:
-                    enabled = bool((props.object_lock_enabled if props else None) is True)
-                    feature_map["object_lock"] = active("Enabled") if enabled else inactive("Disabled")
+                    try:
+                        object_lock = self.get_bucket_object_lock(bucket.name, account)
+                        enabled = bool(object_lock and object_lock.enabled is True)
+                        feature_map["object_lock"] = active("Enabled") if enabled else inactive("Disabled")
+                    except RuntimeError:
+                        feature_map["object_lock"] = unavailable()
 
             if "block_public_access" in requested:
-                if props_error:
-                    feature_map["block_public_access"] = unavailable()
+                cfg = None
+                if use_props_bundle:
+                    if props_error:
+                        feature_map["block_public_access"] = unavailable()
+                    else:
+                        cfg = props.public_access_block if props else None
                 else:
-                    cfg = props.public_access_block if props else None
+                    try:
+                        cfg = self.get_public_access_block(bucket.name, account)
+                    except RuntimeError:
+                        feature_map["block_public_access"] = unavailable()
+                if "block_public_access" not in feature_map:
                     if not cfg:
                         feature_map["block_public_access"] = inactive("Disabled")
                     else:
-                        keys = [
-                            cfg.block_public_acls,
-                            cfg.ignore_public_acls,
-                            cfg.block_public_policy,
-                            cfg.restrict_public_buckets,
-                        ]
+                        keys = [cfg.block_public_acls, cfg.ignore_public_acls, cfg.block_public_policy, cfg.restrict_public_buckets]
                         fully_enabled = all(val is True for val in keys)
                         partially_enabled = not fully_enabled and any(val is True for val in keys)
                         if fully_enabled:
@@ -252,18 +278,35 @@ class BucketsService:
                             feature_map["block_public_access"] = inactive("Disabled")
 
             if "lifecycle_rules" in requested:
-                if props_error:
-                    feature_map["lifecycle_rules"] = unavailable()
+                rules = None
+                if use_props_bundle:
+                    if props_error:
+                        feature_map["lifecycle_rules"] = unavailable()
+                    else:
+                        rules = props.lifecycle_rules if props else []
                 else:
-                    rules = props.lifecycle_rules if props else []
+                    try:
+                        lifecycle = self.get_lifecycle(bucket.name, account)
+                        rules = lifecycle.rules
+                    except RuntimeError:
+                        feature_map["lifecycle_rules"] = unavailable()
+                if "lifecycle_rules" not in feature_map:
                     has_rules = bool(rules and len(rules) > 0)
                     feature_map["lifecycle_rules"] = active("Enabled") if has_rules else inactive("Disabled")
 
             if "cors" in requested:
-                if props_error:
-                    feature_map["cors"] = unavailable()
+                rules = None
+                if use_props_bundle:
+                    if props_error:
+                        feature_map["cors"] = unavailable()
+                    else:
+                        rules = props.cors_rules if props else []
                 else:
-                    rules = props.cors_rules if props else []
+                    try:
+                        rules = self.get_bucket_cors(bucket.name, account)
+                    except RuntimeError:
+                        feature_map["cors"] = unavailable()
+                if "cors" not in feature_map:
                     has_rules = bool(rules and len(rules) > 0)
                     feature_map["cors"] = active("Configured") if has_rules else inactive("Not set")
 

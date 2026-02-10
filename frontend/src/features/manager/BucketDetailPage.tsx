@@ -16,14 +16,17 @@ import {
   BucketPolicy,
   BucketProperties,
   BucketPublicAccessBlock,
+  BucketTag,
   BucketWebsiteConfiguration,
   deleteBucketCors,
   deleteBucketLogging,
   deleteBucketNotifications,
   deleteBucketPolicyApi,
+  deleteBucketTags,
   deleteBucketWebsite,
   deleteBucketLifecycle,
   getBucketCors,
+  getBucketTags,
   getBucketLogging,
   getBucketNotifications,
   getBucketPolicy,
@@ -34,6 +37,7 @@ import {
   getBucketPublicAccessBlock,
   listBuckets,
   putBucketCors,
+  putBucketTags,
   putBucketLogging,
   putBucketNotifications,
   putBucketPolicy,
@@ -51,6 +55,7 @@ import {
   deleteCephAdminBucketLogging,
   deleteCephAdminBucketNotifications,
   deleteCephAdminBucketPolicy,
+  deleteCephAdminBucketTags,
   deleteCephAdminBucketWebsite,
   getCephAdminBucketAcl,
   getCephAdminBucketCors,
@@ -60,6 +65,7 @@ import {
   getCephAdminBucketPolicy,
   getCephAdminBucketProperties,
   getCephAdminBucketPublicAccessBlock,
+  getCephAdminBucketTags,
   getCephAdminBucketWebsite,
   listCephAdminBuckets,
   putCephAdminBucketCors,
@@ -67,6 +73,7 @@ import {
   putCephAdminBucketLogging,
   putCephAdminBucketNotifications,
   putCephAdminBucketPolicy,
+  putCephAdminBucketTags,
   putCephAdminBucketWebsite,
   setCephAdminBucketVersioning,
   updateCephAdminBucketAcl,
@@ -324,6 +331,12 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   ]);
   const [simpleLifecycleWarning, setSimpleLifecycleWarning] = useState<string | null>(null);
   const [showLifecycleEditor, setShowLifecycleEditor] = useState(false);
+  const [bucketTags, setBucketTags] = useState<BucketTag[]>([]);
+  const [bucketTagsLoading, setBucketTagsLoading] = useState(false);
+  const [bucketTagsError, setBucketTagsError] = useState<string | null>(null);
+  const [bucketTagsStatus, setBucketTagsStatus] = useState<string | null>(null);
+  const [savingBucketTags, setSavingBucketTags] = useState(false);
+  const [deletingBucketTags, setDeletingBucketTags] = useState(false);
 
   const [objects, setObjects] = useState<S3Object[]>([]);
   const [prefixes, setPrefixes] = useState<string[]>([]);
@@ -367,14 +380,10 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   const isCephEndpoint = isCephAdmin || selectedS3Account?.endpoint_provider === "ceph";
   const availableTabs = useMemo(() => {
     if (isCephAdmin) {
-      return ["overview", "properties", "permissions", "advanced", "metrics", "ceph"];
+      return ["overview", "ceph", "properties", "permissions", "advanced", "metrics"];
     }
-    const tabs = ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
-    if (isCephEndpoint) {
-      tabs.push("ceph");
-    }
-    return tabs;
-  }, [isCephAdmin, isCephEndpoint]);
+    return ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
+  }, [isCephAdmin]);
 
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {
@@ -818,6 +827,40 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     }
   }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
+  const loadBucketTags = useCallback(async () => {
+    if (!bucketName || !hasContext) {
+      setBucketTags([]);
+      setBucketTagsError(null);
+      setBucketTagsStatus(null);
+      return;
+    }
+    setBucketTagsLoading(true);
+    setBucketTagsError(null);
+    setBucketTagsStatus(null);
+    try {
+      const response = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketTags(endpointId, bucketName)
+          : { tags: [] }
+        : await getBucketTags(accountId, bucketName);
+      const normalized = (response.tags ?? [])
+        .map((tag) => ({
+          key: String(tag.key ?? "").trim(),
+          value: String(tag.value ?? ""),
+        }))
+        .filter((tag) => tag.key.length > 0);
+      setBucketTags(normalized);
+    } catch (err) {
+      const message =
+        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
+        "Unable to load bucket tags.";
+      setBucketTagsError(message);
+      setBucketTags([]);
+    } finally {
+      setBucketTagsLoading(false);
+    }
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
+
   const loadObjects = useCallback(
     async (prefix: string) => {
       if (isCephAdmin || !bucketName || !hasAccountContext) return;
@@ -848,8 +891,10 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   useEffect(() => {
     if (activeTab === "overview" || activeTab === "permissions") {
       loadPolicy();
-      loadCors();
       loadBucketAcl();
+    }
+    if (activeTab === "overview" || activeTab === "advanced") {
+      loadCors();
     }
     if (activeTab === "permissions") {
       loadPublicAccessBlock();
@@ -859,8 +904,9 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   useEffect(() => {
     if (activeTab === "properties") {
       loadLifecycle();
+      loadBucketTags();
     }
-  }, [activeTab, loadLifecycle]);
+  }, [activeTab, loadBucketTags, loadLifecycle]);
 
   useEffect(() => {
     loadLifecycle();
@@ -1439,6 +1485,104 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     }
   };
 
+  const updateBucketTagAt = (index: number, patch: Partial<BucketTag>) => {
+    setBucketTags((prev) => prev.map((tag, idx) => (idx === index ? { ...tag, ...patch } : tag)));
+  };
+
+  const addBucketTag = () => {
+    setBucketTags((prev) => [...prev, { key: "", value: "" }]);
+    setBucketTagsStatus(null);
+    setBucketTagsError(null);
+  };
+
+  const removeBucketTagAt = (index: number) => {
+    setBucketTags((prev) => prev.filter((_, idx) => idx !== index));
+    setBucketTagsStatus(null);
+    setBucketTagsError(null);
+  };
+
+  const saveBucketTags = async () => {
+    if (!bucketName || !hasContext) return;
+    setSavingBucketTags(true);
+    setBucketTagsError(null);
+    setBucketTagsStatus(null);
+    try {
+      const normalized = bucketTags.map((tag) => ({
+        key: String(tag.key ?? "").trim(),
+        value: String(tag.value ?? "").trim(),
+      }));
+      const hasKeylessValue = normalized.some((tag) => !tag.key && tag.value.length > 0);
+      if (hasKeylessValue) {
+        throw new Error("Tag key is required when a value is provided.");
+      }
+      const filtered = normalized.filter((tag) => tag.key.length > 0);
+      const seen = new Set<string>();
+      for (const tag of filtered) {
+        if (seen.has(tag.key)) {
+          throw new Error(`Duplicate tag key: ${tag.key}`);
+        }
+        seen.add(tag.key);
+      }
+
+      if (filtered.length === 0) {
+        if (isCephAdmin) {
+          if (!endpointId) return;
+          await deleteCephAdminBucketTags(endpointId, bucketName);
+        } else {
+          await deleteBucketTags(accountId, bucketName);
+        }
+        setBucketTags([]);
+        setBucketTagsStatus("Bucket tags cleared.");
+      } else {
+        if (isCephAdmin) {
+          if (!endpointId) return;
+          await putCephAdminBucketTags(endpointId, bucketName, filtered);
+        } else {
+          await putBucketTags(accountId, bucketName, filtered);
+        }
+        setBucketTags(filtered);
+        setBucketTagsStatus("Bucket tags updated.");
+      }
+    } catch (err) {
+      const message = axios.isAxiosError(err)
+        ? ((err.response?.data as { detail?: string })?.detail || err.message || "Unable to update bucket tags.")
+        : err instanceof Error
+          ? err.message
+          : "Unable to update bucket tags.";
+      setBucketTagsError(message);
+    } finally {
+      setSavingBucketTags(false);
+    }
+  };
+
+  const clearBucketTags = async () => {
+    if (!bucketName || !hasContext) return;
+    const confirmDelete = window.confirm("Delete all bucket tags?");
+    if (!confirmDelete) return;
+    setDeletingBucketTags(true);
+    setBucketTagsError(null);
+    setBucketTagsStatus(null);
+    try {
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await deleteCephAdminBucketTags(endpointId, bucketName);
+      } else {
+        await deleteBucketTags(accountId, bucketName);
+      }
+      setBucketTags([]);
+      setBucketTagsStatus("Bucket tags cleared.");
+    } catch (err) {
+      const message = axios.isAxiosError(err)
+        ? ((err.response?.data as { detail?: string })?.detail || err.message || "Unable to clear bucket tags.")
+        : err instanceof Error
+          ? err.message
+          : "Unable to clear bucket tags.";
+      setBucketTagsError(message);
+    } finally {
+      setDeletingBucketTags(false);
+    }
+  };
+
   const saveAccessLogging = async () => {
     if (!bucketName || !hasContext) return;
     setAccessLoggingError(null);
@@ -1980,7 +2124,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                     <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Prefixes</p>
                     <div className="space-y-1">
                       <button
-                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left ui-body ${
+                        className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left ui-caption ${
                           currentPrefix === ""
                             ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
                             : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
@@ -1991,7 +2135,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                       </button>
                       {parentPrefix !== "" && (
                         <button
-                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left ui-body text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
+                          className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left ui-caption text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                           onClick={() => setCurrentPrefix(parentPrefix)}
                         >
                           <span>⬆️ Up</span>
@@ -2004,7 +2148,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                         return (
                           <button
                             key={prefix}
-                            className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left ui-body ${
+                            className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left ui-caption ${
                               isActive
                                 ? "bg-primary-100/70 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
                                 : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
@@ -2031,7 +2175,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                         <button
                           type="button"
                           onClick={() => loadObjects(currentPrefix)}
-                          className="rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
                           Refresh
                         </button>
@@ -2039,21 +2183,21 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                           type="button"
                           disabled={selectedKeys.length !== 1}
                           onClick={handleDownload}
-                          className="rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
                           Download
                         </button>
                         <button
                           type="button"
                           onClick={() => setShowUpload(true)}
-                          className="rounded-lg bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600"
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
                         >
                           Upload
                         </button>
                         <button
                           type="button"
                           onClick={handleNewFolder}
-                          className="rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
                           New folder
                         </button>
@@ -2061,7 +2205,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                           type="button"
                           disabled={selectedKeys.length === 0}
                           onClick={handleDelete}
-                          className="rounded-lg border border-rose-200 px-3 py-2 ui-body font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-700 dark:hover:text-rose-100"
+                          className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-700 dark:hover:text-rose-100"
                         >
                           Delete
                         </button>
@@ -2186,7 +2330,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                     onClick={() => {
                       loadProperties();
                       loadLifecycle();
-                      loadWebsite();
+                      loadBucketTags();
                     }}
                     className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                   >
@@ -2701,205 +2845,107 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                         </>
                       )}
                     </div>
-                    <div className={`${bucketCardClass} space-y-3 ${staticWebsiteBlocked ? "opacity-60" : ""}`}>
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Static website</p>
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">
-                              Host a static website from this bucket or redirect all requests.
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={loadWebsite}
-                              className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                              disabled={websiteLoading || staticWebsiteBlocked}
-                            >
-                              {websiteLoading ? "Loading..." : "Refresh"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={saveWebsite}
-                              disabled={savingWebsite || websiteLoading || staticWebsiteBlocked}
-                              className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                            >
-                              {savingWebsite ? "Saving..." : "Save"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={clearWebsite}
-                              disabled={clearingWebsite || staticWebsiteBlocked}
-                              className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                            >
-                              {clearingWebsite ? "Deleting..." : "Delete"}
-                            </button>
-                          </div>
+                    <div className={`${bucketCardClass} space-y-3`}>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Bucket tags</p>
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">
+                            S3 key/value tags associated with this bucket.
+                          </p>
                         </div>
-                        {staticWebsiteBlocked && (
-                          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
-                            Static website is disabled for this endpoint. Enable it in the Ceph endpoint configuration.
-                          </div>
-                        )}
-                        {websiteError && (
-                          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                            {websiteError}
-                          </div>
-                        )}
-                        {websiteStatus && (
-                          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                            {websiteStatus}
-                          </div>
-                        )}
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
-                            <input
-                              type="radio"
-                              checked={websiteMode === "hosting"}
-                              onChange={() => {
-                                setWebsiteMode("hosting");
-                                setWebsiteStatus(null);
-                                setWebsiteError(null);
-                              }}
-                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                              className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
-                            />
-                            <div>
-                              <p className="font-semibold text-slate-900 dark:text-slate-100">Host a website</p>
-                              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                Serve index and error documents from this bucket.
-                              </p>
-                            </div>
-                          </label>
-                          <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
-                            <input
-                              type="radio"
-                              checked={websiteMode === "redirect"}
-                              onChange={() => {
-                                setWebsiteMode("redirect");
-                                setWebsiteStatus(null);
-                                setWebsiteError(null);
-                              }}
-                              disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                              className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
-                            />
-                            <div>
-                              <p className="font-semibold text-slate-900 dark:text-slate-100">Redirect all requests</p>
-                              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                Point every request to another host or domain.
-                              </p>
-                            </div>
-                          </label>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={loadBucketTags}
+                            className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            disabled={bucketTagsLoading || savingBucketTags || deletingBucketTags}
+                          >
+                            {bucketTagsLoading ? "Loading..." : "Refresh"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={saveBucketTags}
+                            className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                            disabled={bucketTagsLoading || savingBucketTags || deletingBucketTags}
+                          >
+                            {savingBucketTags ? "Saving..." : "Save tags"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={clearBucketTags}
+                            className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                            disabled={bucketTagsLoading || savingBucketTags || deletingBucketTags || bucketTags.length === 0}
+                          >
+                            {deletingBucketTags ? "Clearing..." : "Clear tags"}
+                          </button>
                         </div>
-                        {websiteMode === "hosting" ? (
-                          <div className="space-y-3">
-                            <div className="grid gap-3 md:grid-cols-2">
-                              <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                                Index document
-                                <input
-                                  type="text"
-                                  value={websiteIndexDocument}
-                                  onChange={(e) => {
-                                    setWebsiteIndexDocument(e.target.value);
-                                    setWebsiteStatus(null);
-                                  }}
-                                  className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                  placeholder="index.html"
-                                  disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                                />
-                              </label>
-                              <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                                Error document (optional)
-                                <input
-                                  type="text"
-                                  value={websiteErrorDocument}
-                                  onChange={(e) => {
-                                    setWebsiteErrorDocument(e.target.value);
-                                    setWebsiteStatus(null);
-                                  }}
-                                  className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                  placeholder="error.html"
-                                  disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                                />
-                              </label>
-                            </div>
-                            <div className="space-y-2">
-                              <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">
-                                Routing rules (JSON array)
-                              </label>
-                              <textarea
-                                value={websiteRoutingRules}
-                                onChange={(e) => {
-                                  setWebsiteRoutingRules(e.target.value);
-                                  setWebsiteStatus(null);
-                                }}
-                                rows={6}
-                                className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                placeholder="[]"
-                                spellCheck={false}
-                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                              />
-                              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
-                                <button
-                                  type="button"
-                                  onClick={() => setShowWebsiteRulesExample((prev) => !prev)}
-                                  className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
-                                >
-                                  {showWebsiteRulesExample ? "Hide example" : "Show example"}
-                                </button>
-                                {showWebsiteRulesExample && (
-                                  <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
-{`[
-  {
-    "Condition": { "KeyPrefixEquals": "docs/" },
-    "Redirect": { "ReplaceKeyPrefixWith": "documents/" }
-  },
-  {
-    "Condition": { "HttpErrorCodeReturnedEquals": "404" },
-    "Redirect": { "ReplaceKeyWith": "error.html" }
-  }
-]`}
-                                  </pre>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                              Redirect hostname
-                              <input
-                                type="text"
-                                value={websiteRedirectHost}
-                                onChange={(e) => {
-                                  setWebsiteRedirectHost(e.target.value);
-                                  setWebsiteStatus(null);
-                                }}
-                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                placeholder="www.example.com"
-                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
-                              Protocol (optional)
-                              <input
-                                type="text"
-                                value={websiteRedirectProtocol}
-                                onChange={(e) => {
-                                  setWebsiteRedirectProtocol(e.target.value);
-                                  setWebsiteStatus(null);
-                                }}
-                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                placeholder="https"
-                                disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
-                              />
-                            </label>
-                            <p className="md:col-span-2 ui-caption text-slate-500 dark:text-slate-400">
-                              All requests will redirect to the host above. Index and routing rules are ignored.
-                            </p>
-                          </div>
-                        )}
                       </div>
+                      {bucketTagsError && (
+                        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                          {bucketTagsError}
+                        </div>
+                      )}
+                      {bucketTagsStatus && (
+                        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                          {bucketTagsStatus}
+                        </div>
+                      )}
+                      {bucketTagsLoading ? (
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                          Loading bucket tags...
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {bucketTags.length === 0 && (
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">No tags configured on this bucket.</p>
+                          )}
+                          {bucketTags.map((tag, index) => (
+                            <div
+                              key={`bucket-tag-${index}`}
+                              className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                            >
+                              <input
+                                type="text"
+                                value={tag.key}
+                                onChange={(e) => updateBucketTagAt(index, { key: e.target.value })}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                placeholder="Tag key"
+                                disabled={savingBucketTags || deletingBucketTags}
+                              />
+                              <input
+                                type="text"
+                                value={tag.value}
+                                onChange={(e) => updateBucketTagAt(index, { value: e.target.value })}
+                                className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                placeholder="Tag value"
+                                disabled={savingBucketTags || deletingBucketTags}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeBucketTagAt(index)}
+                                className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                                disabled={savingBucketTags || deletingBucketTags}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={addBucketTag}
+                              className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                              disabled={savingBucketTags || deletingBucketTags}
+                            >
+                              Add tag
+                            </button>
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">
+                              Tag keys must be unique and cannot be empty.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -3102,7 +3148,6 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                         type="button"
                         onClick={() => {
                           loadPolicy();
-                          loadCors();
                         }}
                         className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         disabled={policyLoading}
@@ -3165,6 +3210,213 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                   </div>
                 </div>
 
+              </div>
+            ),
+          },
+          {
+            id: "advanced",
+            label: "Advanced",
+            content: (
+              <div className="space-y-3">
+                <div className={`${bucketCardClass} space-y-3 ${staticWebsiteBlocked ? "opacity-60" : ""}`}>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Static website</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        Host a static website from this bucket or redirect all requests.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={loadWebsite}
+                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        disabled={websiteLoading || staticWebsiteBlocked}
+                      >
+                        {websiteLoading ? "Loading..." : "Refresh"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveWebsite}
+                        disabled={savingWebsite || websiteLoading || staticWebsiteBlocked}
+                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                      >
+                        {savingWebsite ? "Saving..." : "Save"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearWebsite}
+                        disabled={clearingWebsite || staticWebsiteBlocked}
+                        className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                      >
+                        {clearingWebsite ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+                  {staticWebsiteBlocked && (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+                      Static website is disabled for this endpoint. Enable it in the Ceph endpoint configuration.
+                    </div>
+                  )}
+                  {websiteError && (
+                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                      {websiteError}
+                    </div>
+                  )}
+                  {websiteStatus && (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                      {websiteStatus}
+                    </div>
+                  )}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                      <input
+                        type="radio"
+                        checked={websiteMode === "hosting"}
+                        onChange={() => {
+                          setWebsiteMode("hosting");
+                          setWebsiteStatus(null);
+                          setWebsiteError(null);
+                        }}
+                        disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                        className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
+                      />
+                      <div>
+                        <p className="font-semibold text-slate-900 dark:text-slate-100">Host a website</p>
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Serve index and error documents from this bucket.
+                        </p>
+                      </div>
+                    </label>
+                    <label className="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                      <input
+                        type="radio"
+                        checked={websiteMode === "redirect"}
+                        onChange={() => {
+                          setWebsiteMode("redirect");
+                          setWebsiteStatus(null);
+                          setWebsiteError(null);
+                        }}
+                        disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                        className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
+                      />
+                      <div>
+                        <p className="font-semibold text-slate-900 dark:text-slate-100">Redirect all requests</p>
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Point every request to another host or domain.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                  {websiteMode === "hosting" ? (
+                    <div className="space-y-3">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                          Index document
+                          <input
+                            type="text"
+                            value={websiteIndexDocument}
+                            onChange={(e) => {
+                              setWebsiteIndexDocument(e.target.value);
+                              setWebsiteStatus(null);
+                            }}
+                            className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            placeholder="index.html"
+                            disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                          Error document (optional)
+                          <input
+                            type="text"
+                            value={websiteErrorDocument}
+                            onChange={(e) => {
+                              setWebsiteErrorDocument(e.target.value);
+                              setWebsiteStatus(null);
+                            }}
+                            className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            placeholder="error.html"
+                            disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                          />
+                        </label>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">
+                          Routing rules (JSON array)
+                        </label>
+                        <textarea
+                          value={websiteRoutingRules}
+                          onChange={(e) => {
+                            setWebsiteRoutingRules(e.target.value);
+                            setWebsiteStatus(null);
+                          }}
+                          rows={6}
+                          className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          placeholder="[]"
+                          spellCheck={false}
+                          disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                        />
+                        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                          <button
+                            type="button"
+                            onClick={() => setShowWebsiteRulesExample((prev) => !prev)}
+                            className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
+                          >
+                            {showWebsiteRulesExample ? "Hide example" : "Show example"}
+                          </button>
+                          {showWebsiteRulesExample && (
+                            <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
+{`[
+  {
+    "Condition": { "KeyPrefixEquals": "docs/" },
+    "Redirect": { "ReplaceKeyPrefixWith": "documents/" }
+  },
+  {
+    "Condition": { "HttpErrorCodeReturnedEquals": "404" },
+    "Redirect": { "ReplaceKeyWith": "error.html" }
+  }
+]`}
+                            </pre>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                        Redirect hostname
+                        <input
+                          type="text"
+                          value={websiteRedirectHost}
+                          onChange={(e) => {
+                            setWebsiteRedirectHost(e.target.value);
+                            setWebsiteStatus(null);
+                          }}
+                          className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          placeholder="www.example.com"
+                          disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                        Protocol (optional)
+                        <input
+                          type="text"
+                          value={websiteRedirectProtocol}
+                          onChange={(e) => {
+                            setWebsiteRedirectProtocol(e.target.value);
+                            setWebsiteStatus(null);
+                          }}
+                          className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          placeholder="https"
+                          disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
+                        />
+                      </label>
+                      <p className="md:col-span-2 ui-caption text-slate-500 dark:text-slate-400">
+                        All requests will redirect to the host above. Index and routing rules are ignored.
+                      </p>
+                    </div>
+                  )}
+                </div>
                 <div className={`space-y-3 ${bucketCardClass}`}>
                   <div className="flex items-center justify-between">
                     <div>
@@ -3231,15 +3483,6 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                     )}
                   </div>
                 </div>
-
-              </div>
-            ),
-          },
-          {
-            id: "advanced",
-            label: "Advanced",
-            content: (
-              <div className="space-y-3">
                 <div className={`${bucketCardClass} space-y-3`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -3476,11 +3719,11 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
               </div>
             ),
           },
-          ...(isCephEndpoint
+          ...(isCephAdmin
             ? [
                 {
                   id: "ceph",
-                  label: "Ceph",
+                  label: "Ceph Admin",
                   content: (
                     <div className="space-y-3">
                       <div className={`${bucketCardClass} ${!canEditQuota ? "opacity-50 pointer-events-none" : ""}`}>
@@ -3569,7 +3812,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                 },
               ]
             : []),
-        ]}
+        ].sort((a, b) => availableTabs.indexOf(a.id) - availableTabs.indexOf(b.id))}
       />
 
       {showUpload && (

@@ -24,6 +24,7 @@ import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
 
@@ -1670,7 +1671,7 @@ export default function UsersPage() {
               value={filter}
               onChange={(e) => handleFilterChange(e.target.value)}
               placeholder={filterPlaceholder}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
+              className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
             />
           </div>
         </div>

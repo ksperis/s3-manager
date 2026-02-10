@@ -58,6 +58,7 @@ import CephAdminAccountsPage from "./features/cephAdmin/CephAdminAccountsPage";
 import CephAdminUsersPage from "./features/cephAdmin/CephAdminUsersPage";
 import CephAdminBucketsPage from "./features/cephAdmin/CephAdminBucketsPage";
 import CephAdminBucketDetailPage from "./features/cephAdmin/CephAdminBucketDetailPage";
+import CephAdminMetricsPage from "./features/cephAdmin/CephAdminMetricsPage";
 
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
@@ -306,6 +307,7 @@ export default function AppRouter() {
             <Route element={<RequireCephAdminFeature />}>
               <Route path="/ceph-admin" element={<CephAdminLayout />}>
                 <Route index element={<CephAdminDashboard />} />
+                <Route path="metrics" element={<CephAdminMetricsPage />} />
                 <Route path="accounts" element={<CephAdminAccountsPage />} />
                 <Route path="users" element={<CephAdminUsersPage />} />
                 <Route path="buckets" element={<CephAdminBucketsPage />} />

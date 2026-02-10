@@ -10,6 +10,7 @@ import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
 import PaginationControls from "../../components/PaginationControls";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import {
   S3ConnectionAdminItem,
   createAdminS3Connection,
@@ -389,7 +390,7 @@ export default function S3ConnectionsPage() {
               value={filter}
               onChange={(e) => handleFilterChange(e.target.value)}
               placeholder="Search name, endpoint, owner..."
-              className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64"
+              className={`${toolbarCompactInputClasses} w-full sm:w-64`}
             />
           </div>
         </div>

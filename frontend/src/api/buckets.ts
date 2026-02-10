@@ -23,10 +23,16 @@ export type Bucket = {
 
 export async function listBuckets(
   accountId: S3AccountSelector,
-  options?: { include?: string[] }
+  options?: { include?: string[]; with_stats?: boolean }
 ): Promise<Bucket[]> {
   const { data } = await client.get<Bucket[]>("/manager/buckets", {
-    params: withS3AccountParam({ include: options?.include?.join(",") }, accountId),
+    params: withS3AccountParam(
+      {
+        include: options?.include?.join(","),
+        with_stats: options?.with_stats,
+      },
+      accountId
+    ),
   });
   return data;
 }
@@ -245,6 +251,13 @@ export async function putBucketCors(accountId: S3AccountSelector, bucketName: st
 
 export async function deleteBucketCors(accountId: S3AccountSelector, bucketName: string): Promise<void> {
   await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/cors`, { params: withS3AccountParam(undefined, accountId) });
+}
+
+export async function getBucketTags(accountId: S3AccountSelector, bucketName: string): Promise<{ tags: BucketTag[] }> {
+  const { data } = await client.get<{ tags: BucketTag[] }>(`/manager/buckets/${encodeURIComponent(bucketName)}/tags`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
+  return data;
 }
 
 export async function putBucketTags(accountId: S3AccountSelector, bucketName: string, tags: BucketTag[]): Promise<void> {
