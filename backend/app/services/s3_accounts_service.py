@@ -421,6 +421,44 @@ class S3AccountsService:
     def _generate_account_id(self) -> str:
         return f"RGW{random.randint(0, 10**17 - 1):017d}"
 
+    def _load_non_root_user_links(
+        self,
+        account_ids: list[int],
+    ) -> tuple[dict[int, list[int]], dict[int, list[AccountUserLink]]]:
+        if not account_ids:
+            return {}, {}
+        rows = (
+            self.db.query(
+                UserS3Account.account_id,
+                UserS3Account.user_id,
+                UserS3Account.account_role,
+                UserS3Account.account_admin,
+                User.email,
+            )
+            .join(User, User.id == UserS3Account.user_id)
+            .filter(
+                UserS3Account.account_id.in_(account_ids),
+                UserS3Account.is_root.is_(False),
+            )
+            .order_by(UserS3Account.account_id.asc(), User.email.asc(), User.id.asc())
+            .all()
+        )
+        user_ids_by_account: dict[int, list[int]] = {}
+        user_links_by_account: dict[int, list[AccountUserLink]] = {}
+        for account_id, user_id, account_role, account_admin, user_email in rows:
+            normalized_account_id = int(account_id)
+            normalized_user_id = int(user_id)
+            user_ids_by_account.setdefault(normalized_account_id, []).append(normalized_user_id)
+            user_links_by_account.setdefault(normalized_account_id, []).append(
+                AccountUserLink(
+                    user_id=normalized_user_id,
+                    account_role=account_role,
+                    account_admin=account_admin,
+                    user_email=user_email,
+                )
+            )
+        return user_ids_by_account, user_links_by_account
+
     def list_accounts(
         self,
         include_usage_stats: bool = True,
@@ -428,14 +466,8 @@ class S3AccountsService:
         include_rgw_details: bool = True,
     ) -> list[S3AccountSchema]:
         db_accounts = self.db.query(S3Account).all()
-        user_links = self.db.query(UserS3Account).filter(UserS3Account.is_root.is_(False)).all()
-        user_ids_by_account: dict[int, list[int]] = {}
-        user_links_by_account: dict[int, list[AccountUserLink]] = {}
-        for link in user_links:
-            user_ids_by_account.setdefault(link.account_id, []).append(link.user_id)
-            user_links_by_account.setdefault(link.account_id, []).append(
-                AccountUserLink(user_id=link.user_id, account_role=link.account_role, account_admin=link.account_admin)
-            )
+        account_ids = [account.id for account in db_accounts]
+        user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
 
         roots_by_account: dict[str, tuple[str, int]] = {}
         for acc in db_accounts:
@@ -504,14 +536,8 @@ class S3AccountsService:
 
     def list_accounts_minimal(self) -> list[S3AccountSummary]:
         db_accounts = self.db.query(S3Account).all()
-        user_links = self.db.query(UserS3Account).filter(UserS3Account.is_root.is_(False)).all()
-        user_ids_by_account: dict[int, list[int]] = {}
-        user_links_by_account: dict[int, list[AccountUserLink]] = {}
-        for link in user_links:
-            user_ids_by_account.setdefault(link.account_id, []).append(link.user_id)
-            user_links_by_account.setdefault(link.account_id, []).append(
-                AccountUserLink(user_id=link.user_id, account_role=link.account_role, account_admin=link.account_admin)
-            )
+        account_ids = [account.id for account in db_accounts]
+        user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
         summaries: list[S3AccountSummary] = []
         for acc in db_accounts:
             endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
@@ -543,24 +569,9 @@ class S3AccountsService:
             .with_entities(User.email, User.id)
             .first()
         )
-        non_root_links = (
-            self.db.query(UserS3Account)
-            .filter(UserS3Account.account_id == account.id, UserS3Account.is_root.is_(False))
-            .all()
-        )
-        user_ids = [link.user_id for link in non_root_links] if non_root_links else None
-        user_links = (
-            [
-                AccountUserLink(
-                    user_id=link.user_id,
-                    account_role=link.account_role,
-                    account_admin=link.account_admin,
-                )
-                for link in non_root_links
-            ]
-            if non_root_links
-            else None
-        )
+        user_ids_by_account, user_links_by_account = self._load_non_root_user_links([account.id])
+        user_ids = user_ids_by_account.get(account.id)
+        user_links = user_links_by_account.get(account.id)
         used_bytes = used_objects = bucket_count = None
         if include_usage:
             used_bytes, used_objects, bucket_count = self._account_usage(account)
@@ -884,16 +895,9 @@ class S3AccountsService:
         self.db.commit()
         self.db.refresh(account)
 
-        non_root_links = (
-            self.db.query(UserS3Account)
-            .filter(UserS3Account.account_id == account.id, UserS3Account.is_root.is_(False))
-            .all()
-        )
-        user_ids = [link.user_id for link in non_root_links]
-        user_links = [
-            AccountUserLink(user_id=link.user_id, account_role=link.account_role, account_admin=link.account_admin)
-            for link in non_root_links
-        ]
+        user_ids_by_account, user_links_by_account = self._load_non_root_user_links([account.id])
+        user_ids = user_ids_by_account.get(account.id) or []
+        user_links = user_links_by_account.get(account.id) or []
         endpoint = self._resolve_storage_endpoint(account.storage_endpoint_id)
         quota_max_size_gb, quota_max_objects = self._account_quota(account)
 

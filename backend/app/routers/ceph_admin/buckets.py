@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
+from dataclasses import dataclass
+from threading import Lock
+from time import monotonic
+from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import ValidationError
@@ -41,6 +46,45 @@ from app.utils.rgw import extract_bucket_list, is_rgw_account_id
 from app.utils.usage_stats import extract_usage_stats
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/buckets", tags=["ceph-admin-buckets"])
+
+BUCKET_LIST_CACHE_TTL_SECONDS = 30.0
+BUCKET_LIST_CACHE_MAX_ENTRIES = 64
+RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES = 16
+
+
+@dataclass(frozen=True)
+class _BucketListCacheKey:
+    endpoint_id: int
+    advanced_filter: str | None
+    sort_by: str
+    sort_dir: str
+    with_stats: bool
+
+
+@dataclass
+class _BucketListCacheEntry:
+    endpoint_id: int
+    expires_at: float
+    items: list[CephAdminBucketSummary]
+
+
+@dataclass(frozen=True)
+class _RgwBucketPayloadCacheKey:
+    endpoint_id: int
+    with_stats: bool
+
+
+@dataclass
+class _RgwBucketPayloadCacheEntry:
+    endpoint_id: int
+    expires_at: float
+    entries: list[dict]
+
+
+_BUCKET_LIST_CACHE: OrderedDict[_BucketListCacheKey, _BucketListCacheEntry] = OrderedDict()
+_BUCKET_LIST_CACHE_LOCK = Lock()
+_RGW_BUCKET_PAYLOAD_CACHE: OrderedDict[_RgwBucketPayloadCacheKey, _RgwBucketPayloadCacheEntry] = OrderedDict()
+_RGW_BUCKET_PAYLOAD_CACHE_LOCK = Lock()
 
 
 def _build_endpoint_account(ctx: CephAdminContext) -> S3Account:
@@ -533,6 +577,100 @@ def _feature_status_active(state: str) -> BucketFeatureStatus:
     return BucketFeatureStatus(state=state, tone="active")
 
 
+def _serialize_filter(query: CephAdminBucketFilterQuery | None) -> str | None:
+    if not query:
+        return None
+    payload = query.model_dump(mode="json") if hasattr(query, "model_dump") else query.dict()
+    return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+
+
+def _clone_bucket(bucket: CephAdminBucketSummary) -> CephAdminBucketSummary:
+    if hasattr(bucket, "model_copy"):
+        return bucket.model_copy(deep=True)
+    if hasattr(bucket, "copy"):
+        return bucket.copy(deep=True)
+    payload = bucket.model_dump() if hasattr(bucket, "model_dump") else bucket.dict()
+    return CephAdminBucketSummary(**payload)
+
+
+def _clone_bucket_list(items: list[CephAdminBucketSummary]) -> list[CephAdminBucketSummary]:
+    return [_clone_bucket(item) for item in items]
+
+
+def _prune_bucket_listing_cache(now: float) -> None:
+    expired_keys = [key for key, entry in _BUCKET_LIST_CACHE.items() if entry.expires_at <= now]
+    for key in expired_keys:
+        _BUCKET_LIST_CACHE.pop(key, None)
+    while len(_BUCKET_LIST_CACHE) > BUCKET_LIST_CACHE_MAX_ENTRIES:
+        _BUCKET_LIST_CACHE.popitem(last=False)
+
+
+def _prune_rgw_bucket_payload_cache(now: float) -> None:
+    expired_keys = [key for key, entry in _RGW_BUCKET_PAYLOAD_CACHE.items() if entry.expires_at <= now]
+    for key in expired_keys:
+        _RGW_BUCKET_PAYLOAD_CACHE.pop(key, None)
+    while len(_RGW_BUCKET_PAYLOAD_CACHE) > RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES:
+        _RGW_BUCKET_PAYLOAD_CACHE.popitem(last=False)
+
+
+def _get_cached_rgw_bucket_entries(ctx: CephAdminContext, with_stats: bool) -> list[dict]:
+    key = _RgwBucketPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0), with_stats=with_stats)
+    now = monotonic()
+    with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
+        _prune_rgw_bucket_payload_cache(now)
+        cached = _RGW_BUCKET_PAYLOAD_CACHE.get(key)
+        if cached is not None:
+            _RGW_BUCKET_PAYLOAD_CACHE.move_to_end(key)
+            return cached.entries
+
+    payload = ctx.rgw_admin.get_all_buckets(with_stats=with_stats)
+    entries = extract_bucket_list(payload)
+    expires_at = monotonic() + BUCKET_LIST_CACHE_TTL_SECONDS
+    with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
+        _prune_rgw_bucket_payload_cache(monotonic())
+        _RGW_BUCKET_PAYLOAD_CACHE[key] = _RgwBucketPayloadCacheEntry(
+            endpoint_id=key.endpoint_id,
+            expires_at=expires_at,
+            entries=entries,
+        )
+        _RGW_BUCKET_PAYLOAD_CACHE.move_to_end(key)
+        _prune_rgw_bucket_payload_cache(monotonic())
+    return entries
+
+
+def _get_cached_bucket_listing(
+    key: _BucketListCacheKey,
+    builder: Callable[[], list[CephAdminBucketSummary]],
+) -> list[CephAdminBucketSummary]:
+    now = monotonic()
+    with _BUCKET_LIST_CACHE_LOCK:
+        _prune_bucket_listing_cache(now)
+        cached = _BUCKET_LIST_CACHE.get(key)
+        if cached is not None:
+            _BUCKET_LIST_CACHE.move_to_end(key)
+            return cached.items
+
+    items = builder()
+    expires_at = monotonic() + BUCKET_LIST_CACHE_TTL_SECONDS
+    with _BUCKET_LIST_CACHE_LOCK:
+        _prune_bucket_listing_cache(monotonic())
+        _BUCKET_LIST_CACHE[key] = _BucketListCacheEntry(endpoint_id=key.endpoint_id, expires_at=expires_at, items=items)
+        _BUCKET_LIST_CACHE.move_to_end(key)
+        _prune_bucket_listing_cache(monotonic())
+    return items
+
+
+def _invalidate_bucket_listing_cache(endpoint_id: int) -> None:
+    with _BUCKET_LIST_CACHE_LOCK:
+        invalid_keys = [key for key, entry in _BUCKET_LIST_CACHE.items() if entry.endpoint_id == endpoint_id]
+        for key in invalid_keys:
+            _BUCKET_LIST_CACHE.pop(key, None)
+    with _RGW_BUCKET_PAYLOAD_CACHE_LOCK:
+        invalid_keys = [key for key, entry in _RGW_BUCKET_PAYLOAD_CACHE.items() if entry.endpoint_id == endpoint_id]
+        for key in invalid_keys:
+            _RGW_BUCKET_PAYLOAD_CACHE.pop(key, None)
+
+
 @router.get("", response_model=PaginatedCephAdminBucketsResponse)
 def list_buckets(
     page: int = Query(1, ge=1),
@@ -550,42 +688,9 @@ def list_buckets(
         _, advanced_filter = _parse_filter(advanced_filter)
     else:
         simple_filter, advanced_filter = _parse_filter(filter)
+    simple_filter = simple_filter.strip() if isinstance(simple_filter, str) and simple_filter.strip() else None
     if _filter_requires_stats(advanced_filter):
         with_stats = True
-    try:
-        name_candidates = _extract_name_candidates(advanced_filter)
-        if name_candidates is not None:
-            if not name_candidates:
-                payload = []
-            else:
-                payload = []
-                for bucket_name in name_candidates:
-                    entry = ctx.rgw_admin.get_bucket_info(bucket_name, stats=with_stats, allow_not_found=True)
-                    if entry:
-                        payload.append(entry)
-        else:
-            payload = ctx.rgw_admin.get_all_buckets(with_stats=with_stats)
-    except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    entries = extract_bucket_list(payload)
-    results: list[CephAdminBucketSummary] = []
-    for entry in entries:
-        summary = _build_bucket_summary(entry)
-        if summary:
-            results.append(summary)
-
-    if simple_filter:
-        filter_value = simple_filter.lower()
-        if advanced_filter:
-            results = [bucket for bucket in results if filter_value in bucket.name.lower()]
-        else:
-            results = [
-                bucket
-                for bucket in results
-                if filter_value in bucket.name.lower()
-                or filter_value in (bucket.tenant or "").lower()
-                or filter_value in (bucket.owner or "").lower()
-            ]
 
     include_set = _parse_includes(include)
     wants_owner_name = "owner_name" in include_set
@@ -601,80 +706,118 @@ def list_buckets(
         "access_logging",
     }
 
-    if advanced_filter and advanced_filter.rules:
-        field_rules = [rule for rule in advanced_filter.rules if rule.field]
-        feature_rules = [rule for rule in advanced_filter.rules if rule.feature]
-        match_mode = advanced_filter.match
+    cache_key = _BucketListCacheKey(
+        endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
+        advanced_filter=_serialize_filter(advanced_filter),
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        with_stats=with_stats,
+    )
 
-        if field_rules and match_mode == "all":
-            results = [bucket for bucket in results if all(_match_field_rule(bucket, rule) for rule in field_rules)]
-        elif field_rules and match_mode == "any" and not feature_rules:
-            results = [bucket for bucket in results if any(_match_field_rule(bucket, rule) for rule in field_rules)]
-
-        if feature_rules:
-            filter_features = {rule.feature for rule in feature_rules if rule.feature}
-            needed_features = requested_features | filter_features
-            service = BucketsService()
-            account = _build_endpoint_account(ctx)
-            results = _enrich_buckets(
-                results,
-                {feature for feature in needed_features if feature != "tags"},
-                include_tags="tags" in needed_features,
-                service=service,
-                account=account,
-            )
-            if match_mode == "all":
-                results = [bucket for bucket in results if all(_match_feature_rule(bucket, rule) for rule in feature_rules)]
+    def build_listing() -> list[CephAdminBucketSummary]:
+        try:
+            name_candidates = _extract_name_candidates(advanced_filter)
+            if name_candidates is not None:
+                if not name_candidates:
+                    entries: list[dict] = []
+                else:
+                    payload = []
+                    for bucket_name in name_candidates:
+                        entry = ctx.rgw_admin.get_bucket_info(bucket_name, stats=with_stats, allow_not_found=True)
+                        if entry:
+                            payload.append(entry)
+                    entries = extract_bucket_list(payload)
             else:
-                results = [bucket for bucket in results if _match_rules(bucket, advanced_filter.rules, match_mode)]
+                entries = _get_cached_rgw_bucket_entries(ctx, with_stats=with_stats)
+        except RGWAdminError as exc:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        results: list[CephAdminBucketSummary] = []
+        for entry in entries:
+            summary = _build_bucket_summary(entry)
+            if summary:
+                results.append(summary)
 
-            if requested_features != needed_features:
-                keep_features = {feature for feature in requested_features if feature != "tags"}
+        if advanced_filter and advanced_filter.rules:
+            field_rules = [rule for rule in advanced_filter.rules if rule.field]
+            feature_rules = [rule for rule in advanced_filter.rules if rule.feature]
+            match_mode = advanced_filter.match
+
+            if field_rules and match_mode == "all":
+                results = [bucket for bucket in results if all(_match_field_rule(bucket, rule) for rule in field_rules)]
+            elif field_rules and match_mode == "any" and not feature_rules:
+                results = [bucket for bucket in results if any(_match_field_rule(bucket, rule) for rule in field_rules)]
+
+            if feature_rules:
+                filter_features = {rule.feature for rule in feature_rules if rule.feature}
+                service = BucketsService()
+                account = _build_endpoint_account(ctx)
+                results = _enrich_buckets(
+                    results,
+                    {feature for feature in filter_features if feature != "tags"},
+                    include_tags="tags" in filter_features,
+                    service=service,
+                    account=account,
+                )
+                if match_mode == "all":
+                    results = [bucket for bucket in results if all(_match_feature_rule(bucket, rule) for rule in feature_rules)]
+                else:
+                    results = [bucket for bucket in results if _match_rules(bucket, advanced_filter.rules, match_mode)]
                 for bucket in results:
-                    if bucket.features is None:
-                        continue
-                    if not keep_features:
-                        bucket.features = None
-                    else:
-                        bucket.features = {key: value for key, value in bucket.features.items() if key in keep_features}
+                    bucket.features = None
+                    bucket.tags = None
 
-    def sort_key(bucket: CephAdminBucketSummary):
-        value = None
-        if sort_by == "tenant":
-            value = bucket.tenant or ""
-        elif sort_by == "owner":
-            value = bucket.owner or ""
-        elif sort_by == "used_bytes":
-            value = bucket.used_bytes
-        elif sort_by == "object_count":
-            value = bucket.object_count
+        def sort_key(bucket: CephAdminBucketSummary):
+            value = None
+            if sort_by == "tenant":
+                value = bucket.tenant or ""
+            elif sort_by == "owner":
+                value = bucket.owner or ""
+            elif sort_by == "used_bytes":
+                value = bucket.used_bytes
+            elif sort_by == "object_count":
+                value = bucket.object_count
+            else:
+                value = bucket.name
+            if value is None:
+                return (1, "")
+            if isinstance(value, str):
+                return (0, value.lower())
+            return (0, value)
+
+        results.sort(key=sort_key, reverse=sort_dir == "desc")
+        return results
+
+    results = _get_cached_bucket_listing(cache_key, build_listing)
+    filtered_results = results
+    if simple_filter:
+        filter_value = simple_filter.lower()
+        if advanced_filter:
+            filtered_results = [bucket for bucket in filtered_results if filter_value in bucket.name.lower()]
         else:
-            value = bucket.name
-        if value is None:
-            return (1, "")
-        if isinstance(value, str):
-            return (0, value.lower())
-        return (0, value)
+            filtered_results = [
+                bucket
+                for bucket in filtered_results
+                if filter_value in bucket.name.lower()
+                or filter_value in (bucket.tenant or "").lower()
+                or filter_value in (bucket.owner or "").lower()
+            ]
 
-    results.sort(key=sort_key, reverse=sort_dir == "desc")
-
-    total = len(results)
+    total = len(filtered_results)
     start = max(page - 1, 0) * page_size
     end = start + page_size
-    page_items = results[start:end]
+    page_items = _clone_bucket_list(filtered_results[start:end])
 
     requested = {feature for feature in requested_features if feature != "tags"}
     if requested or ("tags" in requested_features):
-        if not (advanced_filter and any(rule.feature for rule in advanced_filter.rules)):
-            service = BucketsService()
-            account = _build_endpoint_account(ctx)
-            page_items = _enrich_buckets(
-                page_items,
-                requested,
-                include_tags="tags" in requested_features,
-                service=service,
-                account=account,
-            )
+        service = BucketsService()
+        account = _build_endpoint_account(ctx)
+        page_items = _enrich_buckets(
+            page_items,
+            requested,
+            include_tags="tags" in requested_features,
+            service=service,
+            account=account,
+        )
 
     if wants_owner_name and page_items:
         owner_cache: dict[str, str | None] = {}
@@ -714,6 +857,7 @@ def update_versioning(
     account = _build_endpoint_account(ctx)
     try:
         service.set_versioning(bucket_name, account, enabled=payload.enabled)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return {"message": f"Versioning updated for {bucket_name}", "enabled": payload.enabled}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -750,6 +894,7 @@ def update_quota(
 
     try:
         service.set_bucket_quota(bucket_name, account, payload)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return {"message": "Bucket quota updated"}
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -779,7 +924,9 @@ def put_lifecycle(
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
-        return service.set_lifecycle(bucket_name, account, rules=payload.rules)
+        response = service.set_lifecycle(bucket_name, account, rules=payload.rules)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return response
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -793,6 +940,7 @@ def delete_lifecycle(
     account = _build_endpoint_account(ctx)
     try:
         service.delete_lifecycle(bucket_name, account)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -822,6 +970,7 @@ def put_cors(
     account = _build_endpoint_account(ctx)
     try:
         service.set_cors(bucket_name, account, rules=payload.rules)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return {"rules": payload.rules}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -836,6 +985,7 @@ def delete_cors(
     account = _build_endpoint_account(ctx)
     try:
         service.delete_cors(bucket_name, account)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -865,6 +1015,7 @@ def put_policy(
     account = _build_endpoint_account(ctx)
     try:
         service.put_policy(bucket_name, account, payload.policy)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return BucketPolicyOut(policy=payload.policy)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -879,6 +1030,7 @@ def delete_policy(
     account = _build_endpoint_account(ctx)
     try:
         service.delete_policy(bucket_name, account)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -907,7 +1059,9 @@ def put_notifications(
     account = _build_endpoint_account(ctx)
     try:
         configuration = payload.configuration or {}
-        return service.set_bucket_notifications(bucket_name, account, configuration)
+        response = service.set_bucket_notifications(bucket_name, account, configuration)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return response
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -921,6 +1075,7 @@ def delete_notifications(
     account = _build_endpoint_account(ctx)
     try:
         service.delete_bucket_notifications(bucket_name, account)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -948,7 +1103,9 @@ def put_logging(
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
-        return service.set_bucket_logging(bucket_name, account, payload)
+        response = service.set_bucket_logging(bucket_name, account, payload)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return response
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -964,6 +1121,7 @@ def delete_logging(
     account = _build_endpoint_account(ctx)
     try:
         service.delete_bucket_logging(bucket_name, account)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -991,7 +1149,9 @@ def put_website(
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
-        return service.set_bucket_website(bucket_name, account, payload)
+        response = service.set_bucket_website(bucket_name, account, payload)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return response
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -1007,6 +1167,7 @@ def delete_website(
     account = _build_endpoint_account(ctx)
     try:
         service.delete_bucket_website(bucket_name, account)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -1036,6 +1197,7 @@ def put_tags(
     account = _build_endpoint_account(ctx)
     try:
         service.set_bucket_tags(bucket_name, account, [t.model_dump() for t in payload.tags])
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return {"tags": [t.model_dump() for t in payload.tags]}
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -1050,6 +1212,7 @@ def delete_tags(
     account = _build_endpoint_account(ctx)
     try:
         service.delete_bucket_tags(bucket_name, account)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -1077,7 +1240,9 @@ def put_acl(
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
-        return service.set_bucket_acl(bucket_name, account, payload)
+        response = service.set_bucket_acl(bucket_name, account, payload)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return response
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -1104,7 +1269,9 @@ def put_public_access_block(
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
-        return service.set_public_access_block(bucket_name, account, payload)
+        response = service.set_public_access_block(bucket_name, account, payload)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return response
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -1131,7 +1298,9 @@ def put_object_lock(
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:
-        return service.set_object_lock(bucket_name, account, payload)
+        response = service.set_object_lock(bucket_name, account, payload)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return response
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:

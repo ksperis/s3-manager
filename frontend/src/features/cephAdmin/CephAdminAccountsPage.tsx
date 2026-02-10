@@ -3,12 +3,17 @@
  * Licensed under the Apache License, Version 2.0
  */
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import PaginationControls from "../../components/PaginationControls";
-import { CephAdminRgwAccount, listCephAdminAccounts } from "../../api/cephAdmin";
+import SortableHeader from "../../components/SortableHeader";
+import { CephAdminRgwAccount, CephAdminRgwAccountDetail, listCephAdminAccounts } from "../../api/cephAdmin";
+import { tableActionButtonClasses } from "../../components/tableActionClasses";
+import CephAdminAccountEditModal from "./CephAdminAccountEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 
 const extractError = (err: unknown): string => {
@@ -18,47 +23,211 @@ const extractError = (err: unknown): string => {
   return err instanceof Error ? err.message : "Unexpected error";
 };
 
+const formatBytes = (value?: number | null) => {
+  if (value === undefined || value === null) return "-";
+  if (value === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let size = value;
+  let idx = 0;
+  while (size >= 1024 && idx < units.length - 1) {
+    size /= 1024;
+    idx += 1;
+  }
+  const decimals = size >= 10 || idx === 0 ? 0 : 1;
+  return `${size.toFixed(decimals)} ${units[idx]}`;
+};
+
+const formatNumber = (value?: number | null) => {
+  if (value === undefined || value === null) return "-";
+  return value.toLocaleString();
+};
+
+type ColumnId =
+  | "account_name"
+  | "email"
+  | "max_users"
+  | "max_buckets"
+  | "quota_max_size_bytes"
+  | "quota_max_objects"
+  | "bucket_count"
+  | "user_count";
+
+type SortField =
+  | "account_id"
+  | "account_name"
+  | "email"
+  | "max_users"
+  | "max_buckets"
+  | "quota_max_size_bytes"
+  | "quota_max_objects"
+  | "bucket_count"
+  | "user_count";
+
+type AdvancedFilterState = {
+  accountName: string;
+  email: string;
+  minMaxUsers: string;
+  maxMaxUsers: string;
+  minMaxBuckets: string;
+  maxMaxBuckets: string;
+  minQuotaBytes: string;
+  maxQuotaBytes: string;
+  minQuotaObjects: string;
+  maxQuotaObjects: string;
+  minBucketCount: string;
+  maxBucketCount: string;
+  minUserCount: string;
+  maxUserCount: string;
+};
+
+const COLUMNS_STORAGE_KEY = "ceph-admin.account_list.columns.v1";
+const defaultVisibleColumns: ColumnId[] = [];
+const DEFAULT_SORT: { field: SortField; direction: "asc" | "desc" } = { field: "account_id", direction: "asc" };
+
+const defaultAdvancedFilter: AdvancedFilterState = {
+  accountName: "",
+  email: "",
+  minMaxUsers: "",
+  maxMaxUsers: "",
+  minMaxBuckets: "",
+  maxMaxBuckets: "",
+  minQuotaBytes: "",
+  maxQuotaBytes: "",
+  minQuotaObjects: "",
+  maxQuotaObjects: "",
+  minBucketCount: "",
+  maxBucketCount: "",
+  minUserCount: "",
+  maxUserCount: "",
+};
+
+const hasAdvancedFilters = (advanced: AdvancedFilterState | null) => {
+  if (!advanced) return false;
+  return Boolean(
+    advanced.accountName.trim() ||
+      advanced.email.trim() ||
+      advanced.minMaxUsers.trim() ||
+      advanced.maxMaxUsers.trim() ||
+      advanced.minMaxBuckets.trim() ||
+      advanced.maxMaxBuckets.trim() ||
+      advanced.minQuotaBytes.trim() ||
+      advanced.maxQuotaBytes.trim() ||
+      advanced.minQuotaObjects.trim() ||
+      advanced.maxQuotaObjects.trim() ||
+      advanced.minBucketCount.trim() ||
+      advanced.maxBucketCount.trim() ||
+      advanced.minUserCount.trim() ||
+      advanced.maxUserCount.trim()
+  );
+};
+
+const buildAdvancedFilterPayload = (advanced: AdvancedFilterState | null) => {
+  if (!advanced) return undefined;
+  const rules: Array<Record<string, unknown>> = [];
+  const addTextRule = (field: string, raw: string) => {
+    const value = raw.trim();
+    if (!value) return;
+    rules.push({ field, op: "contains", value });
+  };
+  const addNumericRule = (field: string, op: "gte" | "lte", raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return;
+    rules.push({ field, op, value: parsed });
+  };
+
+  addTextRule("account_name", advanced.accountName);
+  addTextRule("email", advanced.email);
+
+  addNumericRule("max_users", "gte", advanced.minMaxUsers);
+  addNumericRule("max_users", "lte", advanced.maxMaxUsers);
+  addNumericRule("max_buckets", "gte", advanced.minMaxBuckets);
+  addNumericRule("max_buckets", "lte", advanced.maxMaxBuckets);
+
+  addNumericRule("quota_max_size_bytes", "gte", advanced.minQuotaBytes);
+  addNumericRule("quota_max_size_bytes", "lte", advanced.maxQuotaBytes);
+  addNumericRule("quota_max_objects", "gte", advanced.minQuotaObjects);
+  addNumericRule("quota_max_objects", "lte", advanced.maxQuotaObjects);
+
+  addNumericRule("bucket_count", "gte", advanced.minBucketCount);
+  addNumericRule("bucket_count", "lte", advanced.maxBucketCount);
+  addNumericRule("user_count", "gte", advanced.minUserCount);
+  addNumericRule("user_count", "lte", advanced.maxUserCount);
+
+  if (rules.length === 0) return undefined;
+  return JSON.stringify({ match: "all", rules });
+};
+
+const loadVisibleColumns = (): ColumnId[] => {
+  if (typeof window === "undefined") return defaultVisibleColumns;
+  const raw = localStorage.getItem(COLUMNS_STORAGE_KEY);
+  if (!raw) return defaultVisibleColumns;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return defaultVisibleColumns;
+    const allowed = new Set<ColumnId>([
+      "account_name",
+      "email",
+      "max_users",
+      "max_buckets",
+      "quota_max_size_bytes",
+      "quota_max_objects",
+      "bucket_count",
+      "user_count",
+    ]);
+    const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
+    return cleaned.length > 0 ? cleaned : defaultVisibleColumns;
+  } catch {
+    return defaultVisibleColumns;
+  }
+};
+
+const persistVisibleColumns = (value: ColumnId[]) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(value));
+};
+
+const rowKey = (account: CephAdminRgwAccount) => account.account_id;
+
 export default function CephAdminAccountsPage() {
+  const navigate = useNavigate();
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
   const [items, setItems] = useState<CephAdminRgwAccount[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [searchValue, setSearchValue] = useState("");
+  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
+  const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
+  const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
+  const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(DEFAULT_SORT);
+  const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const columnPickerRef = useRef<HTMLDivElement | null>(null);
+  const requestSeqRef = useRef(0);
 
   useEffect(() => {
-    if (!selectedEndpointId) {
-      setItems([]);
-      setTotal(0);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    listCephAdminAccounts(selectedEndpointId, {
-      page,
-      page_size: pageSize,
-      search: searchValue || undefined,
-    })
-      .then((data) => {
-        setItems(data.items ?? []);
-        setTotal(data.total ?? 0);
-      })
-      .catch((err) => {
-        setError(extractError(err));
-        setItems([]);
-        setTotal(0);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [selectedEndpointId, page, pageSize, searchValue]);
+    persistVisibleColumns(visibleColumns);
+  }, [visibleColumns]);
 
   useEffect(() => {
-    setPage(1);
-  }, [selectedEndpointId]);
+    if (!showColumnPicker) return;
+    const handler = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target || !columnPickerRef.current) return;
+      if (!columnPickerRef.current.contains(target)) {
+        setShowColumnPicker(false);
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [showColumnPicker]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -68,11 +237,289 @@ export default function CephAdminAccountsPage() {
     return () => window.clearTimeout(handle);
   }, [filter]);
 
+  useEffect(() => {
+    setPage(1);
+    setPageSize(25);
+    setFilter("");
+    setSearchValue("");
+    setAdvancedDraft(defaultAdvancedFilter);
+    setAdvancedApplied(null);
+    setSort(DEFAULT_SORT);
+    setEditingAccountId(null);
+  }, [selectedEndpointId]);
+
+  const includeParams = useMemo(() => {
+    const include = new Set<string>();
+    if (visibleColumns.includes("account_name") || visibleColumns.includes("email")) include.add("profile");
+    if (visibleColumns.includes("max_users") || visibleColumns.includes("max_buckets")) include.add("limits");
+    if (visibleColumns.includes("quota_max_size_bytes") || visibleColumns.includes("quota_max_objects")) include.add("quota");
+    if (visibleColumns.includes("bucket_count") || visibleColumns.includes("user_count")) include.add("stats");
+    return Array.from(include.values());
+  }, [visibleColumns]);
+
+  const advancedFilterParam = useMemo(() => buildAdvancedFilterPayload(advancedApplied), [advancedApplied]);
+
+  useEffect(() => {
+    if (!selectedEndpointId) {
+      setItems([]);
+      setTotal(0);
+      setLoading(false);
+      setLoadingDetails(false);
+      return;
+    }
+
+    const requestId = requestSeqRef.current + 1;
+    requestSeqRef.current = requestId;
+
+    const load = async () => {
+      setLoading(true);
+      setLoadingDetails(false);
+      setError(null);
+      try {
+        const baseResponse = await listCephAdminAccounts(selectedEndpointId, {
+          page,
+          page_size: pageSize,
+          search: searchValue || undefined,
+          advanced_filter: advancedFilterParam,
+          sort_by: sort.field,
+          sort_dir: sort.direction,
+        });
+        if (requestId !== requestSeqRef.current) return;
+
+        const baseItems = baseResponse.items ?? [];
+        setItems(baseItems);
+        setTotal(baseResponse.total ?? 0);
+        setLoading(false);
+
+        if (includeParams.length === 0 || baseItems.length === 0) return;
+
+        setLoadingDetails(true);
+        try {
+          const detailResponse = await listCephAdminAccounts(selectedEndpointId, {
+            page,
+            page_size: pageSize,
+            search: searchValue || undefined,
+            advanced_filter: advancedFilterParam,
+            sort_by: sort.field,
+            sort_dir: sort.direction,
+            include: includeParams,
+          });
+          if (requestId !== requestSeqRef.current) return;
+
+          const detailsByKey = new Map((detailResponse.items ?? []).map((account) => [rowKey(account), account]));
+          setItems(baseItems.map((account) => detailsByKey.get(rowKey(account)) ?? account));
+        } finally {
+          if (requestId === requestSeqRef.current) {
+            setLoadingDetails(false);
+          }
+        }
+      } catch (err) {
+        if (requestId !== requestSeqRef.current) return;
+        setError(extractError(err));
+        setItems([]);
+        setTotal(0);
+        setLoading(false);
+        setLoadingDetails(false);
+      }
+    };
+
+    void load();
+  }, [selectedEndpointId, page, pageSize, searchValue, advancedFilterParam, sort.field, sort.direction, includeParams.join(",")]);
+
+  const toggleColumn = (id: ColumnId) => {
+    setVisibleColumns((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+  };
+
+  const resetColumns = () => {
+    setVisibleColumns(defaultVisibleColumns);
+  };
+
+  const toggleSort = (field: SortField) => {
+    setSort((prev) => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === "asc" ? "desc" : "asc" };
+      }
+      return { field, direction: "asc" };
+    });
+    setPage(1);
+  };
+
+  const updateAdvancedField = (field: keyof AdvancedFilterState, value: string) => {
+    setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const applyAdvancedFilter = () => {
+    setAdvancedApplied(advancedDraft);
+    setPage(1);
+  };
+
+  const resetAdvancedFilter = () => {
+    setAdvancedDraft(defaultAdvancedFilter);
+    setAdvancedApplied(null);
+    setPage(1);
+  };
+
+  const resetAllFilters = () => {
+    setFilter("");
+    setSearchValue("");
+    setAdvancedDraft(defaultAdvancedFilter);
+    setAdvancedApplied(null);
+    setShowAdvancedFilter(false);
+    setPage(1);
+  };
+
+  const advancedFilterActive = hasAdvancedFilters(advancedApplied);
+  const quickFilterActive = searchValue.trim().length > 0;
+  const filtersActive = quickFilterActive || advancedFilterActive;
+  const columnsCustomized = useMemo(() => {
+    if (visibleColumns.length !== defaultVisibleColumns.length) return true;
+    const current = new Set(visibleColumns);
+    return defaultVisibleColumns.some((column) => !current.has(column));
+  }, [visibleColumns]);
+
+  const detailPlaceholder = loadingDetails ? "Loading..." : "-";
+
+  const applyUpdatedAccount = (updated: CephAdminRgwAccountDetail) => {
+    setItems((prev) =>
+      prev.map((account) =>
+        account.account_id !== updated.account_id
+          ? account
+          : {
+              ...account,
+              account_name: updated.account_name ?? null,
+              email: updated.email ?? null,
+              max_users: updated.max_users ?? null,
+              max_buckets: updated.max_buckets ?? null,
+              quota_max_size_bytes: updated.quota?.max_size_bytes ?? null,
+              quota_max_objects: updated.quota?.max_objects ?? null,
+              bucket_count: updated.bucket_count ?? null,
+              user_count: updated.user_count ?? null,
+            }
+      )
+    );
+  };
+
+  type ColumnDef = {
+    id: string;
+    label: string;
+    field: SortField | null;
+    align?: "left" | "right";
+    render: (account: CephAdminRgwAccount) => ReactNode;
+  };
+
+  const accountTableColumns: ColumnDef[] = (() => {
+    const visible = new Set(visibleColumns);
+    const cols: ColumnDef[] = [
+      {
+        id: "account_id",
+        label: "Account ID",
+        field: "account_id",
+        render: (account) => account.account_id,
+      },
+    ];
+
+    if (visible.has("account_name")) {
+      cols.push({
+        id: "account_name",
+        label: "Name",
+        field: "account_name",
+        render: (account) => account.account_name ?? detailPlaceholder,
+      });
+    }
+    if (visible.has("email")) {
+      cols.push({
+        id: "email",
+        label: "Email",
+        field: "email",
+        render: (account) => account.email ?? detailPlaceholder,
+      });
+    }
+    if (visible.has("max_users")) {
+      cols.push({
+        id: "max_users",
+        label: "Max users",
+        field: "max_users",
+        align: "right",
+        render: (account) => (account.max_users == null ? detailPlaceholder : formatNumber(account.max_users)),
+      });
+    }
+    if (visible.has("max_buckets")) {
+      cols.push({
+        id: "max_buckets",
+        label: "Max buckets",
+        field: "max_buckets",
+        align: "right",
+        render: (account) => (account.max_buckets == null ? detailPlaceholder : formatNumber(account.max_buckets)),
+      });
+    }
+    if (visible.has("quota_max_size_bytes")) {
+      cols.push({
+        id: "quota_max_size_bytes",
+        label: "Quota (size)",
+        field: "quota_max_size_bytes",
+        align: "right",
+        render: (account) =>
+          account.quota_max_size_bytes == null ? detailPlaceholder : formatBytes(account.quota_max_size_bytes),
+      });
+    }
+    if (visible.has("quota_max_objects")) {
+      cols.push({
+        id: "quota_max_objects",
+        label: "Quota (objects)",
+        field: "quota_max_objects",
+        align: "right",
+        render: (account) =>
+          account.quota_max_objects == null ? detailPlaceholder : formatNumber(account.quota_max_objects),
+      });
+    }
+    if (visible.has("bucket_count")) {
+      cols.push({
+        id: "bucket_count",
+        label: "Buckets",
+        field: "bucket_count",
+        align: "right",
+        render: (account) => (account.bucket_count == null ? detailPlaceholder : formatNumber(account.bucket_count)),
+      });
+    }
+    if (visible.has("user_count")) {
+      cols.push({
+        id: "user_count",
+        label: "Users",
+        field: "user_count",
+        align: "right",
+        render: (account) => (account.user_count == null ? detailPlaceholder : formatNumber(account.user_count)),
+      });
+    }
+
+    cols.push({
+      id: "actions",
+      label: "Actions",
+      field: null,
+      align: "right",
+      render: (account) => (
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            className={tableActionButtonClasses}
+            onClick={() => navigate(`/ceph-admin/buckets?owner=${encodeURIComponent(account.account_id)}`)}
+          >
+            Owner buckets
+          </button>
+          <button type="button" onClick={() => setEditingAccountId(account.account_id)} className={tableActionButtonClasses}>
+            Configure
+          </button>
+        </div>
+      ),
+    });
+
+    return cols;
+  })();
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="RGW Accounts"
-        description="Liste complète des accounts (admin ops)."
+        description="Liste complète des accounts RGW (admin ops)."
         breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Accounts" }]}
       />
 
@@ -83,7 +530,6 @@ export default function CephAdminAccountsPage() {
         </PageBanner>
       )}
       {error && <PageBanner tone="error">{error}</PageBanner>}
-      {loading && <PageBanner tone="info">Loading accounts…</PageBanner>}
 
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
@@ -92,16 +538,303 @@ export default function CephAdminAccountsPage() {
               <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Accounts</p>
               <p className="ui-caption text-slate-500 dark:text-slate-400">{total} result(s)</p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
-              <input
-                type="text"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder="Search by id or name"
-                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64"
-              />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              <div className="relative" ref={columnPickerRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowColumnPicker((prev) => !prev)}
+                  className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                >
+                  Columns
+                </button>
+                {showColumnPicker && (
+                  <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Visible columns</p>
+                      <button
+                        type="button"
+                        onClick={resetColumns}
+                        className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                      >
+                        Reset
+                      </button>
+                    </div>
+
+                    <div className="mt-3 space-y-3">
+                      <div className="space-y-2">
+                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Identity</p>
+                        {[
+                          { id: "account_name" as const, label: "Name" },
+                          { id: "email" as const, label: "Email" },
+                        ].map((opt) => (
+                          <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
+                            <span>{opt.label}</span>
+                            <input
+                              type="checkbox"
+                              checked={visibleColumns.includes(opt.id)}
+                              onChange={() => toggleColumn(opt.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            />
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Limits & quotas
+                        </p>
+                        {[
+                          { id: "max_users" as const, label: "Max users" },
+                          { id: "max_buckets" as const, label: "Max buckets" },
+                          { id: "quota_max_size_bytes" as const, label: "Quota (size)" },
+                          { id: "quota_max_objects" as const, label: "Quota (objects)" },
+                        ].map((opt) => (
+                          <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
+                            <span>{opt.label}</span>
+                            <input
+                              type="checkbox"
+                              checked={visibleColumns.includes(opt.id)}
+                              onChange={() => toggleColumn(opt.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            />
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Usage</p>
+                        {[
+                          { id: "bucket_count" as const, label: "Buckets" },
+                          { id: "user_count" as const, label: "Users" },
+                        ].map((opt) => (
+                          <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
+                            <span>{opt.label}</span>
+                            <input
+                              type="checkbox"
+                              checked={visibleColumns.includes(opt.id)}
+                              onChange={() => toggleColumn(opt.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={resetColumns}
+                disabled={!columnsCustomized}
+                className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
+                  columnsCustomized
+                    ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                    : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                }`}
+              >
+                Reset Columns
+              </button>
             </div>
+          </div>
+        </div>
+
+        <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/40">
+          <div className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filters</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">Quick filter + Advanced filter</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFilter((prev) => !prev)}
+                  className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
+                    showAdvancedFilter || advancedFilterActive
+                      ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
+                      : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  Advanced filter{advancedFilterActive ? " · Active" : ""}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetAllFilters}
+                  disabled={!filtersActive}
+                  className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
+                    filtersActive
+                      ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                      : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                  }`}
+                >
+                  Clear all filters
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <input
+                  type="text"
+                  aria-label="Quick filter"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Search by account id or name"
+                  className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+              </div>
+            </div>
+
+            {showAdvancedFilter && (
+              <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                <div className="grid gap-3 lg:grid-cols-3">
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Account name contains
+                    <input
+                      type="text"
+                      value={advancedDraft.accountName}
+                      onChange={(e) => updateAdvancedField("accountName", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Email contains
+                    <input
+                      type="text"
+                      value={advancedDraft.email}
+                      onChange={(e) => updateAdvancedField("email", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Max users min
+                    <input
+                      type="number"
+                      value={advancedDraft.minMaxUsers}
+                      onChange={(e) => updateAdvancedField("minMaxUsers", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Max users max
+                    <input
+                      type="number"
+                      value={advancedDraft.maxMaxUsers}
+                      onChange={(e) => updateAdvancedField("maxMaxUsers", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Max buckets min
+                    <input
+                      type="number"
+                      value={advancedDraft.minMaxBuckets}
+                      onChange={(e) => updateAdvancedField("minMaxBuckets", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Max buckets max
+                    <input
+                      type="number"
+                      value={advancedDraft.maxMaxBuckets}
+                      onChange={(e) => updateAdvancedField("maxMaxBuckets", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Quota bytes min
+                    <input
+                      type="number"
+                      value={advancedDraft.minQuotaBytes}
+                      onChange={(e) => updateAdvancedField("minQuotaBytes", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Quota bytes max
+                    <input
+                      type="number"
+                      value={advancedDraft.maxQuotaBytes}
+                      onChange={(e) => updateAdvancedField("maxQuotaBytes", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Quota objects min
+                    <input
+                      type="number"
+                      value={advancedDraft.minQuotaObjects}
+                      onChange={(e) => updateAdvancedField("minQuotaObjects", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Quota objects max
+                    <input
+                      type="number"
+                      value={advancedDraft.maxQuotaObjects}
+                      onChange={(e) => updateAdvancedField("maxQuotaObjects", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Bucket count min
+                    <input
+                      type="number"
+                      value={advancedDraft.minBucketCount}
+                      onChange={(e) => updateAdvancedField("minBucketCount", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    Bucket count max
+                    <input
+                      type="number"
+                      value={advancedDraft.maxBucketCount}
+                      onChange={(e) => updateAdvancedField("maxBucketCount", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    User count min
+                    <input
+                      type="number"
+                      value={advancedDraft.minUserCount}
+                      onChange={(e) => updateAdvancedField("minUserCount", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+                    User count max
+                    <input
+                      type="number"
+                      value={advancedDraft.maxUserCount}
+                      onChange={(e) => updateAdvancedField("maxUserCount", e.target.value)}
+                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={resetAdvancedFilter}
+                    className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={applyAdvancedFilter}
+                    className="rounded-md bg-primary px-2 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
+                  >
+                    Apply filter
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -109,25 +842,46 @@ export default function CephAdminAccountsPage() {
           <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                <th className="px-4 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Account ID
-                </th>
-                <th className="px-4 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Name
-                </th>
+                {accountTableColumns.map((col) => (
+                  <SortableHeader
+                    key={col.id}
+                    label={col.label}
+                    field={col.field}
+                    activeField={sort.field}
+                    direction={sort.direction}
+                    align={col.align ?? "left"}
+                    onSort={(field) => toggleSort(field as SortField)}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {items.length === 0 && <TableEmptyState colSpan={2} message="No accounts found." />}
-              {items.map((acc) => (
-                <tr key={acc.account_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{acc.account_id}</td>
-                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{acc.account_name ?? "—"}</td>
-                </tr>
-              ))}
+              {loading && <TableEmptyState colSpan={accountTableColumns.length} message="Loading accounts..." />}
+              {!loading && !error && items.length === 0 && (
+                <TableEmptyState colSpan={accountTableColumns.length} message="No accounts found." />
+              )}
+              {!loading &&
+                items.map((account) => (
+                  <tr key={rowKey(account)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    {accountTableColumns.map((col) => {
+                      const align = col.align ?? "left";
+                      const cellBase = align === "right" ? "px-6 py-4 text-right" : "px-6 py-4";
+                      const textClass =
+                        col.id === "account_id"
+                          ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
+                          : "ui-body text-slate-600 dark:text-slate-300";
+                      return (
+                        <td key={`${rowKey(account)}:${col.id}`} className={`${cellBase} ${textClass}`}>
+                          {col.render(account)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
+
         <PaginationControls
           page={page}
           pageSize={pageSize}
@@ -140,6 +894,15 @@ export default function CephAdminAccountsPage() {
           disabled={loading || !selectedEndpointId}
         />
       </div>
+
+      {selectedEndpointId && editingAccountId && (
+        <CephAdminAccountEditModal
+          endpointId={selectedEndpointId}
+          accountId={editingAccountId}
+          onClose={() => setEditingAccountId(null)}
+          onSaved={applyUpdatedAccount}
+        />
+      )}
     </div>
   );
 }

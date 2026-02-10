@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -29,10 +29,11 @@ def get_service(db: Session = Depends(get_db)) -> StorageEndpointsService:
 
 @router.get("", response_model=list[StorageEndpoint])
 def list_storage_endpoints(
+    include_admin_ops_permissions: bool = Query(False),
     service: StorageEndpointsService = Depends(get_service),
     _: dict = Depends(get_current_super_admin),
 ) -> list[StorageEndpoint]:
-    return service.list_endpoints()
+    return service.list_endpoints(include_admin_ops_permissions=include_admin_ops_permissions)
 
 
 @router.get("/meta", response_model=StorageEndpointMeta)
@@ -46,11 +47,12 @@ def get_storage_endpoints_meta(
 @router.get("/{endpoint_id}", response_model=StorageEndpoint)
 def get_storage_endpoint(
     endpoint_id: int,
+    include_admin_ops_permissions: bool = Query(True),
     service: StorageEndpointsService = Depends(get_service),
     _: dict = Depends(get_current_super_admin),
 ) -> StorageEndpoint:
     try:
-        return service.get_endpoint(endpoint_id)
+        return service.get_endpoint(endpoint_id, include_admin_ops_permissions=include_admin_ops_permissions)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 

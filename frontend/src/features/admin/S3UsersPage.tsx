@@ -15,7 +15,7 @@ import {
   listS3Users,
   updateS3User,
 } from "../../api/s3Users";
-import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
+import { getStorageEndpoint, listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
@@ -39,6 +39,7 @@ export default function S3UsersPage() {
 
   const [users, setUsers] = useState<S3User[]>([]);
   const [portalUsers, setPortalUsers] = useState<UserSummary[]>([]);
+  const [portalUsersLoaded, setPortalUsersLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -48,6 +49,10 @@ export default function S3UsersPage() {
   const MAX_LINK_OPTIONS = 10;
   const [storageEndpoints, setStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
+  const [endpointsLoaded, setEndpointsLoaded] = useState(false);
+  const [endpointUsersWrite, setEndpointUsersWrite] = useState<Record<number, boolean>>({});
+  const [endpointPermissionLoading, setEndpointPermissionLoading] = useState<Record<number, boolean>>({});
+  const [endpointPermissionErrors, setEndpointPermissionErrors] = useState<Record<number, string | null>>({});
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -151,29 +156,59 @@ export default function S3UsersPage() {
     fetchUsers();
   }, [fetchUsers]);
 
+  const loadPortalUsersIfNeeded = useCallback(async () => {
+    if (portalUsersLoaded) return;
+    try {
+      const data = await listMinimalUsers();
+      setPortalUsers(data);
+      setPortalUsersLoaded(true);
+    } catch {
+      setPortalUsers([]);
+    }
+  }, [portalUsersLoaded]);
+
+  const loadEndpointsIfNeeded = useCallback(async () => {
+    if (endpointsLoaded || loadingEndpoints) return;
+    setLoadingEndpoints(true);
+    try {
+      const data = await listStorageEndpoints();
+      setStorageEndpoints(data);
+      setEndpointsLoaded(true);
+    } catch {
+      setStorageEndpoints([]);
+    } finally {
+      setLoadingEndpoints(false);
+    }
+  }, [endpointsLoaded, loadingEndpoints]);
+
+  const hasLinkedPortalUsers = useMemo(
+    () => users.some((user) => (user.user_ids?.length ?? 0) > 0),
+    [users]
+  );
+
   useEffect(() => {
-    const loadPortalUsers = async () => {
+    if (!hasLinkedPortalUsers) return;
+    void loadPortalUsersIfNeeded();
+  }, [hasLinkedPortalUsers, loadPortalUsersIfNeeded]);
+
+  const fetchEndpointUsersWritePermission = useCallback(
+    async (endpointId: number) => {
+      if (!Number.isFinite(endpointId) || endpointId <= 0) return;
+      if (endpointPermissionLoading[endpointId]) return;
+      setEndpointPermissionLoading((prev) => ({ ...prev, [endpointId]: true }));
       try {
-        const data = await listMinimalUsers();
-        setPortalUsers(data);
-      } catch {
-        setPortalUsers([]);
-      }
-    };
-    loadPortalUsers();
-    const loadEndpoints = async () => {
-      setLoadingEndpoints(true);
-      try {
-        const data = await listStorageEndpoints();
-        setStorageEndpoints(data);
-      } catch {
-        setStorageEndpoints([]);
+        const endpoint = await getStorageEndpoint(endpointId, { include_admin_ops_permissions: true });
+        setEndpointUsersWrite((prev) => ({ ...prev, [endpointId]: Boolean(endpoint.admin_ops_permissions?.users_write) }));
+        setEndpointPermissionErrors((prev) => ({ ...prev, [endpointId]: null }));
+      } catch (err) {
+        setEndpointUsersWrite((prev) => ({ ...prev, [endpointId]: false }));
+        setEndpointPermissionErrors((prev) => ({ ...prev, [endpointId]: extractError(err) }));
       } finally {
-        setLoadingEndpoints(false);
+        setEndpointPermissionLoading((prev) => ({ ...prev, [endpointId]: false }));
       }
-    };
-    loadEndpoints();
-  }, []);
+    },
+    [endpointPermissionLoading]
+  );
 
   const portalUserOptions = useMemo(() => portalUsers.map((u) => ({ id: u.id, label: u.email })), [portalUsers]);
   const portalUserLabelById = useMemo(() => {
@@ -200,29 +235,50 @@ export default function S3UsersPage() {
     if (!editingUser?.storage_endpoint_id) return null;
     return storageEndpoints.find((endpoint) => endpoint.id === editingUser.storage_endpoint_id) ?? null;
   }, [editingUser?.storage_endpoint_id, storageEndpoints]);
-  const allowUserQuotaUpdates = Boolean(editingEndpoint?.admin_ops_permissions?.users_write);
-  const userWritableCephEndpoints = useMemo(
-    () => adminCephEndpoints.filter((ep) => Boolean(ep.admin_ops_permissions?.users_write)),
-    [adminCephEndpoints]
-  );
+  const editingEndpointId = editingUser?.storage_endpoint_id ?? null;
+  const allowUserQuotaUpdates = editingEndpointId ? endpointUsersWrite[editingEndpointId] === true : false;
 
   useEffect(() => {
     const defaultCeph =
-      userWritableCephEndpoints.find((ep) => ep.is_default) || userWritableCephEndpoints[0];
+      adminCephEndpoints.find((ep) => ep.is_default) || adminCephEndpoints[0];
     const firstCephId = defaultCeph ? String(defaultCeph.id) : "";
     setCreateForm((prev) => ({
       ...prev,
-      storage_endpoint_id: userWritableCephEndpoints.some((endpoint) => String(endpoint.id) === prev.storage_endpoint_id)
+      storage_endpoint_id: adminCephEndpoints.some((endpoint) => String(endpoint.id) === prev.storage_endpoint_id)
         ? prev.storage_endpoint_id
         : firstCephId,
     }));
     setImportEndpointId((prev) =>
-      userWritableCephEndpoints.some((endpoint) => String(endpoint.id) === prev) ? prev : firstCephId
+      adminCephEndpoints.some((endpoint) => String(endpoint.id) === prev) ? prev : firstCephId
     );
     if (!editForm.storage_endpoint_id && firstCephId) {
       setEditForm((prev) => ({ ...prev, storage_endpoint_id: firstCephId }));
     }
-  }, [userWritableCephEndpoints, editForm.storage_endpoint_id]);
+  }, [adminCephEndpoints, editForm.storage_endpoint_id]);
+
+  useEffect(() => {
+    if (!showCreateModal) return;
+    if (!createForm.storage_endpoint_id) return;
+    const endpointId = Number(createForm.storage_endpoint_id);
+    if (!Number.isFinite(endpointId) || endpointId <= 0) return;
+    if (Object.prototype.hasOwnProperty.call(endpointUsersWrite, endpointId)) return;
+    void fetchEndpointUsersWritePermission(endpointId);
+  }, [showCreateModal, createForm.storage_endpoint_id, endpointUsersWrite, fetchEndpointUsersWritePermission]);
+
+  useEffect(() => {
+    if (!showImportModal) return;
+    if (!importEndpointId) return;
+    const endpointId = Number(importEndpointId);
+    if (!Number.isFinite(endpointId) || endpointId <= 0) return;
+    if (Object.prototype.hasOwnProperty.call(endpointUsersWrite, endpointId)) return;
+    void fetchEndpointUsersWritePermission(endpointId);
+  }, [showImportModal, importEndpointId, endpointUsersWrite, fetchEndpointUsersWritePermission]);
+
+  useEffect(() => {
+    if (!editingEndpointId) return;
+    if (Object.prototype.hasOwnProperty.call(endpointUsersWrite, editingEndpointId)) return;
+    void fetchEndpointUsersWritePermission(editingEndpointId);
+  }, [editingEndpointId, endpointUsersWrite, fetchEndpointUsersWritePermission]);
 
   const toggleEditPortalUserSelection = (userId: number) => {
     setEditPortalUserSelections((prev) =>
@@ -252,6 +308,8 @@ export default function S3UsersPage() {
   };
 
   const openEditModal = (user: S3User) => {
+    void loadPortalUsersIfNeeded();
+    void loadEndpointsIfNeeded();
     const quota = resolveQuotaForEdit(user.quota_max_size_gb);
     setEditingUser(user);
     setEditForm({
@@ -315,16 +373,20 @@ export default function S3UsersPage() {
 
   const submitCreate = async (e: FormEvent) => {
     e.preventDefault();
-    if (!canProvisionUsers) {
-      setCreateError("Admin Ops credentials require users=write on at least one Ceph endpoint.");
-      return;
-    }
     if (!createForm.name.trim()) {
       setCreateError("Name is required");
       return;
     }
     if (!createForm.storage_endpoint_id) {
       setCreateError("Select a Ceph endpoint.");
+      return;
+    }
+    if (createPermissionLoading) {
+      setCreateError("Checking endpoint permissions. Please wait.");
+      return;
+    }
+    if (!createEndpointCanWrite) {
+      setCreateError("Selected endpoint does not allow this operation (missing users=write).");
       return;
     }
     setCreating(true);
@@ -358,11 +420,6 @@ export default function S3UsersPage() {
   };
 
   const submitImport = async () => {
-    if (!canProvisionUsers) {
-      setImportError("Admin Ops credentials require users=write on at least one Ceph endpoint.");
-      setImportMessage(null);
-      return;
-    }
     const entries = importText
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -374,6 +431,16 @@ export default function S3UsersPage() {
     }
     if (!importEndpointId) {
       setImportError("Select a Ceph endpoint.");
+      setImportMessage(null);
+      return;
+    }
+    if (importPermissionLoading) {
+      setImportError("Checking endpoint permissions. Please wait.");
+      setImportMessage(null);
+      return;
+    }
+    if (!importEndpointCanWrite) {
+      setImportError("Selected endpoint does not allow this operation (missing users=write).");
       setImportMessage(null);
       return;
     }
@@ -423,7 +490,14 @@ export default function S3UsersPage() {
   };
 
   const deleteModalBusy = userToDelete ? deleteBusyId === userToDelete.id : false;
-  const canProvisionUsers = userWritableCephEndpoints.length > 0;
+  const selectedCreateEndpointId = createForm.storage_endpoint_id ? Number(createForm.storage_endpoint_id) : null;
+  const selectedImportEndpointId = importEndpointId ? Number(importEndpointId) : null;
+  const createPermissionLoading = selectedCreateEndpointId ? Boolean(endpointPermissionLoading[selectedCreateEndpointId]) : false;
+  const importPermissionLoading = selectedImportEndpointId ? Boolean(endpointPermissionLoading[selectedImportEndpointId]) : false;
+  const createEndpointCanWrite = selectedCreateEndpointId ? endpointUsersWrite[selectedCreateEndpointId] === true : false;
+  const importEndpointCanWrite = selectedImportEndpointId ? endpointUsersWrite[selectedImportEndpointId] === true : false;
+  const createPermissionError = selectedCreateEndpointId ? endpointPermissionErrors[selectedCreateEndpointId] ?? null : null;
+  const importPermissionError = selectedImportEndpointId ? endpointPermissionErrors[selectedImportEndpointId] ?? null : null;
 
   const confirmDeleteUser = async () => {
     if (!userToDelete) return;
@@ -453,16 +527,20 @@ export default function S3UsersPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setShowImportModal(true)}
-              disabled={!canProvisionUsers}
+              onClick={() => {
+                setShowImportModal(true);
+                void loadEndpointsIfNeeded();
+              }}
               className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
             >
               Import
             </button>
             <button
               type="button"
-              onClick={() => setShowCreateModal(true)}
-              disabled={!canProvisionUsers}
+              onClick={() => {
+                setShowCreateModal(true);
+                void loadEndpointsIfNeeded();
+              }}
               className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Create user
@@ -577,11 +655,6 @@ export default function S3UsersPage() {
 
       {showCreateModal && (
         <Modal title="Create user" onClose={() => setShowCreateModal(false)}>
-          {!canProvisionUsers && (
-            <PageBanner tone="warning" className="mb-3">
-              No Ceph endpoint has Admin Ops capability <code>users=write</code>. User provisioning is disabled.
-            </PageBanner>
-          )}
           {createError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {createError}
@@ -612,23 +685,38 @@ export default function S3UsersPage() {
                 className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={createForm.storage_endpoint_id}
                 onChange={(e) => setCreateForm((prev) => ({ ...prev, storage_endpoint_id: e.target.value }))}
-                disabled={loadingEndpoints || userWritableCephEndpoints.length === 0}
+                disabled={loadingEndpoints || adminCephEndpoints.length === 0}
                 required
               >
                 <option value="" disabled>
                   {loadingEndpoints
                     ? "Loading..."
-                    : userWritableCephEndpoints.length === 0
-                      ? "No Ceph endpoint with users=write"
+                    : adminCephEndpoints.length === 0
+                      ? "No Ceph endpoint with admin enabled"
                       : "Select"}
                 </option>
-                {userWritableCephEndpoints.map((ep) => (
+                {adminCephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
                     {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
                 ))}
               </select>
             </div>
+            {createForm.storage_endpoint_id && (
+              <div className="flex flex-col gap-1">
+                {createPermissionLoading ? (
+                  <PageBanner tone="info">Checking endpoint permissions...</PageBanner>
+                ) : createPermissionError ? (
+                  <PageBanner tone="warning">
+                    {createPermissionError}. Validation is disabled until permissions can be verified.
+                  </PageBanner>
+                ) : !createEndpointCanWrite ? (
+                  <PageBanner tone="warning">
+                    Selected endpoint does not allow this operation: missing <code>users=write</code>.
+                  </PageBanner>
+                ) : null}
+              </div>
+            )}
             <div className="flex flex-col gap-1">
               <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Email</label>
               <input
@@ -689,7 +777,7 @@ export default function S3UsersPage() {
               </button>
               <button
                 type="submit"
-                disabled={creating || !canProvisionUsers}
+                disabled={creating || createPermissionLoading || !createEndpointCanWrite}
                 className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
               >
                 {creating ? "Creating..." : "Create user"}
@@ -702,11 +790,6 @@ export default function S3UsersPage() {
       {showImportModal && (
         <Modal title="Import users" onClose={() => setShowImportModal(false)}>
           <p className="mb-3 ui-body text-slate-500">Enter RGW user IDs, one per line. The platform will fetch or generate keys.</p>
-          {!canProvisionUsers && (
-            <PageBanner tone="warning" className="mb-3">
-              No Ceph endpoint has Admin Ops capability <code>users=write</code>. User import is disabled.
-            </PageBanner>
-          )}
           {importError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {importError}
@@ -730,23 +813,40 @@ export default function S3UsersPage() {
               className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               value={importEndpointId}
               onChange={(e) => setImportEndpointId(e.target.value)}
-              disabled={loadingEndpoints || userWritableCephEndpoints.length === 0}
+              disabled={loadingEndpoints || adminCephEndpoints.length === 0}
               required
             >
               <option value="" disabled>
                 {loadingEndpoints
                   ? "Loading..."
-                  : userWritableCephEndpoints.length === 0
-                    ? "No Ceph endpoint with users=write"
+                  : adminCephEndpoints.length === 0
+                    ? "No Ceph endpoint with admin enabled"
                     : "Select"}
               </option>
-              {userWritableCephEndpoints.map((ep) => (
+              {adminCephEndpoints.map((ep) => (
                 <option key={ep.id} value={ep.id}>
                   {ep.name} {ep.is_default ? "(default)" : ""}
                 </option>
               ))}
             </select>
           </div>
+          {importEndpointId && (
+            <>
+              {importPermissionLoading ? (
+                <PageBanner tone="info" className="mt-3">
+                  Checking endpoint permissions...
+                </PageBanner>
+              ) : importPermissionError ? (
+                <PageBanner tone="warning" className="mt-3">
+                  {importPermissionError}. Validation is disabled until permissions can be verified.
+                </PageBanner>
+              ) : !importEndpointCanWrite ? (
+                <PageBanner tone="warning" className="mt-3">
+                  Selected endpoint does not allow this operation: missing <code>users=write</code>.
+                </PageBanner>
+              ) : null}
+            </>
+          )}
           <div className="mt-4 flex items-center justify-end gap-3">
             <button
               type="button"
@@ -757,7 +857,7 @@ export default function S3UsersPage() {
             </button>
             <button
               type="button"
-              disabled={importBusy || !canProvisionUsers || !importText.trim() || !importEndpointId}
+              disabled={importBusy || importPermissionLoading || !importEndpointCanWrite || !importText.trim() || !importEndpointId}
               onClick={submitImport}
               className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
             >

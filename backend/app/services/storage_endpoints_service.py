@@ -209,11 +209,20 @@ class StorageEndpointsService:
             )
             return self._empty_admin_ops_permissions()
 
-    def _serialize(self, endpoint: StorageEndpoint) -> StorageEndpointSchema:
+    def _serialize(
+        self,
+        endpoint: StorageEndpoint,
+        *,
+        include_admin_ops_permissions: bool = True,
+    ) -> StorageEndpointSchema:
         provider = self._normalize_provider(endpoint.provider)
         features, _ = self._normalize_features(provider, endpoint.features_config)
         capabilities = features_to_capabilities(features)
-        admin_ops_permissions = self._resolve_admin_ops_permissions(endpoint, capabilities)
+        admin_ops_permissions = (
+            self._resolve_admin_ops_permissions(endpoint, capabilities)
+            if include_admin_ops_permissions
+            else self._empty_admin_ops_permissions()
+        )
         return StorageEndpointSchema(
             id=endpoint.id,
             name=endpoint.name,
@@ -409,16 +418,16 @@ class StorageEndpointsService:
         for endpoint_url in seen_urls:
             endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.endpoint_url == endpoint_url).first()
             if endpoint:
-                synced.append(self._serialize(endpoint))
+                synced.append(self._serialize(endpoint, include_admin_ops_permissions=False))
         return synced
 
-    def list_endpoints(self) -> list[StorageEndpointSchema]:
+    def list_endpoints(self, *, include_admin_ops_permissions: bool = False) -> list[StorageEndpointSchema]:
         endpoints = (
             self.db.query(StorageEndpoint)
             .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
             .all()
         )
-        return [self._serialize(ep) for ep in endpoints]
+        return [self._serialize(ep, include_admin_ops_permissions=include_admin_ops_permissions) for ep in endpoints]
 
     def get_default_endpoint_url(self) -> Optional[str]:
         endpoint = (
@@ -430,11 +439,11 @@ class StorageEndpointsService:
             return self._normalize_url(endpoint.endpoint_url)
         return configured_s3_endpoint()
 
-    def get_endpoint(self, endpoint_id: int) -> StorageEndpointSchema:
+    def get_endpoint(self, endpoint_id: int, *, include_admin_ops_permissions: bool = True) -> StorageEndpointSchema:
         endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:
             raise ValueError("Endpoint not found.")
-        return self._serialize(endpoint)
+        return self._serialize(endpoint, include_admin_ops_permissions=include_admin_ops_permissions)
 
     def create_endpoint(self, payload: StorageEndpointCreate) -> StorageEndpointSchema:
         self._ensure_env_editable()
@@ -550,6 +559,14 @@ class StorageEndpointsService:
             if "ceph_admin_secret_key" in fields_set
             else endpoint.ceph_admin_secret_key
         )
+        # Keep credentials consistent when an access key is explicitly cleared.
+        # This avoids stale encrypted secrets if API clients only send access_key=null.
+        if "admin_access_key" in fields_set and not admin_access:
+            admin_secret = None
+        if "supervision_access_key" in fields_set and not supervision_access:
+            supervision_secret = None
+        if "ceph_admin_access_key" in fields_set and not ceph_admin_access:
+            ceph_admin_secret = None
         raw_features = payload.features_config if payload.features_config is not None else endpoint.features_config
         features, features_config = self._normalize_features(provider, raw_features)
         admin_endpoint = features.get("admin", {}).get("endpoint")

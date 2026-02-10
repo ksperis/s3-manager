@@ -572,7 +572,7 @@ export default function StorageEndpointsPage() {
           <div className="flex items-center gap-2">
             {!endpoint.is_default && (
               <button
-                className="rounded-lg border border-slate-200 px-3 py-1.5 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
                 onClick={() => handleSetDefault(endpoint)}
                 type="button"
                 disabled={Boolean(defaultBusyId) || envManaged}
@@ -583,14 +583,14 @@ export default function StorageEndpointsPage() {
             {!readOnly ? (
               <>
                 <button
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                  className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
                   onClick={() => startEdit(endpoint)}
                   type="button"
                 >
                   Edit
                 </button>
                 <button
-                  className="rounded-lg bg-rose-600 px-3 py-1.5 ui-body font-semibold text-white shadow-sm transition hover:bg-rose-700"
+                  className="rounded-md bg-rose-600 px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-rose-700"
                   onClick={() => {
                     setDeleteTarget(endpoint);
                     setDeleteError(null);
@@ -888,7 +888,7 @@ export default function StorageEndpointsPage() {
                     <button
                       type="button"
                       onClick={() => setShowOpsHelp((prev) => !prev)}
-                      className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200"
+                      className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200"
                     >
                       {showOpsHelp ? "Hide" : "Show"}
                     </button>
@@ -1124,14 +1124,14 @@ export default function StorageEndpointsPage() {
               <button
                 type="button"
                 onClick={onCloseForm}
-                className="rounded-lg border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-lg bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? "Saving..." : editingId ? "Update" : "Create"}
               </button>
@@ -1150,7 +1150,7 @@ export default function StorageEndpointsPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="rounded-lg border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
                 type="button"
               >
                 Cancel
@@ -1158,7 +1158,7 @@ export default function StorageEndpointsPage() {
               <button
                 onClick={handleDelete}
                 disabled={deleteBusy}
-                className="rounded-lg bg-rose-600 px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-70"
+                className="rounded-md bg-rose-600 px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:opacity-70"
                 type="button"
               >
                 {deleteBusy ? "Deleting..." : "Delete"}

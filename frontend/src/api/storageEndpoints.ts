@@ -70,8 +70,21 @@ export type StorageEndpointPayload = {
   features_config?: string | null;
 };
 
-export async function listStorageEndpoints(): Promise<StorageEndpoint[]> {
-  const { data } = await client.get<StorageEndpoint[]>("/admin/storage-endpoints");
+export type ListStorageEndpointsParams = {
+  include_admin_ops_permissions?: boolean;
+};
+
+export type GetStorageEndpointParams = {
+  include_admin_ops_permissions?: boolean;
+};
+
+export async function listStorageEndpoints(params?: ListStorageEndpointsParams): Promise<StorageEndpoint[]> {
+  const { data } = await client.get<StorageEndpoint[]>("/admin/storage-endpoints", { params });
+  return data;
+}
+
+export async function getStorageEndpoint(id: number, params?: GetStorageEndpointParams): Promise<StorageEndpoint> {
+  const { data } = await client.get<StorageEndpoint>(`/admin/storage-endpoints/${id}`, { params });
   return data;
 }
 

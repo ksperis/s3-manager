@@ -5,7 +5,7 @@
 import axios from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
@@ -33,6 +33,7 @@ import {
 } from "../../api/cephAdmin";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import BucketDetailPage from "../manager/BucketDetailPage";
 
 const extractError = (err: unknown): string => {
   if (axios.isAxiosError(err)) {
@@ -1159,6 +1160,13 @@ const mergeUiTags = (existing: string[], incoming: string[]) => {
 };
 
 const normalizeBucketName = (value: string) => value.trim().toLowerCase();
+const ownerFilterFromSearch = (search: string) => {
+  if (!search) return null;
+  const value = new URLSearchParams(search).get("owner");
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+};
 
 const getTagColors = (tag: string) => {
   const hue = Array.from(tag).reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360;
@@ -1170,6 +1178,7 @@ const getTagColors = (tag: string) => {
 };
 
 export default function CephAdminBucketsPage() {
+  const location = useLocation();
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
   const [items, setItems] = useState<CephAdminBucket[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1189,6 +1198,10 @@ export default function CephAdminBucketsPage() {
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [tagFilterMode, setTagFilterMode] = useState<"any" | "all">("any");
   const [selectedBuckets, setSelectedBuckets] = useState<Set<string>>(new Set());
+  const [editingBucketName, setEditingBucketName] = useState<string | null>(null);
+  const [allFilteredBucketNames, setAllFilteredBucketNames] = useState<string[] | null>(null);
+  const [allFilteredBucketNamesKey, setAllFilteredBucketNamesKey] = useState<string | null>(null);
+  const [selectAllLoading, setSelectAllLoading] = useState(false);
   const [orphanedTagBuckets, setOrphanedTagBuckets] = useState<string[]>([]);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
@@ -1255,6 +1268,7 @@ export default function CephAdminBucketsPage() {
     [uiTags]
   );
   const tagBucketSignature = useMemo(() => tagBucketNames.slice().sort().join("|"), [tagBucketNames]);
+  const ownerQueryFilter = useMemo(() => ownerFilterFromSearch(location.search), [location.search]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -1277,8 +1291,22 @@ export default function CephAdminBucketsPage() {
 
   useEffect(() => {
     setUiTags(loadUiTags(selectedEndpointId));
+    setEditingBucketName(null);
     const stored = loadBucketListState(selectedEndpointId);
-    if (stored) {
+    if (ownerQueryFilter) {
+      const ownerPrefill: AdvancedFilterState = { ...defaultAdvancedFilter, owner: ownerQueryFilter };
+      restoreFilterRef.current = null;
+      setFilter("");
+      setFilterValue("");
+      setAdvancedApplied(ownerPrefill);
+      setAdvancedDraft(ownerPrefill);
+      setTagFilters([]);
+      setTagFilterMode("any");
+      setSelectedBuckets(new Set());
+      setPage(1);
+      setPageSize(stored?.pageSize ?? DEFAULT_PAGE_SIZE);
+      setSort(stored?.sort ?? DEFAULT_SORT);
+    } else if (stored) {
       restoreFilterRef.current = stored.filter;
       setFilter(stored.filter);
       setFilterValue(stored.filter.trim());
@@ -1303,7 +1331,7 @@ export default function CephAdminBucketsPage() {
       setPageSize(DEFAULT_PAGE_SIZE);
       setSort(DEFAULT_SORT);
     }
-  }, [selectedEndpointId]);
+  }, [selectedEndpointId, ownerQueryFilter]);
 
   useEffect(() => {
     persistUiTags(selectedEndpointId, uiTags);
@@ -1452,6 +1480,16 @@ export default function CephAdminBucketsPage() {
     () => buildAdvancedFilterPayload("", advancedApplied, taggedBuckets),
     [advancedApplied, taggedBuckets]
   );
+  const selectionQueryKey = useMemo(
+    () =>
+      JSON.stringify({
+        endpoint: selectedEndpointId ?? null,
+        filter: filterValue.trim() || null,
+        advanced: advancedFilterParam || null,
+        withStats: requiresStats,
+      }),
+    [selectedEndpointId, filterValue, advancedFilterParam, requiresStats]
+  );
 
   const fetchBuckets = async () => {
     if (!selectedEndpointId) return;
@@ -1499,6 +1537,20 @@ export default function CephAdminBucketsPage() {
     requiresStats,
   ]);
 
+  useEffect(() => {
+    setAllFilteredBucketNames(null);
+    setAllFilteredBucketNamesKey(null);
+    setSelectAllLoading(false);
+  }, [selectionQueryKey]);
+
+  useEffect(() => {
+    if (allFilteredBucketNamesKey !== selectionQueryKey || !allFilteredBucketNames) return;
+    if (total !== allFilteredBucketNames.length) {
+      setAllFilteredBucketNames(null);
+      setAllFilteredBucketNamesKey(null);
+    }
+  }, [allFilteredBucketNamesKey, allFilteredBucketNames, selectionQueryKey, total]);
+
   const toggleSort = (field: SortField) => {
     setSort((prev) => {
       if (prev.field === field) {
@@ -1529,18 +1581,66 @@ export default function CephAdminBucketsPage() {
     });
   };
 
-  const setSelectionForPage = (checked: boolean) => {
-    setSelectedBuckets((prev) => {
-      const next = new Set(prev);
-      items.forEach((bucket) => {
-        if (checked) {
-          next.add(bucket.name);
-        } else {
-          next.delete(bucket.name);
-        }
+  const loadAllFilteredBucketNames = async () => {
+    if (!selectedEndpointId) return [];
+    if (allFilteredBucketNamesKey === selectionQueryKey && allFilteredBucketNames) {
+      return allFilteredBucketNames;
+    }
+    const names = new Set<string>();
+    let nextPage = 1;
+    let expectedTotal: number | null = null;
+    while (true) {
+      const response = await listCephAdminBuckets(selectedEndpointId, {
+        page: nextPage,
+        page_size: 200,
+        filter: filterValue.trim() || undefined,
+        advanced_filter: advancedFilterParam,
+        sort_by: sort.field,
+        sort_dir: sort.direction,
+        with_stats: requiresStats,
       });
-      return next;
-    });
+      (response.items ?? []).forEach((bucket) => {
+        if (bucket.name) names.add(bucket.name);
+      });
+      if (expectedTotal === null && typeof response.total === "number") {
+        expectedTotal = response.total;
+      }
+      if (!response.has_next) {
+        break;
+      }
+      if (expectedTotal !== null && names.size >= expectedTotal) {
+        break;
+      }
+      nextPage += 1;
+    }
+    const resolved = Array.from(names.values());
+    setAllFilteredBucketNames(resolved);
+    setAllFilteredBucketNamesKey(selectionQueryKey);
+    return resolved;
+  };
+
+  const setSelectionForFilteredResults = async (checked: boolean) => {
+    if (!selectedEndpointId) return;
+    setSelectAllLoading(true);
+    try {
+      const names = await loadAllFilteredBucketNames();
+      setSelectedBuckets((prev) => {
+        const next = new Set(prev);
+        names.forEach((name) => {
+          if (checked) {
+            next.add(name);
+          } else {
+            next.delete(name);
+          }
+        });
+        return next;
+      });
+    } catch (err) {
+      console.error(err);
+      setError(extractError(err));
+    } finally {
+      setSelectAllLoading(false);
+    }
   };
 
   const clearSelection = () => {
@@ -1623,13 +1723,24 @@ export default function CephAdminBucketsPage() {
 
   const selectedCount = selectedBuckets.size;
   const selectedOnPageCount = items.filter((bucket) => selectedBuckets.has(bucket.name)).length;
+  const hasResolvedFilteredNames =
+    allFilteredBucketNamesKey === selectionQueryKey && Array.isArray(allFilteredBucketNames) && allFilteredBucketNames.length > 0;
+  const selectedOnFilteredCount = hasResolvedFilteredNames
+    ? allFilteredBucketNames.reduce((count, bucketName) => count + (selectedBuckets.has(bucketName) ? 1 : 0), 0)
+    : selectedOnPageCount;
+  const allSelectedOnFiltered =
+    hasResolvedFilteredNames && total > 0 && allFilteredBucketNames.length === total && selectedOnFilteredCount === total;
   const hiddenSelectedCount = Math.max(selectedCount - selectedOnPageCount, 0);
   const allSelectedOnPage = items.length > 0 && selectedOnPageCount === items.length;
+  const headerChecked = hasResolvedFilteredNames ? allSelectedOnFiltered : allSelectedOnPage;
+  const headerIndeterminate = hasResolvedFilteredNames
+    ? selectedOnFilteredCount > 0 && !allSelectedOnFiltered
+    : selectedOnPageCount > 0 && !allSelectedOnPage;
 
   useEffect(() => {
     if (!selectionHeaderRef.current) return;
-    selectionHeaderRef.current.indeterminate = selectedOnPageCount > 0 && !allSelectedOnPage;
-  }, [selectedOnPageCount, allSelectedOnPage]);
+    selectionHeaderRef.current.indeterminate = headerIndeterminate;
+  }, [headerIndeterminate]);
 
   const openTagEditor = (targets: string[]) => {
     setTagTargets(targets);
@@ -2689,6 +2800,11 @@ export default function CephAdminBucketsPage() {
   const advancedFilterActive = hasAdvancedFilters(advancedApplied) || tagFilters.length > 0;
   const quickFilterActive = filterValue.trim().length > 0;
   const filtersActive = quickFilterActive || advancedFilterActive;
+  const columnsCustomized = useMemo(() => {
+    if (visibleColumns.length !== defaultVisibleColumns.length) return true;
+    const current = new Set(visibleColumns);
+    return defaultVisibleColumns.some((column) => !current.has(column));
+  }, [visibleColumns]);
   const availableTagFilters = useMemo(() => {
     const selected = new Set(tagFilters.map((tag) => tag.toLowerCase()));
     return availableUiTags.filter((tag) => !selected.has(tag.toLowerCase()));
@@ -2903,8 +3019,11 @@ export default function CephAdminBucketsPage() {
           <input
             ref={selectionHeaderRef}
             type="checkbox"
-            checked={allSelectedOnPage}
-            onChange={(e) => setSelectionForPage(e.target.checked)}
+            checked={headerChecked}
+            onChange={(e) => {
+              void setSelectionForFilteredResults(e.target.checked);
+            }}
+            disabled={loading || selectAllLoading || !selectedEndpointId || total === 0}
             className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
           />
         ),
@@ -2923,9 +3042,13 @@ export default function CephAdminBucketsPage() {
         label: "Name",
         field: "name",
         render: (bucket) => (
-          <Link to={`/ceph-admin/buckets/${encodeURIComponent(bucket.name)}`} className="hover:text-primary-700 dark:hover:text-primary-200">
+          <button
+            type="button"
+            onClick={() => setEditingBucketName(bucket.name)}
+            className="text-left hover:text-primary-700 dark:hover:text-primary-200"
+          >
             {bucket.name}
-          </Link>
+          </button>
         ),
       },
     ];
@@ -3049,9 +3172,13 @@ export default function CephAdminBucketsPage() {
       field: null,
       align: "right",
       render: (bucket) => (
-        <Link to={`/ceph-admin/buckets/${encodeURIComponent(bucket.name)}`} className={tableActionButtonClasses}>
+        <button
+          type="button"
+          onClick={() => setEditingBucketName(bucket.name)}
+          className={tableActionButtonClasses}
+        >
           Configure
-        </Link>
+        </button>
       ),
     });
 
@@ -3103,7 +3230,7 @@ export default function CephAdminBucketsPage() {
                   <button
                     type="button"
                     onClick={() => setShowColumnPicker((prev) => !prev)}
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                   >
                     Columns
                   </button>
@@ -3177,6 +3304,18 @@ export default function CephAdminBucketsPage() {
                     </div>
                   )}
                 </div>
+                <button
+                  type="button"
+                  onClick={resetColumns}
+                  disabled={!columnsCustomized}
+                  className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
+                    columnsCustomized
+                      ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                      : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                  }`}
+                >
+                  Reset Columns
+                </button>
               </div>
             </div>
           </div>
@@ -3191,7 +3330,7 @@ export default function CephAdminBucketsPage() {
                   <button
                     type="button"
                     onClick={() => setShowAdvancedFilter((prev) => !prev)}
-                    className={`rounded-md border px-3 py-2 ui-body font-semibold ${
+                    className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
                       showAdvancedFilter || advancedFilterActive
                         ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
                         : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
@@ -3203,7 +3342,7 @@ export default function CephAdminBucketsPage() {
                     type="button"
                     onClick={resetAllFilters}
                     disabled={!filtersActive}
-                    className={`rounded-md border px-3 py-2 ui-body font-semibold ${
+                    className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
                       filtersActive
                         ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
                         : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
@@ -3215,25 +3354,20 @@ export default function CephAdminBucketsPage() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-1">
-                  <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Quick filter
-                  </label>
+                <div>
                   <input
                     type="text"
+                    aria-label="Quick filter"
                     value={filter}
                     onChange={(e) => setFilter(e.target.value)}
                     placeholder="Bucket name"
-                    className={`w-full rounded-md border bg-white px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
+                    className={`w-full rounded-md border bg-white px-2.5 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
                       quickFilterActive ? activeFieldClass : "border-slate-200 dark:border-slate-700"
                     }`}
                   />
                 </div>
                 {showTagFilterBar && (
                   <div className="space-y-1 sm:col-span-2">
-                    <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Tag filter
-                    </label>
                     <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-900">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {tagFilters.map((tag) => {
@@ -3554,6 +3688,16 @@ export default function CephAdminBucketsPage() {
           <option key={tag} value={tag} />
         ))}
       </datalist>
+      {editingBucketName && (
+        <Modal
+          title={`Configure bucket · ${editingBucketName}`}
+          onClose={() => setEditingBucketName(null)}
+          maxWidthClass="max-w-7xl"
+          maxBodyHeightClass="max-h-[85vh]"
+        >
+          <BucketDetailPage mode="ceph-admin" bucketNameOverride={editingBucketName} embedded />
+        </Modal>
+      )}
       {showBulkUpdateModal && (
         <Modal title="Bulk update" onClose={closeBulkUpdateModal} maxWidthClass="max-w-6xl">
           <div className="space-y-4">

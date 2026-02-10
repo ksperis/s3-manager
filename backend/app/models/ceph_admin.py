@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime
-from typing import Optional, Literal, Union
+from typing import Any, Optional, Literal, Union
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -21,6 +21,13 @@ class CephAdminEndpoint(BaseModel):
 class CephAdminRgwAccountSummary(BaseModel):
     account_id: str
     account_name: Optional[str] = None
+    email: Optional[str] = None
+    max_users: Optional[int] = None
+    max_buckets: Optional[int] = None
+    quota_max_size_bytes: Optional[int] = None
+    quota_max_objects: Optional[int] = None
+    bucket_count: Optional[int] = None
+    user_count: Optional[int] = None
 
 
 class CephAdminRgwUserSummary(BaseModel):
@@ -64,6 +71,106 @@ class PaginatedCephAdminAccountsResponse(PaginatedResponse):
 
 class PaginatedCephAdminUsersResponse(PaginatedResponse):
     items: list[CephAdminRgwUserSummary]
+
+
+class CephAdminRgwQuotaConfig(BaseModel):
+    enabled: Optional[bool] = None
+    max_size_bytes: Optional[int] = None
+    max_objects: Optional[int] = None
+
+
+class CephAdminRgwAccessKey(BaseModel):
+    access_key: str
+    secret_key: Optional[str] = None
+    status: Optional[str] = None
+    is_active: Optional[bool] = None
+    created_at: Optional[datetime] = None
+    user: Optional[str] = None
+    subuser: Optional[str] = None
+
+
+class CephAdminRgwGeneratedAccessKey(BaseModel):
+    access_key: str
+    secret_key: str
+
+
+class CephAdminRgwAccessKeyStatusChange(BaseModel):
+    active: bool
+
+
+class CephAdminRgwAccountDetail(BaseModel):
+    account_id: str
+    account_name: Optional[str] = None
+    email: Optional[str] = None
+    max_users: Optional[int] = None
+    max_buckets: Optional[int] = None
+    bucket_count: Optional[int] = None
+    user_count: Optional[int] = None
+    quota: Optional[CephAdminRgwQuotaConfig] = None
+
+
+class CephAdminRgwUserDetail(BaseModel):
+    uid: str
+    tenant: Optional[str] = None
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+    account_id: Optional[str] = None
+    account_name: Optional[str] = None
+    suspended: Optional[bool] = None
+    admin: Optional[bool] = None
+    system: Optional[bool] = None
+    account_root: Optional[bool] = None
+    max_buckets: Optional[int] = None
+    op_mask: Optional[str] = None
+    caps: list[str] = Field(default_factory=list)
+    quota: Optional[CephAdminRgwQuotaConfig] = None
+    keys: list[CephAdminRgwAccessKey] = Field(default_factory=list)
+
+
+class CephAdminRgwUserCapsUpdate(BaseModel):
+    mode: Literal["replace", "add", "remove"] = "replace"
+    values: list[str] = Field(default_factory=list)
+
+
+class CephAdminRgwAccountConfigUpdate(BaseModel):
+    account_name: Optional[str] = None
+    email: Optional[str] = None
+    max_users: Optional[int] = Field(default=None, ge=0)
+    max_buckets: Optional[int] = Field(default=None, ge=0)
+    quota_enabled: Optional[bool] = None
+    quota_max_size_bytes: Optional[int] = Field(default=None, ge=0)
+    quota_max_objects: Optional[int] = Field(default=None, ge=0)
+    extra_params: dict[str, Any] = Field(default_factory=dict)
+
+
+class CephAdminRgwUserConfigUpdate(BaseModel):
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+    suspended: Optional[bool] = None
+    max_buckets: Optional[int] = Field(default=None, ge=0)
+    op_mask: Optional[str] = None
+    admin: Optional[bool] = None
+    system: Optional[bool] = None
+    account_root: Optional[bool] = None
+    quota_enabled: Optional[bool] = None
+    quota_max_size_bytes: Optional[int] = Field(default=None, ge=0)
+    quota_max_objects: Optional[int] = Field(default=None, ge=0)
+    caps: Optional[CephAdminRgwUserCapsUpdate] = None
+    extra_params: dict[str, Any] = Field(default_factory=dict)
+
+
+class CephAdminBucketUsagePoint(BaseModel):
+    name: str
+    used_bytes: Optional[int] = None
+    object_count: Optional[int] = None
+
+
+class CephAdminEntityMetrics(BaseModel):
+    total_bytes: Optional[int] = None
+    total_objects: Optional[int] = None
+    bucket_count: int = 0
+    bucket_usage: list[CephAdminBucketUsagePoint] = Field(default_factory=list)
+    generated_at: datetime
 
 
 BucketFilterField = Literal[
@@ -142,3 +249,94 @@ class CephAdminBucketFilterRule(BaseModel):
 class CephAdminBucketFilterQuery(BaseModel):
     match: Literal["all", "any"] = "all"
     rules: list[CephAdminBucketFilterRule] = Field(default_factory=list)
+
+
+UserFilterField = Literal[
+    "uid",
+    "tenant",
+    "account_id",
+    "account_name",
+    "full_name",
+    "email",
+    "suspended",
+    "max_buckets",
+    "quota_max_size_bytes",
+    "quota_max_objects",
+]
+UserFilterOp = Literal[
+    "eq",
+    "neq",
+    "contains",
+    "starts_with",
+    "ends_with",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "in",
+    "not_in",
+    "is_null",
+    "not_null",
+]
+
+
+class CephAdminUserFilterRule(BaseModel):
+    field: UserFilterField
+    op: UserFilterOp
+    value: Optional[Union[str, int, float, bool, list[str], list[int], list[float], list[bool]]] = None
+
+    @model_validator(mode="after")
+    def validate_rule(self):
+        if self.op not in ("is_null", "not_null") and self.value is None:
+            raise ValueError("User filter rule requires value.")
+        return self
+
+
+class CephAdminUserFilterQuery(BaseModel):
+    match: Literal["all", "any"] = "all"
+    rules: list[CephAdminUserFilterRule] = Field(default_factory=list)
+
+
+AccountFilterField = Literal[
+    "account_id",
+    "account_name",
+    "email",
+    "max_users",
+    "max_buckets",
+    "quota_max_size_bytes",
+    "quota_max_objects",
+    "bucket_count",
+    "user_count",
+]
+AccountFilterOp = Literal[
+    "eq",
+    "neq",
+    "contains",
+    "starts_with",
+    "ends_with",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "in",
+    "not_in",
+    "is_null",
+    "not_null",
+]
+
+
+class CephAdminAccountFilterRule(BaseModel):
+    field: AccountFilterField
+    op: AccountFilterOp
+    value: Optional[Union[str, int, float, bool, list[str], list[int], list[float], list[bool]]] = None
+
+    @model_validator(mode="after")
+    def validate_rule(self):
+        if self.op not in ("is_null", "not_null") and self.value is None:
+            raise ValueError("Account filter rule requires value.")
+        return self
+
+
+class CephAdminAccountFilterQuery(BaseModel):
+    match: Literal["all", "any"] = "all"
+    rules: list[CephAdminAccountFilterRule] = Field(default_factory=list)

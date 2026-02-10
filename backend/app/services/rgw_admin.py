@@ -93,6 +93,9 @@ class RGWAdminClient:
         uid = re.sub(r"[^a-z0-9_.-]", "-", uid)
         return uid
 
+    def _to_rgw_bool(self, value: bool) -> str:
+        return "true" if value else "false"
+
     def create_user(
         self,
         uid: str,
@@ -303,6 +306,48 @@ class RGWAdminClient:
                 return existing
         return result
 
+    def update_account(
+        self,
+        account_id: str,
+        *,
+        account_name: Optional[str] = None,
+        email: Optional[str] = None,
+        max_users: Optional[int] = None,
+        max_buckets: Optional[int] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
+            "id": account_id,
+            "account-id": account_id,
+            "format": "json",
+        }
+        if account_name is not None:
+            params["name"] = account_name
+        if email is not None:
+            params["email"] = email
+        if max_users is not None:
+            value = int(max_users)
+            params["max_users"] = value
+            params["max-users"] = value
+        if max_buckets is not None:
+            value = int(max_buckets)
+            params["max_buckets"] = value
+            params["max-buckets"] = value
+        if isinstance(extra_params, dict):
+            for key, value in extra_params.items():
+                normalized_key = str(key or "").strip()
+                if not normalized_key or value is None:
+                    continue
+                params[normalized_key] = value
+        return self._request(
+            "POST",
+            "/admin/account",
+            params=params,
+            data=None,
+            allow_not_found=True,
+            allow_not_implemented=True,
+        )
+
     def delete_account(self, account_id: str) -> Dict[str, Any]:
         params: Dict[str, Any] = {
             "id": account_id,
@@ -365,22 +410,52 @@ class RGWAdminClient:
             return None, None
         return extract_quota_limits(payload, keys=("quota", "account_quota"))
 
-    def list_accounts(self) -> list[Dict[str, Any]]:
+    def list_accounts(self, include_details: bool = True) -> list[Dict[str, Any]]:
         params: Dict[str, Any] = {"format": "json"}
         result = self._request("GET", "/admin/metadata/account", params=params)
         if not isinstance(result, list):
             return []
         accounts: list[Dict[str, Any]] = []
-        for account_id in result:
-            if not account_id:
+        for account_id_entry in result:
+            if not account_id_entry:
                 continue
-            detail = self.get_account(str(account_id), allow_not_found=True)
+            account_id_value: Optional[str] = None
+            account_name_value: Optional[str] = None
+            if isinstance(account_id_entry, dict):
+                raw_id = account_id_entry.get("account_id") or account_id_entry.get("id")
+                if raw_id:
+                    account_id_value = str(raw_id).strip()
+                raw_name = account_id_entry.get("account_name") or account_id_entry.get("name") or account_id_entry.get("display_name")
+                if isinstance(raw_name, str) and raw_name.strip():
+                    account_name_value = raw_name.strip()
+            else:
+                account_id_value = str(account_id_entry).strip()
+            if not account_id_value:
+                continue
+            if not include_details:
+                if isinstance(account_id_entry, dict):
+                    normalized: Dict[str, Any] = dict(account_id_entry)
+                    normalized.setdefault("account_id", account_id_value)
+                    normalized.setdefault("id", account_id_value)
+                    if account_name_value:
+                        normalized.setdefault("account_name", account_name_value)
+                    accounts.append(normalized)
+                else:
+                    base: Dict[str, Any] = {"account_id": account_id_value, "id": account_id_value}
+                    if account_name_value:
+                        base["account_name"] = account_name_value
+                    accounts.append(base)
+                continue
+            detail = self.get_account(account_id_value, allow_not_found=True)
             if detail and not detail.get("not_found"):
-                detail.setdefault("account_id", detail.get("id") or str(account_id))
-                detail.setdefault("account_name", detail.get("name") or detail.get("display_name"))
+                detail.setdefault("account_id", detail.get("id") or account_id_value)
+                detail.setdefault("account_name", detail.get("name") or detail.get("display_name") or account_name_value)
                 accounts.append(detail)
             else:
-                accounts.append({"account_id": str(account_id), "id": str(account_id)})
+                fallback: Dict[str, Any] = {"account_id": account_id_value, "id": account_id_value}
+                if account_name_value:
+                    fallback["account_name"] = account_name_value
+                accounts.append(fallback)
         return accounts
 
     def list_users(self) -> list[Dict[str, Any]]:
@@ -395,6 +470,63 @@ class RGWAdminClient:
             else:
                 normalized.append({"user": str(entry)})
         return normalized
+
+    def update_user(
+        self,
+        uid: str,
+        *,
+        tenant: Optional[str] = None,
+        display_name: Optional[str] = None,
+        email: Optional[str] = None,
+        suspended: Optional[bool] = None,
+        max_buckets: Optional[int] = None,
+        op_mask: Optional[str] = None,
+        admin: Optional[bool] = None,
+        system: Optional[bool] = None,
+        account_root: Optional[bool] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"uid": uid, "format": "json"}
+        if tenant:
+            params["tenant"] = tenant
+        if display_name is not None:
+            params["display-name"] = display_name
+        if email is not None:
+            params["email"] = email
+        if suspended is not None:
+            params["suspended"] = self._to_rgw_bool(bool(suspended))
+        if max_buckets is not None:
+            value = int(max_buckets)
+            params["max-buckets"] = value
+            params["max_buckets"] = value
+        if op_mask is not None:
+            params["op-mask"] = op_mask
+        if admin is not None:
+            params["admin"] = self._to_rgw_bool(bool(admin))
+        if system is not None:
+            params["system"] = self._to_rgw_bool(bool(system))
+        if account_root is not None:
+            params["account-root"] = self._to_rgw_bool(bool(account_root))
+        if isinstance(extra_params, dict):
+            for key, value in extra_params.items():
+                normalized_key = str(key or "").strip()
+                if not normalized_key or value is None:
+                    continue
+                params[normalized_key] = value
+        return self._request(
+            "PUT",
+            "/admin/user",
+            params=params,
+            data=None,
+            allow_not_found=True,
+            allow_not_implemented=True,
+        )
+
+    def list_user_keys(self, uid: str, tenant: Optional[str] = None) -> list[Dict[str, Any]]:
+        payload = self.get_user(uid, tenant=tenant, allow_not_found=True)
+        if not payload:
+            return []
+        return self._extract_keys(payload)
 
     def list_topics(self, account_id: Optional[str] = None) -> Optional[list[Dict[str, Any]]]:
         params: Dict[str, Any] = {"format": "json", "list": ""}

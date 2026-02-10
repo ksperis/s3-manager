@@ -229,8 +229,15 @@ function randomLifecycleId() {
 
 type BucketDetailMode = "manager" | "ceph-admin";
 
-export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDetailMode }) {
-  const { bucketName } = useParams<{ bucketName: string }>();
+type BucketDetailPageProps = {
+  mode?: BucketDetailMode;
+  bucketNameOverride?: string;
+  embedded?: boolean;
+};
+
+export default function BucketDetailPage({ mode = "manager", bucketNameOverride, embedded = false }: BucketDetailPageProps) {
+  const params = useParams<{ bucketName: string }>();
+  const bucketName = bucketNameOverride ?? params.bucketName;
   const isCephAdmin = mode === "ceph-admin";
   const { accounts, selectedS3AccountId, accountIdForApi, requiresS3AccountSelection } = useS3AccountContext();
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
@@ -1869,17 +1876,19 @@ export default function BucketDetailPage({ mode = "manager" }: { mode?: BucketDe
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title={bucketName ?? "Bucket"}
-        description={
-          bucketError ||
-          (isCephAdmin
-            ? "Bucket configuration and permissions (Admin Ops + S3)."
-            : "Bucket overview, objects, properties, permissions, metrics.")
-        }
-        breadcrumbs={breadcrumbs}
-        actions={[{ label: "← Back to buckets", to: basePath, variant: "ghost" }]}
-      />
+      {!embedded && (
+        <PageHeader
+          title={bucketName ?? "Bucket"}
+          description={
+            bucketError ||
+            (isCephAdmin
+              ? "Bucket configuration and permissions (Admin Ops + S3)."
+              : "Bucket overview, objects, properties, permissions, metrics.")
+          }
+          breadcrumbs={breadcrumbs}
+          actions={[{ label: "← Back to buckets", to: basePath, variant: "ghost" }]}
+        />
+      )}
 
       {isCephAdmin && !endpointId && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">

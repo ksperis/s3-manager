@@ -11,6 +11,7 @@ export type AccountUserLink = {
   user_id: number;
   account_role?: string | null;
   account_admin?: boolean | null;
+  user_email?: string | null;
 };
 
 export type S3Account = {
