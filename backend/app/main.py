@@ -23,6 +23,7 @@ from app.routers.admin import s3_users as admin_s3_users
 from app.routers.admin import s3_connections as admin_s3_connections
 from app.routers.admin import storage_endpoints as admin_storage_endpoints
 from app.routers.admin import settings as admin_settings
+from app.routers.admin import key_rotation as admin_key_rotation
 from app.routers.admin import onboarding as admin_onboarding
 from app.routers.admin import automation as admin_automation
 from app.routers.admin import healthchecks as admin_healthchecks
@@ -98,6 +99,7 @@ app.include_router(admin_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_users.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_storage_endpoints.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_settings.router, prefix=settings.api_v1_prefix)
+app.include_router(admin_key_rotation.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_onboarding.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_automation.router, prefix=settings.api_v1_prefix)
 app.include_router(admin_healthchecks.router, prefix=settings.api_v1_prefix)

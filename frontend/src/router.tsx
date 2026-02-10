@@ -21,6 +21,7 @@ import GeneralSettingsPage from "./features/admin/GeneralSettingsPage";
 import ManagerSettingsPage from "./features/admin/ManagerSettingsPage";
 import AdminPortalSettingsPage from "./features/admin/PortalSettingsPage";
 import BrowserSettingsPage from "./features/admin/BrowserSettingsPage";
+import KeyRotationPage from "./features/admin/KeyRotationPage";
 import ApiTokensPage from "./features/admin/ApiTokensPage";
 import FeatureDisabledPage from "./features/shared/FeatureDisabledPage";
 import BucketsPage from "./features/manager/BucketsPage";
@@ -90,6 +91,7 @@ const buildAdminNav = (
     { to: "/admin/manager-settings", label: "Manager" },
     { to: "/admin/browser-settings", label: "Browser", disabled: !browserEnabled },
     { to: "/admin/portal-settings", label: "Portal", disabled: !portalEnabled },
+    { to: "/admin/key-rotation", label: "Key Rotation" },
     { to: "/admin/api-tokens", label: "API Tokens" },
   ];
 
@@ -296,6 +298,7 @@ export default function AppRouter() {
               <Route path="api-tokens" element={<ApiTokensPage />} />
               <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
               <Route path="browser-settings" element={<BrowserSettingsPage />} />
+              <Route path="key-rotation" element={<KeyRotationPage />} />
             </Route>
           </Route>
 

@@ -195,7 +195,7 @@ class RGWAdminClient:
             params=params,
             allow_not_implemented=True,
         )
-        if response.get("not_implemented"):
+        if isinstance(response, dict) and response.get("not_implemented"):
             raise RGWAdminError("RGW does not support updating access key status")
 
     def _extract_keys(self, data: Any) -> list[dict]:
