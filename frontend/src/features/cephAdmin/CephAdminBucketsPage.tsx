@@ -766,7 +766,8 @@ const defaultAdvancedFilter: AdvancedFilterState = {
 const buildAdvancedFilterPayload = (
   basicFilter: string,
   advanced: AdvancedFilterState | null,
-  taggedBuckets: string[] | null
+  taggedBuckets: string[] | null,
+  allowStatsFilters: boolean = true
 ) => {
   const trimmedFilter = basicFilter.trim();
   if (!advanced && !taggedBuckets) {
@@ -792,14 +793,16 @@ const buildAdvancedFilterPayload = (
       if (!Number.isFinite(value)) return;
       rules.push({ field, op, value });
     };
-    addNumericRule("used_bytes", "gte", advanced.minUsedBytes);
-    addNumericRule("used_bytes", "lte", advanced.maxUsedBytes);
-    addNumericRule("object_count", "gte", advanced.minObjects);
-    addNumericRule("object_count", "lte", advanced.maxObjects);
-    addNumericRule("quota_max_size_bytes", "gte", advanced.minQuotaBytes);
-    addNumericRule("quota_max_size_bytes", "lte", advanced.maxQuotaBytes);
-    addNumericRule("quota_max_objects", "gte", advanced.minQuotaObjects);
-    addNumericRule("quota_max_objects", "lte", advanced.maxQuotaObjects);
+    if (allowStatsFilters) {
+      addNumericRule("used_bytes", "gte", advanced.minUsedBytes);
+      addNumericRule("used_bytes", "lte", advanced.maxUsedBytes);
+      addNumericRule("object_count", "gte", advanced.minObjects);
+      addNumericRule("object_count", "lte", advanced.maxObjects);
+      addNumericRule("quota_max_size_bytes", "gte", advanced.minQuotaBytes);
+      addNumericRule("quota_max_size_bytes", "lte", advanced.maxQuotaBytes);
+      addNumericRule("quota_max_objects", "gte", advanced.minQuotaObjects);
+      addNumericRule("quota_max_objects", "lte", advanced.maxQuotaObjects);
+    }
 
     (Object.keys(advanced.features) as FeatureKey[]).forEach((key) => {
       const state = advanced.features[key];
@@ -818,18 +821,21 @@ const buildAdvancedFilterPayload = (
   return JSON.stringify({ match: "all", rules });
 };
 
-const hasAdvancedFilters = (advanced: AdvancedFilterState | null) => {
+const hasAdvancedFilters = (advanced: AdvancedFilterState | null, allowStatsFilters: boolean = true) => {
   if (!advanced) return false;
   if (advanced.tenant.trim() || advanced.owner.trim()) return true;
   if (
-    advanced.minUsedBytes ||
-    advanced.maxUsedBytes ||
-    advanced.minObjects ||
-    advanced.maxObjects ||
-    advanced.minQuotaBytes ||
-    advanced.maxQuotaBytes ||
-    advanced.minQuotaObjects ||
-    advanced.maxQuotaObjects
+    allowStatsFilters &&
+    (
+      advanced.minUsedBytes ||
+      advanced.maxUsedBytes ||
+      advanced.minObjects ||
+      advanced.maxObjects ||
+      advanced.minQuotaBytes ||
+      advanced.maxQuotaBytes ||
+      advanced.minQuotaObjects ||
+      advanced.maxQuotaObjects
+    )
   ) {
     return true;
   }
@@ -1063,6 +1069,7 @@ const getTagColors = (tag: string) => {
 export default function CephAdminBucketsPage() {
   const location = useLocation();
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
+  const usageFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
   const [filter, setFilter] = useState("");
   const [filterValue, setFilterValue] = useState("");
   const [page, setPage] = useState(1);
@@ -1307,7 +1314,7 @@ export default function CephAdminBucketsPage() {
   }, [visibleColumns]);
 
   const advancedStatsRequired = useMemo(() => {
-    if (!advancedApplied) return false;
+    if (!usageFeatureEnabled || !advancedApplied) return false;
     return Boolean(
       advancedApplied.minUsedBytes ||
         advancedApplied.maxUsedBytes ||
@@ -1318,9 +1325,10 @@ export default function CephAdminBucketsPage() {
         advancedApplied.minQuotaObjects ||
         advancedApplied.maxQuotaObjects
     );
-  }, [advancedApplied]);
+  }, [advancedApplied, usageFeatureEnabled]);
 
   const requiresStats = useMemo(() => {
+    if (!usageFeatureEnabled) return false;
     if (advancedStatsRequired) return true;
     return (
       visibleColumns.includes("used_bytes") ||
@@ -1329,9 +1337,12 @@ export default function CephAdminBucketsPage() {
       visibleColumns.includes("quota_max_objects") ||
       visibleColumns.includes("quota_status")
     );
-  }, [advancedStatsRequired, visibleColumns]);
+  }, [advancedStatsRequired, usageFeatureEnabled, visibleColumns]);
   const sortRequiresStats = useMemo(() => sort.field === "used_bytes" || sort.field === "object_count", [sort.field]);
-  const baseRequiresStats = useMemo(() => advancedStatsRequired || sortRequiresStats, [advancedStatsRequired, sortRequiresStats]);
+  const baseRequiresStats = useMemo(
+    () => usageFeatureEnabled && (advancedStatsRequired || sortRequiresStats),
+    [advancedStatsRequired, sortRequiresStats, usageFeatureEnabled]
+  );
 
   const availableUiTags = useMemo(() => {
     const tags: string[] = [];
@@ -1358,8 +1369,8 @@ export default function CephAdminBucketsPage() {
   }, [tagFilters, tagFilterMode, uiTags]);
 
   const advancedFilterParam = useMemo(
-    () => buildAdvancedFilterPayload("", advancedApplied, taggedBuckets),
-    [advancedApplied, taggedBuckets]
+    () => buildAdvancedFilterPayload("", advancedApplied, taggedBuckets, usageFeatureEnabled),
+    [advancedApplied, taggedBuckets, usageFeatureEnabled]
   );
 
   const {
@@ -1695,6 +1706,12 @@ export default function CephAdminBucketsPage() {
     showBulkUpdateModal,
   ]);
 
+  useEffect(() => {
+    if (!usageFeatureEnabled && bulkOperation === "set_quota") {
+      setBulkOperation("");
+    }
+  }, [bulkOperation, usageFeatureEnabled]);
+
   const openBulkUpdateModal = () => {
     setShowBulkUpdateModal(true);
     setBulkOperation("");
@@ -1814,7 +1831,7 @@ export default function CephAdminBucketsPage() {
       page: 1,
       page_size: 5,
       advanced_filter: advancedFilter,
-      with_stats: true,
+      with_stats: usageFeatureEnabled,
     });
     const match =
       response.items.find((item) => normalizeBucketName(item.name) === normalizeBucketName(bucketName)) ??
@@ -2656,7 +2673,7 @@ export default function CephAdminBucketsPage() {
     setPage(1);
   };
 
-  const advancedFilterActive = hasAdvancedFilters(advancedApplied) || tagFilters.length > 0;
+  const advancedFilterActive = hasAdvancedFilters(advancedApplied, usageFeatureEnabled) || tagFilters.length > 0;
   const quickFilterActive = filterValue.trim().length > 0;
   const filtersActive = quickFilterActive || advancedFilterActive;
   const columnsCustomized = useMemo(() => {
@@ -3468,21 +3485,21 @@ export default function CephAdminBucketsPage() {
                   <button
                     type="button"
                     onClick={openBulkUpdateModal}
-                    className="rounded-md bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600"
+                    className="rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
                   >
                     Bulk update
                   </button>
                   <button
                     type="button"
                     onClick={() => openTagEditor(Array.from(selectedBuckets))}
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
                   >
                     Edit UI tags
                   </button>
                   <button
                     type="button"
                     onClick={clearSelection}
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
                   >
                     Clear selection
                   </button>
@@ -3606,7 +3623,9 @@ export default function CephAdminBucketsPage() {
                   className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 >
                   <option value="">Select an operation</option>
-                  <option value="set_quota">Set bucket quota</option>
+                  <option value="set_quota" disabled={!usageFeatureEnabled}>
+                    {usageFeatureEnabled ? "Set bucket quota" : "Set bucket quota (usage disabled)"}
+                  </option>
                   <option value="add_public_access_block">Add block public access</option>
                   <option value="remove_public_access_block">Remove block public access</option>
                   <option value="enable_versioning">Enable versioning</option>
