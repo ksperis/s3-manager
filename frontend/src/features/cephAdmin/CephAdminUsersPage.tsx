@@ -214,7 +214,8 @@ const bucketOwnerFilterForUser = (user: CephAdminRgwUser) => {
 
 export default function CephAdminUsersPage() {
   const navigate = useNavigate();
-  const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
+  const { selectedEndpointId, selectedEndpoint, selectedEndpointAccess } = useCephAdminEndpoint();
+  const canViewMetrics = Boolean(selectedEndpointAccess?.can_metrics) && (selectedEndpoint?.capabilities?.usage !== false);
   const [items, setItems] = useState<CephAdminRgwUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -966,6 +967,7 @@ export default function CephAdminUsersPage() {
           endpointId={selectedEndpointId}
           uid={editingTarget.uid}
           tenant={editingTarget.tenant}
+          canViewMetrics={canViewMetrics}
           onClose={() => setEditingTarget(null)}
           onSaved={applyUpdatedUser}
         />

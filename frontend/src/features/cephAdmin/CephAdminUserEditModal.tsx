@@ -28,6 +28,7 @@ type Props = {
   endpointId: number;
   uid: string;
   tenant?: string | null;
+  canViewMetrics?: boolean;
   onClose: () => void;
   onSaved?: (detail: CephAdminRgwUserDetail) => void;
 };
@@ -114,7 +115,14 @@ const capsTextToValues = (value: string): string[] => {
   return Array.from(new Set(parts));
 };
 
-export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClose, onSaved }: Props) {
+export default function CephAdminUserEditModal({
+  endpointId,
+  uid,
+  tenant,
+  canViewMetrics = true,
+  onClose,
+  onSaved,
+}: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [detail, setDetail] = useState<CephAdminRgwUserDetail | null>(null);
   const [keys, setKeys] = useState<CephAdminRgwAccessKey[]>([]);
@@ -208,7 +216,7 @@ export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClos
   }, [endpointId, uid, tenant]);
 
   useEffect(() => {
-    if (activeTab !== "metrics") return;
+    if (!canViewMetrics || activeTab !== "metrics") return;
     let cancelled = false;
     const load = async () => {
       setMetricsLoading(true);
@@ -233,7 +241,13 @@ export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClos
     return () => {
       cancelled = true;
     };
-  }, [activeTab, endpointId, uid, tenant]);
+  }, [activeTab, canViewMetrics, endpointId, uid, tenant]);
+
+  useEffect(() => {
+    if (!canViewMetrics && activeTab === "metrics") {
+      setActiveTab("overview");
+    }
+  }, [activeTab, canViewMetrics]);
 
   const submit = async () => {
     setSaveError(null);
@@ -787,15 +801,17 @@ export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClos
     </section>
   );
 
-  const tabs = useMemo(
-    () => [
+  const tabs = useMemo(() => {
+    const baseTabs = [
       { id: "overview", label: "Overview", content: overviewTab },
       { id: "ceph", label: "Ceph Admin", content: cephTab },
       { id: "s3", label: "S3 API", content: s3Tab },
-      { id: "metrics", label: "Metrics", content: metricsTab },
-    ],
-    [overviewTab, cephTab, s3Tab, metricsTab]
-  );
+    ];
+    if (canViewMetrics) {
+      baseTabs.push({ id: "metrics", label: "Metrics", content: metricsTab });
+    }
+    return baseTabs;
+  }, [canViewMetrics, cephTab, metricsTab, overviewTab, s3Tab]);
 
   return (
     <Modal title={`Configure user · ${identityLabel}`} onClose={onClose} maxWidthClass="max-w-6xl" maxBodyHeightClass="max-h-[85vh]">

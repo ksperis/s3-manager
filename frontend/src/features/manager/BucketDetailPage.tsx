@@ -396,6 +396,12 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     }
     return selectedS3Account?.storage_endpoint_capabilities?.static_website ?? false;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
+  const usageFeatureEnabled = useMemo(() => {
+    if (isCephAdmin) {
+      return selectedEndpoint?.capabilities?.usage ?? true;
+    }
+    return selectedS3Account?.storage_endpoint_capabilities?.usage ?? true;
+  }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
   const accountId = accountIdForApi ?? null;
   const hasAccountContext = !requiresS3AccountSelection || accountId !== null;
   const endpointId = selectedEndpointId ?? null;
@@ -546,12 +552,12 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
           page: 1,
           page_size: 50,
           filter: bucketName,
-          with_stats: true,
+          with_stats: usageFeatureEnabled,
         });
         const found = response.items.find((b) => b.name === bucketName) ?? null;
         setBucket(found ?? null);
       } else {
-        const data = await listBuckets(accountId);
+        const data = await listBuckets(accountId, { with_stats: usageFeatureEnabled });
         const found = data.find((b) => b.name === bucketName) ?? null;
         setBucket(found);
       }
@@ -560,7 +566,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     } finally {
       setLoadingBucket(false);
     }
-  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, usageFeatureEnabled]);
 
   useEffect(() => {
     if (activeTab !== "overview" && activeTab !== "metrics") return;

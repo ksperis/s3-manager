@@ -32,7 +32,13 @@ function extractError(err: unknown, fallback: string): string {
 }
 
 export default function CephAdminMetricsPage() {
-  const { selectedEndpointId, selectedEndpoint, loading: endpointLoading } = useCephAdminEndpoint();
+  const {
+    selectedEndpointId,
+    selectedEndpoint,
+    selectedEndpointAccess,
+    selectedEndpointAccessLoading,
+    loading: endpointLoading,
+  } = useCephAdminEndpoint();
   const [storage, setStorage] = useState<CephAdminClusterStorageMetrics | null>(null);
   const [storageLoading, setStorageLoading] = useState<boolean>(true);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -42,14 +48,20 @@ export default function CephAdminMetricsPage() {
   const [trafficError, setTrafficError] = useState<string | null>(null);
 
   const [window, setWindow] = useState<TrafficWindow>("week");
+  const metricsCredentialsReady = !selectedEndpointAccessLoading && Boolean(selectedEndpointAccess?.can_metrics);
+  const usageFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
+  const trafficFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
+  const canLoadStorage = selectedEndpointId != null && metricsCredentialsReady && usageFeatureEnabled;
+  const canLoadTraffic = selectedEndpointId != null && metricsCredentialsReady && trafficFeatureEnabled;
 
   useEffect(() => {
     let cancelled = false;
     async function loadStorage() {
-      if (endpointLoading) {
+      if (endpointLoading || selectedEndpointAccessLoading) {
         return;
       }
-      if (selectedEndpointId == null) {
+      const endpointId = selectedEndpointId;
+      if (!canLoadStorage || endpointId == null) {
         setStorage(null);
         setStorageLoading(false);
         return;
@@ -58,7 +70,7 @@ export default function CephAdminMetricsPage() {
       setStorageLoading(true);
       setStorageError(null);
       try {
-        const payload = await fetchCephAdminClusterStorage(selectedEndpointId);
+        const payload = await fetchCephAdminClusterStorage(endpointId);
         if (!cancelled) {
           setStorage(payload);
         }
@@ -77,15 +89,16 @@ export default function CephAdminMetricsPage() {
     return () => {
       cancelled = true;
     };
-  }, [endpointLoading, selectedEndpointId]);
+  }, [canLoadStorage, endpointLoading, selectedEndpointAccessLoading, selectedEndpointId]);
 
   useEffect(() => {
     let cancelled = false;
     async function loadTraffic() {
-      if (endpointLoading) {
+      if (endpointLoading || selectedEndpointAccessLoading) {
         return;
       }
-      if (selectedEndpointId == null) {
+      const endpointId = selectedEndpointId;
+      if (!canLoadTraffic || endpointId == null) {
         setTraffic(null);
         setTrafficLoading(false);
         return;
@@ -94,7 +107,7 @@ export default function CephAdminMetricsPage() {
       setTrafficLoading(true);
       setTrafficError(null);
       try {
-        const payload = await fetchCephAdminClusterTraffic(selectedEndpointId, window);
+        const payload = await fetchCephAdminClusterTraffic(endpointId, window);
         if (!cancelled) {
           setTraffic(payload);
         }
@@ -113,7 +126,7 @@ export default function CephAdminMetricsPage() {
     return () => {
       cancelled = true;
     };
-  }, [endpointLoading, selectedEndpointId, window]);
+  }, [canLoadTraffic, endpointLoading, selectedEndpointAccessLoading, selectedEndpointId, window]);
 
   const storageTotals = storage?.storage_totals;
   const ownerUsageItems = useMemo(
@@ -139,8 +152,20 @@ export default function CephAdminMetricsPage() {
 
   const endpointRequiredError =
     !endpointLoading && selectedEndpointId == null ? "No Ceph endpoint selected for metrics." : null;
-  const pageError = endpointRequiredError || storageError;
-  const missingTraffic = selectedEndpointId != null && !traffic && !trafficLoading && !trafficError;
+  const metricsUnavailableError =
+    !endpointLoading && !selectedEndpointAccessLoading && selectedEndpointId != null && !metricsCredentialsReady
+      ? "Supervision credentials are not configured for this endpoint."
+      : null;
+  const pageError = endpointRequiredError || metricsUnavailableError || storageError;
+  const storageDisabledMessage =
+    selectedEndpointId != null && metricsCredentialsReady && !usageFeatureEnabled
+      ? "Storage metrics are disabled for this endpoint."
+      : null;
+  const trafficDisabledMessage =
+    selectedEndpointId != null && metricsCredentialsReady && !trafficFeatureEnabled
+      ? "Traffic metrics are disabled for this endpoint."
+      : null;
+  const missingTraffic = canLoadTraffic && !traffic && !trafficLoading && !trafficError;
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
@@ -170,6 +195,8 @@ export default function CephAdminMetricsPage() {
       </div>
 
       {pageError && <PageBanner tone="warning">{pageError}</PageBanner>}
+      {!pageError && storageDisabledMessage && <PageBanner tone="info">{storageDisabledMessage}</PageBanner>}
+      {!pageError && trafficDisabledMessage && <PageBanner tone="info">{trafficDisabledMessage}</PageBanner>}
 
       <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
         <header className="flex flex-col justify-between gap-2 md:flex-row md:items-center">

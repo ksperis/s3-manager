@@ -43,6 +43,7 @@ import ManagerUserPoliciesPage from "./features/manager/ManagerUserPoliciesPage"
 import ManagerGroupPoliciesPage from "./features/manager/ManagerGroupPoliciesPage";
 import ManagerMetricsPage from "./features/manager/ManagerMetricsPage";
 import TopicsPage from "./features/manager/TopicsPage";
+import { useS3AccountContext } from "./features/manager/S3AccountContext";
 import PortalLayout from "./features/portal/PortalLayout";
 import PortalDashboard from "./features/portal/PortalDashboard";
 import PortalBucketsPage from "./features/portal/PortalBucketsPage";
@@ -273,6 +274,19 @@ function RequireBrowserSurface({ surface }: { surface: "root" | "manager" | "por
   return <Outlet />;
 }
 
+function RequireManagerIamFeature() {
+  const { accounts, selectedS3AccountId, requiresS3AccountSelection, hasS3AccountContext } = useS3AccountContext();
+  if (!requiresS3AccountSelection || !hasS3AccountContext) {
+    return <Outlet />;
+  }
+  const selected = accounts.find((account) => account.id === selectedS3AccountId) ?? null;
+  const iamEnabled = selected?.storage_endpoint_capabilities?.iam !== false;
+  if (!iamEnabled) {
+    return <FeatureDisabledPage feature="IAM" />;
+  }
+  return <Outlet />;
+}
+
 export default function AppRouter() {
   const router = useMemo(() => {
     const routes = createRoutesFromElements(
@@ -325,16 +339,18 @@ export default function AppRouter() {
                 <Route element={<RequireBrowserSurface surface="manager" />}>
                   <Route path="browser" element={<ManagerBrowserPage />} />
                 </Route>
-                <Route path="users" element={<ManagerUsersPage />} />
-                <Route path="users/:userName/keys" element={<ManagerUserKeysPage />} />
-                <Route path="users/:userName/policies" element={<ManagerUserPoliciesPage />} />
                 <Route path="metrics" element={<ManagerMetricsPage />} />
-                <Route path="groups" element={<ManagerGroupsPage />} />
-                <Route path="groups/:groupName/policies" element={<ManagerGroupPoliciesPage />} />
-                <Route path="groups/:groupName/users" element={<ManagerGroupUsersPage />} />
-                <Route path="roles" element={<ManagerRolesPage />} />
-                <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
-                <Route path="iam/policies" element={<PoliciesPage />} />
+                <Route element={<RequireManagerIamFeature />}>
+                  <Route path="users" element={<ManagerUsersPage />} />
+                  <Route path="users/:userName/keys" element={<ManagerUserKeysPage />} />
+                  <Route path="users/:userName/policies" element={<ManagerUserPoliciesPage />} />
+                  <Route path="groups" element={<ManagerGroupsPage />} />
+                  <Route path="groups/:groupName/policies" element={<ManagerGroupPoliciesPage />} />
+                  <Route path="groups/:groupName/users" element={<ManagerGroupUsersPage />} />
+                  <Route path="roles" element={<ManagerRolesPage />} />
+                  <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
+                  <Route path="iam/policies" element={<PoliciesPage />} />
+                </Route>
                 <Route path="topics" element={<TopicsPage />} />
               </Route>
             </Route>

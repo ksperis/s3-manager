@@ -71,8 +71,9 @@ function ManagerShell() {
   const isS3User = selectedS3AccountType === "s3_user";
   const isConnection = selectedS3AccountType === "connection";
   const canManageBuckets = capabilities.can_manage_buckets !== false;
-  const canManageIam = !isS3User && !isConnection && capabilities.can_manage_iam !== false;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
+  const iamFeatureEnabled = endpointCaps ? endpointCaps.iam !== false : true;
+  const canManageIam = !isS3User && !isConnection && capabilities.can_manage_iam !== false && iamFeatureEnabled;
   const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
   const metricsFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
   const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;

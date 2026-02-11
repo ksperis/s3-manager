@@ -2102,9 +2102,10 @@ export default function BrowserPage({
       setBucketInspectorLoading(true);
       setBucketInspectorError(null);
       try {
+        const usageFeatureEnabled = effectiveCaps ? effectiveCaps.usage !== false : true;
         const staticWebsiteEnabled = effectiveCaps?.static_website ?? true;
         const results = await Promise.allSettled([
-          listBuckets(accountIdForApi),
+          listBuckets(accountIdForApi, { with_stats: usageFeatureEnabled }),
           getBucketProperties(accountIdForApi, bucketName),
           getBucketPolicy(accountIdForApi, bucketName),
           getBucketLogging(accountIdForApi, bucketName),

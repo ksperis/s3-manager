@@ -19,6 +19,7 @@ import UsageTile from "../../components/UsageTile";
 type Props = {
   endpointId: number;
   accountId: string;
+  canViewMetrics?: boolean;
   onClose: () => void;
   onSaved?: (detail: CephAdminRgwAccountDetail) => void;
 };
@@ -83,7 +84,13 @@ const formToQuotaBytes = (value: string, unit: QuotaUnit): number | null => {
   return Math.round(parsed * UNIT_FACTORS[unit]);
 };
 
-export default function CephAdminAccountEditModal({ endpointId, accountId, onClose, onSaved }: Props) {
+export default function CephAdminAccountEditModal({
+  endpointId,
+  accountId,
+  canViewMetrics = true,
+  onClose,
+  onSaved,
+}: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [detail, setDetail] = useState<CephAdminRgwAccountDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(true);
@@ -161,7 +168,7 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
   }, [accountId, endpointId]);
 
   useEffect(() => {
-    if (activeTab !== "metrics") return;
+    if (!canViewMetrics || activeTab !== "metrics") return;
     let cancelled = false;
     const load = async () => {
       setMetricsLoading(true);
@@ -186,7 +193,13 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
     return () => {
       cancelled = true;
     };
-  }, [activeTab, endpointId, accountId]);
+  }, [activeTab, canViewMetrics, endpointId, accountId]);
+
+  useEffect(() => {
+    if (!canViewMetrics && activeTab === "metrics") {
+      setActiveTab("overview");
+    }
+  }, [activeTab, canViewMetrics]);
 
   const submit = async () => {
     setSaveError(null);
@@ -624,14 +637,16 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
     </section>
   );
 
-  const tabs = useMemo(
-    () => [
+  const tabs = useMemo(() => {
+    const baseTabs = [
       { id: "overview", label: "Overview", content: overviewTab },
       { id: "config", label: "Configuration", content: configTab },
-      { id: "metrics", label: "Metrics", content: metricsTab },
-    ],
-    [overviewTab, configTab, metricsTab]
-  );
+    ];
+    if (canViewMetrics) {
+      baseTabs.push({ id: "metrics", label: "Metrics", content: metricsTab });
+    }
+    return baseTabs;
+  }, [canViewMetrics, configTab, metricsTab, overviewTab]);
 
   return (
     <Modal title={`Configure account · ${accountId}`} onClose={onClose} maxWidthClass="max-w-6xl" maxBodyHeightClass="max-h-[85vh]">

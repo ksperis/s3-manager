@@ -105,20 +105,28 @@ class BucketsService:
         account_uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
         admin_by_name: dict[str, dict] = {}
         if account_uid and with_stats:
-            try:
-                admin_list = self._admin_bucket_list(account, with_stats=True)
+            endpoint = getattr(account, "storage_endpoint", None)
+            usage_enabled = bool(resolve_feature_flags(endpoint).usage_enabled) if endpoint else True
+            if not usage_enabled:
                 logger.debug(
-                    "S3Account %s fetched %s bucket stats via RGW admin",
+                    "S3Account %s skipped RGW admin stats enrichment (usage feature disabled)",
                     account.rgw_account_id or account.id,
-                    len(admin_list),
                 )
-                admin_by_name = {
-                    entry.get("bucket") or entry.get("name"): entry
-                    for entry in admin_list
-                    if isinstance(entry, dict) and (entry.get("bucket") or entry.get("name"))
-                }
-            except RuntimeError as exc:
-                logger.warning("Unable to fetch admin bucket stats for %s: %s", account.rgw_account_id or account.id, exc)
+            else:
+                try:
+                    admin_list = self._admin_bucket_list(account, with_stats=True)
+                    logger.debug(
+                        "S3Account %s fetched %s bucket stats via RGW admin",
+                        account.rgw_account_id or account.id,
+                        len(admin_list),
+                    )
+                    admin_by_name = {
+                        entry.get("bucket") or entry.get("name"): entry
+                        for entry in admin_list
+                        if isinstance(entry, dict) and (entry.get("bucket") or entry.get("name"))
+                    }
+                except RuntimeError as exc:
+                    logger.warning("Unable to fetch admin bucket stats for %s: %s", account.rgw_account_id or account.id, exc)
         elif account_uid and not with_stats:
             logger.debug("S3Account %s skipped RGW admin stats enrichment", account.rgw_account_id or account.id)
         logger.debug("S3Account %s listed %s buckets", account.rgw_account_id or account.id, len(buckets))

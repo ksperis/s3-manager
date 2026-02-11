@@ -212,7 +212,8 @@ const rowKey = (account: CephAdminRgwAccount) => account.account_id;
 
 export default function CephAdminAccountsPage() {
   const navigate = useNavigate();
-  const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
+  const { selectedEndpointId, selectedEndpoint, selectedEndpointAccess } = useCephAdminEndpoint();
+  const canViewMetrics = Boolean(selectedEndpointAccess?.can_metrics) && (selectedEndpoint?.capabilities?.usage !== false);
   const [items, setItems] = useState<CephAdminRgwAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -963,6 +964,7 @@ export default function CephAdminAccountsPage() {
         <CephAdminAccountEditModal
           endpointId={selectedEndpointId}
           accountId={editingAccountId}
+          canViewMetrics={canViewMetrics}
           onClose={() => setEditingAccountId(null)}
           onSaved={applyUpdatedAccount}
         />

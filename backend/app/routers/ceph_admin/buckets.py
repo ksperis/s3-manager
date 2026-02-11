@@ -43,6 +43,7 @@ from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin
 from app.services.buckets_service import BucketsService
 from app.services.rgw_admin import RGWAdminError
 from app.utils.rgw import extract_bucket_list, is_rgw_account_id
+from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/buckets", tags=["ceph-admin-buckets"])
@@ -697,7 +698,13 @@ def list_buckets(
     else:
         simple_filter, advanced_filter = _parse_filter(filter)
     simple_filter = simple_filter.strip() if isinstance(simple_filter, str) and simple_filter.strip() else None
-    if _filter_requires_stats(advanced_filter):
+    usage_enabled = True
+    endpoint = getattr(ctx, "endpoint", None)
+    if endpoint is not None and hasattr(endpoint, "provider") and hasattr(endpoint, "features_config"):
+        usage_enabled = bool(resolve_feature_flags(endpoint).usage_enabled)
+    if not usage_enabled:
+        with_stats = False
+    elif _filter_requires_stats(advanced_filter):
         with_stats = True
 
     include_set = _parse_includes(include)
@@ -877,6 +884,9 @@ def update_quota(
     payload: BucketQuotaUpdate,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ):
+    endpoint = getattr(ctx, "endpoint", None)
+    if endpoint is not None and hasattr(endpoint, "provider") and hasattr(endpoint, "features_config") and not resolve_feature_flags(endpoint).usage_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are disabled for this endpoint")
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:

@@ -365,9 +365,20 @@ def _resolve_session_account(
                 rgw_account_id=actor.account_id,
             )
     account.set_session_credentials(actor.access_key, actor.secret_key)
+    resolved_endpoint: Optional[StorageEndpoint] = None
     if not requested_endpoint and not resolve_s3_endpoint(account):
         endpoint = _resolve_default_endpoint(db)
         requested_endpoint = endpoint.endpoint_url
+        resolved_endpoint = endpoint
+    elif requested_endpoint:
+        resolved_endpoint = (
+            db.query(StorageEndpoint)
+            .filter(StorageEndpoint.endpoint_url == requested_endpoint)
+            .first()
+        )
+    if resolved_endpoint:
+        account.storage_endpoint_id = resolved_endpoint.id
+        account.storage_endpoint = resolved_endpoint
     if requested_endpoint:
         account._session_endpoint = requested_endpoint  # type: ignore[attr-defined]
     return account
@@ -558,6 +569,10 @@ def _ensure_manager_capabilities(account: S3Account, require_iam: bool = False, 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account context unavailable")
     if require_iam and not caps.can_manage_iam:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IAM management not allowed for this account")
+    if require_iam:
+        endpoint = getattr(account, "storage_endpoint", None)
+        if endpoint and not resolve_feature_flags(endpoint).iam_enabled:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IAM is disabled for this endpoint")
     if require_usage and not caps.can_manage_buckets:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this account")
 

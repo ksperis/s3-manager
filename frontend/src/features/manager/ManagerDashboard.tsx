@@ -48,6 +48,7 @@ export default function ManagerDashboard() {
   );
   const hasContext = hasS3AccountContext;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
+  const iamFeatureEnabled = endpointCaps ? endpointCaps.iam !== false : true;
   // Usage/traffic stats are a platform/RGW feature. We only enable the widgets when the backend says it is allowed.
   const usageFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.usage !== false : true);
   const { stats, loading, error } = useManagerStats(
@@ -55,7 +56,7 @@ export default function ManagerDashboard() {
     usageFeatureEnabled && hasContext,
     accessMode ?? "default"
   );
-  const canManageIam = !isS3User && !isConnection;
+  const canManageIam = !isS3User && !isConnection && iamFeatureEnabled;
   const { overview: iamOverview, loading: iamLoading, error: iamError } = useIamOverview(
     accountIdForApi,
     canManageIam,
@@ -63,7 +64,7 @@ export default function ManagerDashboard() {
     accessMode ?? "default"
   );
   const accountLabel = selected?.display_name ?? sessionS3AccountName ?? "RGW session";
-  const iamDisabled = isS3User || isConnection;
+  const iamDisabled = isS3User || isConnection || !iamFeatureEnabled;
 
   return (
     <div className="space-y-4">

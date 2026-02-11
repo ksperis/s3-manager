@@ -181,6 +181,20 @@ export default function BucketsPage() {
   });
   const [enrichingColumns, setEnrichingColumns] = useState(false);
 
+  const selectedS3Account = useMemo(
+    () => accounts.find((a) => a.id === selectedS3AccountId),
+    [accounts, selectedS3AccountId]
+  );
+  const endpointCaps = selectedS3Account?.storage_endpoint_capabilities ?? null;
+  const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
+  const staticWebsiteFeatureEnabled = endpointCaps ? endpointCaps.static_website !== false : true;
+  const accountLabel = selectedS3Account
+    ? selectedS3Account.display_name
+    : requiresS3AccountSelection
+      ? "Not selected"
+      : sessionS3AccountName || "RGW session";
+  const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
+
   const includeParams = useMemo(() => {
     const include: string[] = [];
     if (visibleColumns.includes("tags")) include.push("tags");
@@ -195,19 +209,21 @@ export default function BucketsPage() {
       "access_logging",
     ];
     featureKeys.forEach((key) => {
+      if (key === "static_website" && !staticWebsiteFeatureEnabled) return;
       if (visibleColumns.includes(key)) include.push(key);
     });
     return include;
-  }, [visibleColumns]);
+  }, [staticWebsiteFeatureEnabled, visibleColumns]);
 
   const requiresStats = useMemo(
     () =>
-      visibleColumns.includes("used_bytes") ||
-      visibleColumns.includes("object_count") ||
-      visibleColumns.includes("quota_max_size_bytes") ||
-      visibleColumns.includes("quota_max_objects") ||
-      visibleColumns.includes("quota_status"),
-    [visibleColumns]
+      usageFeatureEnabled &&
+      (visibleColumns.includes("used_bytes") ||
+        visibleColumns.includes("object_count") ||
+        visibleColumns.includes("quota_max_size_bytes") ||
+        visibleColumns.includes("quota_max_objects") ||
+        visibleColumns.includes("quota_status")),
+    [usageFeatureEnabled, visibleColumns]
   );
 
   type ColumnDef = {
@@ -252,17 +268,6 @@ export default function BucketsPage() {
     if (!status) return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
     return <PropertySummaryChip compact state={status.state} tone={status.tone} title={`${featureKey}: ${status.state}`} />;
   };
-
-  const selectedS3Account = useMemo(
-    () => accounts.find((a) => a.id === selectedS3AccountId),
-    [accounts, selectedS3AccountId]
-  );
-  const accountLabel = selectedS3Account
-    ? selectedS3Account.display_name
-    : requiresS3AccountSelection
-      ? "Not selected"
-      : sessionS3AccountName || "RGW session";
-  const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {

@@ -32,6 +32,7 @@ from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin
 from app.services.rgw_admin import RGWAdminError
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw import extract_bucket_list
+from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/users", tags=["ceph-admin-users"])
@@ -1132,6 +1133,8 @@ def get_rgw_user_metrics(
     tenant: Optional[str] = None,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> CephAdminEntityMetrics:
+    if not resolve_feature_flags(ctx.endpoint).usage_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are disabled for this endpoint")
     uid = user_id.strip()
     if not uid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="uid is required")
