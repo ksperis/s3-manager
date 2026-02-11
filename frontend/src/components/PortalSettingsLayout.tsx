@@ -60,7 +60,7 @@ export const PortalSettingsItem = ({ title, description, action, children, class
 );
 
 export const PortalSettingsSwitch = ({ checked, disabled, ariaLabel, onChange }: PortalSettingsSwitchProps) => (
-  <label className="relative inline-flex cursor-pointer items-center">
+  <label className={`relative inline-flex items-center ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
     <input
       type="checkbox"
       className="peer sr-only"

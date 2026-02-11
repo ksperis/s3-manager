@@ -201,7 +201,7 @@ class BillingCollector:
         from app.services.app_settings_service import load_app_settings
 
         app_settings = load_app_settings()
-        if not settings.billing_enabled or not app_settings.general.billing_enabled:
+        if not app_settings.general.billing_enabled:
             raise ValueError("Billing is disabled")
         endpoints = (
             self.db.query(StorageEndpoint)

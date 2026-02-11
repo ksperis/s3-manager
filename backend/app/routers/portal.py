@@ -46,14 +46,12 @@ from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
 from app.db import UserRole
 from pydantic import BaseModel
-from app.core.config import get_settings
 from app.services.billing_service import BillingService
 from app.services.app_settings_service import load_app_settings
 from app.models.billing import BillingSubjectDetail
 
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 @router.get("/accounts", response_model=list[S3AccountSchema])
@@ -170,7 +168,7 @@ def portal_billing_me(
     db: Session = Depends(get_db),
 ) -> BillingSubjectDetail:
     app_settings = load_app_settings()
-    if not settings.billing_enabled or not app_settings.general.billing_enabled:
+    if not app_settings.general.billing_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Billing is disabled")
     actor = access.actor
     if not isinstance(actor, User):

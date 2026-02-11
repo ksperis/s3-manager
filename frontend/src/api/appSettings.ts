@@ -30,6 +30,21 @@ export type GeneralSettings = {
   allow_login_custom_endpoint: boolean;
 };
 
+export type GeneralFeatureLock = {
+  forced: boolean;
+  value?: boolean | null;
+  source?: string | null;
+};
+
+export type GeneralFeatureLocks = {
+  manager_enabled: GeneralFeatureLock;
+  ceph_admin_enabled: GeneralFeatureLock;
+  browser_enabled: GeneralFeatureLock;
+  portal_enabled: GeneralFeatureLock;
+  billing_enabled: GeneralFeatureLock;
+  endpoint_status_enabled: GeneralFeatureLock;
+};
+
 export type PortalIAMPolicySettings = {
   actions: string[];
   advanced_policy?: Record<string, unknown> | null;
@@ -137,6 +152,11 @@ export async function fetchAppSettings(): Promise<AppSettings> {
 
 export async function fetchDefaultAppSettings(): Promise<AppSettings> {
   const { data } = await client.get<AppSettings>("/admin/settings/defaults");
+  return data;
+}
+
+export async function fetchGeneralFeatureLocks(): Promise<GeneralFeatureLocks> {
+  const { data } = await client.get<GeneralFeatureLocks>("/admin/settings/general-feature-locks");
   return data;
 }
 

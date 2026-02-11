@@ -157,6 +157,30 @@ class Settings(BaseSettings):
     oidc_state_ttl_seconds: int = Field(600, description="Validity of OIDC login state (seconds)")
 
     billing_enabled: bool = Field(True, description="Enable billing endpoints and collection")
+    feature_manager_enabled: Optional[bool] = Field(
+        None,
+        description="Force Manager feature on/off (FEATURE_MANAGER_ENABLED)",
+    )
+    feature_browser_enabled: Optional[bool] = Field(
+        None,
+        description="Force Browser feature on/off (FEATURE_BROWSER_ENABLED)",
+    )
+    feature_portal_enabled: Optional[bool] = Field(
+        None,
+        description="Force Portal feature on/off (FEATURE_PORTAL_ENABLED)",
+    )
+    feature_ceph_admin_enabled: Optional[bool] = Field(
+        None,
+        description="Force Ceph Admin feature on/off (FEATURE_CEPH_ADMIN_ENABLED)",
+    )
+    feature_billing_enabled: Optional[bool] = Field(
+        None,
+        description="Force Billing feature on/off (FEATURE_BILLING_ENABLED)",
+    )
+    feature_endpoint_status_enabled: Optional[bool] = Field(
+        None,
+        description="Force Endpoint Status feature on/off (FEATURE_ENDPOINT_STATUS_ENABLED)",
+    )
     billing_store_by_bucket: bool = Field(
         False,
         description="Store per-bucket breakdown in billing snapshots",

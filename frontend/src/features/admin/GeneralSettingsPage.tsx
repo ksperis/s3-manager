@@ -10,7 +10,14 @@ import {
   PortalSettingsSection,
   PortalSettingsSwitch,
 } from "../../components/PortalSettingsLayout";
-import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
+import {
+  AppSettings,
+  GeneralFeatureLocks,
+  fetchAppSettings,
+  fetchDefaultAppSettings,
+  fetchGeneralFeatureLocks,
+  updateAppSettings,
+} from "../../api/appSettings";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { confirmAction } from "../../utils/confirm";
 
@@ -19,10 +26,29 @@ const CEPH_ADMIN_WARNING_MESSAGE =
   "It is not recommended to enable it on the same s3-manager instance exposed to end users.";
 const BILLING_CRON_REMINDER_MESSAGE =
   "Billing feature enabled. Think about enabling the billing collection cron job.";
+const FEATURE_FIELDS = [
+  "manager_enabled",
+  "ceph_admin_enabled",
+  "browser_enabled",
+  "portal_enabled",
+  "billing_enabled",
+  "endpoint_status_enabled",
+] as const;
+type FeatureField = (typeof FEATURE_FIELDS)[number];
+type ToggleField =
+  | FeatureField
+  | "allow_login_access_keys"
+  | "allow_login_endpoint_list"
+  | "allow_login_custom_endpoint";
+
+function isFeatureField(field: ToggleField): field is FeatureField {
+  return FEATURE_FIELDS.includes(field as FeatureField);
+}
 
 export default function GeneralSettingsPage() {
   const { setGeneralSettings } = useGeneralSettings();
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [featureLocks, setFeatureLocks] = useState<GeneralFeatureLocks | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [billingReminder, setBillingReminder] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,45 +56,34 @@ export default function GeneralSettingsPage() {
   const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
-    fetchAppSettings()
-      .then((data) => {
+    Promise.all([fetchAppSettings(), fetchGeneralFeatureLocks()])
+      .then(([data, locks]) => {
         setSettings(data);
+        setFeatureLocks(locks);
         setGeneralSettings(data.general);
       })
       .catch(() => setError("Unable to load settings."));
   }, [setGeneralSettings]);
 
-  const handleToggle = (
-    field:
-      | "manager_enabled"
-      | "ceph_admin_enabled"
-      | "browser_enabled"
-      | "portal_enabled"
-      | "billing_enabled"
-      | "endpoint_status_enabled"
-      | "allow_login_access_keys"
-      | "allow_login_endpoint_list"
-      | "allow_login_custom_endpoint",
-    value: boolean
-  ) => {
+  const isFeatureLocked = (field: FeatureField): boolean => Boolean(featureLocks?.[field]?.forced);
+  const getFeatureLockHint = (field: FeatureField): string | null => {
+    const lock = featureLocks?.[field];
+    if (!lock?.forced || lock.value == null) return null;
+    const source = lock.source ? `${lock.source}=` : "";
+    return `Forced by environment (${source}${lock.value ? "true" : "false"}).`;
+  };
+  const forcedFeaturesCount = featureLocks
+    ? FEATURE_FIELDS.filter((field) => featureLocks[field]?.forced).length
+    : 0;
+
+  const handleToggle = (field: ToggleField, value: boolean) => {
+    if (isFeatureField(field) && isFeatureLocked(field)) return;
     if (field === "billing_enabled") {
       const wasEnabled = Boolean(settings?.general.billing_enabled);
       if (value && !wasEnabled) {
         setBillingReminder(BILLING_CRON_REMINDER_MESSAGE);
       } else if (!value) {
         setBillingReminder(null);
-      }
-    }
-    if (field === "ceph_admin_enabled" && value) {
-      const wasEnabled = Boolean(settings?.general.ceph_admin_enabled);
-      if (!wasEnabled) {
-        const confirmed = confirmAction(
-          "Enable Ceph Admin advanced mode?\n\n" +
-            "This enables cluster-wide mass management operations and carries high risk.\n" +
-            "Do not enable this on an instance exposed to end users.\n\n" +
-            "Enable anyway?"
-        );
-        if (!confirmed) return;
       }
     }
     setSettings((prev) => (prev ? { ...prev, general: { ...prev.general, [field]: value } } : prev));
@@ -148,6 +163,11 @@ export default function GeneralSettingsPage() {
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
         {billingReminder && <PageBanner tone="info">{billingReminder}</PageBanner>}
+        {forcedFeaturesCount > 0 && (
+          <PageBanner tone="info">
+            {forcedFeaturesCount} feature switch(es) are currently forced by environment variables.
+          </PageBanner>
+        )}
         {settings?.general.ceph_admin_enabled && (
           <PageBanner tone="warning">
             Ceph Admin is currently enabled on this instance. {CEPH_ADMIN_WARNING_MESSAGE}
@@ -165,70 +185,121 @@ export default function GeneralSettingsPage() {
               >
                 <PortalSettingsItem
                   title="Manager feature"
-                  description="Enables the /manager environment for account administrators."
+                  description="Tenant administration workspace."
                   action={
                     <PortalSettingsSwitch
                       checked={Boolean(settings.general.manager_enabled)}
+                      disabled={isFeatureLocked("manager_enabled")}
                       onChange={(value) => handleToggle("manager_enabled", value)}
                       ariaLabel="Manager feature"
                     />
                   }
-                />
+                >
+                  {getFeatureLockHint("manager_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("manager_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
                 <PortalSettingsItem
                   title="Browser feature"
-                  description="Enables the /browser environment for object navigation."
+                  description="Object and bucket navigation workspace."
                   action={
                     <PortalSettingsSwitch
                       checked={Boolean(settings.general.browser_enabled)}
+                      disabled={isFeatureLocked("browser_enabled")}
                       onChange={(value) => handleToggle("browser_enabled", value)}
                       ariaLabel="Browser feature"
                     />
                   }
-                />
+                >
+                  {getFeatureLockHint("browser_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("browser_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
                 <PortalSettingsItem
                   title="Portal feature"
-                  description="Enables the /portal environment for end users."
+                  description="End-user self-service workspace."
                   action={
                     <PortalSettingsSwitch
                       checked={Boolean(settings.general.portal_enabled)}
+                      disabled={isFeatureLocked("portal_enabled")}
                       onChange={(value) => handleToggle("portal_enabled", value)}
                       ariaLabel="Portal feature"
                     />
                   }
-                />
+                >
+                  {getFeatureLockHint("portal_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("portal_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="Ceph Admin feature"
+                  description="Cluster-wide advanced operations."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.ceph_admin_enabled)}
+                      disabled={isFeatureLocked("ceph_admin_enabled")}
+                      onChange={(value) => handleToggle("ceph_admin_enabled", value)}
+                      ariaLabel="Ceph Admin feature"
+                    />
+                  }
+                >
+                  {getFeatureLockHint("ceph_admin_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("ceph_admin_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
+              </PortalSettingsSection>
+            </div>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <PortalSettingsSection
+                title="EXTRA FEATURES"
+                description="Optional capabilities that extend operations visibility."
+                layout="grid"
+                columns={1}
+              >
                 <PortalSettingsItem
                   title="Billing feature"
                   description="Enables the billing dashboards for admin and portal."
                   action={
                     <PortalSettingsSwitch
                       checked={Boolean(settings.general.billing_enabled)}
+                      disabled={isFeatureLocked("billing_enabled")}
                       onChange={(value) => handleToggle("billing_enabled", value)}
                       ariaLabel="Billing feature"
                     />
                   }
-                />
+                >
+                  {getFeatureLockHint("billing_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("billing_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
                 <PortalSettingsItem
                   title="Endpoint Status feature"
                   description="Enables the Endpoint Status workspace for endpoint healthchecks."
                   action={
                     <PortalSettingsSwitch
                       checked={Boolean(settings.general.endpoint_status_enabled)}
+                      disabled={isFeatureLocked("endpoint_status_enabled")}
                       onChange={(value) => handleToggle("endpoint_status_enabled", value)}
                       ariaLabel="Endpoint Status feature"
                     />
                   }
-                />
-                <PortalSettingsItem
-                  title="Ceph Admin feature"
-                  description="Enables the /ceph-admin workspace for explicitly authorized UI admins."
-                  action={
-                    <PortalSettingsSwitch
-                      checked={Boolean(settings.general.ceph_admin_enabled)}
-                      onChange={(value) => handleToggle("ceph_admin_enabled", value)}
-                      ariaLabel="Ceph Admin feature"
-                    />
-                  }
-                />
+                >
+                  {getFeatureLockHint("endpoint_status_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("endpoint_status_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
               </PortalSettingsSection>
             </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">

@@ -134,6 +134,21 @@ class GeneralSettings(BaseModel):
     allow_login_custom_endpoint: bool = False
 
 
+class GeneralFeatureLock(BaseModel):
+    forced: bool = False
+    value: Optional[bool] = None
+    source: Optional[str] = None
+
+
+class GeneralFeatureLocks(BaseModel):
+    manager_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
+    ceph_admin_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
+    browser_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
+    portal_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
+    billing_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
+    endpoint_status_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
+
+
 class LoginSettings(BaseModel):
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False

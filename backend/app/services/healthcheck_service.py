@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db import EndpointHealthCheck, EndpointHealthDaily, HealthCheckStatus, StorageEndpoint
+from app.services.app_settings_service import load_app_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -85,8 +86,9 @@ class HealthCheckService:
         self.db = db
 
     def run_checks(self) -> dict:
-        if not settings.healthcheck_enabled:
-            raise ValueError("Healthchecks are disabled")
+        app_settings = load_app_settings()
+        if not app_settings.general.endpoint_status_enabled:
+            raise ValueError("Endpoint Status feature is disabled")
         endpoints = (
             self.db.query(StorageEndpoint)
             .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())

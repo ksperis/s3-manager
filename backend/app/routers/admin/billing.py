@@ -7,7 +7,6 @@ from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.core.database import get_db
 from app.db import StorageEndpoint, StorageProvider
 from app.models.billing import BillingSubjectDetail, BillingSubjectsResponse, BillingSummary
@@ -15,13 +14,12 @@ from app.routers.dependencies import get_current_super_admin
 from app.services.billing_service import BillingService, BillingCollector
 from app.services.app_settings_service import load_app_settings
 
-settings = get_settings()
 router = APIRouter(prefix="/admin/billing", tags=["admin-billing"])
 
 
 def _ensure_billing_enabled() -> None:
     app_settings = load_app_settings()
-    if not settings.billing_enabled or not app_settings.general.billing_enabled:
+    if not app_settings.general.billing_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Billing is disabled")
 
 

@@ -2,9 +2,14 @@
 # Licensed under the Apache License, Version 2.0
 from fastapi import APIRouter, Depends
 
-from app.models.app_settings import AppSettings
+from app.models.app_settings import AppSettings, GeneralFeatureLocks
 from app.routers.dependencies import get_current_super_admin
-from app.services.app_settings_service import load_app_settings, save_app_settings
+from app.services.app_settings_service import (
+    get_general_feature_locks,
+    load_app_settings,
+    load_default_app_settings,
+    save_app_settings,
+)
 
 router = APIRouter(prefix="/admin/settings", tags=["admin-settings"])
 
@@ -16,7 +21,12 @@ def get_settings(_: None = Depends(get_current_super_admin)) -> AppSettings:
 
 @router.get("/defaults", response_model=AppSettings)
 def get_default_settings(_: None = Depends(get_current_super_admin)) -> AppSettings:
-    return AppSettings()
+    return load_default_app_settings()
+
+
+@router.get("/general-feature-locks", response_model=GeneralFeatureLocks)
+def get_general_feature_locks_route(_: None = Depends(get_current_super_admin)) -> GeneralFeatureLocks:
+    return get_general_feature_locks()
 
 
 @router.put("", response_model=AppSettings)
