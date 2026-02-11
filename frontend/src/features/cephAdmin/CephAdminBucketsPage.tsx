@@ -32,7 +32,9 @@ import {
   updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
 import { tableActionMenuItemClasses, tableIconActionButtonClasses } from "../../components/tableActionClasses";
+import { parseCorsRules, parseLifecycleRules, parsePolicyStatements, parseRuleIds, stableStringify } from "./bucketJsonParsers";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import { useCephAdminBucketListing } from "./useCephAdminBucketListing";
 import BucketDetailPage from "../manager/BucketDetailPage";
 
 const extractError = (err: unknown): string => {
@@ -340,16 +342,6 @@ const POLICY_TYPE_OPTIONS: Array<{ key: PolicyRuleTypeKey; label: string }> = [
   { key: "public_principal", label: "Public principal (*)" },
 ];
 
-const stableStringify = (value: unknown): string => {
-  if (value === null || value === undefined) return "null";
-  if (typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
-  }
-  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
-  return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`).join(",")}}`;
-};
-
 const formatLifecycleRule = (rule: Record<string, unknown>) => JSON.stringify(rule, null, 2);
 const formatCorsRule = (rule: Record<string, unknown>) => JSON.stringify(rule, null, 2);
 const formatPolicyRule = (rule: Record<string, unknown>) => JSON.stringify(rule, null, 2);
@@ -426,56 +418,6 @@ const mergeLifecycleRules = (
   return { nextRules, changes };
 };
 
-const parseLifecycleRules = (raw: string) => {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return { error: "Provide lifecycle rules in JSON format." } as const;
-  }
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (!parsed || typeof parsed !== "object") {
-      return { error: "Lifecycle rules must be a JSON object or array." } as const;
-    }
-    if (Array.isArray(parsed)) {
-      const rules = parsed as unknown[];
-      if (rules.length === 0) {
-        return { error: "Provide at least one lifecycle rule." } as const;
-      }
-      const invalidIndex = rules.findIndex(
-        (rule) => !rule || typeof rule !== "object" || Array.isArray(rule)
-      );
-      if (invalidIndex >= 0) {
-        return { error: `Lifecycle rule at index ${invalidIndex} must be a JSON object.` } as const;
-      }
-      return { rules: rules as Record<string, unknown>[] } as const;
-    }
-    return { rules: [parsed as Record<string, unknown>] } as const;
-  } catch {
-    return { error: "Invalid JSON." } as const;
-  }
-};
-
-const parseRuleIds = (raw: string) => {
-  const trimmed = raw.trim();
-  if (!trimmed) return [] as string[];
-  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .map((item) => (typeof item === "string" || typeof item === "number" ? String(item).trim() : ""))
-          .filter(Boolean);
-      }
-    } catch {
-      return [];
-    }
-  }
-  return trimmed
-    .split(/[\n,]/g)
-    .map((value) => value.trim())
-    .filter(Boolean);
-};
-
 const getLifecycleRuleTypes = (rule: Record<string, unknown>): LifecycleRuleTypeKey[] => {
   const types: LifecycleRuleTypeKey[] = [];
   const expiration = rule.Expiration as Record<string, unknown> | undefined;
@@ -490,34 +432,6 @@ const getLifecycleRuleTypes = (rule: Record<string, unknown>): LifecycleRuleType
   const noncurrentTransitions = Array.isArray(rule.NoncurrentVersionTransitions) ? rule.NoncurrentVersionTransitions : [];
   if (noncurrentTransitions.length > 0) types.push("noncurrent_transition");
   return types;
-};
-
-const parseCorsRules = (raw: string) => {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return { error: "Provide CORS rules in JSON format." } as const;
-  }
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (!parsed || typeof parsed !== "object") {
-      return { error: "CORS rules must be a JSON object or array." } as const;
-    }
-    if (Array.isArray(parsed)) {
-      if (parsed.length === 0) {
-        return { error: "Provide at least one CORS rule." } as const;
-      }
-      const invalidIndex = parsed.findIndex(
-        (rule) => !rule || typeof rule !== "object" || Array.isArray(rule)
-      );
-      if (invalidIndex >= 0) {
-        return { error: `CORS rule at index ${invalidIndex} must be a JSON object.` } as const;
-      }
-      return { rules: parsed as Record<string, unknown>[] } as const;
-    }
-    return { rules: [parsed as Record<string, unknown>] } as const;
-  } catch {
-    return { error: "Invalid JSON." } as const;
-  }
 };
 
 const getCorsRuleKey = (rule: Record<string, unknown>) => {
@@ -554,51 +468,6 @@ const getCorsRuleTypes = (rule: Record<string, unknown>): CorsRuleTypeKey[] => {
     types.push("max_age");
   }
   return types;
-};
-
-const parsePolicyStatements = (raw: string) => {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return { error: "Provide a policy in JSON format." } as const;
-  }
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (!parsed || typeof parsed !== "object") {
-      return { error: "Policy must be a JSON object or array." } as const;
-    }
-    if (Array.isArray(parsed)) {
-      if (parsed.length === 0) {
-        return { error: "Provide at least one policy statement." } as const;
-      }
-      const invalidIndex = parsed.findIndex(
-        (statement) => !statement || typeof statement !== "object" || Array.isArray(statement)
-      );
-      if (invalidIndex >= 0) {
-        return { error: `Policy statement at index ${invalidIndex} must be a JSON object.` } as const;
-      }
-      return { policy: { Statement: parsed }, statements: parsed as Record<string, unknown>[] } as const;
-    }
-    const parsedObj = parsed as Record<string, unknown>;
-    const rawStatements = parsedObj.Statement;
-    if (Array.isArray(rawStatements)) {
-      if (rawStatements.length === 0) {
-        return { error: "Provide at least one policy statement." } as const;
-      }
-      const invalidIndex = rawStatements.findIndex(
-        (statement) => !statement || typeof statement !== "object" || Array.isArray(statement)
-      );
-      if (invalidIndex >= 0) {
-        return { error: `Policy statement at index ${invalidIndex} must be a JSON object.` } as const;
-      }
-      return { policy: parsedObj, statements: rawStatements as Record<string, unknown>[] } as const;
-    }
-    if (rawStatements && typeof rawStatements === "object") {
-      return { policy: { ...parsedObj, Statement: [rawStatements] }, statements: [rawStatements as Record<string, unknown>] } as const;
-    }
-    return { policy: { Statement: [parsedObj] }, statements: [parsedObj] } as const;
-  } catch {
-    return { error: "Invalid JSON." } as const;
-  }
 };
 
 const getPolicyStatementKey = (statement: Record<string, unknown>) => {
@@ -1199,19 +1068,13 @@ const getTagColors = (tag: string) => {
 export default function CephAdminBucketsPage() {
   const location = useLocation();
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
-  const [items, setItems] = useState<CephAdminBucket[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [filterValue, setFilterValue] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [total, setTotal] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
-  const requestSeqRef = useRef(0);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
   const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(null);
@@ -1503,6 +1366,28 @@ export default function CephAdminBucketsPage() {
     () => buildAdvancedFilterPayload("", advancedApplied, taggedBuckets),
     [advancedApplied, taggedBuckets]
   );
+
+  const {
+    items,
+    total,
+    loading,
+    loadingDetails,
+    error,
+    setError,
+    refresh: refreshBuckets,
+  } = useCephAdminBucketListing({
+    selectedEndpointId,
+    page,
+    pageSize,
+    filterValue,
+    advancedFilterParam,
+    sort,
+    includeParams,
+    requiresStats,
+    baseRequiresStats,
+    extractError,
+  });
+
   const selectionQueryKey = useMemo(
     () =>
       JSON.stringify({
@@ -1513,87 +1398,6 @@ export default function CephAdminBucketsPage() {
       }),
     [selectedEndpointId, filterValue, advancedFilterParam, baseRequiresStats]
   );
-  const bucketRowKey = (bucket: CephAdminBucket) => `${bucket.tenant ?? ""}:${bucket.name}`;
-
-  const fetchBuckets = async () => {
-    if (!selectedEndpointId) return;
-    const requestId = requestSeqRef.current + 1;
-    requestSeqRef.current = requestId;
-    setLoading(true);
-    setLoadingDetails(false);
-    setError(null);
-    try {
-      const baseResponse = await listCephAdminBuckets(selectedEndpointId, {
-        page,
-        page_size: pageSize,
-        filter: filterValue.trim() || undefined,
-        advanced_filter: advancedFilterParam,
-        sort_by: sort.field,
-        sort_dir: sort.direction,
-        with_stats: baseRequiresStats,
-      });
-      if (requestId !== requestSeqRef.current) return;
-
-      const baseItems = baseResponse.items ?? [];
-      setItems(baseItems);
-      setTotal(baseResponse.total ?? 0);
-      setLoading(false);
-
-      const needsDetails = includeParams.length > 0 || (requiresStats && !baseRequiresStats);
-      if (!needsDetails || baseItems.length === 0) return;
-
-      setLoadingDetails(true);
-      try {
-        const detailResponse = await listCephAdminBuckets(selectedEndpointId, {
-          page,
-          page_size: pageSize,
-          filter: filterValue.trim() || undefined,
-          advanced_filter: advancedFilterParam,
-          sort_by: sort.field,
-          sort_dir: sort.direction,
-          include: includeParams.length > 0 ? includeParams : undefined,
-          with_stats: requiresStats,
-        });
-        if (requestId !== requestSeqRef.current) return;
-        const detailsByKey = new Map((detailResponse.items ?? []).map((bucket) => [bucketRowKey(bucket), bucket]));
-        setItems(baseItems.map((bucket) => detailsByKey.get(bucketRowKey(bucket)) ?? bucket));
-      } finally {
-        if (requestId === requestSeqRef.current) {
-          setLoadingDetails(false);
-        }
-      }
-    } catch (err) {
-      if (requestId !== requestSeqRef.current) return;
-      console.error(err);
-      setError(extractError(err));
-      setItems([]);
-      setTotal(0);
-      setLoading(false);
-      setLoadingDetails(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!selectedEndpointId) {
-      setItems([]);
-      setTotal(0);
-      setLoading(false);
-      setLoadingDetails(false);
-      return;
-    }
-    void fetchBuckets();
-  }, [
-    selectedEndpointId,
-    page,
-    pageSize,
-    filterValue,
-    advancedFilterParam,
-    sort.field,
-    sort.direction,
-    includeParams.join(","),
-    requiresStats,
-    baseRequiresStats,
-  ]);
 
   useEffect(() => {
     setAllFilteredBucketNames(null);
@@ -2833,7 +2637,7 @@ export default function CephAdminBucketsPage() {
       `Updated ${changedCount} bucket${changedCount !== 1 ? "s" : ""}${unchangedCount > 0 ? ` (${unchangedCount} unchanged)` : ""}.`
     );
     setBulkApplyLoading(false);
-    void fetchBuckets();
+    refreshBuckets();
   };
 
   const updateAdvancedField = (field: keyof AdvancedFilterState, value: string) => {
