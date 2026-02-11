@@ -8,12 +8,11 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
-import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
-import { CephAdminRgwUser, CephAdminRgwUserDetail, assumeCephAdminUser, listCephAdminUsers } from "../../api/cephAdmin";
-import { tableActionButtonClasses, tableActionMenuItemClasses, tableIconActionButtonClasses } from "../../components/tableActionClasses";
+import { CephAdminRgwUser, CephAdminRgwUserDetail, listCephAdminUsers } from "../../api/cephAdmin";
+import { tableActionMenuItemClasses, tableIconActionButtonClasses } from "../../components/tableActionClasses";
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
 import CephAdminUserEditModal from "./CephAdminUserEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
@@ -216,13 +215,10 @@ const bucketOwnerFilterForUser = (user: CephAdminRgwUser) => {
 export default function CephAdminUsersPage() {
   const navigate = useNavigate();
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
-  const stsEnabled = Boolean(selectedEndpoint?.capabilities?.sts);
   const [items, setItems] = useState<CephAdminRgwUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [assumeTarget, setAssumeTarget] = useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<CephAdminRgwUser | null>(null);
   const [editingTarget, setEditingTarget] = useState<CephAdminRgwUser | null>(null);
   const [filter, setFilter] = useState("");
   const [searchValue, setSearchValue] = useState("");
@@ -275,7 +271,6 @@ export default function CephAdminUsersPage() {
     setSort(DEFAULT_SORT);
     setShowCreateModal(false);
     setEditingTarget(null);
-    setConfirmTarget(null);
   }, [selectedEndpointId]);
 
   const includeParams = useMemo(() => {
@@ -587,26 +582,6 @@ export default function CephAdminUsersPage() {
               >
                 Owner buckets
               </button>
-              <button
-                type="button"
-                className={tableActionMenuItemClasses}
-                disabled={!selectedEndpointId || !stsEnabled || assumeTarget === user.uid || Boolean(user.tenant)}
-                title={
-                  user.tenant
-                    ? "Tenant users are not supported for assume-role."
-                    : !stsEnabled
-                      ? "STS is disabled for this endpoint."
-                      : undefined
-                }
-                onClick={(event) => {
-                  event.preventDefault();
-                  setConfirmTarget(user);
-                  const parent = event.currentTarget.closest("details");
-                  if (parent) parent.removeAttribute("open");
-                }}
-              >
-                {assumeTarget === user.uid ? "Assuming..." : "Assume in manager"}
-              </button>
             </div>
           </details>
         </div>
@@ -639,9 +614,6 @@ export default function CephAdminUsersPage() {
         <PageBanner tone="info">
           Endpoint: <span className="font-semibold">{selectedEndpoint.name}</span>
         </PageBanner>
-      )}
-      {selectedEndpoint && !stsEnabled && (
-        <PageBanner tone="warning">STS is disabled for this endpoint. Assume role is unavailable.</PageBanner>
       )}
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
@@ -988,50 +960,6 @@ export default function CephAdminUsersPage() {
           disabled={loading || !selectedEndpointId}
         />
       </div>
-
-      {confirmTarget && (
-        <Modal title="Assume in manager" onClose={() => setConfirmTarget(null)} maxWidthClass="max-w-lg">
-          <div className="space-y-4">
-            <p className="ui-body text-slate-700 dark:text-slate-200">
-              This will create a temporary connection and STS key for:
-              <span className="font-semibold"> {confirmTarget.uid}</span>.
-            </p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              The connection will expire automatically and be cleaned up by the server.
-            </p>
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-full border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
-                onClick={() => setConfirmTarget(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={tableActionButtonClasses}
-                disabled={!selectedEndpointId || assumeTarget === confirmTarget.uid}
-                onClick={async () => {
-                  if (!selectedEndpointId) return;
-                  setAssumeTarget(confirmTarget.uid);
-                  setError(null);
-                  try {
-                    const result = await assumeCephAdminUser(selectedEndpointId, confirmTarget.uid);
-                    setConfirmTarget(null);
-                    navigate(`/manager?ctx=${encodeURIComponent(result.context_id)}`);
-                  } catch (err) {
-                    setError(extractError(err));
-                  } finally {
-                    setAssumeTarget(null);
-                  }
-                }}
-              >
-                {assumeTarget === confirmTarget.uid ? "Assuming..." : "Confirm"}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
 
       {selectedEndpointId && editingTarget && (
         <CephAdminUserEditModal

@@ -9,16 +9,11 @@ from datetime import datetime, timezone
 from threading import Lock
 from time import monotonic
 from typing import Any, Callable, Optional, Tuple
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import ValidationError
-from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.db import User
 from app.models.ceph_admin import (
-    CephAdminAssumeUserResponse,
     CephAdminEntityMetrics,
     CephAdminRgwAccessKey,
     CephAdminRgwAccessKeyStatusChange,
@@ -34,19 +29,13 @@ from app.models.ceph_admin import (
     PaginatedCephAdminUsersResponse,
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
-from app.routers.dependencies import get_audit_logger, get_current_ceph_admin
-from app.services.audit_service import AuditService
 from app.services.rgw_admin import RGWAdminError
-from app.services.s3_connections_service import S3ConnectionsService
-from app.services.sts_service import get_session_token
 from app.utils.quota_stats import extract_quota_limits
 from app.utils.rgw import extract_bucket_list
-from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
 from app.utils.usage_stats import extract_usage_stats
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/users", tags=["ceph-admin-users"])
 
-STS_ASSUME_DURATION_SECONDS = 3600
 USERS_LIST_CACHE_TTL_SECONDS = 30.0
 USERS_LIST_CACHE_MAX_ENTRIES = 64
 RGW_USERS_PAYLOAD_CACHE_MAX_ENTRIES = 16
@@ -1242,94 +1231,3 @@ def delete_rgw_user_key(
     except RGWAdminError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post("/{user_id}/assume", response_model=CephAdminAssumeUserResponse)
-def assume_rgw_user(
-    user_id: str,
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
-    db: Session = Depends(get_db),
-    actor: User = Depends(get_current_ceph_admin),
-    audit: AuditService = Depends(get_audit_logger),
-) -> CephAdminAssumeUserResponse:
-    uid = user_id.strip()
-    if not uid:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="uid is required")
-    flags = resolve_feature_flags(ctx.endpoint)
-    if not flags.sts_enabled:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="STS is disabled for this endpoint")
-    sts_endpoint = resolve_sts_endpoint(ctx.endpoint)
-    if not sts_endpoint:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="STS endpoint is not configured")
-    try:
-        payload = ctx.rgw_admin.get_user(uid, tenant=None, allow_not_found=True)
-    except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    if not payload or payload.get("not_found"):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="RGW user not found")
-    try:
-        key_response = ctx.rgw_admin.create_access_key(uid, tenant=None)
-    except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    entries = ctx.rgw_admin._extract_keys(key_response)
-    access_key = secret_key = None
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        access_key, secret_key = _extract_access_key(entry)
-        if access_key and secret_key:
-            break
-    if not access_key or not secret_key:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="RGW did not return access credentials for this user",
-        )
-    session_nonce = uuid.uuid4().hex[:8]
-    session_name = f"ceph-admin-{uid[:24]}-{session_nonce}"
-    try:
-        sts_access, sts_secret, sts_token, expiration = get_session_token(
-            session_name,
-            STS_ASSUME_DURATION_SECONDS,
-            access_key,
-            secret_key,
-            endpoint=sts_endpoint,
-            region=ctx.region,
-            verify_tls=True,
-        )
-    except RuntimeError as exc:
-        try:
-            ctx.rgw_admin.delete_access_key(uid, access_key, tenant=None)
-        except RGWAdminError:
-            pass
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
-    if expiration.tzinfo is not None:
-        expires_at = expiration.astimezone(timezone.utc).replace(tzinfo=None)
-    else:
-        expires_at = expiration
-
-    service = S3ConnectionsService(db)
-    name = f"Assume {uid}"
-    if expires_at:
-        suffix = expires_at.strftime("%Y%m%d%H%M%S")
-        name = f"{name} ({suffix}-{session_nonce[:6]})"
-    conn = service.create_temporary(
-        owner_user_id=actor.id,
-        name=name,
-        storage_endpoint_id=ctx.endpoint.id,
-        access_key_id=sts_access,
-        secret_access_key=sts_secret,
-        session_token=sts_token,
-        expires_at=expires_at,
-        temp_user_uid=uid,
-        temp_access_key_id=access_key,
-    )
-    audit.record_action(
-        user=actor,
-        scope="ceph_admin",
-        action="assume_user",
-        entity_type="rgw_user",
-        entity_id=uid,
-        metadata={"connection_id": conn.id, "expires_at": expires_at.isoformat() if expires_at else None},
-    )
-    return CephAdminAssumeUserResponse(context_id=f"conn-{conn.id}", expires_at=expires_at)

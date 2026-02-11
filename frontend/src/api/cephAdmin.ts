@@ -335,11 +335,6 @@ export type CreateCephAdminUserResponse = {
   generated_key?: CephAdminRgwGeneratedAccessKey | null;
 };
 
-export type CephAdminAssumeUserResponse = {
-  context_id: string;
-  expires_at: string;
-};
-
 export type PaginatedCephAdminUsersResponse = PaginatedResponse<CephAdminRgwUser>;
 
 export type ListCephAdminUsersParams = {
@@ -461,13 +456,6 @@ export async function deleteCephAdminUserKey(
     `/ceph-admin/endpoints/${endpointId}/users/${encodeURIComponent(uid)}/keys/${encodeURIComponent(accessKey)}`,
     { params: tenant ? { tenant } : undefined }
   );
-}
-
-export async function assumeCephAdminUser(endpointId: number, uid: string): Promise<CephAdminAssumeUserResponse> {
-  const { data } = await client.post<CephAdminAssumeUserResponse>(
-    `/ceph-admin/endpoints/${endpointId}/users/${encodeURIComponent(uid)}/assume`
-  );
-  return data;
 }
 
 export type CephAdminBucket = {

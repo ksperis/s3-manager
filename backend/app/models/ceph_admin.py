@@ -50,11 +50,6 @@ class CephAdminRgwUserSummary(BaseModel):
     quota_max_objects: Optional[int] = None
 
 
-class CephAdminAssumeUserResponse(BaseModel):
-    context_id: str
-    expires_at: datetime
-
-
 class CephAdminBucketSummary(BaseModel):
     name: str
     tenant: Optional[str] = None
