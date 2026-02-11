@@ -204,9 +204,29 @@ type BucketInspectorData = {
   quota_max_objects?: number | null;
   features: Record<string, BucketInspectorFeature>;
 };
+type PathSuggestionSource = "local" | "remote" | "history";
+type PathSuggestion = {
+  value: string;
+  label: string;
+  source: PathSuggestionSource;
+};
+type PathDraftContext = {
+  parentPrefix: string;
+  fragment: string;
+};
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
+const PATH_SUGGESTIONS_DEBOUNCE_MS = 200;
+const PATH_SUGGESTIONS_LIMIT = 20;
+const PATH_SUGGESTIONS_API_LIMIT = 50;
+const PATH_HISTORY_LIMIT = 20;
+const PATH_HISTORY_STORAGE_KEY = "browser:path-history:v1";
+const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
+  history: 300,
+  local: 200,
+  remote: 100,
+};
 const BUCKET_INSPECTOR_FEATURE_ORDER = [
   "versioning",
   "object_lock",
@@ -242,6 +262,135 @@ const inspectorEmptyStateClasses =
   "rounded-lg border border-dashed border-slate-200 px-3 py-3 ui-caption text-slate-500 dark:border-slate-800 dark:text-slate-400";
 const inspectorInlineActionClasses =
   "ui-caption font-semibold text-slate-500 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200 dark:disabled:text-slate-500";
+const normalizePathDraftValue = (value: string) => value.trim().replace(/^\/+/, "");
+
+const resolvePathDraftContext = (value: string): PathDraftContext => {
+  const cleaned = normalizePathDraftValue(value);
+  const hasTrailingSlash = cleaned.endsWith("/");
+  const slashIndex = cleaned.lastIndexOf("/");
+  const parentRaw = slashIndex >= 0 ? cleaned.slice(0, slashIndex + 1) : "";
+  const fragment = hasTrailingSlash ? "" : slashIndex >= 0 ? cleaned.slice(slashIndex + 1) : cleaned;
+  return {
+    parentPrefix: parentRaw ? normalizePrefix(parentRaw) : "",
+    fragment,
+  };
+};
+
+const buildPathSuggestionEntries = (
+  prefixes: string[],
+  parentPrefix: string,
+  fragment: string,
+  source: PathSuggestionSource
+): PathSuggestion[] => {
+  const normalizedFragment = fragment.trim().toLowerCase();
+  const seen = new Set<string>();
+  const entries: PathSuggestion[] = [];
+  prefixes.forEach((entry) => {
+    const normalized = normalizePrefix(normalizePathDraftValue(entry || ""));
+    if (!normalized) return;
+    if (parentPrefix && !normalized.startsWith(parentPrefix)) return;
+    const relative = shortName(normalized, parentPrefix || "");
+    const label = relative.endsWith("/") ? relative.slice(0, -1) : relative;
+    if (!label) return;
+    if (normalizedFragment && !label.toLowerCase().includes(normalizedFragment)) return;
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+    entries.push({ value: normalized, label, source });
+  });
+  return entries;
+};
+
+const scorePathSuggestion = (entry: PathSuggestion, fragment: string): number => {
+  const query = fragment.trim().toLowerCase();
+  const label = entry.label.toLowerCase();
+  let score = PATH_SUGGESTION_SOURCE_WEIGHT[entry.source] ?? 0;
+  if (!query) {
+    return score + Math.max(0, 80 - Math.min(label.length, 80));
+  }
+  if (label === query) {
+    score += 1200;
+  } else if (label.startsWith(query)) {
+    score += 1000;
+  } else if (label.split("/").some((segment) => segment.startsWith(query))) {
+    score += 800;
+  } else if (label.includes(query)) {
+    score += 600;
+  }
+  const index = label.indexOf(query);
+  if (index >= 0) {
+    score += Math.max(0, 120 - index * 4);
+  }
+  score += Math.max(0, 60 - Math.min(label.length, 60));
+  return score;
+};
+
+const mergePathSuggestions = (fragment: string, ...groups: PathSuggestion[][]): PathSuggestion[] => {
+  const byValue = new Map<string, PathSuggestion>();
+  groups.forEach((group) => {
+    group.forEach((entry) => {
+      const existing = byValue.get(entry.value);
+      if (!existing) {
+        byValue.set(entry.value, entry);
+        return;
+      }
+      if ((PATH_SUGGESTION_SOURCE_WEIGHT[entry.source] ?? 0) > (PATH_SUGGESTION_SOURCE_WEIGHT[existing.source] ?? 0)) {
+        byValue.set(entry.value, entry);
+      }
+    });
+  });
+  return Array.from(byValue.values())
+    .sort((a, b) => {
+      const scoreDiff = scorePathSuggestion(b, fragment) - scorePathSuggestion(a, fragment);
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.label.localeCompare(b.label);
+    })
+    .slice(0, PATH_SUGGESTIONS_LIMIT);
+};
+
+const readPathHistoryStore = (): Record<string, string[]> => {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(PATH_HISTORY_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    return parsed as Record<string, string[]>;
+  } catch {
+    return {};
+  }
+};
+
+const readBucketPathHistory = (bucketName: string): string[] => {
+  if (!bucketName) return [];
+  const store = readPathHistoryStore();
+  const rawEntries = Array.isArray(store[bucketName]) ? store[bucketName] : [];
+  const seen = new Set<string>();
+  const entries: string[] = [];
+  rawEntries.forEach((value) => {
+    const normalized = normalizePrefix(normalizePathDraftValue(value || ""));
+    if (!normalized) return;
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+    entries.push(normalized);
+  });
+  return entries.slice(0, PATH_HISTORY_LIMIT);
+};
+
+const pushBucketPathHistory = (bucketName: string, prefixValue: string): string[] => {
+  if (!bucketName || typeof window === "undefined") return [];
+  const normalized = normalizePrefix(normalizePathDraftValue(prefixValue || ""));
+  if (!normalized) return readBucketPathHistory(bucketName);
+  const store = readPathHistoryStore();
+  const current = readBucketPathHistory(bucketName);
+  const next = [normalized, ...current.filter((entry) => entry !== normalized)].slice(0, PATH_HISTORY_LIMIT);
+  store[bucketName] = next;
+  try {
+    window.localStorage.setItem(PATH_HISTORY_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // Ignore localStorage write failures (private mode / quota).
+  }
+  return next;
+};
 
 export default function BrowserPage({
   accountIdForApi: accountIdOverride,
@@ -365,6 +514,10 @@ export default function BrowserPage({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathDraft, setPathDraft] = useState("");
+  const [pathSuggestions, setPathSuggestions] = useState<PathSuggestion[]>([]);
+  const [pathSuggestionsLoading, setPathSuggestionsLoading] = useState(false);
+  const [pathSuggestionIndex, setPathSuggestionIndex] = useState(-1);
+  const [pathHistory, setPathHistory] = useState<string[]>([]);
   const [showNameColumnControls, setShowNameColumnControls] = useState(true);
   const [selectionStats, setSelectionStats] = useState<SelectionStats | null>(null);
   const [selectionStatsLoading, setSelectionStatsLoading] = useState(false);
@@ -431,6 +584,8 @@ export default function BrowserPage({
   const nameHeaderRef = useRef<HTMLTableCellElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
+  const pathSuggestionsDebounceRef = useRef<number | null>(null);
+  const pathSuggestionsRequestIdRef = useRef(0);
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
   const previewObjectUrlRef = useRef<string | null>(null);
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
@@ -1602,6 +1757,8 @@ export default function BrowserPage({
   }, [bucketName, bucketOptions.length, loadingBuckets]);
   const sortKey = sortId.split("-")[0] as "name" | "size" | "modified";
   const sortDirection = sortId.endsWith("asc") ? "asc" : "desc";
+  const activePathSuggestion =
+    pathSuggestionIndex >= 0 && pathSuggestionIndex < pathSuggestions.length ? pathSuggestions[pathSuggestionIndex] : null;
 
   const breadcrumbs = useMemo(() => {
     let current = "";
@@ -1876,17 +2033,29 @@ export default function BrowserPage({
   const handleSelectPrefix = (nextPrefix: string) => {
     setPrefix(nextPrefix);
     setActiveItem(null);
+    if (bucketName) {
+      setPathHistory(pushBucketPathHistory(bucketName, nextPrefix));
+    }
   };
 
   const startEditingPath = () => {
     if (!bucketName) return;
     setPathDraft(prefix);
+    setPathSuggestionIndex(-1);
     setIsEditingPath(true);
   };
 
   const commitPathDraft = () => {
-    const trimmed = pathDraft.trim().replace(/^\/+/, "");
+    const trimmed = normalizePathDraftValue(pathDraft);
     const nextPrefix = trimmed ? normalizePrefix(trimmed) : "";
+    if (pathSuggestionsDebounceRef.current !== null) {
+      window.clearTimeout(pathSuggestionsDebounceRef.current);
+      pathSuggestionsDebounceRef.current = null;
+    }
+    pathSuggestionsRequestIdRef.current += 1;
+    setPathSuggestions([]);
+    setPathSuggestionsLoading(false);
+    setPathSuggestionIndex(-1);
     setIsEditingPath(false);
     if (nextPrefix !== prefix) {
       handleSelectPrefix(nextPrefix);
@@ -1894,13 +2063,60 @@ export default function BrowserPage({
   };
 
   const cancelPathEdit = () => {
+    if (pathSuggestionsDebounceRef.current !== null) {
+      window.clearTimeout(pathSuggestionsDebounceRef.current);
+      pathSuggestionsDebounceRef.current = null;
+    }
+    pathSuggestionsRequestIdRef.current += 1;
     setPathDraft(prefix);
+    setPathSuggestions([]);
+    setPathSuggestionsLoading(false);
+    setPathSuggestionIndex(-1);
     setIsEditingPath(false);
   };
 
+  const applyPathSuggestion = (suggestion: PathSuggestion, options?: { commit?: boolean }) => {
+    const nextPrefix = suggestion.value ? normalizePrefix(suggestion.value) : "";
+    setPathDraft(nextPrefix);
+    setPathSuggestionIndex(-1);
+    if (!options?.commit) return;
+    if (pathSuggestionsDebounceRef.current !== null) {
+      window.clearTimeout(pathSuggestionsDebounceRef.current);
+      pathSuggestionsDebounceRef.current = null;
+    }
+    pathSuggestionsRequestIdRef.current += 1;
+    setPathSuggestions([]);
+    setPathSuggestionsLoading(false);
+    setIsEditingPath(false);
+    if (nextPrefix !== prefix) {
+      handleSelectPrefix(nextPrefix);
+    }
+  };
+
   const handlePathKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") {
+      if (pathSuggestions.length === 0) return;
+      event.preventDefault();
+      setPathSuggestionIndex((prev) => (prev < pathSuggestions.length - 1 ? prev + 1 : 0));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      if (pathSuggestions.length === 0) return;
+      event.preventDefault();
+      setPathSuggestionIndex((prev) => (prev > 0 ? prev - 1 : pathSuggestions.length - 1));
+      return;
+    }
+    if (event.key === "Tab" && activePathSuggestion) {
+      event.preventDefault();
+      applyPathSuggestion(activePathSuggestion);
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
+      if (activePathSuggestion) {
+        applyPathSuggestion(activePathSuggestion, { commit: true });
+        return;
+      }
       commitPathDraft();
     }
     if (event.key === "Escape") {
@@ -1931,6 +2147,92 @@ export default function BrowserPage({
     pathInputRef.current?.focus();
     pathInputRef.current?.select();
   }, [isEditingPath, prefix]);
+
+  useEffect(() => {
+    if (!bucketName) {
+      setPathHistory([]);
+      return;
+    }
+    setPathHistory(readBucketPathHistory(bucketName));
+  }, [bucketName]);
+
+  useEffect(() => {
+    if (!isEditingPath || !bucketName || !hasS3AccountContext) {
+      if (pathSuggestionsDebounceRef.current !== null) {
+        window.clearTimeout(pathSuggestionsDebounceRef.current);
+        pathSuggestionsDebounceRef.current = null;
+      }
+      pathSuggestionsRequestIdRef.current += 1;
+      setPathSuggestions([]);
+      setPathSuggestionsLoading(false);
+      setPathSuggestionIndex(-1);
+      return;
+    }
+
+    const { parentPrefix, fragment } = resolvePathDraftContext(pathDraft);
+    const localCandidates = parentPrefix === normalizePrefix(prefix) ? prefixes : [];
+    const localSuggestions = buildPathSuggestionEntries(localCandidates, parentPrefix, fragment, "local");
+    const historySuggestions = buildPathSuggestionEntries(pathHistory, parentPrefix, fragment, "history");
+    const localOnlySuggestions = mergePathSuggestions(fragment, historySuggestions, localSuggestions);
+    setPathSuggestions(localOnlySuggestions);
+    setPathSuggestionIndex(-1);
+
+    if (pathSuggestionsDebounceRef.current !== null) {
+      window.clearTimeout(pathSuggestionsDebounceRef.current);
+    }
+    const requestId = pathSuggestionsRequestIdRef.current + 1;
+    pathSuggestionsRequestIdRef.current = requestId;
+    setPathSuggestionsLoading(true);
+    pathSuggestionsDebounceRef.current = window.setTimeout(() => {
+      pathSuggestionsDebounceRef.current = null;
+      listBrowserObjects(accountIdForApi, bucketName, {
+        prefix: parentPrefix,
+        query: fragment || undefined,
+        type: "folder",
+        maxKeys: PATH_SUGGESTIONS_API_LIMIT,
+      })
+        .then((data) => {
+          if (pathSuggestionsRequestIdRef.current !== requestId) return;
+          const remoteSuggestions = buildPathSuggestionEntries(data.prefixes || [], parentPrefix, fragment, "remote");
+          setPathSuggestions(mergePathSuggestions(fragment, historySuggestions, localSuggestions, remoteSuggestions));
+        })
+        .catch(() => {
+          if (pathSuggestionsRequestIdRef.current !== requestId) return;
+          setPathSuggestions(localOnlySuggestions);
+        })
+        .finally(() => {
+          if (pathSuggestionsRequestIdRef.current === requestId) {
+            setPathSuggestionsLoading(false);
+          }
+        });
+    }, PATH_SUGGESTIONS_DEBOUNCE_MS);
+
+    return () => {
+      if (pathSuggestionsDebounceRef.current !== null) {
+        window.clearTimeout(pathSuggestionsDebounceRef.current);
+        pathSuggestionsDebounceRef.current = null;
+      }
+    };
+  }, [
+    accountIdForApi,
+    bucketName,
+    hasS3AccountContext,
+    isEditingPath,
+    pathDraft,
+    pathHistory,
+    prefix,
+    prefixes,
+  ]);
+
+  useEffect(() => {
+    if (pathSuggestions.length === 0 && pathSuggestionIndex !== -1) {
+      setPathSuggestionIndex(-1);
+      return;
+    }
+    if (pathSuggestionIndex >= pathSuggestions.length) {
+      setPathSuggestionIndex(pathSuggestions.length - 1);
+    }
+  }, [pathSuggestionIndex, pathSuggestions.length]);
 
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => items.some((item) => item.id === id)));
@@ -4831,6 +5133,12 @@ export default function BrowserPage({
         return;
       }
 
+      if (key === "l") {
+        event.preventDefault();
+        startEditingPath();
+        return;
+      }
+
       if (key === "c") {
         const targets = selectedItems.length > 0 ? selectedItems : inspectedItem ? [inspectedItem] : [];
         if (targets.length === 0) return;
@@ -4867,6 +5175,7 @@ export default function BrowserPage({
     previewItem,
     selectedItems,
     setInspectorVisible,
+    startEditingPath,
     showAdvancedModal,
     showBulkAttributesModal,
     showBulkRestoreModal,
@@ -5754,7 +6063,7 @@ export default function BrowserPage({
               />
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
             <div ref={bucketMenuRef} className="relative">
               <button
                 type="button"
@@ -5830,23 +6139,98 @@ export default function BrowserPage({
               )}
             </div>
             <div
-              className="flex flex-wrap items-center gap-1 ui-caption font-semibold text-slate-500 dark:text-slate-400"
+              className="flex min-w-[240px] flex-1 flex-wrap items-center gap-1 ui-caption font-semibold text-slate-500 dark:text-slate-400 sm:min-w-[460px]"
               onClick={isEditingPath ? undefined : startEditingPath}
+              onDoubleClick={isEditingPath ? undefined : startEditingPath}
             >
               {isEditingPath ? (
-                <input
-                  ref={pathInputRef}
-                  type="text"
-                  value={pathDraft}
-                  onChange={(event) => setPathDraft(event.target.value)}
-                  onBlur={commitPathDraft}
-                  onKeyDown={handlePathKeyDown}
-                  placeholder="root"
-                  aria-label="Path"
-                  className="min-w-[140px] flex-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  disabled={!bucketName}
-                  spellCheck={false}
-                />
+                <div className="relative min-w-[240px] flex-1 sm:min-w-[460px] md:min-w-[640px] lg:min-w-[760px]">
+                  <input
+                    ref={pathInputRef}
+                    type="text"
+                    value={pathDraft}
+                    onChange={(event) => setPathDraft(event.target.value)}
+                    onBlur={commitPathDraft}
+                    onKeyDown={handlePathKeyDown}
+                    placeholder="root"
+                    aria-label="Path"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-controls="browser-path-suggestion-list"
+                    aria-expanded={pathSuggestions.length > 0 || pathSuggestionsLoading}
+                    aria-activedescendant={
+                      activePathSuggestion ? `browser-path-suggestion-${pathSuggestionIndex}` : undefined
+                    }
+                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    disabled={!bucketName}
+                    spellCheck={false}
+                  />
+                  {(pathSuggestions.length > 0 || pathSuggestionsLoading) && (
+                    <div
+                      id="browser-path-suggestion-list"
+                      role="listbox"
+                      className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                    >
+                      {pathSuggestions.length === 0 ? (
+                        <div className="px-2 py-1.5 text-slate-500 dark:text-slate-300">Searching folders...</div>
+                      ) : (
+                        <div className="max-h-56 overflow-y-auto">
+                          {pathSuggestions.map((suggestion, idx) => {
+                            const isActive = idx === pathSuggestionIndex;
+                            const suggestionId = `browser-path-suggestion-${idx}`;
+                            const sourceBadge =
+                              suggestion.source === "history"
+                                ? "Recent"
+                                : suggestion.source === "local"
+                                  ? "Visible"
+                                  : null;
+                            return (
+                              <button
+                                id={suggestionId}
+                                key={`${suggestion.source}-${suggestion.value}`}
+                                type="button"
+                                role="option"
+                                aria-selected={isActive}
+                                onMouseEnter={() => setPathSuggestionIndex(idx)}
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  applyPathSuggestion(suggestion, { commit: true });
+                                }}
+                                className={`flex w-full items-start gap-2 px-2 py-1.5 text-left transition ${
+                                  isActive
+                                    ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
+                                    : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                }`}
+                              >
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate font-semibold" title={suggestion.label}>
+                                    {suggestion.label}
+                                  </span>
+                                  <span
+                                    className="mt-0.5 block break-all text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500"
+                                    title={suggestion.value}
+                                  >
+                                    {suggestion.value}
+                                  </span>
+                                </span>
+                                {sourceBadge && (
+                                  <span className="ml-2 shrink-0 self-start rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                                    {sourceBadge}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {pathSuggestionsLoading && pathSuggestions.length > 0 && (
+                        <div className="border-t border-slate-200 px-2 py-1 text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                          Searching more folders...
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <>
                   <button
@@ -5862,35 +6246,39 @@ export default function BrowserPage({
                   >
                     <UpIcon className="h-3.5 w-3.5" />
                   </button>
-                  {breadcrumbs.length === 0 ? (
-                    <span className="text-slate-400">(root)</span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleSelectPrefix("");
-                      }}
-                      className="rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
-                    >
-                      root
-                    </button>
-                  )}
-                  {breadcrumbs.map((crumb) => (
-                    <span key={crumb.prefix} className="flex items-center gap-1">
-                      <span className="text-slate-300">/</span>
+                  <div className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5">
+                    {breadcrumbs.length === 0 ? (
+                      <span className="shrink-0 text-slate-400">(root)</span>
+                    ) : (
                       <button
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          handleSelectPrefix(crumb.prefix);
+                          handleSelectPrefix("");
                         }}
-                        className="rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+                        className="shrink-0 rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+                        title="root"
                       >
-                        {crumb.label}
+                        root
                       </button>
-                    </span>
-                  ))}
+                    )}
+                    {breadcrumbs.map((crumb) => (
+                      <span key={crumb.prefix} className="flex shrink-0 items-center gap-1">
+                        <span className="text-slate-300">/</span>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleSelectPrefix(crumb.prefix);
+                          }}
+                          className="max-w-[220px] truncate rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 sm:max-w-[320px] md:max-w-[420px]"
+                          title={crumb.prefix}
+                        >
+                          {crumb.label}
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 </>
               )}
             </div>

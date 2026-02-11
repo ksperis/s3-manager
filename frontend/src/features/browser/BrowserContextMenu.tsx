@@ -354,18 +354,20 @@ export default function BrowserContextMenu({
             <SlidersIcon className="h-3.5 w-3.5" />
             Bulk attributes
           </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onOpenBulkRestore([contextItem]);
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            <HistoryIcon className="h-3.5 w-3.5" />
-            Restore to date
-          </button>
+          {versioningEnabled && (
+            <button
+              type="button"
+              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+              onClick={() => {
+                onClose();
+                onOpenBulkRestore([contextItem]);
+              }}
+              disabled={!bucketName || !hasS3AccountContext}
+            >
+              <HistoryIcon className="h-3.5 w-3.5" />
+              Restore to date
+            </button>
+          )}
           {contextItem.type === "file" && (
             <button
               type="button"
@@ -489,18 +491,20 @@ export default function BrowserContextMenu({
             <SlidersIcon className="h-3.5 w-3.5" />
             Bulk attributes
           </button>
-          <button
-            type="button"
-            className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
-            onClick={() => {
-              onClose();
-              onOpenBulkRestore(contextSelectionInfo.items);
-            }}
-            disabled={!bucketName || !hasS3AccountContext}
-          >
-            <HistoryIcon className="h-3.5 w-3.5" />
-            Restore to date
-          </button>
+          {versioningEnabled && (
+            <button
+              type="button"
+              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+              onClick={() => {
+                onClose();
+                onOpenBulkRestore(contextSelectionInfo.items);
+              }}
+              disabled={!bucketName || !hasS3AccountContext}
+            >
+              <HistoryIcon className="h-3.5 w-3.5" />
+              Restore to date
+            </button>
+          )}
           {contextSelectionInfo.canAdvanced && contextSelectionInfo.primary && (
             <button
               type="button"
