@@ -31,7 +31,7 @@ import {
   updateCephAdminBucketPublicAccessBlock,
   updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
-import { tableActionButtonClasses } from "../../components/tableActionClasses";
+import { tableActionMenuItemClasses, tableIconActionButtonClasses } from "../../components/tableActionClasses";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import BucketDetailPage from "../manager/BucketDetailPage";
 
@@ -60,6 +60,25 @@ const formatNumber = (value?: number | null) => {
   if (value === undefined || value === null) return "-";
   return value.toLocaleString();
 };
+
+function ConfigureIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+      <path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z" />
+      <path d="m19.4 15.2 1.1 1.9-1.9 3.3-2.3-.5a7.9 7.9 0 0 1-1.7 1l-.6 2.2H10l-.6-2.2a7.9 7.9 0 0 1-1.7-1l-2.3.5-1.9-3.3 1.1-1.9a8.3 8.3 0 0 1 0-2.4L3.5 11l1.9-3.3 2.3.5c.5-.4 1.1-.7 1.7-1L10 5h3.8l.6 2.2c.6.3 1.2.6 1.7 1l2.3-.5 1.9 3.3-1.1 1.8c.1.8.1 1.6 0 2.4Z" />
+    </svg>
+  );
+}
+
+function MoreIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <circle cx="5" cy="12" r="1.9" />
+      <circle cx="12" cy="12" r="1.9" />
+      <circle cx="19" cy="12" r="1.9" />
+    </svg>
+  );
+}
 
 const BULK_CONCURRENCY_LIMIT = 6;
 
@@ -3211,13 +3230,40 @@ export default function CephAdminBucketsPage() {
       field: null,
       align: "right",
       render: (bucket) => (
-        <button
-          type="button"
-          onClick={() => setEditingBucketName(bucket.name)}
-          className={tableActionButtonClasses}
-        >
-          Configure
-        </button>
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setEditingBucketName(bucket.name)}
+            className={tableIconActionButtonClasses}
+            aria-label="Configure bucket"
+            title="Configure"
+          >
+            <ConfigureIcon />
+          </button>
+          <details className="relative">
+            <summary
+              className={`${tableIconActionButtonClasses} list-none [&::-webkit-details-marker]:hidden`}
+              aria-label="More actions"
+              title="More actions"
+            >
+              <MoreIcon />
+            </summary>
+            <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+              <button
+                type="button"
+                className={tableActionMenuItemClasses}
+                onClick={(event) => {
+                  event.preventDefault();
+                  openTagEditor([bucket.name]);
+                  const parent = event.currentTarget.closest("details");
+                  if (parent) parent.removeAttribute("open");
+                }}
+              >
+                Edit UI tags
+              </button>
+            </div>
+          </details>
+        </div>
       ),
     });
 

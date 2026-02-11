@@ -13,7 +13,7 @@ import TableEmptyState from "../../components/TableEmptyState";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
 import { CephAdminRgwUser, CephAdminRgwUserDetail, assumeCephAdminUser, listCephAdminUsers } from "../../api/cephAdmin";
-import { tableActionButtonClasses } from "../../components/tableActionClasses";
+import { tableActionButtonClasses, tableActionMenuItemClasses, tableIconActionButtonClasses } from "../../components/tableActionClasses";
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
 import CephAdminUserEditModal from "./CephAdminUserEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
@@ -43,6 +43,25 @@ const formatNumber = (value?: number | null) => {
   if (value === undefined || value === null) return "-";
   return value.toLocaleString();
 };
+
+function ConfigureIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+      <path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z" />
+      <path d="m19.4 15.2 1.1 1.9-1.9 3.3-2.3-.5a7.9 7.9 0 0 1-1.7 1l-.6 2.2H10l-.6-2.2a7.9 7.9 0 0 1-1.7-1l-2.3.5-1.9-3.3 1.1-1.9a8.3 8.3 0 0 1 0-2.4L3.5 11l1.9-3.3 2.3.5c.5-.4 1.1-.7 1.7-1L10 5h3.8l.6 2.2c.6.3 1.2.6 1.7 1l2.3-.5 1.9 3.3-1.1 1.8c.1.8.1 1.6 0 2.4Z" />
+    </svg>
+  );
+}
+
+function MoreIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <circle cx="5" cy="12" r="1.9" />
+      <circle cx="12" cy="12" r="1.9" />
+      <circle cx="19" cy="12" r="1.9" />
+    </svg>
+  );
+}
 
 type ColumnId =
   | "tenant"
@@ -538,33 +557,58 @@ export default function CephAdminUsersPage() {
         <div className="inline-flex items-center gap-2">
           <button
             type="button"
-            className={tableActionButtonClasses}
-            onClick={() => {
-              const owner = bucketOwnerFilterForUser(user);
-              if (!owner) return;
-              navigate(`/ceph-admin/buckets?owner=${encodeURIComponent(owner)}`);
-            }}
+            className={tableIconActionButtonClasses}
+            onClick={() => setEditingTarget(user)}
+            aria-label="Configure user"
+            title="Configure"
           >
-            Owner buckets
+            <ConfigureIcon />
           </button>
-          <button type="button" className={tableActionButtonClasses} onClick={() => setEditingTarget(user)}>
-            Configure
-          </button>
-          <button
-            type="button"
-            className={tableActionButtonClasses}
-            disabled={!selectedEndpointId || !stsEnabled || assumeTarget === user.uid || Boolean(user.tenant)}
-            title={
-              user.tenant
-                ? "Tenant users are not supported for assume-role."
-                : !stsEnabled
-                  ? "STS is disabled for this endpoint."
-                  : undefined
-            }
-            onClick={() => setConfirmTarget(user)}
-          >
-            {assumeTarget === user.uid ? "Assuming..." : "Assume in manager"}
-          </button>
+          <details className="relative">
+            <summary
+              className={`${tableIconActionButtonClasses} list-none [&::-webkit-details-marker]:hidden`}
+              aria-label="More actions"
+              title="More actions"
+            >
+              <MoreIcon />
+            </summary>
+            <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+              <button
+                type="button"
+                className={tableActionMenuItemClasses}
+                onClick={(event) => {
+                  event.preventDefault();
+                  const owner = bucketOwnerFilterForUser(user);
+                  if (!owner) return;
+                  navigate(`/ceph-admin/buckets?owner=${encodeURIComponent(owner)}`);
+                  const parent = event.currentTarget.closest("details");
+                  if (parent) parent.removeAttribute("open");
+                }}
+              >
+                Owner buckets
+              </button>
+              <button
+                type="button"
+                className={tableActionMenuItemClasses}
+                disabled={!selectedEndpointId || !stsEnabled || assumeTarget === user.uid || Boolean(user.tenant)}
+                title={
+                  user.tenant
+                    ? "Tenant users are not supported for assume-role."
+                    : !stsEnabled
+                      ? "STS is disabled for this endpoint."
+                      : undefined
+                }
+                onClick={(event) => {
+                  event.preventDefault();
+                  setConfirmTarget(user);
+                  const parent = event.currentTarget.closest("details");
+                  if (parent) parent.removeAttribute("open");
+                }}
+              >
+                {assumeTarget === user.uid ? "Assuming..." : "Assume in manager"}
+              </button>
+            </div>
+          </details>
         </div>
       ),
     });
