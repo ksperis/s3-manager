@@ -3092,7 +3092,7 @@ export default function CephAdminBucketsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Buckets"
-        description="Listing cluster-level des buckets (Admin Ops + S3)."
+        description="Cluster-level bucket listing (Admin Ops + S3)."
         breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Buckets" }]}
       />
 

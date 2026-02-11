@@ -29,7 +29,7 @@ export default function Modal({
             className="rounded-md px-3 py-1 ui-body font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
             aria-label="Close modal"
           >
-            Fermer
+            Close
           </button>
         </div>
         <div className={`${maxBodyHeightClass} overflow-y-auto px-6 py-4`}>{children}</div>

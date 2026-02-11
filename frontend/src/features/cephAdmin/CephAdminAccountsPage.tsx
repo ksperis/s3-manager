@@ -574,7 +574,7 @@ export default function CephAdminAccountsPage() {
     <div className="space-y-4">
       <PageHeader
         title="RGW Accounts"
-        description="Liste complète des accounts RGW (admin ops)."
+        description="Complete list of RGW accounts (admin ops)."
         breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Accounts" }]}
         actions={
           selectedEndpointId

@@ -13,10 +13,10 @@ type CardLink = {
 };
 
 const cards: CardLink[] = [
-  { title: "Metrics", description: "Vue cluster-wide du stockage et du trafic RGW.", to: "/ceph-admin/metrics" },
-  { title: "RGW Accounts", description: "Créer/importer des tenants RGW et gérer leurs quotas.", to: "/ceph-admin/accounts" },
-  { title: "RGW Users", description: "Administrer les utilisateurs RGW du cluster.", to: "/ceph-admin/users" },
-  { title: "Buckets", description: "Lister et configurer les buckets du cluster (Admin Ops + S3).", to: "/ceph-admin/buckets" },
+  { title: "Metrics", description: "Cluster-wide view of RGW storage and traffic.", to: "/ceph-admin/metrics" },
+  { title: "RGW Accounts", description: "Create/import RGW tenants and manage their quotas.", to: "/ceph-admin/accounts" },
+  { title: "RGW Users", description: "Manage cluster-wide RGW users.", to: "/ceph-admin/users" },
+  { title: "Buckets", description: "List and configure cluster-wide buckets (Admin Ops + S3).", to: "/ceph-admin/buckets" },
 ];
 
 export default function CephAdminDashboard() {
@@ -25,7 +25,7 @@ export default function CephAdminDashboard() {
     <div className="space-y-4">
       <PageHeader
         title="Ceph Admin"
-        description={`Administration RGW cluster-level. Endpoint actif : ${selectedEndpoint?.name ?? "—"}.`}
+        description={`Cluster-level RGW administration. Active endpoint: ${selectedEndpoint?.name ?? "—"}.`}
         breadcrumbs={[{ label: "Ceph Admin" }]}
       />
       <div className="grid gap-4 md:grid-cols-3">
