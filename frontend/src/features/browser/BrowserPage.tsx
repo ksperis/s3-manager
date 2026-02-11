@@ -611,12 +611,13 @@ export default function BrowserPage({
     [browserContext.contexts, browserContext.selectedContextId]
   );
   const storageEndpointCaps = useMemo(() => {
-    const raw = selectedContext?.raw;
-    if (!raw || typeof raw !== "object") return null;
-    if ("storage_endpoint_capabilities" in raw) {
-      return (raw as { storage_endpoint_capabilities?: Record<string, boolean> | null }).storage_endpoint_capabilities ?? null;
+    if (selectedContext?.storage_endpoint_capabilities) {
+      return selectedContext.storage_endpoint_capabilities;
     }
-    return null;
+    const raw = (selectedContext as { raw?: unknown } | null)?.raw;
+    if (!raw || typeof raw !== "object") return null;
+    if (!("storage_endpoint_capabilities" in raw)) return null;
+    return (raw as { storage_endpoint_capabilities?: Record<string, boolean> | null }).storage_endpoint_capabilities ?? null;
   }, [selectedContext]);
   const effectiveCaps = storageEndpointCapabilities === undefined ? storageEndpointCaps : storageEndpointCapabilities;
   const contextId = typeof accountIdForApi === "string" ? accountIdForApi : null;
@@ -736,13 +737,10 @@ export default function BrowserPage({
     },
     [accountIdForApi, hasS3AccountContext, stsEnabled, stsStatus?.available]
   );
-  const stsReady = Boolean(stsEnabled && stsStatus?.available && !stsCredentialsError);
+  const stsAvailable = Boolean(stsEnabled && stsStatus?.available);
   const presignObjectRequest = useCallback(
     async (targetBucket: string, payload: PresignRequest) => {
-      if (payload.operation === "post_object") {
-        return presignObject(accountIdForApi, targetBucket, payload);
-      }
-      if (stsReady) {
+      if (stsAvailable) {
         const credentials = await ensureStsCredentials();
         if (credentials) {
           try {
@@ -761,11 +759,11 @@ export default function BrowserPage({
       }
       return presignObject(accountIdForApi, targetBucket, payload);
     },
-    [accountIdForApi, ensureStsCredentials, stsReady]
+    [accountIdForApi, ensureStsCredentials, stsAvailable]
   );
   const presignPartRequest = useCallback(
     async (targetBucket: string, uploadId: string, payload: PresignPartRequest) => {
-      if (stsReady) {
+      if (stsAvailable) {
         const credentials = await ensureStsCredentials();
         if (credentials) {
           try {
@@ -784,7 +782,7 @@ export default function BrowserPage({
       }
       return presignPart(accountIdForApi, targetBucket, uploadId, payload);
     },
-    [accountIdForApi, ensureStsCredentials, stsReady]
+    [accountIdForApi, ensureStsCredentials, stsAvailable]
   );
   const warnings = useMemo(() => {
     const items: string[] = [];
@@ -3433,8 +3431,7 @@ export default function BrowserPage({
       await proxyUpload(accountId, bucket, key, file, onProgress, controller?.signal);
       return;
     }
-    const usePutPresign = stsReady;
-    const operation: PresignRequest["operation"] = usePutPresign ? "put_object" : "post_object";
+    const operation: PresignRequest["operation"] = "post_object";
     const presign = await presignObjectRequest(bucket, {
       key,
       operation,
