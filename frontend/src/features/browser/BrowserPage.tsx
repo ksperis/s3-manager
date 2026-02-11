@@ -3431,7 +3431,7 @@ export default function BrowserPage({
       await proxyUpload(accountId, bucket, key, file, onProgress, controller?.signal);
       return;
     }
-    const operation: PresignRequest["operation"] = "post_object";
+    const operation: PresignRequest["operation"] = stsAvailable ? "put_object" : "post_object";
     const presign = await presignObjectRequest(bucket, {
       key,
       operation,

@@ -9,7 +9,6 @@ import {
   S3Client,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
-import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type {
   PresignPartRequest,
@@ -80,26 +79,6 @@ export const presignObjectWithSts = async (
     }
     const url = await getSignedUrl(client, command, { expiresIn });
     return { url, method, expires_in: expiresIn, headers: Object.keys(headers).length ? headers : undefined };
-  }
-  if (payload.operation === "post_object") {
-    method = "POST";
-    const conditions: Array<Record<string, string> | [string, number, number]> = [];
-    const fields: Record<string, string> = {};
-    if (payload.content_type) {
-      fields["Content-Type"] = payload.content_type;
-      conditions.push({ "Content-Type": payload.content_type });
-    }
-    if (typeof payload.content_length === "number" && Number.isFinite(payload.content_length)) {
-      conditions.push(["content-length-range", 0, Math.max(0, Math.floor(payload.content_length))]);
-    }
-    const result = await createPresignedPost(client, {
-      Bucket: bucketName,
-      Key: payload.key,
-      Expires: expiresIn,
-      Fields: Object.keys(fields).length ? fields : undefined,
-      Conditions: conditions.length ? conditions : undefined,
-    });
-    return { url: result.url, method, expires_in: expiresIn, fields: result.fields };
   }
   throw new Error(`STS presign does not support ${payload.operation}`);
 };
