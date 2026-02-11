@@ -884,6 +884,21 @@ const persistVisibleColumns = (value: ColumnId[]) => {
 
 type BucketUiTags = Record<string, string[]>;
 
+const normalizeUiTagValues = (values: string[]) => {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  values.forEach((value) => {
+    if (typeof value !== "string") return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    normalized.push(trimmed);
+  });
+  return normalized;
+};
+
 const loadUiTags = (endpointId?: number | null): BucketUiTags => {
   if (typeof window === "undefined" || !endpointId) return {};
   const raw = localStorage.getItem(UI_TAGS_STORAGE_KEY);
@@ -895,7 +910,7 @@ const loadUiTags = (endpointId?: number | null): BucketUiTags => {
     const cleaned: BucketUiTags = {};
     Object.entries(tags).forEach(([key, value]) => {
       if (!Array.isArray(value)) return;
-      const items = value.filter((item) => typeof item === "string" && item.trim()) as string[];
+      const items = normalizeUiTagValues(value as string[]);
       if (items.length > 0) {
         cleaned[key] = items;
       }
@@ -999,7 +1014,7 @@ const loadBucketListState = (endpointId?: number | null): BucketListState | null
     return {
       filter: typeof data.filter === "string" ? data.filter : "",
       advancedApplied: data.advancedApplied ? sanitizeAdvancedFilter(data.advancedApplied) : null,
-      tagFilters: sanitizeStringArray(data.tagFilters),
+      tagFilters: normalizeUiTagValues(sanitizeStringArray(data.tagFilters) as string[]),
       tagFilterMode: data.tagFilterMode === "all" ? "all" : "any",
       selectedBuckets: sanitizeStringArray(data.selectedBuckets),
       page: sanitizePage(data.page, 1),
@@ -1020,31 +1035,11 @@ const persistBucketListState = (endpointId: number | null | undefined, value: Bu
 };
 
 const parseUiTags = (value: string) => {
-  const raw = value
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
-  const seen = new Set<string>();
-  const result: string[] = [];
-  raw.forEach((tag) => {
-    const key = tag.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    result.push(tag);
-  });
-  return result;
+  return normalizeUiTagValues(value.split(","));
 };
 
 const mergeUiTags = (existing: string[], incoming: string[]) => {
-  const seen = new Set(existing.map((tag) => tag.toLowerCase()));
-  const merged = [...existing];
-  incoming.forEach((tag) => {
-    const key = tag.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    merged.push(tag);
-  });
-  return merged;
+  return normalizeUiTagValues([...existing, ...incoming]);
 };
 
 const normalizeBucketName = (value: string) => value.trim().toLowerCase();
@@ -1339,19 +1334,19 @@ export default function CephAdminBucketsPage() {
   const baseRequiresStats = useMemo(() => advancedStatsRequired || sortRequiresStats, [advancedStatsRequired, sortRequiresStats]);
 
   const availableUiTags = useMemo(() => {
-    const tags = new Set<string>();
+    const tags: string[] = [];
     Object.values(uiTags).forEach((bucketTags) => {
-      bucketTags.forEach((tag) => tags.add(tag));
+      tags.push(...normalizeUiTagValues(bucketTags));
     });
-    return Array.from(tags.values()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    return normalizeUiTagValues(tags).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
   }, [uiTags]);
 
   const taggedBuckets = useMemo(() => {
     if (tagFilters.length === 0) return null;
-    const normalizedFilters = tagFilters.map((tag) => tag.toLowerCase());
+    const normalizedFilters = normalizeUiTagValues(tagFilters).map((tag) => tag.toLowerCase());
     const names = Object.entries(uiTags)
       .filter(([, tags]) => {
-        const lowerTags = tags.map((tag) => tag.toLowerCase());
+        const lowerTags = normalizeUiTagValues(tags).map((tag) => tag.toLowerCase());
         if (tagFilterMode === "all") {
           return normalizedFilters.every((filterTag) => lowerTags.includes(filterTag));
         }
@@ -1555,7 +1550,8 @@ export default function CephAdminBucketsPage() {
   };
 
   const removeTagFilter = (tag: string) => {
-    setTagFilters((prev) => prev.filter((item) => item.toLowerCase() !== tag.toLowerCase()));
+    const target = tag.trim().toLowerCase();
+    setTagFilters((prev) => prev.filter((item) => item.trim().toLowerCase() !== target));
     setPage(1);
   };
 
@@ -1570,9 +1566,10 @@ export default function CephAdminBucketsPage() {
   };
 
   const removeTagForBucket = (bucketName: string, tag: string) => {
+    const target = tag.trim().toLowerCase();
     setUiTags((prev) => {
-      const existing = prev[bucketName] ?? [];
-      const next = existing.filter((item) => item.toLowerCase() !== tag.toLowerCase());
+      const existing = normalizeUiTagValues(prev[bucketName] ?? []);
+      const next = existing.filter((item) => item.toLowerCase() !== target);
       const updated = { ...prev };
       if (next.length === 0) {
         delete updated[bucketName];
@@ -2668,7 +2665,7 @@ export default function CephAdminBucketsPage() {
     return defaultVisibleColumns.some((column) => !current.has(column));
   }, [visibleColumns]);
   const availableTagFilters = useMemo(() => {
-    const selected = new Set(tagFilters.map((tag) => tag.toLowerCase()));
+    const selected = new Set(normalizeUiTagValues(tagFilters).map((tag) => tag.toLowerCase()));
     return availableUiTags.filter((tag) => !selected.has(tag.toLowerCase()));
   }, [availableUiTags, tagFilters]);
   const showTagFilterBar = availableUiTags.length > 0 || tagFilters.length > 0;
@@ -3258,7 +3255,7 @@ export default function CephAdminBucketsPage() {
                 </div>
                 {showTagFilterBar && (
                   <div className="space-y-1 sm:col-span-2">
-                    <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-900">
+                    <div className="flex flex-wrap items-center gap-2">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {tagFilters.map((tag) => {
                           const colors = getTagColors(tag);
