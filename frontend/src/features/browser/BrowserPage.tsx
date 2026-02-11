@@ -506,6 +506,10 @@ export default function BrowserPage({
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
+  const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderError, setNewFolderError] = useState<string | null>(null);
+  const [newFolderLoading, setNewFolderLoading] = useState(false);
   const [showOperationsModal, setShowOperationsModal] = useState(false);
   const [previewItem, setPreviewItem] = useState<BrowserItem | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -584,9 +588,12 @@ export default function BrowserPage({
   const nameHeaderRef = useRef<HTMLTableCellElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
+  const newFolderInputRef = useRef<HTMLInputElement | null>(null);
   const pathSuggestionsDebounceRef = useRef<number | null>(null);
   const pathSuggestionsRequestIdRef = useRef(0);
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
+  const uploadRefreshTimeoutRef = useRef<number | null>(null);
+  const pendingUploadedKeysByBucketRef = useRef<Map<string, Set<string>>>(new Map());
   const previewObjectUrlRef = useRef<string | null>(null);
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
   const skipNextObjectsLoadRef = useRef(false);
@@ -647,14 +654,6 @@ export default function BrowserPage({
     if (!allowInspectorPanel) return;
     setShowInspector((prev) => !prev);
   }, [allowInspectorPanel]);
-
-  const setInspectorVisible = useCallback(
-    (next: boolean) => {
-      if (!allowInspectorPanel) return;
-      setShowInspector(next);
-    },
-    [allowInspectorPanel]
-  );
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   const isVersioningEnabled = bucketVersioningEnabled;
@@ -1220,6 +1219,10 @@ export default function BrowserPage({
         setObjectsLoading(true);
         setObjectsLoadingMore(false);
         setObjectsError(null);
+        setObjects([]);
+        setDeletedObjects([]);
+        setDeletedPrefixes([]);
+        setPrefixes([]);
         setObjectsNextToken(null);
         setObjectsIsTruncated(false);
       }
@@ -1962,7 +1965,6 @@ export default function BrowserPage({
   const openItemDetails = (item: BrowserItem) => {
     setActiveItem(item);
     setInspectorTab("details");
-    setInspectorVisible(true);
   };
 
   const isInteractiveTarget = (target: EventTarget | null) => {
@@ -2021,7 +2023,6 @@ export default function BrowserPage({
       return;
     }
     setActiveItem(item);
-    setInspectorVisible(true);
     clearPreviewObjectUrl();
     setPreviewError(null);
     setPreviewUrl(null);
@@ -2147,6 +2148,12 @@ export default function BrowserPage({
     pathInputRef.current?.focus();
     pathInputRef.current?.select();
   }, [isEditingPath, prefix]);
+
+  useEffect(() => {
+    if (!showNewFolderModal) return;
+    newFolderInputRef.current?.focus();
+    newFolderInputRef.current?.select();
+  }, [showNewFolderModal]);
 
   useEffect(() => {
     if (!bucketName) {
@@ -2554,7 +2561,6 @@ export default function BrowserPage({
       const next = isSelected ? prev.filter((itemId) => itemId !== id) : [...prev, id];
       if (!isSelected) {
         setInspectorTab("selection");
-        setInspectorVisible(true);
       }
       return next;
     });
@@ -2566,7 +2572,6 @@ export default function BrowserPage({
         return [];
       }
       setInspectorTab("selection");
-      setInspectorVisible(true);
       return [id];
     });
   };
@@ -2595,19 +2600,13 @@ export default function BrowserPage({
     setSelectedIds(listItems.map((item) => item.id));
     if (listItems.length > 0) {
       setInspectorTab("selection");
-      setInspectorVisible(true);
     }
   };
 
   const toggleInspectorForItem = (item: BrowserItem) => {
     if (!allowInspectorPanel) return;
-    if (showInspector && inspectedItem?.id === item.id) {
-      setInspectorVisible(false);
-      return;
-    }
     setActiveItem(item);
     setInspectorTab("details");
-    setInspectorVisible(true);
   };
 
   const handleItemContextMenu = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
@@ -2650,7 +2649,6 @@ export default function BrowserPage({
     setSelectedIds([]);
     setActiveItem(null);
     setInspectorTab("context");
-    setInspectorVisible(true);
   };
 
   const handleBucketChange = (value: string) => {
@@ -3166,6 +3164,59 @@ export default function BrowserPage({
     }, 400);
   };
 
+  const recordUploadedKey = (bucket: string, key: string) => {
+    if (!bucket || !key) return;
+    const next = pendingUploadedKeysByBucketRef.current;
+    const existing = next.get(bucket);
+    if (existing) {
+      existing.add(key);
+      return;
+    }
+    next.set(bucket, new Set([key]));
+  };
+
+  const flushUploadRefreshIfIdle = () => {
+    if (typeof window === "undefined") return;
+    if (activeUploadsRef.current > 0) return;
+    if (uploadQueueRef.current.length > 0) return;
+    if (uploadRefreshTimeoutRef.current !== null) return;
+    uploadRefreshTimeoutRef.current = window.setTimeout(() => {
+      uploadRefreshTimeoutRef.current = null;
+      if (activeUploadsRef.current > 0 || uploadQueueRef.current.length > 0) {
+        return;
+      }
+      const currentBucket = bucketNameRef.current;
+      if (!currentBucket) {
+        pendingUploadedKeysByBucketRef.current.clear();
+        return;
+      }
+      const currentPrefixValue = prefixRef.current;
+      const normalizedCurrentPrefix = normalizePrefix(currentPrefixValue);
+      const bucketKeys = pendingUploadedKeysByBucketRef.current.get(currentBucket);
+      const shouldRefreshCurrentPath = Boolean(
+        bucketKeys && Array.from(bucketKeys).some((key) => key.startsWith(normalizedCurrentPrefix))
+      );
+      pendingUploadedKeysByBucketRef.current.clear();
+      if (!shouldRefreshCurrentPath) return;
+      void loadObjects({ prefixOverride: currentPrefixValue, silent: true });
+      loadTreeChildren(currentPrefixValue, { expand: false });
+    }, 300);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (objectsRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(objectsRefreshTimeoutRef.current);
+        objectsRefreshTimeoutRef.current = null;
+      }
+      if (uploadRefreshTimeoutRef.current !== null) {
+        window.clearTimeout(uploadRefreshTimeoutRef.current);
+        uploadRefreshTimeoutRef.current = null;
+      }
+      pendingUploadedKeysByBucketRef.current.clear();
+    };
+  }, []);
+
   const startOperation = (
     status: OperationItem["status"],
     label: string,
@@ -3224,21 +3275,36 @@ export default function BrowserPage({
     );
   };
 
-  const handleNewFolder = async () => {
+  const handleNewFolder = () => {
     if (!bucketName || !hasS3AccountContext) return;
-    const name = window.prompt("Folder name:");
-    if (!name) return;
-    const clean = name.replace(/^\/+|\/+$/g, "");
-    if (!clean) return;
+    setNewFolderName("");
+    setNewFolderError(null);
+    setNewFolderLoading(false);
+    setShowNewFolderModal(true);
+  };
+
+  const handleCreateFolderFromModal = async () => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const clean = newFolderName.replace(/^\/+|\/+$/g, "");
+    if (!clean) {
+      setNewFolderError("Folder name is required.");
+      return;
+    }
     const folderPrefix = `${normalizedPrefix}${clean}/`;
+    setNewFolderLoading(true);
+    setNewFolderError(null);
     try {
       await createFolder(accountIdForApi, bucketName, folderPrefix);
       addActivity("Created", `${bucketName}/${folderPrefix}`);
       setStatusMessage(`Folder ${clean} created`);
+      setShowNewFolderModal(false);
+      setNewFolderName("");
       await loadObjects({ prefixOverride: prefix });
       loadTreeChildren(prefix);
     } catch (err) {
-      setStatusMessage("Unable to create folder.");
+      setNewFolderError("Unable to create folder.");
+    } finally {
+      setNewFolderLoading(false);
     }
   };
 
@@ -3312,6 +3378,7 @@ export default function BrowserPage({
         .finally(() => {
           activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1);
           processUploadQueue();
+          flushUploadRefreshIfIdle();
         });
     });
   };
@@ -3366,22 +3433,34 @@ export default function BrowserPage({
       await proxyUpload(accountId, bucket, key, file, onProgress, controller?.signal);
       return;
     }
+    const usePutPresign = stsReady;
+    const operation: PresignRequest["operation"] = usePutPresign ? "put_object" : "post_object";
     const presign = await presignObjectRequest(bucket, {
       key,
-      operation: "post_object",
+      operation,
       content_type: file.type || undefined,
       content_length: file.size,
       expires_in: 1800,
     });
-    if (!presign.fields) {
-      throw new Error("Missing presigned POST fields.");
+    const method = (presign.method || "").toUpperCase();
+    const hasPostFields = Boolean(presign.fields && Object.keys(presign.fields).length > 0);
+    if (operation === "post_object" || (method === "POST" && hasPostFields)) {
+      if (!presign.fields) {
+        throw new Error("Missing presigned POST fields.");
+      }
+      const formData = new FormData();
+      Object.entries(presign.fields).forEach(([field, value]) => {
+        formData.append(field, value);
+      });
+      formData.append("file", file);
+      await axios.post(presign.url, formData, {
+        onUploadProgress: onProgress,
+        signal: controller?.signal,
+      });
+      return;
     }
-    const formData = new FormData();
-    Object.entries(presign.fields).forEach(([field, value]) => {
-      formData.append(field, value);
-    });
-    formData.append("file", file);
-    await axios.post(presign.url, formData, {
+    await axios.put(presign.url, file, {
+      headers: { ...(presign.headers || {}), "Content-Type": file.type || "application/octet-stream" },
       onUploadProgress: onProgress,
       signal: controller?.signal,
     });
@@ -3516,9 +3595,7 @@ export default function BrowserPage({
       }
       completeOperation(operationId, "done");
       setStatusMessage(`Uploaded ${relativePath}`);
-      if (bucket === bucketName) {
-        requestObjectsRefresh(prefix);
-      }
+      recordUploadedKey(bucket, key);
     } catch (err) {
       if (isAbortError(err)) {
         completeOperation(operationId, "cancelled");
@@ -5097,6 +5174,7 @@ export default function BrowserPage({
     if (typeof window === "undefined") return;
     const shortcutsBlocked =
       showAdvancedModal ||
+      showNewFolderModal ||
       showOperationsModal ||
       showBulkAttributesModal ||
       showBulkRestoreModal ||
@@ -5129,7 +5207,6 @@ export default function BrowserPage({
         event.preventDefault();
         setSelectedIds(listItems.map((item) => item.id));
         setInspectorTab("selection");
-        setInspectorVisible(true);
         return;
       }
 
@@ -5174,9 +5251,9 @@ export default function BrowserPage({
     listItems,
     previewItem,
     selectedItems,
-    setInspectorVisible,
     startEditingPath,
     showAdvancedModal,
+    showNewFolderModal,
     showBulkAttributesModal,
     showBulkRestoreModal,
     showCleanupModal,
@@ -7878,6 +7955,61 @@ export default function BrowserPage({
           onApply={handleCleanupApply}
           onClose={() => setShowCleanupModal(false)}
         />
+      )}
+      {showNewFolderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-3">
+              <h3 className="ui-body font-semibold text-slate-900 dark:text-slate-100">Create folder</h3>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                Destination: <span className="font-semibold">{currentPath || `${bucketName}/`}</span>
+              </p>
+            </div>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleCreateFolderFromModal();
+              }}
+            >
+              <label className="block ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                Folder name
+                <input
+                  ref={newFolderInputRef}
+                  type="text"
+                  value={newFolderName}
+                  onChange={(event) => setNewFolderName(event.target.value)}
+                  placeholder="my-folder"
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  disabled={newFolderLoading}
+                  spellCheck={false}
+                />
+              </label>
+              {newFolderError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">{newFolderError}</p>}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                  onClick={() => {
+                    if (newFolderLoading) return;
+                    setShowNewFolderModal(false);
+                    setNewFolderError(null);
+                  }}
+                  disabled={newFolderLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!bucketName || !hasS3AccountContext || newFolderLoading}
+                >
+                  {newFolderLoading ? "Creating..." : "Create"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
       {showOperationsModal && (
         <BrowserOperationsModal
