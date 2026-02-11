@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useMemo, useRef, type ReactNode } from "react";
 import Modal from "../../components/Modal";
 import { formatBytes } from "../../utils/format";
 import {
@@ -94,6 +94,44 @@ type BrowserOperationsModalProps = {
   onClose: () => void;
 };
 
+type OperationCardProps = {
+  title: string;
+  subtitle?: string;
+  summary?: string;
+  progress?: number;
+  statusPill?: { label: string; classes: string };
+  actions?: ReactNode;
+  children?: ReactNode;
+};
+
+function OperationCard({ title, subtitle, summary, progress, statusPill, actions, children }: OperationCardProps) {
+  return (
+    <div className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">{title}</p>
+          {subtitle && <p className="ui-caption text-slate-400">{subtitle}</p>}
+          {summary && <p className="ui-caption tabular-nums text-slate-400">{summary}</p>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:ml-2 sm:flex-nowrap sm:justify-end sm:shrink-0">
+          {statusPill && (
+            <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 ui-caption font-semibold ${statusPill.classes}`}>
+              {statusPill.label}
+            </span>
+          )}
+          {actions}
+        </div>
+      </div>
+      {typeof progress === "number" && (
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+          <div className="h-full bg-primary-500" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+      {children != null && <div className="mt-2 space-y-1.5">{children}</div>}
+    </div>
+  );
+}
+
 export default function BrowserOperationsModal(props: BrowserOperationsModalProps) {
   const {
     totalOperationsCount,
@@ -115,9 +153,6 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     visibleCopyGroups,
     visibleUploadGroups,
     visibleOtherOperations,
-    operationSortIndexById,
-    uploadGroupSortIndexById,
-    operationSortFallback,
     isGroupExpanded,
     toggleGroupExpanded,
     getSectionVisibleCount,
@@ -195,75 +230,46 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     return { label: "In progress", classes: statusClasses(options.status) };
   };
 
-  const OperationCard = ({
-    title,
-    subtitle,
-    summary,
-    progress,
-    statusPill,
-    actions,
-    children,
-  }: {
-    title: string;
-    subtitle?: string;
-    summary?: string;
-    progress?: number;
-    statusPill?: { label: string; classes: string };
-    actions?: ReactNode;
-    children?: ReactNode;
-  }) => (
-    <div className="rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">{title}</p>
-          {subtitle && <p className="ui-caption text-slate-400">{subtitle}</p>}
-          {summary && <p className="ui-caption text-slate-400">{summary}</p>}
-        </div>
-        <div className="flex items-center gap-2">
-          {statusPill && (
-            <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${statusPill.classes}`}>
-              {statusPill.label}
-            </span>
-          )}
-          {actions}
-        </div>
-      </div>
-      {typeof progress === "number" && (
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-          <div className="h-full bg-primary-500" style={{ width: `${progress}%` }} />
-        </div>
-      )}
-      {children != null && <div className="mt-2 space-y-1.5">{children}</div>}
-    </div>
-  );
-
-  const timelineEntries = [
-    ...visibleDownloadGroups.map((group) => ({
-      type: "download" as const,
-      sortIndex: operationSortIndexById[group.op.id] ?? operationSortFallback,
-      group,
-    })),
-    ...visibleDeleteGroups.map((group) => ({
-      type: "delete" as const,
-      sortIndex: operationSortIndexById[group.op.id] ?? operationSortFallback,
-      group,
-    })),
-    ...visibleCopyGroups.map((group) => ({
-      type: "copy" as const,
-      sortIndex: operationSortIndexById[group.op.id] ?? operationSortFallback,
-      group,
-    })),
-    ...visibleUploadGroups.map((group) => ({
-      type: "upload" as const,
-      sortIndex: uploadGroupSortIndexById[group.id] ?? operationSortFallback,
-      group,
-    })),
-    ...visibleOtherOperations.map((op) => ({
-      type: "other" as const,
-      sortIndex: operationSortIndexById[op.id] ?? operationSortFallback,
-      op,
-    })),
-  ].sort((a, b) => a.sortIndex - b.sortIndex);
+  const timelineOrderByKeyRef = useRef<Record<string, number>>({});
+  const nextTimelineOrderRef = useRef(0);
+  const timelineEntries = useMemo(() => {
+    const entries = [
+      ...visibleDownloadGroups.map((group) => ({
+        key: `download:${group.op.id}`,
+        type: "download" as const,
+        group,
+      })),
+      ...visibleDeleteGroups.map((group) => ({
+        key: `delete:${group.op.id}`,
+        type: "delete" as const,
+        group,
+      })),
+      ...visibleCopyGroups.map((group) => ({
+        key: `copy:${group.op.id}`,
+        type: "copy" as const,
+        group,
+      })),
+      ...visibleUploadGroups.map((group) => ({
+        key: `upload:${group.id}`,
+        type: "upload" as const,
+        group,
+      })),
+      ...visibleOtherOperations.map((op) => ({
+        key: `other:${op.id}`,
+        type: "other" as const,
+        op,
+      })),
+    ];
+    entries.forEach((entry) => {
+      if (timelineOrderByKeyRef.current[entry.key] == null) {
+        nextTimelineOrderRef.current -= 1;
+        timelineOrderByKeyRef.current[entry.key] = nextTimelineOrderRef.current;
+      }
+    });
+    return entries.sort(
+      (a, b) => (timelineOrderByKeyRef.current[a.key] ?? 0) - (timelineOrderByKeyRef.current[b.key] ?? 0)
+    );
+  }, [visibleCopyGroups, visibleDeleteGroups, visibleDownloadGroups, visibleOtherOperations, visibleUploadGroups]);
 
   const renderDownloadGroup = (group: DownloadGroup) => {
     const queuedItems = group.items.filter((item) => item.status === "queued");
@@ -977,25 +983,19 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               ) : (
                 <div className="space-y-3">
                   {timelineEntries.map((entry) => {
-                    const key =
-                      entry.type === "other"
-                        ? `other:${entry.op.id}`
-                        : entry.type === "upload"
-                          ? `upload:${entry.group.id}`
-                          : `${entry.type}:${entry.group.op.id}`;
                     if (entry.type === "download") {
-                      return <Fragment key={key}>{renderDownloadGroup(entry.group)}</Fragment>;
+                      return <Fragment key={entry.key}>{renderDownloadGroup(entry.group)}</Fragment>;
                     }
                     if (entry.type === "delete") {
-                      return <Fragment key={key}>{renderDeleteGroup(entry.group)}</Fragment>;
+                      return <Fragment key={entry.key}>{renderDeleteGroup(entry.group)}</Fragment>;
                     }
                     if (entry.type === "copy") {
-                      return <Fragment key={key}>{renderCopyGroup(entry.group)}</Fragment>;
+                      return <Fragment key={entry.key}>{renderCopyGroup(entry.group)}</Fragment>;
                     }
                     if (entry.type === "upload") {
-                      return <Fragment key={key}>{renderUploadGroup(entry.group)}</Fragment>;
+                      return <Fragment key={entry.key}>{renderUploadGroup(entry.group)}</Fragment>;
                     }
-                    return <Fragment key={key}>{renderOtherOperation(entry.op)}</Fragment>;
+                    return <Fragment key={entry.key}>{renderOtherOperation(entry.op)}</Fragment>;
                   })}
                 </div>
               )}

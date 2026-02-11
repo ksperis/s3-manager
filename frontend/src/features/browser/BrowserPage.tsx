@@ -5896,7 +5896,7 @@ export default function BrowserPage({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-            <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1 py-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => {

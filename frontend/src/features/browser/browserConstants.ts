@@ -31,9 +31,9 @@ export const filterChipActiveClasses =
 export const countBadgeClasses =
   "inline-flex w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 px-1 ui-caption font-semibold text-slate-600 tabular-nums dark:bg-slate-800 dark:text-slate-200";
 export const operationStopClasses =
-  "rounded-full border border-rose-200 px-2 py-0.5 ui-caption font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30";
+  "inline-flex items-center justify-center whitespace-nowrap rounded-full border border-rose-200 px-2 py-0.5 ui-caption font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-50 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30";
 export const operationSecondaryClasses =
-  "rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 transition hover:border-primary hover:text-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100";
+  "inline-flex items-center justify-center whitespace-nowrap rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 transition hover:border-primary hover:text-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-100";
 export const viewToggleBaseClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100";
 export const viewToggleActiveClasses = "bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-100";
