@@ -13,6 +13,7 @@ import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
 import { CephAdminRgwAccount, CephAdminRgwAccountDetail, listCephAdminAccounts } from "../../api/cephAdmin";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
+import CephAdminAccountCreateModal from "./CephAdminAccountCreateModal";
 import CephAdminAccountEditModal from "./CephAdminAccountEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 
@@ -208,7 +209,9 @@ export default function CephAdminAccountsPage() {
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(DEFAULT_SORT);
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const requestSeqRef = useRef(0);
 
@@ -245,14 +248,14 @@ export default function CephAdminAccountsPage() {
     setAdvancedDraft(defaultAdvancedFilter);
     setAdvancedApplied(null);
     setSort(DEFAULT_SORT);
+    setShowCreateModal(false);
     setEditingAccountId(null);
   }, [selectedEndpointId]);
 
   const includeParams = useMemo(() => {
     const include = new Set<string>();
-    if (visibleColumns.includes("account_name") || visibleColumns.includes("email")) include.add("profile");
-    if (visibleColumns.includes("max_users") || visibleColumns.includes("max_buckets")) include.add("limits");
-    if (visibleColumns.includes("quota_max_size_bytes") || visibleColumns.includes("quota_max_objects")) include.add("quota");
+    // Base listing response is already enriched with profile/limits/quota values.
+    // Request extra enrichment only for live stats fields.
     if (visibleColumns.includes("bucket_count") || visibleColumns.includes("user_count")) include.add("stats");
     return Array.from(include.values());
   }, [visibleColumns]);
@@ -324,7 +327,17 @@ export default function CephAdminAccountsPage() {
     };
 
     void load();
-  }, [selectedEndpointId, page, pageSize, searchValue, advancedFilterParam, sort.field, sort.direction, includeParams.join(",")]);
+  }, [
+    selectedEndpointId,
+    page,
+    pageSize,
+    searchValue,
+    advancedFilterParam,
+    sort.field,
+    sort.direction,
+    includeParams.join(","),
+    reloadNonce,
+  ]);
 
   const toggleColumn = (id: ColumnId) => {
     setVisibleColumns((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -521,6 +534,16 @@ export default function CephAdminAccountsPage() {
         title="RGW Accounts"
         description="Liste complète des accounts RGW (admin ops)."
         breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Accounts" }]}
+        actions={
+          selectedEndpointId
+            ? [
+                {
+                  label: "Create account",
+                  onClick: () => setShowCreateModal(true),
+                },
+              ]
+            : []
+        }
       />
 
       {!selectedEndpointId && <PageBanner tone="warning">Select a Ceph endpoint first.</PageBanner>}
@@ -901,6 +924,15 @@ export default function CephAdminAccountsPage() {
           accountId={editingAccountId}
           onClose={() => setEditingAccountId(null)}
           onSaved={applyUpdatedAccount}
+        />
+      )}
+      {selectedEndpointId && showCreateModal && (
+        <CephAdminAccountCreateModal
+          endpointId={selectedEndpointId}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={() => {
+            setReloadNonce((prev) => prev + 1);
+          }}
         />
       )}
     </div>

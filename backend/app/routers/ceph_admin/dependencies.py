@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import StorageEndpoint, StorageProvider, User
 from app.routers.dependencies import get_current_ceph_admin
-from app.services.rgw_admin import RGWAdminClient, get_rgw_admin_client
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.utils.s3_endpoint import normalize_s3_endpoint
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags, features_to_capabilities, normalize_features_config
 
@@ -123,6 +123,22 @@ def _resolve_storage_endpoint(db: Session, endpoint_id: int) -> StorageEndpoint:
     return endpoint
 
 
+def _resolve_ceph_admin_workspace_endpoint(db: Session, endpoint_id: int) -> StorageEndpoint:
+    endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
+    if not endpoint:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage endpoint not found")
+    provider = StorageProvider(str(endpoint.provider))
+    if provider != StorageProvider.CEPH:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage endpoint is not a Ceph provider")
+    flags = resolve_feature_flags(endpoint)
+    if not flags.admin_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Admin operations are disabled for this endpoint",
+        )
+    return endpoint
+
+
 def get_ceph_admin_context(
     endpoint_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
@@ -148,6 +164,14 @@ def get_ceph_admin_context(
         access_key=access_key,
         secret_key=secret_key,
     )
+
+
+def get_ceph_admin_workspace_endpoint(
+    endpoint_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_ceph_admin),
+) -> StorageEndpoint:
+    return _resolve_ceph_admin_workspace_endpoint(db, endpoint_id)
 
 
 def build_ceph_admin_endpoint_payload(endpoint: StorageEndpoint) -> dict:

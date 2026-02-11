@@ -111,6 +111,8 @@ def create_bucket(
     region: Optional[str] = None,
     force_path_style: bool = False,
     verify_tls: bool = True,
+    location_constraint: Optional[str] = None,
+    object_lock_enabled: bool = False,
 ) -> None:
     client = get_s3_client(
         access_key,
@@ -122,14 +124,13 @@ def create_bucket(
         verify_tls=verify_tls,
     )
     try:
-        effective_region = region or settings.seed_s3_region
-        if effective_region and effective_region != "us-east-1":
-            client.create_bucket(
-                Bucket=bucket_name,
-                CreateBucketConfiguration={"LocationConstraint": effective_region},
-            )
-        else:
-            client.create_bucket(Bucket=bucket_name)
+        effective_location = (location_constraint or "").strip() or (region or settings.seed_s3_region)
+        create_kwargs: dict[str, Any] = {"Bucket": bucket_name}
+        if effective_location and effective_location != "us-east-1":
+            create_kwargs["CreateBucketConfiguration"] = {"LocationConstraint": effective_location}
+        if object_lock_enabled:
+            create_kwargs["ObjectLockEnabledForBucket"] = True
+        client.create_bucket(**create_kwargs)
     except (BotoCoreError, ClientError) as exc:
         raise RuntimeError(f"Unable to create bucket '{bucket_name}': {exc}") from exc
     logger.debug("Created bucket %s", bucket_name)

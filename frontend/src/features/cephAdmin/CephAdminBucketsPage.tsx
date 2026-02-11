@@ -1182,6 +1182,7 @@ export default function CephAdminBucketsPage() {
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
   const [items, setItems] = useState<CephAdminBucket[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [filterValue, setFilterValue] = useState("");
@@ -1191,6 +1192,7 @@ export default function CephAdminBucketsPage() {
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
+  const requestSeqRef = useRef(0);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
   const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(null);
@@ -1451,6 +1453,8 @@ export default function CephAdminBucketsPage() {
       visibleColumns.includes("quota_status")
     );
   }, [advancedStatsRequired, visibleColumns]);
+  const sortRequiresStats = useMemo(() => sort.field === "used_bytes" || sort.field === "object_count", [sort.field]);
+  const baseRequiresStats = useMemo(() => advancedStatsRequired || sortRequiresStats, [advancedStatsRequired, sortRequiresStats]);
 
   const availableUiTags = useMemo(() => {
     const tags = new Set<string>();
@@ -1486,35 +1490,67 @@ export default function CephAdminBucketsPage() {
         endpoint: selectedEndpointId ?? null,
         filter: filterValue.trim() || null,
         advanced: advancedFilterParam || null,
-        withStats: requiresStats,
+        withStats: baseRequiresStats,
       }),
-    [selectedEndpointId, filterValue, advancedFilterParam, requiresStats]
+    [selectedEndpointId, filterValue, advancedFilterParam, baseRequiresStats]
   );
+  const bucketRowKey = (bucket: CephAdminBucket) => `${bucket.tenant ?? ""}:${bucket.name}`;
 
   const fetchBuckets = async () => {
     if (!selectedEndpointId) return;
+    const requestId = requestSeqRef.current + 1;
+    requestSeqRef.current = requestId;
     setLoading(true);
+    setLoadingDetails(false);
     setError(null);
     try {
-      const response = await listCephAdminBuckets(selectedEndpointId, {
+      const baseResponse = await listCephAdminBuckets(selectedEndpointId, {
         page,
         page_size: pageSize,
         filter: filterValue.trim() || undefined,
         advanced_filter: advancedFilterParam,
         sort_by: sort.field,
         sort_dir: sort.direction,
-        include: includeParams.length > 0 ? includeParams : undefined,
-        with_stats: requiresStats,
+        with_stats: baseRequiresStats,
       });
-      setItems(response.items ?? []);
-      setTotal(response.total ?? 0);
+      if (requestId !== requestSeqRef.current) return;
+
+      const baseItems = baseResponse.items ?? [];
+      setItems(baseItems);
+      setTotal(baseResponse.total ?? 0);
+      setLoading(false);
+
+      const needsDetails = includeParams.length > 0 || (requiresStats && !baseRequiresStats);
+      if (!needsDetails || baseItems.length === 0) return;
+
+      setLoadingDetails(true);
+      try {
+        const detailResponse = await listCephAdminBuckets(selectedEndpointId, {
+          page,
+          page_size: pageSize,
+          filter: filterValue.trim() || undefined,
+          advanced_filter: advancedFilterParam,
+          sort_by: sort.field,
+          sort_dir: sort.direction,
+          include: includeParams.length > 0 ? includeParams : undefined,
+          with_stats: requiresStats,
+        });
+        if (requestId !== requestSeqRef.current) return;
+        const detailsByKey = new Map((detailResponse.items ?? []).map((bucket) => [bucketRowKey(bucket), bucket]));
+        setItems(baseItems.map((bucket) => detailsByKey.get(bucketRowKey(bucket)) ?? bucket));
+      } finally {
+        if (requestId === requestSeqRef.current) {
+          setLoadingDetails(false);
+        }
+      }
     } catch (err) {
+      if (requestId !== requestSeqRef.current) return;
       console.error(err);
       setError(extractError(err));
       setItems([]);
       setTotal(0);
-    } finally {
       setLoading(false);
+      setLoadingDetails(false);
     }
   };
 
@@ -1522,6 +1558,8 @@ export default function CephAdminBucketsPage() {
     if (!selectedEndpointId) {
       setItems([]);
       setTotal(0);
+      setLoading(false);
+      setLoadingDetails(false);
       return;
     }
     void fetchBuckets();
@@ -1535,6 +1573,7 @@ export default function CephAdminBucketsPage() {
     sort.direction,
     includeParams.join(","),
     requiresStats,
+    baseRequiresStats,
   ]);
 
   useEffect(() => {
@@ -1597,7 +1636,7 @@ export default function CephAdminBucketsPage() {
         advanced_filter: advancedFilterParam,
         sort_by: sort.field,
         sort_dir: sort.direction,
-        with_stats: requiresStats,
+        with_stats: baseRequiresStats,
       });
       (response.items ?? []).forEach((bucket) => {
         if (bucket.name) names.add(bucket.name);
@@ -3200,6 +3239,7 @@ export default function CephAdminBucketsPage() {
         </PageBanner>
       )}
       {error && <PageBanner tone="error">{error}</PageBanner>}
+      {loadingDetails && !loading && <PageBanner tone="info">Loading selected column details...</PageBanner>}
       {orphanedTagBuckets.length > 0 && (
         <PageBanner tone="warning">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

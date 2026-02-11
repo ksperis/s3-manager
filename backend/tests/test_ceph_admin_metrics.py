@@ -30,7 +30,7 @@ class FakeRGWAdmin:
         return self._usage_payload
 
 
-def _build_ctx(*, usage_enabled: bool = True, metrics_enabled: bool = True):
+def _build_endpoint(*, usage_enabled: bool = True, metrics_enabled: bool = True):
     features_yaml = (
         "features:\n"
         "  usage:\n"
@@ -39,7 +39,7 @@ def _build_ctx(*, usage_enabled: bool = True, metrics_enabled: bool = True):
         f"    enabled: {'true' if metrics_enabled else 'false'}\n"
     )
     endpoint = SimpleNamespace(provider="ceph", features_config=features_yaml)
-    return SimpleNamespace(endpoint=endpoint)
+    return endpoint
 
 
 def test_ceph_admin_cluster_storage_aggregates_bucket_and_owner_usage(monkeypatch: pytest.MonkeyPatch):
@@ -54,7 +54,7 @@ def test_ceph_admin_cluster_storage_aggregates_bucket_and_owner_usage(monkeypatc
     fake_admin = FakeRGWAdmin(buckets_payload=buckets_payload)
     monkeypatch.setattr(metrics_router, "get_supervision_rgw_client", lambda endpoint: fake_admin)
 
-    payload = metrics_router.cluster_storage_metrics(ctx=_build_ctx())
+    payload = metrics_router.cluster_storage_metrics(endpoint=_build_endpoint())
 
     assert payload["total_buckets"] == 3
     assert payload["storage_totals"]["bucket_count"] == 3
@@ -89,7 +89,7 @@ def test_ceph_admin_cluster_traffic_aggregates_usage_entries(monkeypatch: pytest
     fake_admin = FakeRGWAdmin(usage_payload=usage_payload)
     monkeypatch.setattr(metrics_router, "get_supervision_rgw_client", lambda endpoint: fake_admin)
 
-    payload = metrics_router.cluster_traffic_metrics(window=TrafficWindow.DAY, ctx=_build_ctx())
+    payload = metrics_router.cluster_traffic_metrics(window=TrafficWindow.DAY, endpoint=_build_endpoint())
 
     assert payload["window"] == "day"
     assert payload["totals"]["bytes_out"] == 140
@@ -101,5 +101,5 @@ def test_ceph_admin_cluster_traffic_aggregates_usage_entries(monkeypatch: pytest
 
 def test_ceph_admin_cluster_storage_requires_usage_feature():
     with pytest.raises(HTTPException) as exc:
-        metrics_router.cluster_storage_metrics(ctx=_build_ctx(usage_enabled=False, metrics_enabled=True))
+        metrics_router.cluster_storage_metrics(endpoint=_build_endpoint(usage_enabled=False, metrics_enabled=True))
     assert exc.value.status_code == 403

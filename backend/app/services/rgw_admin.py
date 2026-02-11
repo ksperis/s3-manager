@@ -103,17 +103,25 @@ class RGWAdminClient:
         email: Optional[str] = None,
         tenant: Optional[str] = None,
         caps: Optional[str] = None,
+        generate_key: bool = True,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
             "uid": uid,
             "display-name": display_name or uid,
             "email": email or "",
-            "generate-key": "true",
+            "generate-key": self._to_rgw_bool(bool(generate_key)),
         }
         if tenant:
             params["tenant"] = tenant
         if caps:
             params["caps"] = caps
+        if isinstance(extra_params, dict):
+            for key, value in extra_params.items():
+                normalized_key = str(key or "").strip()
+                if not normalized_key or value is None:
+                    continue
+                params[normalized_key] = value
         return self._request("PUT", "/admin/user", params=params, allow_conflict=True)
 
     def get_user(
@@ -284,12 +292,52 @@ class RGWAdminClient:
             return None
         return user
 
-    def create_account(self, account_id: str, account_name: Optional[str] = None) -> Dict[str, Any]:
+    def create_account(
+        self,
+        account_id: Optional[str] = None,
+        account_name: Optional[str] = None,
+        email: Optional[str] = None,
+        max_users: Optional[int] = None,
+        max_buckets: Optional[int] = None,
+        max_roles: Optional[int] = None,
+        max_groups: Optional[int] = None,
+        max_access_keys: Optional[int] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
-            "id": account_id,
-            "name": account_name or account_id,
+            "name": account_name or account_id or "",
             "format": "json",
         }
+        if account_id:
+            params["id"] = account_id
+        if email is not None:
+            params["email"] = email
+        if max_users is not None:
+            value = int(max_users)
+            params["max_users"] = value
+            params["max-users"] = value
+        if max_buckets is not None:
+            value = int(max_buckets)
+            params["max_buckets"] = value
+            params["max-buckets"] = value
+        if max_roles is not None:
+            value = int(max_roles)
+            params["max_roles"] = value
+            params["max-roles"] = value
+        if max_groups is not None:
+            value = int(max_groups)
+            params["max_groups"] = value
+            params["max-groups"] = value
+        if max_access_keys is not None:
+            value = int(max_access_keys)
+            params["max_access_keys"] = value
+            params["max-access-keys"] = value
+        if isinstance(extra_params, dict):
+            for key, value in extra_params.items():
+                normalized_key = str(key or "").strip()
+                if not normalized_key or value is None:
+                    continue
+                params[normalized_key] = value
         result = self._request(
             "POST",
             "/admin/account",
@@ -300,7 +348,7 @@ class RGWAdminClient:
         )
         if result.get("not_found"):
             raise RGWAdminError("RGW account API not available or account endpoint returned 404.")
-        if result.get("conflict"):
+        if result.get("conflict") and account_id:
             existing = self.get_account(account_id, allow_not_found=True)
             if existing and not existing.get("not_found"):
                 return existing
@@ -314,6 +362,9 @@ class RGWAdminClient:
         email: Optional[str] = None,
         max_users: Optional[int] = None,
         max_buckets: Optional[int] = None,
+        max_roles: Optional[int] = None,
+        max_groups: Optional[int] = None,
+        max_access_keys: Optional[int] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
@@ -333,6 +384,18 @@ class RGWAdminClient:
             value = int(max_buckets)
             params["max_buckets"] = value
             params["max-buckets"] = value
+        if max_roles is not None:
+            value = int(max_roles)
+            params["max_roles"] = value
+            params["max-roles"] = value
+        if max_groups is not None:
+            value = int(max_groups)
+            params["max_groups"] = value
+            params["max-groups"] = value
+        if max_access_keys is not None:
+            value = int(max_access_keys)
+            params["max_access_keys"] = value
+            params["max-access-keys"] = value
         if isinstance(extra_params, dict):
             for key, value in extra_params.items():
                 normalized_key = str(key or "").strip()
@@ -550,6 +613,18 @@ class RGWAdminClient:
             return result
         return []
 
+    def get_info(self, allow_not_found: bool = True) -> Dict[str, Any]:
+        result = self._request(
+            "GET",
+            "/api/info",
+            params={"format": "json"},
+            allow_not_found=allow_not_found,
+            allow_not_implemented=True,
+        )
+        if isinstance(result, dict) and (result.get("not_found") or result.get("not_implemented")):
+            return {}
+        return result if isinstance(result, dict) else {}
+
     def get_bucket_info(
         self,
         bucket: str,
@@ -699,16 +774,27 @@ class RGWAdminClient:
         account_id: str,
         display_name: Optional[str] = None,
         account_root: bool = True,
+        email: Optional[str] = None,
+        generate_key: bool = True,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
             "uid": uid,
             "account-id": account_id,
             "display-name": display_name or uid,
-            "generate-key": "true",
+            "generate-key": self._to_rgw_bool(bool(generate_key)),
             "format": "json",
         }
+        if email is not None:
+            params["email"] = email
         if account_root:
             params["account-root"] = "true"
+        if isinstance(extra_params, dict):
+            for key, value in extra_params.items():
+                normalized_key = str(key or "").strip()
+                if not normalized_key or value is None:
+                    continue
+                params[normalized_key] = value
         return self._request("PUT", "/admin/user", params=params, allow_conflict=True)
 
     def delete_user(self, uid: str, tenant: Optional[str] = None) -> None:

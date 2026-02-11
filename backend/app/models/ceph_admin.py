@@ -18,6 +18,13 @@ class CephAdminEndpoint(BaseModel):
     capabilities: dict[str, bool] = Field(default_factory=dict)
 
 
+class CephAdminEndpointAccess(BaseModel):
+    endpoint_id: int
+    can_admin: bool = False
+    can_metrics: bool = False
+    admin_warning: Optional[str] = None
+
+
 class CephAdminRgwAccountSummary(BaseModel):
     account_id: str
     account_name: Optional[str] = None
@@ -104,9 +111,13 @@ class CephAdminRgwAccountDetail(BaseModel):
     email: Optional[str] = None
     max_users: Optional[int] = None
     max_buckets: Optional[int] = None
+    max_roles: Optional[int] = None
+    max_groups: Optional[int] = None
+    max_access_keys: Optional[int] = None
     bucket_count: Optional[int] = None
     user_count: Optional[int] = None
     quota: Optional[CephAdminRgwQuotaConfig] = None
+    bucket_quota: Optional[CephAdminRgwQuotaConfig] = None
 
 
 class CephAdminRgwUserDetail(BaseModel):
@@ -132,14 +143,94 @@ class CephAdminRgwUserCapsUpdate(BaseModel):
     values: list[str] = Field(default_factory=list)
 
 
+class CephAdminRgwAccountCreate(BaseModel):
+    account_id: Optional[str] = None
+    account_name: str
+    email: Optional[str] = None
+    max_users: Optional[int] = Field(default=None, ge=0)
+    max_buckets: Optional[int] = Field(default=None, ge=0)
+    max_roles: Optional[int] = Field(default=None, ge=0)
+    max_groups: Optional[int] = Field(default=None, ge=0)
+    max_access_keys: Optional[int] = Field(default=None, ge=0)
+    quota_enabled: Optional[bool] = None
+    quota_max_size_bytes: Optional[int] = Field(default=None, ge=0)
+    quota_max_objects: Optional[int] = Field(default=None, ge=0)
+    bucket_quota_enabled: Optional[bool] = None
+    bucket_quota_max_size_bytes: Optional[int] = Field(default=None, ge=0)
+    bucket_quota_max_objects: Optional[int] = Field(default=None, ge=0)
+    extra_params: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_name(self):
+        if not isinstance(self.account_name, str) or not self.account_name.strip():
+            raise ValueError("account_name is required.")
+        if isinstance(self.account_id, str) and not self.account_id.strip():
+            self.account_id = None
+        return self
+
+
+class CephAdminRgwAccountCreateResponse(BaseModel):
+    account: CephAdminRgwAccountDetail
+
+
+class CephAdminRgwUserCreate(BaseModel):
+    uid: str
+    tenant: Optional[str] = None
+    account_id: Optional[str] = None
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+    suspended: Optional[bool] = None
+    max_buckets: Optional[int] = Field(default=None, ge=0)
+    op_mask: Optional[str] = None
+    admin: Optional[bool] = None
+    system: Optional[bool] = None
+    account_root: Optional[bool] = None
+    generate_key: bool = True
+    quota_enabled: Optional[bool] = None
+    quota_max_size_bytes: Optional[int] = Field(default=None, ge=0)
+    quota_max_objects: Optional[int] = Field(default=None, ge=0)
+    caps: Optional[CephAdminRgwUserCapsUpdate] = None
+    extra_params: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_scope(self):
+        if self.account_id and self.tenant:
+            raise ValueError("tenant cannot be combined with account_id.")
+        return self
+
+
+class CephAdminRgwUserCreateResponse(BaseModel):
+    detail: CephAdminRgwUserDetail
+    generated_key: Optional[CephAdminRgwGeneratedAccessKey] = None
+
+
+class CephAdminRgwPlacementTarget(BaseModel):
+    name: str
+    storage_classes: list[str] = Field(default_factory=list)
+
+
+class CephAdminRgwInfoSummary(BaseModel):
+    default_placement: Optional[str] = None
+    zonegroup: Optional[str] = None
+    realm: Optional[str] = None
+    placement_targets: list[CephAdminRgwPlacementTarget] = Field(default_factory=list)
+    storage_classes: list[str] = Field(default_factory=list)
+
+
 class CephAdminRgwAccountConfigUpdate(BaseModel):
     account_name: Optional[str] = None
     email: Optional[str] = None
     max_users: Optional[int] = Field(default=None, ge=0)
     max_buckets: Optional[int] = Field(default=None, ge=0)
+    max_roles: Optional[int] = Field(default=None, ge=0)
+    max_groups: Optional[int] = Field(default=None, ge=0)
+    max_access_keys: Optional[int] = Field(default=None, ge=0)
     quota_enabled: Optional[bool] = None
     quota_max_size_bytes: Optional[int] = Field(default=None, ge=0)
     quota_max_objects: Optional[int] = Field(default=None, ge=0)
+    bucket_quota_enabled: Optional[bool] = None
+    bucket_quota_max_size_bytes: Optional[int] = Field(default=None, ge=0)
+    bucket_quota_max_objects: Optional[int] = Field(default=None, ge=0)
     extra_params: dict[str, Any] = Field(default_factory=dict)
 
 

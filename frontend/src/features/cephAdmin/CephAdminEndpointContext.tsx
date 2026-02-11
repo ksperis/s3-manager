@@ -5,7 +5,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useSearchParams } from "react-router-dom";
-import { CephAdminEndpoint, listCephAdminEndpoints } from "../../api/cephAdmin";
+import { CephAdminEndpoint, CephAdminEndpointAccess, getCephAdminEndpointAccess, listCephAdminEndpoints } from "../../api/cephAdmin";
 
 const ENDPOINT_STORAGE_KEY = "selectedCephAdminEndpointId";
 const ENDPOINT_URL_PARAM = "ep";
@@ -15,6 +15,9 @@ type CephAdminEndpointContextValue = {
   selectedEndpointId: number | null;
   setSelectedEndpointId: (id: number | null) => void;
   selectedEndpoint: CephAdminEndpoint | null;
+  selectedEndpointAccess: CephAdminEndpointAccess | null;
+  selectedEndpointAccessLoading: boolean;
+  selectedEndpointAccessError: string | null;
   loading: boolean;
   error: string | null;
 };
@@ -24,6 +27,9 @@ const CephAdminEndpointContext = createContext<CephAdminEndpointContextValue>({
   selectedEndpointId: null,
   setSelectedEndpointId: () => {},
   selectedEndpoint: null,
+  selectedEndpointAccess: null,
+  selectedEndpointAccessLoading: false,
+  selectedEndpointAccessError: null,
   loading: false,
   error: null,
 });
@@ -47,6 +53,9 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
   const [selectedEndpointId, setSelectedEndpointIdState] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEndpointAccess, setSelectedEndpointAccess] = useState<CephAdminEndpointAccess | null>(null);
+  const [selectedEndpointAccessLoading, setSelectedEndpointAccessLoading] = useState(false);
+  const [selectedEndpointAccessError, setSelectedEndpointAccessError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const refresh = useCallback(async () => {
@@ -125,16 +134,63 @@ export function CephAdminEndpointProvider({ children }: { children: ReactNode })
     [endpoints, selectedEndpointId]
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSelectedEndpointAccess() {
+      if (loading) return;
+      if (selectedEndpointId == null) {
+        setSelectedEndpointAccess(null);
+        setSelectedEndpointAccessError(null);
+        setSelectedEndpointAccessLoading(false);
+        return;
+      }
+      setSelectedEndpointAccess(null);
+      setSelectedEndpointAccessError(null);
+      setSelectedEndpointAccessLoading(true);
+      try {
+        const access = await getCephAdminEndpointAccess(selectedEndpointId);
+        if (!cancelled) {
+          setSelectedEndpointAccess(access);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSelectedEndpointAccess(null);
+          setSelectedEndpointAccessError(extractError(err));
+        }
+      } finally {
+        if (!cancelled) {
+          setSelectedEndpointAccessLoading(false);
+        }
+      }
+    }
+    void loadSelectedEndpointAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, selectedEndpointId]);
+
   const value = useMemo(
     () => ({
       endpoints,
       selectedEndpointId,
       setSelectedEndpointId,
       selectedEndpoint,
+      selectedEndpointAccess,
+      selectedEndpointAccessLoading,
+      selectedEndpointAccessError,
       loading,
       error,
     }),
-    [endpoints, selectedEndpointId, selectedEndpoint, loading, error]
+    [
+      endpoints,
+      selectedEndpointId,
+      selectedEndpoint,
+      selectedEndpointAccess,
+      selectedEndpointAccessLoading,
+      selectedEndpointAccessError,
+      loading,
+      error,
+    ]
   );
 
   return <CephAdminEndpointContext.Provider value={value}>{children}</CephAdminEndpointContext.Provider>;

@@ -10,10 +10,23 @@ import PageBanner from "../../components/PageBanner";
 import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndpointContext";
 
 function CephAdminShell() {
-  const { endpoints, selectedEndpointId, setSelectedEndpointId, selectedEndpoint, loading, error } = useCephAdminEndpoint();
+  const {
+    endpoints,
+    selectedEndpointId,
+    setSelectedEndpointId,
+    selectedEndpoint,
+    selectedEndpointAccess,
+    selectedEndpointAccessLoading,
+    selectedEndpointAccessError,
+    loading,
+    error,
+  } = useCephAdminEndpoint();
   const showSelector = endpoints.length > 1;
   const selectorEnabled = endpoints.length > 0;
-  const workspaceBlocked = !loading && !selectorEnabled && Boolean(error);
+  const endpointSelected = selectorEnabled && selectedEndpointId != null;
+  const canAdmin = endpointSelected && !selectedEndpointAccessLoading && Boolean(selectedEndpointAccess?.can_admin);
+  const canMetrics = endpointSelected && !selectedEndpointAccessLoading && Boolean(selectedEndpointAccess?.can_metrics);
+  const adminWarning = endpointSelected && !selectedEndpointAccessLoading ? selectedEndpointAccess?.admin_warning ?? null : null;
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const next = Number(event.target.value);
@@ -27,15 +40,15 @@ function CephAdminShell() {
       label: "Overview",
       links: [
         { to: "/ceph-admin", label: "Dashboard", end: true },
-        { to: "/ceph-admin/metrics", label: "Metrics", disabled: !selectorEnabled },
+        { to: "/ceph-admin/metrics", label: "Metrics", disabled: !canMetrics },
       ],
     },
     {
       label: "Ceph S3",
       links: [
-        { to: "/ceph-admin/accounts", label: "RGW Accounts", disabled: !selectorEnabled },
-        { to: "/ceph-admin/users", label: "RGW Users", disabled: !selectorEnabled },
-        { to: "/ceph-admin/buckets", label: "Buckets", disabled: !selectorEnabled },
+        { to: "/ceph-admin/accounts", label: "RGW Accounts", disabled: !canAdmin },
+        { to: "/ceph-admin/users", label: "RGW Users", disabled: !canAdmin },
+        { to: "/ceph-admin/buckets", label: "Buckets", disabled: !canAdmin },
       ],
     },
   ];
@@ -73,14 +86,13 @@ function CephAdminShell() {
     <Layout navSections={navSections} sidebarTitle="CEPH ADMIN" hideHeader topbarContent={topbarContent}>
       <>
         {error && <PageBanner tone="warning" className="mb-4">{error}</PageBanner>}
-        {workspaceBlocked ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
-            Ceph Admin pages are hidden until the dedicated credential is mapped to an RGW user with
-            <code> --admin </code> or <code> --system </code> privileges.
-          </div>
-        ) : (
-          <Outlet />
+        {selectedEndpointAccessError && <PageBanner tone="warning" className="mb-4">{selectedEndpointAccessError}</PageBanner>}
+        {adminWarning && (
+          <PageBanner tone="warning" className="mb-4">
+            {adminWarning}
+          </PageBanner>
         )}
+        <Outlet />
       </>
     </Layout>
   );

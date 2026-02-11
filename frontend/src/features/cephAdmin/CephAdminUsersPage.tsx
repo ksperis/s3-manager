@@ -14,6 +14,7 @@ import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
 import { CephAdminRgwUser, CephAdminRgwUserDetail, assumeCephAdminUser, listCephAdminUsers } from "../../api/cephAdmin";
 import { tableActionButtonClasses } from "../../components/tableActionClasses";
+import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
 import CephAdminUserEditModal from "./CephAdminUserEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 
@@ -215,6 +216,8 @@ export default function CephAdminUsersPage() {
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(DEFAULT_SORT);
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const requestSeqRef = useRef(0);
 
@@ -251,6 +254,7 @@ export default function CephAdminUsersPage() {
     setAdvancedApplied(null);
     setAdvancedDraft(defaultAdvancedFilter);
     setSort(DEFAULT_SORT);
+    setShowCreateModal(false);
     setEditingTarget(null);
     setConfirmTarget(null);
   }, [selectedEndpointId]);
@@ -332,7 +336,17 @@ export default function CephAdminUsersPage() {
     };
 
     void load();
-  }, [selectedEndpointId, page, pageSize, searchValue, advancedFilterParam, sort.field, sort.direction, includeParams.join(",")]);
+  }, [
+    selectedEndpointId,
+    page,
+    pageSize,
+    searchValue,
+    advancedFilterParam,
+    sort.field,
+    sort.direction,
+    includeParams.join(","),
+    reloadNonce,
+  ]);
 
   const toggleColumn = (id: ColumnId) => {
     setVisibleColumns((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -564,6 +578,16 @@ export default function CephAdminUsersPage() {
         title="RGW Users"
         description="Liste complète des utilisateurs RGW (admin ops)."
         breadcrumbs={[{ label: "Ceph Admin", to: "/ceph-admin" }, { label: "Users" }]}
+        actions={
+          selectedEndpointId
+            ? [
+                {
+                  label: "Create user",
+                  onClick: () => setShowCreateModal(true),
+                },
+              ]
+            : []
+        }
       />
 
       {!selectedEndpointId && <PageBanner tone="warning">Select a Ceph endpoint first.</PageBanner>}
@@ -972,6 +996,15 @@ export default function CephAdminUsersPage() {
           tenant={editingTarget.tenant}
           onClose={() => setEditingTarget(null)}
           onSaved={applyUpdatedUser}
+        />
+      )}
+      {selectedEndpointId && showCreateModal && (
+        <CephAdminUserCreateModal
+          endpointId={selectedEndpointId}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={() => {
+            setReloadNonce((prev) => prev + 1);
+          }}
         />
       )}
     </div>

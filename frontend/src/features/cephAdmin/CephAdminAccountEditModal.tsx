@@ -99,11 +99,17 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
   const [email, setEmail] = useState("");
   const [maxUsers, setMaxUsers] = useState("");
   const [maxBuckets, setMaxBuckets] = useState("");
+  const [maxRoles, setMaxRoles] = useState("");
+  const [maxGroups, setMaxGroups] = useState("");
+  const [maxAccessKeys, setMaxAccessKeys] = useState("");
   const [quotaEnabled, setQuotaEnabled] = useState(true);
   const [quotaSize, setQuotaSize] = useState("");
   const [quotaUnit, setQuotaUnit] = useState<QuotaUnit>("GiB");
   const [quotaObjects, setQuotaObjects] = useState("");
-  const [extraParamsText, setExtraParamsText] = useState("{}");
+  const [bucketQuotaEnabled, setBucketQuotaEnabled] = useState(true);
+  const [bucketQuotaSize, setBucketQuotaSize] = useState("");
+  const [bucketQuotaUnit, setBucketQuotaUnit] = useState<QuotaUnit>("GiB");
+  const [bucketQuotaObjects, setBucketQuotaObjects] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -118,6 +124,9 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
         setEmail(payload.email ?? "");
         setMaxUsers(payload.max_users != null ? String(payload.max_users) : "");
         setMaxBuckets(payload.max_buckets != null ? String(payload.max_buckets) : "");
+        setMaxRoles(payload.max_roles != null ? String(payload.max_roles) : "");
+        setMaxGroups(payload.max_groups != null ? String(payload.max_groups) : "");
+        setMaxAccessKeys(payload.max_access_keys != null ? String(payload.max_access_keys) : "");
         const quotaConfigured = Boolean(
           payload.quota && (payload.quota.max_size_bytes != null || payload.quota.max_objects != null)
         );
@@ -126,6 +135,14 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
         setQuotaSize(quotaForm.value);
         setQuotaUnit(quotaForm.unit);
         setQuotaObjects(payload.quota?.max_objects != null ? String(payload.quota.max_objects) : "");
+        const bucketQuotaConfigured = Boolean(
+          payload.bucket_quota && (payload.bucket_quota.max_size_bytes != null || payload.bucket_quota.max_objects != null)
+        );
+        setBucketQuotaEnabled(payload.bucket_quota?.enabled ?? bucketQuotaConfigured);
+        const bucketQuotaForm = quotaBytesToForm(payload.bucket_quota?.max_size_bytes);
+        setBucketQuotaSize(bucketQuotaForm.value);
+        setBucketQuotaUnit(bucketQuotaForm.unit);
+        setBucketQuotaObjects(payload.bucket_quota?.max_objects != null ? String(payload.bucket_quota.max_objects) : "");
       } catch (err) {
         if (!cancelled) {
           setDetailError(extractError(err));
@@ -175,26 +192,17 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
     setSaveError(null);
     setSaveStatus(null);
 
-    let extraParams: Record<string, unknown> = {};
-    const extraRaw = extraParamsText.trim();
-    if (extraRaw) {
-      try {
-        const parsed = JSON.parse(extraRaw) as unknown;
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          setSaveError("Extra params must be a JSON object.");
-          return;
-        }
-        extraParams = parsed as Record<string, unknown>;
-      } catch {
-        setSaveError("Extra params must be valid JSON.");
-        return;
-      }
-    }
-
     const parsedMaxUsers = maxUsers.trim() === "" ? null : Number(maxUsers);
     const parsedMaxBuckets = maxBuckets.trim() === "" ? null : Number(maxBuckets);
+    const parsedMaxRoles = maxRoles.trim() === "" ? null : Number(maxRoles);
+    const parsedMaxGroups = maxGroups.trim() === "" ? null : Number(maxGroups);
+    const parsedMaxAccessKeys = maxAccessKeys.trim() === "" ? null : Number(maxAccessKeys);
     const parsedQuotaBytes = quotaEnabled ? formToQuotaBytes(quotaSize, quotaUnit) : null;
     const parsedQuotaObjects = quotaEnabled ? (quotaObjects.trim() === "" ? null : Number(quotaObjects)) : null;
+    const parsedBucketQuotaBytes = bucketQuotaEnabled ? formToQuotaBytes(bucketQuotaSize, bucketQuotaUnit) : null;
+    const parsedBucketQuotaObjects = bucketQuotaEnabled
+      ? (bucketQuotaObjects.trim() === "" ? null : Number(bucketQuotaObjects))
+      : null;
 
     if (parsedMaxUsers != null && (!Number.isInteger(parsedMaxUsers) || parsedMaxUsers < 0)) {
       setSaveError("Max users must be a positive integer.");
@@ -202,6 +210,18 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
     }
     if (parsedMaxBuckets != null && (!Number.isInteger(parsedMaxBuckets) || parsedMaxBuckets < 0)) {
       setSaveError("Max buckets must be a positive integer.");
+      return;
+    }
+    if (parsedMaxRoles != null && (!Number.isInteger(parsedMaxRoles) || parsedMaxRoles < 0)) {
+      setSaveError("Max roles must be a positive integer.");
+      return;
+    }
+    if (parsedMaxGroups != null && (!Number.isInteger(parsedMaxGroups) || parsedMaxGroups < 0)) {
+      setSaveError("Max groups must be a positive integer.");
+      return;
+    }
+    if (parsedMaxAccessKeys != null && (!Number.isInteger(parsedMaxAccessKeys) || parsedMaxAccessKeys < 0)) {
+      setSaveError("Max access keys must be a positive integer.");
       return;
     }
     if (parsedQuotaObjects != null && (!Number.isInteger(parsedQuotaObjects) || parsedQuotaObjects < 0)) {
@@ -212,6 +232,14 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
       setSaveError("Storage quota value is invalid.");
       return;
     }
+    if (parsedBucketQuotaObjects != null && (!Number.isInteger(parsedBucketQuotaObjects) || parsedBucketQuotaObjects < 0)) {
+      setSaveError("Bucket quota objects must be a positive integer.");
+      return;
+    }
+    if (bucketQuotaEnabled && bucketQuotaSize.trim() !== "" && parsedBucketQuotaBytes == null) {
+      setSaveError("Bucket storage quota value is invalid.");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -220,10 +248,15 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
         email: email.trim() || null,
         max_users: parsedMaxUsers,
         max_buckets: parsedMaxBuckets,
+        max_roles: parsedMaxRoles,
+        max_groups: parsedMaxGroups,
+        max_access_keys: parsedMaxAccessKeys,
         quota_enabled: quotaEnabled,
         quota_max_size_bytes: parsedQuotaBytes,
         quota_max_objects: parsedQuotaObjects,
-        extra_params: extraParams,
+        bucket_quota_enabled: bucketQuotaEnabled,
+        bucket_quota_max_size_bytes: parsedBucketQuotaBytes,
+        bucket_quota_max_objects: parsedBucketQuotaObjects,
       });
       setDetail(updated);
       setSaveStatus("Account configuration updated.");
@@ -359,6 +392,39 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
             className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           />
         </label>
+        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+          Max roles
+          <input
+            type="number"
+            min={0}
+            value={maxRoles}
+            onChange={(event) => setMaxRoles(event.target.value)}
+            placeholder="Leave empty to clear"
+            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          />
+        </label>
+        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+          Max groups
+          <input
+            type="number"
+            min={0}
+            value={maxGroups}
+            onChange={(event) => setMaxGroups(event.target.value)}
+            placeholder="Leave empty to clear"
+            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          />
+        </label>
+        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+          Max access keys
+          <input
+            type="number"
+            min={0}
+            value={maxAccessKeys}
+            onChange={(event) => setMaxAccessKeys(event.target.value)}
+            placeholder="Leave empty to clear"
+            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          />
+        </label>
       </div>
 
       <div className="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
@@ -414,17 +480,58 @@ export default function CephAdminAccountEditModal({ endpointId, accountId, onClo
         </div>
       </div>
 
-      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-        Extra params (JSON object)
-        <textarea
-          value={extraParamsText}
-          onChange={(event) => setExtraParamsText(event.target.value)}
-          rows={5}
-          className="rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          placeholder='{"anonymous":false}'
-          spellCheck={false}
-        />
-      </label>
+      <div className="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+        <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+          <input
+            type="checkbox"
+            checked={bucketQuotaEnabled}
+            onChange={(event) => setBucketQuotaEnabled(event.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+          />
+          Enable bucket quota
+        </label>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)]">
+          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+            Storage quota
+            <input
+              type="number"
+              min={0}
+              step="any"
+              value={bucketQuotaSize}
+              onChange={(event) => setBucketQuotaSize(event.target.value)}
+              placeholder="Leave empty to clear"
+              disabled={!bucketQuotaEnabled}
+              className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+          </label>
+          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+            Unit
+            <select
+              value={bucketQuotaUnit}
+              onChange={(event) => setBucketQuotaUnit(event.target.value as QuotaUnit)}
+              disabled={!bucketQuotaEnabled}
+              className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            >
+              <option value="MiB">MiB</option>
+              <option value="GiB">GiB</option>
+              <option value="TiB">TiB</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+            Object quota
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={bucketQuotaObjects}
+              onChange={(event) => setBucketQuotaObjects(event.target.value)}
+              placeholder="Leave empty to clear"
+              disabled={!bucketQuotaEnabled}
+              className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+          </label>
+        </div>
+      </div>
 
       <div className="flex items-center justify-end gap-2">
         <button

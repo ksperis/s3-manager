@@ -7,7 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
+from app.db import StorageEndpoint
+from app.routers.ceph_admin.dependencies import get_ceph_admin_workspace_endpoint
 from app.services.rgw_admin import RGWAdminError
 from app.services.traffic_service import (
     WINDOW_RESOLUTION_LABELS,
@@ -23,15 +24,15 @@ from app.utils.usage_stats import extract_usage_stats
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/metrics", tags=["ceph-admin-metrics"])
 
 
-def _build_supervision_client(ctx: CephAdminContext):
+def _build_supervision_client(endpoint: StorageEndpoint):
     try:
-        return get_supervision_rgw_client(ctx.endpoint)
+        return get_supervision_rgw_client(endpoint)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-def _require_usage_enabled(ctx: CephAdminContext) -> None:
-    flags = resolve_feature_flags(ctx.endpoint)
+def _require_usage_enabled(endpoint: StorageEndpoint) -> None:
+    flags = resolve_feature_flags(endpoint)
     if not flags.usage_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -39,8 +40,8 @@ def _require_usage_enabled(ctx: CephAdminContext) -> None:
         )
 
 
-def _require_metrics_enabled(ctx: CephAdminContext) -> None:
-    flags = resolve_feature_flags(ctx.endpoint)
+def _require_metrics_enabled(endpoint: StorageEndpoint) -> None:
+    flags = resolve_feature_flags(endpoint)
     if not flags.metrics_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -60,10 +61,10 @@ def _normalize_owner(entry: dict[str, Any]) -> str:
 
 @router.get("/storage")
 def cluster_storage_metrics(
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+    endpoint: StorageEndpoint = Depends(get_ceph_admin_workspace_endpoint),
 ) -> dict[str, Any]:
-    _require_usage_enabled(ctx)
-    rgw_admin = _build_supervision_client(ctx)
+    _require_usage_enabled(endpoint)
+    rgw_admin = _build_supervision_client(endpoint)
     try:
         payload = rgw_admin.get_all_buckets(with_stats=True)
     except RGWAdminError as exc:
@@ -148,10 +149,10 @@ def cluster_storage_metrics(
 @router.get("/traffic")
 def cluster_traffic_metrics(
     window: TrafficWindow = Query(TrafficWindow.WEEK),
-    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+    endpoint: StorageEndpoint = Depends(get_ceph_admin_workspace_endpoint),
 ) -> dict[str, Any]:
-    _require_metrics_enabled(ctx)
-    rgw_admin = _build_supervision_client(ctx)
+    _require_metrics_enabled(endpoint)
+    rgw_admin = _build_supervision_client(endpoint)
     reference = datetime.now(timezone.utc).replace(microsecond=0)
     start = window_start(reference, window)
     try:

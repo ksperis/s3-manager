@@ -28,6 +28,14 @@ class FakeRGWAdmin:
         return payload
 
 
+class FakeRGWAdminMetadataIds(FakeRGWAdmin):
+    def list_accounts(self, include_details: bool = True):
+        self.list_accounts_calls += 1
+        if include_details:
+            return list(self._account_details.values())
+        return self._accounts_payload
+
+
 @pytest.fixture(autouse=True)
 def clear_accounts_listing_cache():
     with accounts_router._ACCOUNTS_LIST_CACHE_LOCK:
@@ -111,6 +119,34 @@ def test_ceph_admin_accounts_listing_cache_is_reused_across_pages():
     assert rgw_admin.list_accounts_calls == 1
 
 
+def test_ceph_admin_accounts_listing_falls_back_to_include_details_when_metadata_has_only_ids():
+    accounts_payload = ["RGW03", "RGW01", "RGW02"]
+    account_details = {
+        "RGW01": _build_account_payload("RGW01", account_name="Alpha", email="alpha@example.test"),
+        "RGW02": _build_account_payload("RGW02", account_name="Beta", email="beta@example.test"),
+        "RGW03": _build_account_payload("RGW03", account_name="Gamma", email="gamma@example.test"),
+    }
+    rgw_admin = FakeRGWAdminMetadataIds(accounts_payload=accounts_payload, account_details=account_details)
+    ctx = SimpleNamespace(endpoint=SimpleNamespace(id=2101), rgw_admin=rgw_admin)
+
+    response = accounts_router.list_rgw_accounts(
+        page=1,
+        page_size=25,
+        search=None,
+        advanced_filter=None,
+        sort_by="account_id",
+        sort_dir="asc",
+        include=[],
+        ctx=ctx,
+    )
+
+    assert [item.account_id for item in response.items] == ["RGW01", "RGW02", "RGW03"]
+    assert [item.account_name for item in response.items] == ["Alpha", "Beta", "Gamma"]
+    assert [item.email for item in response.items] == ["alpha@example.test", "beta@example.test", "gamma@example.test"]
+    assert rgw_admin.list_accounts_calls == 1
+    assert rgw_admin.get_account_calls == 0
+
+
 def test_ceph_admin_accounts_listing_cache_is_reused_for_quick_filter_changes():
     accounts_payload = [
         {"id": "RGW01", "name": "Alpha"},
@@ -151,7 +187,11 @@ def test_ceph_admin_accounts_listing_cache_is_reused_for_quick_filter_changes():
 
 
 def test_ceph_admin_accounts_advanced_filter_uses_cached_listing_and_lazy_include():
-    accounts_payload = ["RGW01", "RGW02", "RGW03"]
+    accounts_payload = [
+        {"id": "RGW01", "name": "Alpha", "email": "alpha@example.test"},
+        {"id": "RGW02", "name": "Beta", "email": "beta@example.test"},
+        {"id": "RGW03", "name": "Gamma", "email": "gamma@example.test"},
+    ]
     account_details = {
         "RGW01": _build_account_payload("RGW01", account_name="Alpha", email="alpha@example.test"),
         "RGW02": _build_account_payload("RGW02", account_name="Beta", email="beta@example.test"),
@@ -176,9 +216,9 @@ def test_ceph_admin_accounts_advanced_filter_uses_cached_listing_and_lazy_includ
         ctx=ctx,
     )
     assert [item.account_id for item in filtered.items] == ["RGW01"]
-    assert filtered.items[0].email is None
+    assert filtered.items[0].email == "alpha@example.test"
     assert rgw_admin.list_accounts_calls == 1
-    assert rgw_admin.get_account_calls == 3
+    assert rgw_admin.get_account_calls == 0
 
     enriched = accounts_router.list_rgw_accounts(
         page=1,
@@ -192,7 +232,7 @@ def test_ceph_admin_accounts_advanced_filter_uses_cached_listing_and_lazy_includ
     )
     assert [item.email for item in enriched.items] == ["alpha@example.test"]
     assert rgw_admin.list_accounts_calls == 1
-    assert rgw_admin.get_account_calls == 4
+    assert rgw_admin.get_account_calls == 0
 
 
 def test_ceph_admin_accounts_advanced_filter_rejects_invalid_json():
@@ -212,3 +252,33 @@ def test_ceph_admin_accounts_advanced_filter_rejects_invalid_json():
             ctx=ctx,
         )
     assert exc.value.status_code == 400
+
+
+def test_ceph_admin_accounts_sort_by_name_uses_metadata_without_detail_fetch():
+    accounts_payload = [
+        {"id": "RGW03", "name": "Gamma"},
+        {"id": "RGW01", "name": "Alpha"},
+        {"id": "RGW02", "name": "Beta"},
+    ]
+    account_details = {
+        "RGW01": _build_account_payload("RGW01", account_name="Alpha", email="alpha@example.test"),
+        "RGW02": _build_account_payload("RGW02", account_name="Beta", email="beta@example.test"),
+        "RGW03": _build_account_payload("RGW03", account_name="Gamma", email="gamma@example.test"),
+    }
+    ctx, rgw_admin = _build_ctx(endpoint_id=25, accounts_payload=accounts_payload, account_details=account_details)
+
+    result = accounts_router.list_rgw_accounts(
+        page=1,
+        page_size=25,
+        search=None,
+        advanced_filter=None,
+        sort_by="account_name",
+        sort_dir="asc",
+        include=[],
+        ctx=ctx,
+    )
+
+    assert [item.account_id for item in result.items] == ["RGW01", "RGW02", "RGW03"]
+    assert [item.account_name for item in result.items] == ["Alpha", "Beta", "Gamma"]
+    assert rgw_admin.list_accounts_calls == 1
+    assert rgw_admin.get_account_calls == 0

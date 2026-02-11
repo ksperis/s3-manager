@@ -24,6 +24,26 @@ export type CephAdminEndpoint = {
   capabilities?: Record<string, boolean>;
 };
 
+export type CephAdminEndpointAccess = {
+  endpoint_id: number;
+  can_admin: boolean;
+  can_metrics: boolean;
+  admin_warning?: string | null;
+};
+
+export type CephAdminPlacementTarget = {
+  name: string;
+  storage_classes: string[];
+};
+
+export type CephAdminEndpointInfo = {
+  default_placement?: string | null;
+  zonegroup?: string | null;
+  realm?: string | null;
+  placement_targets: CephAdminPlacementTarget[];
+  storage_classes: string[];
+};
+
 export type CephAdminRgwAccount = {
   account_id: string;
   account_name?: string | null;
@@ -86,9 +106,13 @@ export type CephAdminRgwAccountDetail = {
   email?: string | null;
   max_users?: number | null;
   max_buckets?: number | null;
+  max_roles?: number | null;
+  max_groups?: number | null;
+  max_access_keys?: number | null;
   bucket_count?: number | null;
   user_count?: number | null;
   quota?: CephAdminRgwQuotaConfig | null;
+  bucket_quota?: CephAdminRgwQuotaConfig | null;
 };
 
 export type UpdateCephAdminAccountPayload = {
@@ -96,10 +120,38 @@ export type UpdateCephAdminAccountPayload = {
   email?: string | null;
   max_users?: number | null;
   max_buckets?: number | null;
+  max_roles?: number | null;
+  max_groups?: number | null;
+  max_access_keys?: number | null;
   quota_enabled?: boolean | null;
   quota_max_size_bytes?: number | null;
   quota_max_objects?: number | null;
+  bucket_quota_enabled?: boolean | null;
+  bucket_quota_max_size_bytes?: number | null;
+  bucket_quota_max_objects?: number | null;
   extra_params?: Record<string, unknown>;
+};
+
+export type CreateCephAdminAccountPayload = {
+  account_id?: string | null;
+  account_name: string;
+  email?: string | null;
+  max_users?: number | null;
+  max_buckets?: number | null;
+  max_roles?: number | null;
+  max_groups?: number | null;
+  max_access_keys?: number | null;
+  quota_enabled?: boolean | null;
+  quota_max_size_bytes?: number | null;
+  quota_max_objects?: number | null;
+  bucket_quota_enabled?: boolean | null;
+  bucket_quota_max_size_bytes?: number | null;
+  bucket_quota_max_objects?: number | null;
+  extra_params?: Record<string, unknown>;
+};
+
+export type CreateCephAdminAccountResponse = {
+  account: CephAdminRgwAccountDetail;
 };
 
 export type PaginatedCephAdminAccountsResponse = PaginatedResponse<CephAdminRgwAccount>;
@@ -116,6 +168,16 @@ export type ListCephAdminAccountsParams = {
 
 export async function listCephAdminEndpoints(): Promise<CephAdminEndpoint[]> {
   const { data } = await client.get<CephAdminEndpoint[]>("/ceph-admin/endpoints");
+  return data;
+}
+
+export async function getCephAdminEndpointInfo(endpointId: number): Promise<CephAdminEndpointInfo> {
+  const { data } = await client.get<CephAdminEndpointInfo>(`/ceph-admin/endpoints/${endpointId}/info`);
+  return data;
+}
+
+export async function getCephAdminEndpointAccess(endpointId: number): Promise<CephAdminEndpointAccess> {
+  const { data } = await client.get<CephAdminEndpointAccess>(`/ceph-admin/endpoints/${endpointId}/access`);
   return data;
 }
 
@@ -136,6 +198,14 @@ export async function getCephAdminAccountDetail(endpointId: number, accountId: s
   const { data } = await client.get<CephAdminRgwAccountDetail>(
     `/ceph-admin/endpoints/${endpointId}/accounts/${encodeURIComponent(accountId)}/detail`
   );
+  return data;
+}
+
+export async function createCephAdminAccount(
+  endpointId: number,
+  payload: CreateCephAdminAccountPayload
+): Promise<CreateCephAdminAccountResponse> {
+  const { data } = await client.post<CreateCephAdminAccountResponse>(`/ceph-admin/endpoints/${endpointId}/accounts`, payload);
   return data;
 }
 
@@ -240,6 +310,31 @@ export type UpdateCephAdminUserPayload = {
   extra_params?: Record<string, unknown>;
 };
 
+export type CreateCephAdminUserPayload = {
+  uid: string;
+  tenant?: string | null;
+  account_id?: string | null;
+  display_name?: string | null;
+  email?: string | null;
+  suspended?: boolean | null;
+  max_buckets?: number | null;
+  op_mask?: string | null;
+  admin?: boolean | null;
+  system?: boolean | null;
+  account_root?: boolean | null;
+  generate_key?: boolean;
+  quota_enabled?: boolean | null;
+  quota_max_size_bytes?: number | null;
+  quota_max_objects?: number | null;
+  caps?: CephAdminRgwUserCapsUpdate | null;
+  extra_params?: Record<string, unknown>;
+};
+
+export type CreateCephAdminUserResponse = {
+  detail: CephAdminRgwUserDetail;
+  generated_key?: CephAdminRgwGeneratedAccessKey | null;
+};
+
 export type CephAdminAssumeUserResponse = {
   context_id: string;
   expires_at: string;
@@ -267,6 +362,14 @@ export async function listCephAdminUsers(
       include: params?.include?.join(","),
     },
   });
+  return data;
+}
+
+export async function createCephAdminUser(
+  endpointId: number,
+  payload: CreateCephAdminUserPayload
+): Promise<CreateCephAdminUserResponse> {
+  const { data } = await client.post<CreateCephAdminUserResponse>(`/ceph-admin/endpoints/${endpointId}/users`, payload);
   return data;
 }
 

@@ -142,14 +142,12 @@ export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClos
   const [opMask, setOpMask] = useState("");
   const [adminFlag, setAdminFlag] = useState(false);
   const [systemFlag, setSystemFlag] = useState(false);
-  const [accountRootFlag, setAccountRootFlag] = useState(false);
   const [quotaEnabled, setQuotaEnabled] = useState(true);
   const [quotaSize, setQuotaSize] = useState("");
   const [quotaUnit, setQuotaUnit] = useState<QuotaUnit>("GiB");
   const [quotaObjects, setQuotaObjects] = useState("");
   const [capsMode, setCapsMode] = useState<CapsMode>("replace");
   const [capsText, setCapsText] = useState("");
-  const [extraParamsText, setExtraParamsText] = useState("{}");
 
   const refreshKeys = async () => {
     setKeysLoading(true);
@@ -181,7 +179,6 @@ export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClos
         setOpMask(payload.op_mask ?? "");
         setAdminFlag(Boolean(payload.admin));
         setSystemFlag(Boolean(payload.system));
-        setAccountRootFlag(Boolean(payload.account_root));
         const quotaConfigured = Boolean(
           payload.quota && (payload.quota.max_size_bytes != null || payload.quota.max_objects != null)
         );
@@ -241,22 +238,7 @@ export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClos
   const submit = async () => {
     setSaveError(null);
     setSaveStatus(null);
-
-    let extraParams: Record<string, unknown> = {};
-    const extraRaw = extraParamsText.trim();
-    if (extraRaw) {
-      try {
-        const parsed = JSON.parse(extraRaw) as unknown;
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          setSaveError("Extra params must be a JSON object.");
-          return;
-        }
-        extraParams = parsed as Record<string, unknown>;
-      } catch {
-        setSaveError("Extra params must be valid JSON.");
-        return;
-      }
-    }
+    const accountRootEnabled = Boolean(detail?.account_id);
 
     const parsedMaxBuckets = maxBuckets.trim() === "" ? null : Number(maxBuckets);
     const parsedQuotaBytes = quotaEnabled ? formToQuotaBytes(quotaSize, quotaUnit) : null;
@@ -288,7 +270,7 @@ export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClos
           op_mask: opMask.trim() || null,
           admin: adminFlag,
           system: systemFlag,
-          account_root: accountRootFlag,
+          account_root: accountRootEnabled ? true : undefined,
           quota_enabled: quotaEnabled,
           quota_max_size_bytes: parsedQuotaBytes,
           quota_max_objects: parsedQuotaObjects,
@@ -296,7 +278,6 @@ export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClos
             mode: capsMode,
             values: capsTextToValues(capsText),
           },
-          extra_params: extraParams,
         },
         tenant
       );
@@ -517,15 +498,6 @@ export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClos
           />
           System
         </label>
-        <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-          <input
-            type="checkbox"
-            checked={accountRootFlag}
-            onChange={(event) => setAccountRootFlag(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-          />
-          Account root
-        </label>
       </div>
 
       <div className="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/40">
@@ -603,18 +575,6 @@ export default function CephAdminUserEditModal({ endpointId, uid, tenant, onClos
           onChange={(event) => setCapsText(event.target.value)}
           rows={4}
           className="rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          spellCheck={false}
-        />
-      </label>
-
-      <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-        Extra params (JSON object)
-        <textarea
-          value={extraParamsText}
-          onChange={(event) => setExtraParamsText(event.target.value)}
-          rows={5}
-          className="rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          placeholder='{"generate-subuser":"false"}'
           spellCheck={false}
         />
       </label>

@@ -30,3 +30,80 @@ def test_set_access_key_status_raises_when_not_implemented(monkeypatch):
 
     with pytest.raises(RGWAdminError, match="does not support updating access key status"):
         client.set_access_key_status("user-1", "AK-123", enabled=False, tenant=None)
+
+
+def test_get_info_returns_empty_when_not_implemented(monkeypatch):
+    client = RGWAdminClient(
+        access_key="AKIA-TEST",
+        secret_key="SECRET-TEST",
+        endpoint="https://rgw-admin.example.test",
+        region="us-east-1",
+    )
+
+    monkeypatch.setattr(client, "_request", lambda *args, **kwargs: {"not_implemented": True})
+
+    assert client.get_info() == {}
+
+
+def test_list_accounts_with_include_details_fetches_per_account_details(monkeypatch):
+    client = RGWAdminClient(
+        access_key="AKIA-TEST",
+        secret_key="SECRET-TEST",
+        endpoint="https://rgw-admin.example.test",
+        region="us-east-1",
+    )
+
+    captured: dict = {}
+
+    def fake_request(method: str, path: str, **kwargs):
+        captured["method"] = method
+        captured["path"] = path
+        captured["params"] = kwargs.get("params", {})
+        return [
+            {"id": "RGW01"},
+            {"account_id": "RGW02", "account_name": "Beta"},
+        ]
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    detail_calls: list[str] = []
+
+    def fake_get_account(account_id: str, allow_not_found: bool = True):
+        detail_calls.append(account_id)
+        return {"id": account_id, "name": f"Name-{account_id}", "email": f"{account_id.lower()}@example.test"}
+
+    monkeypatch.setattr(client, "get_account", fake_get_account)
+
+    payload = client.list_accounts(include_details=True)
+
+    assert captured["method"] == "GET"
+    assert captured["path"] == "/admin/metadata/account"
+    assert captured["params"] == {"format": "json"}
+    assert detail_calls == ["RGW01", "RGW02"]
+    assert [item["account_id"] for item in payload] == ["RGW01", "RGW02"]
+    assert [item["email"] for item in payload] == ["rgw01@example.test", "rgw02@example.test"]
+
+
+def test_list_accounts_without_details_omits_include_details_params(monkeypatch):
+    client = RGWAdminClient(
+        access_key="AKIA-TEST",
+        secret_key="SECRET-TEST",
+        endpoint="https://rgw-admin.example.test",
+        region="us-east-1",
+    )
+
+    captured: dict = {}
+
+    def fake_request(method: str, path: str, **kwargs):
+        captured["method"] = method
+        captured["path"] = path
+        captured["params"] = kwargs.get("params", {})
+        return ["RGW01"]
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    payload = client.list_accounts(include_details=False)
+
+    assert captured["method"] == "GET"
+    assert captured["path"] == "/admin/metadata/account"
+    assert captured["params"] == {"format": "json"}
+    assert payload == [{"account_id": "RGW01", "id": "RGW01"}]

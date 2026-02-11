@@ -379,18 +379,35 @@ class BucketsService:
         name: str,
         account: S3Account,
         versioning: bool = False,
+        location_constraint: Optional[str] = None,
+        object_lock_enabled: bool = False,
     ) -> None:
         access_key, secret_key = self._account_credentials(account)
-        s3_client.create_bucket(name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account))
-        if versioning:
+        s3_client.create_bucket(
+            name,
+            access_key=access_key,
+            secret_key=secret_key,
+            location_constraint=location_constraint,
+            object_lock_enabled=object_lock_enabled,
+            **self._client_kwargs(account),
+        )
+        effective_versioning = bool(versioning or object_lock_enabled)
+        if effective_versioning:
             s3_client.set_bucket_versioning(
                 name,
-                enabled=versioning,
+                enabled=True,
                 access_key=access_key,
                 secret_key=secret_key,
                 **self._client_kwargs(account),
             )
-        logger.debug("S3Account %s created bucket %s (versioning=%s)", account.rgw_account_id or account.id, name, versioning)
+        logger.debug(
+            "S3Account %s created bucket %s (versioning=%s object_lock=%s location=%s)",
+            account.rgw_account_id or account.id,
+            name,
+            effective_versioning,
+            object_lock_enabled,
+            location_constraint,
+        )
 
     def delete_bucket(self, name: str, account: S3Account, force: bool = False) -> None:
         access_key, secret_key = self._account_credentials(account)
