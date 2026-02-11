@@ -930,6 +930,100 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     loadWebsite();
   }, [loadWebsite]);
 
+  const refreshActiveTab = useCallback(async () => {
+    if (activeTab === "overview") {
+      await Promise.all([refreshBucketMeta(), loadProperties(), loadLifecycle(), loadPolicy(), loadBucketAcl(), loadCors()]);
+      return;
+    }
+    if (activeTab === "metrics") {
+      await refreshBucketMeta();
+      return;
+    }
+    if (activeTab === "objects") {
+      if (!isCephAdmin) {
+        await loadObjects(currentPrefix);
+      }
+      return;
+    }
+    if (activeTab === "properties") {
+      await Promise.all([loadProperties(), loadLifecycle(), loadBucketTags()]);
+      return;
+    }
+    if (activeTab === "permissions") {
+      await Promise.all([loadPublicAccessBlock(), loadBucketAcl(), loadPolicy()]);
+      return;
+    }
+    if (activeTab === "advanced") {
+      await Promise.all([loadWebsite(), loadCors(), loadAccessLogging(), loadNotifications()]);
+      return;
+    }
+    if (activeTab === "ceph") {
+      await Promise.all([refreshBucketMeta(), loadProperties()]);
+    }
+  }, [
+    activeTab,
+    currentPrefix,
+    isCephAdmin,
+    loadAccessLogging,
+    loadBucketAcl,
+    loadBucketTags,
+    loadCors,
+    loadLifecycle,
+    loadNotifications,
+    loadObjects,
+    loadPolicy,
+    loadProperties,
+    loadPublicAccessBlock,
+    loadWebsite,
+    refreshBucketMeta,
+  ]);
+
+  const activeTabLoading = useMemo(() => {
+    if (activeTab === "overview") {
+      return loadingBucket || propsLoading || lifecycleLoading || policyLoading || bucketAclLoading || corsLoading;
+    }
+    if (activeTab === "metrics") {
+      return loadingBucket;
+    }
+    if (activeTab === "objects") {
+      return objectsLoading;
+    }
+    if (activeTab === "properties") {
+      return propsLoading || lifecycleLoading || bucketTagsLoading;
+    }
+    if (activeTab === "permissions") {
+      return publicAccessLoading || bucketAclLoading || policyLoading;
+    }
+    if (activeTab === "advanced") {
+      return websiteLoading || corsLoading || accessLoggingLoading || notificationsLoading;
+    }
+    if (activeTab === "ceph") {
+      return loadingBucket || propsLoading;
+    }
+    return false;
+  }, [
+    accessLoggingLoading,
+    activeTab,
+    bucketAclLoading,
+    bucketTagsLoading,
+    corsLoading,
+    lifecycleLoading,
+    loadingBucket,
+    notificationsLoading,
+    objectsLoading,
+    policyLoading,
+    propsLoading,
+    publicAccessLoading,
+    websiteLoading,
+  ]);
+
+  const canRefreshActiveTab = useMemo(() => {
+    if (activeTab === "objects") {
+      return !isCephAdmin && hasAccountContext;
+    }
+    return hasContext;
+  }, [activeTab, hasAccountContext, hasContext, isCephAdmin]);
+
   const updateSimpleLifecycleRule = (index: number, patch: Partial<SimpleLifecycleRule>) => {
     setSimpleLifecycleRules((prev) => prev.map((rule, idx) => (idx === index ? { ...rule, ...patch } : rule)));
   };
@@ -2046,11 +2140,6 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
         </div>
       )}
 
-      {loadingBucket && (
-        <div className="rounded-md bg-slate-100 px-4 py-3 ui-body text-slate-600 dark:bg-slate-800 dark:text-slate-200">
-          Loading bucket...
-        </div>
-      )}
       {bucketError && (
         <div className="rounded-md bg-rose-50 px-4 py-3 ui-body text-rose-700 dark:bg-rose-900/40 dark:text-rose-100">
           {bucketError}
@@ -2060,6 +2149,16 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
       <PageTabs
         activeTab={activeTab}
         onChange={setActiveTab}
+        headerActions={
+          <button
+            type="button"
+            onClick={refreshActiveTab}
+            disabled={!canRefreshActiveTab || activeTabLoading}
+            className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+          >
+            {activeTabLoading ? "Loading..." : "Refresh"}
+          </button>
+        }
         tabs={[
           {
             id: "overview",
@@ -2105,9 +2204,6 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                       <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Bucket properties</p>
                       <p className="ui-caption text-slate-500 dark:text-slate-400">Summary of enabled features.</p>
                     </div>
-                    {(propsLoading || lifecycleLoading) && (
-                      <span className="ui-caption font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-200">Updating…</span>
-                    )}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {propertySummary.map((item) => (
@@ -2180,30 +2276,23 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          onClick={() => loadObjects(currentPrefix)}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        >
-                          Refresh
-                        </button>
-                        <button
-                          type="button"
                           disabled={selectedKeys.length !== 1}
                           onClick={handleDownload}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
                           Download
                         </button>
                         <button
                           type="button"
                           onClick={() => setShowUpload(true)}
-                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
+                          className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
                         >
                           Upload
                         </button>
                         <button
                           type="button"
                           onClick={handleNewFolder}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
                           New folder
                         </button>
@@ -2211,7 +2300,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                           type="button"
                           disabled={selectedKeys.length === 0}
                           onClick={handleDelete}
-                          className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-700 dark:hover:text-rose-100"
+                          className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-700 dark:hover:text-rose-100"
                         >
                           Delete
                         </button>
@@ -2326,23 +2415,6 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
             label: "Properties",
             content: (
               <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">RGW status</p>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">Versioning, Object Lock, lifecycle.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      loadProperties();
-                      loadLifecycle();
-                      loadBucketTags();
-                    }}
-                    className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                  >
-                    Refresh
-                  </button>
-                </div>
                 {propsLoading && (
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
                     Loading properties...
@@ -2355,8 +2427,8 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                 )}
                 {properties && (
                   <>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className={bucketCardClass}>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className={`${bucketCardClass} md:col-start-1`}>
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Versioning</p>
@@ -2394,7 +2466,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                           </p>
                         )}
                       </div>
-                      <div className={bucketCardClass}>
+                      <div className={`${bucketCardClass} md:col-start-2 md:row-start-1 md:row-span-2`}>
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Object Lock</p>
@@ -2500,9 +2572,9 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                               <button
                                 type="submit"
                                 disabled={savingObjectLock || propsLoading}
-                                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                                className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                               >
-                                {savingObjectLock ? "Updating..." : "Save"}
+                                {savingObjectLock ? "Saving..." : "Save"}
                               </button>
                             </div>
                           </form>
@@ -2511,8 +2583,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                           Choose a mode plus days or years. Leave it empty to remove the default retention (Object Lock must already be enabled on the bucket).
                         </p>
                       </div>
-                    </div>
-                    <div className={bucketCardClass}>
+                    <div className={`${bucketCardClass} order-4 md:order-none md:col-span-2 md:col-start-1 md:row-start-3`}>
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Lifecycle rules</p>
@@ -2528,6 +2599,14 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                             className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                           >
                             {showLifecycleEditor ? "Hide editor" : "Show editor"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={saveLifecycle}
+                            disabled={savingLifecycle || lifecycleLoading}
+                            className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                          >
+                            {savingLifecycle ? "Saving..." : "Save"}
                           </button>
                         </div>
                       </div>
@@ -2551,7 +2630,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                           <p className="ui-caption text-slate-600 dark:text-slate-300">No rules configured on this bucket.</p>
                         ) : (
                           <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
+                            <table className="min-w-full divide-y divide-slate-200 ui-caption dark:divide-slate-800">
                               <thead className="bg-slate-100 dark:bg-slate-900/60">
                                 <tr>
                                   <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -2590,10 +2669,10 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                                       key={`${(rule as any).ID ?? (rule as any).Prefix ?? "rule"}-${idx}`}
                                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50"
                                     >
-                                      <td className="px-3 py-2 font-semibold text-slate-900 dark:text-slate-100">
+                                      <td className="px-3 py-1.5 font-semibold text-slate-900 dark:text-slate-100">
                                         {(rule as any).ID ?? "(no ID)"}
                                       </td>
-                                      <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
+                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">
                                         <button
                                           type="button"
                                           onClick={() => toggleRuleStatusAt(idx)}
@@ -2607,9 +2686,9 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                                           {(rule as any).Status === "Disabled" ? "Disabled" : "Enabled"}
                                         </button>
                                       </td>
-                                      <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{filterLabel}</td>
-                                      <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{describeLifecycleActions(rule as any)}</td>
-                                      <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
+                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{filterLabel}</td>
+                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">{describeLifecycleActions(rule as any)}</td>
+                                      <td className="px-3 py-1.5 text-slate-700 dark:text-slate-200">
                                         <div className="flex flex-wrap gap-2">
                                           <button
                                             type="button"
@@ -2828,30 +2907,10 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                               />
                             </div>
                           )}
-                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={loadLifecycle}
-                                disabled={lifecycleLoading || savingLifecycle}
-                                className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                              >
-                                Reload
-                              </button>
-                              <button
-                                type="button"
-                                onClick={saveLifecycle}
-                                disabled={savingLifecycle || lifecycleLoading}
-                                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                              >
-                                {savingLifecycle ? "Saving..." : "Save"}
-                              </button>
-                            </div>
-                          </div>
                         </>
                       )}
                     </div>
-                    <div className={`${bucketCardClass} space-y-3`}>
+                    <div className={`${bucketCardClass} space-y-3 order-3 md:order-none md:col-start-1 md:row-start-2`}>
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Bucket tags</p>
@@ -2862,27 +2921,19 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={loadBucketTags}
-                            className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                            disabled={bucketTagsLoading || savingBucketTags || deletingBucketTags}
+                            onClick={clearBucketTags}
+                            className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                            disabled={bucketTagsLoading || savingBucketTags || deletingBucketTags || bucketTags.length === 0}
                           >
-                            {bucketTagsLoading ? "Loading..." : "Refresh"}
+                            {deletingBucketTags ? "Clearing..." : "Clear"}
                           </button>
                           <button
                             type="button"
                             onClick={saveBucketTags}
-                            className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                            className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                             disabled={bucketTagsLoading || savingBucketTags || deletingBucketTags}
                           >
-                            {savingBucketTags ? "Saving..." : "Save tags"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={clearBucketTags}
-                            className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                            disabled={bucketTagsLoading || savingBucketTags || deletingBucketTags || bucketTags.length === 0}
-                          >
-                            {deletingBucketTags ? "Clearing..." : "Clear tags"}
+                            {savingBucketTags ? "Saving..." : "Save"}
                           </button>
                         </div>
                       </div>
@@ -2940,7 +2991,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                             <button
                               type="button"
                               onClick={addBucketTag}
-                              className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                              className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                               disabled={savingBucketTags || deletingBucketTags}
                             >
                               Add tag
@@ -2951,6 +3002,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                           </div>
                         </div>
                       )}
+                    </div>
                     </div>
                   </>
                 )}
@@ -2978,17 +3030,9 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                       )}
                       <button
                         type="button"
-                        onClick={loadPublicAccessBlock}
-                        disabled={publicAccessLoading || savingPublicAccess}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                      >
-                        {publicAccessLoading ? "Loading..." : "Refresh"}
-                      </button>
-                      <button
-                        type="button"
                         onClick={savePublicAccessBlock}
                         disabled={publicAccessLoading || savingPublicAccess}
-                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingPublicAccess ? "Saving..." : "Save"}
                       </button>
@@ -3032,19 +3076,11 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={loadBucketAcl}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        disabled={bucketAclLoading}
-                      >
-                        {bucketAclLoading ? "Loading..." : "Refresh"}
-                      </button>
-                      <button
-                        type="button"
                         onClick={saveBucketAcl}
-                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         disabled={savingBucketAcl || bucketAclLoading}
                       >
-                        {savingBucketAcl ? "Saving..." : "Save ACL"}
+                        {savingBucketAcl ? "Saving..." : "Save"}
                       </button>
                     </div>
                   </div>
@@ -3152,29 +3188,19 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          loadPolicy();
-                        }}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        disabled={policyLoading}
+                        onClick={removePolicy}
+                        disabled={deletingPolicy}
+                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
-                        {policyLoading ? "Loading..." : "Refresh"}
+                        {deletingPolicy ? "Deleting..." : "Delete"}
                       </button>
                       <button
                         type="button"
                         onClick={savePolicy}
                         disabled={savingPolicy || policyLoading}
-                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
-                        {savingPolicy ? "Saving..." : "Save policy"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={removePolicy}
-                        disabled={deletingPolicy}
-                        className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                      >
-                        {deletingPolicy ? "Deleting..." : "Delete policy"}
+                        {savingPolicy ? "Saving..." : "Save"}
                       </button>
                     </div>
                   </div>
@@ -3235,27 +3261,19 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={loadWebsite}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        disabled={websiteLoading || staticWebsiteBlocked}
+                        onClick={clearWebsite}
+                        disabled={clearingWebsite || staticWebsiteBlocked}
+                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
-                        {websiteLoading ? "Loading..." : "Refresh"}
+                        {clearingWebsite ? "Deleting..." : "Delete"}
                       </button>
                       <button
                         type="button"
                         onClick={saveWebsite}
                         disabled={savingWebsite || websiteLoading || staticWebsiteBlocked}
-                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingWebsite ? "Saving..." : "Save"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={clearWebsite}
-                        disabled={clearingWebsite || staticWebsiteBlocked}
-                        className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                      >
-                        {clearingWebsite ? "Deleting..." : "Delete"}
                       </button>
                     </div>
                   </div>
@@ -3432,27 +3450,19 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={loadCors}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        disabled={corsLoading}
+                        onClick={removeCors}
+                        disabled={deletingCors}
+                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
-                        {corsLoading ? "Loading..." : "Refresh"}
+                        {deletingCors ? "Deleting..." : "Delete"}
                       </button>
                       <button
                         type="button"
                         onClick={saveCors}
                         disabled={savingCors || corsLoading}
-                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
-                        {savingCors ? "Saving..." : "Save CORS"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={removeCors}
-                        disabled={deletingCors}
-                        className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                      >
-                        {deletingCors ? "Deleting..." : "Delete CORS"}
+                        {savingCors ? "Saving..." : "Save"}
                       </button>
                     </div>
                   </div>
@@ -3500,27 +3510,19 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={loadAccessLogging}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        disabled={accessLoggingLoading}
+                        onClick={clearAccessLogging}
+                        disabled={clearingAccessLogging}
+                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
-                        {accessLoggingLoading ? "Loading..." : "Refresh"}
+                        {clearingAccessLogging ? "Disabling..." : "Disable"}
                       </button>
                       <button
                         type="button"
                         onClick={saveAccessLogging}
                         disabled={savingAccessLogging || accessLoggingLoading}
-                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {savingAccessLogging ? "Saving..." : "Save"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={clearAccessLogging}
-                        disabled={clearingAccessLogging}
-                        className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                      >
-                        {clearingAccessLogging ? "Disabling..." : "Disable"}
                       </button>
                     </div>
                   </div>
@@ -3596,27 +3598,19 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={loadNotifications}
-                        className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        disabled={notificationsLoading}
+                        onClick={clearNotifications}
+                        disabled={clearingNotifications}
+                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
                       >
-                        {notificationsLoading ? "Loading..." : "Refresh"}
+                        {clearingNotifications ? "Clearing..." : "Clear"}
                       </button>
                       <button
                         type="button"
                         onClick={saveNotifications}
                         disabled={savingNotifications || notificationsLoading}
-                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
-                        {savingNotifications ? "Saving..." : "Save notifications"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={clearNotifications}
-                        disabled={clearingNotifications}
-                        className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                      >
-                        {clearingNotifications ? "Clearing..." : "Clear"}
+                        {savingNotifications ? "Saving..." : "Save"}
                       </button>
                     </div>
                   </div>
@@ -3797,10 +3791,10 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                       <button
                         type="submit"
                         disabled={updatingQuota || !canEditQuota}
-                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         title={!canEditQuota ? "Admins only" : undefined}
                       >
-                        {updatingQuota ? "Updating..." : "Save"}
+                        {updatingQuota ? "Saving..." : "Save"}
                       </button>
                     </div>
                   </form>
