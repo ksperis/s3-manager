@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Lock
 from time import monotonic
-from typing import Callable
+from typing import Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import ValidationError
@@ -63,6 +63,7 @@ class _BucketListCacheKey:
     sort_by: str
     sort_dir: str
     with_stats: bool
+    with_owner_metadata: bool
 
 
 @dataclass
@@ -129,19 +130,62 @@ def _normalize_optional_str(value: object) -> str | None:
     return cleaned or None
 
 
+def _owner_kind_from_owner(owner_id: str | None) -> Literal["account", "user"] | None:
+    if not owner_id:
+        return None
+    return "account" if is_rgw_account_id(owner_id) else "user"
+
+
+def _normalize_owner_kind(raw: object) -> Literal["account", "user"] | None:
+    if not isinstance(raw, str):
+        return None
+    value = raw.strip().lower().replace("-", "_")
+    if value in {"account", "accounts", "acct"}:
+        return "account"
+    if value in {"user", "users"}:
+        return "user"
+    return None
+
+
+def _determine_owner_name_lookup_scope(query: CephAdminBucketFilterQuery | None) -> Literal["any", "account", "user"]:
+    if not query or query.match != "all":
+        return "any"
+    allowed: set[Literal["account", "user"]] = {"account", "user"}
+    saw_owner_kind_rule = False
+    for rule in query.rules:
+        if rule.field != "owner_kind":
+            continue
+        saw_owner_kind_rule = True
+        if rule.op == "eq":
+            value = _normalize_owner_kind(rule.value)
+            if value:
+                allowed &= {value}
+        elif rule.op == "neq":
+            value = _normalize_owner_kind(rule.value)
+            if value:
+                allowed.discard(value)
+        elif rule.op == "in" and isinstance(rule.value, list):
+            values = {_normalize_owner_kind(item) for item in rule.value}
+            values = {item for item in values if item is not None}
+            if values:
+                allowed &= values
+        elif rule.op == "not_in" and isinstance(rule.value, list):
+            values = {_normalize_owner_kind(item) for item in rule.value}
+            values = {item for item in values if item is not None}
+            if values:
+                allowed -= values
+    if not saw_owner_kind_rule:
+        return "any"
+    if len(allowed) == 1:
+        return next(iter(allowed))
+    return "any"
+
+
 def _extract_bucket_owner_scope(entry: dict) -> tuple[str | None, str | None]:
     if not isinstance(entry, dict):
         return None, None
-    bucket_value = entry.get("bucket")
-    tenant_value = entry.get("tenant")
-    if tenant_value is None and isinstance(bucket_value, dict):
-        tenant_value = bucket_value.get("tenant")
-    tenant = _normalize_optional_str(tenant_value)
-
-    owner_value = entry.get("owner") or entry.get("owner_id") or entry.get("user") or entry.get("uid")
-    if not owner_value and isinstance(bucket_value, dict):
-        owner_value = bucket_value.get("owner") or bucket_value.get("owner_id") or bucket_value.get("user") or bucket_value.get("uid")
-    owner = _normalize_optional_str(owner_value)
+    tenant = _normalize_optional_str(entry.get("tenant"))
+    owner = _normalize_optional_str(entry.get("owner"))
     if owner and "$" in owner:
         split_tenant, split_uid = _split_tenant_uid(owner)
         if split_tenant:
@@ -156,20 +200,8 @@ def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
     bucket_name = _extract_bucket_name(entry)
     if not bucket_name:
         return None
-    bucket_value = entry.get("bucket")
-    tenant_value = entry.get("tenant")
-    if tenant_value is None and isinstance(bucket_value, dict):
-        tenant_value = bucket_value.get("tenant")
-    tenant = str(tenant_value).strip() if isinstance(tenant_value, str) and tenant_value.strip() else None
-    owner_value = entry.get("owner") or entry.get("owner_id") or entry.get("user") or entry.get("uid")
-    if not owner_value and isinstance(bucket_value, dict):
-        owner_value = (
-            bucket_value.get("owner")
-            or bucket_value.get("owner_id")
-            or bucket_value.get("user")
-            or bucket_value.get("uid")
-        )
-    owner = str(owner_value).strip() if isinstance(owner_value, str) and owner_value.strip() else None
+    tenant = _normalize_optional_str(entry.get("tenant"))
+    owner = _normalize_optional_str(entry.get("owner"))
     usage_bytes, objects = extract_usage_stats(entry.get("usage"))
     quota_size = None
     quota_objects = None
@@ -200,14 +232,9 @@ def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
 def _extract_bucket_name(entry: dict) -> str | None:
     if not isinstance(entry, dict):
         return None
-    bucket_value = entry.get("bucket")
-    name = None
-    if isinstance(bucket_value, str):
-        name = bucket_value
-    elif isinstance(bucket_value, dict):
-        name = bucket_value.get("name") or bucket_value.get("bucket") or bucket_value.get("bucket_name")
-    if not name:
-        name = entry.get("name") or entry.get("bucket_name") or entry.get("bucket")
+    name = entry.get("name")
+    if not name and isinstance(entry.get("bucket"), str):
+        name = entry.get("bucket")
     bucket_name = str(name or "").strip()
     return bucket_name or None
 
@@ -249,6 +276,7 @@ def _resolve_owner_name(
     owner_id: str | None,
     tenant: str | None,
     cache: dict[str, str | None],
+    owner_scope: Literal["any", "account", "user"] = "any",
 ) -> str | None:
     if not owner_id:
         return None
@@ -256,19 +284,26 @@ def _resolve_owner_name(
     if owner_key in cache:
         return cache[owner_key]
 
+    owner_kind = _owner_kind_from_owner(owner_id)
+    if owner_scope != "any" and owner_kind != owner_scope:
+        cache[owner_key] = None
+        return None
+
     name: str | None = None
-    try:
-        account_payload = ctx.rgw_admin.get_account(owner_id, allow_not_found=True)
-    except RGWAdminError:
-        account_payload = None
-    if isinstance(account_payload, dict) and not account_payload.get("not_found"):
-        name = _normalize_optional_str(
-            account_payload.get("name")
-            or account_payload.get("display_name")
-            or account_payload.get("display-name")
-        )
-        cache[owner_key] = name
-        return name
+    if owner_scope in {"any", "account"}:
+        try:
+            account_payload = ctx.rgw_admin.get_account(owner_id, allow_not_found=True)
+        except RGWAdminError:
+            account_payload = None
+        if isinstance(account_payload, dict) and not account_payload.get("not_found"):
+            # Strict account owner-name resolution: only RGW account "name" is accepted.
+            name = _normalize_optional_str(account_payload.get("name"))
+            cache[owner_key] = name
+            return name
+
+    if owner_scope == "account":
+        cache[owner_key] = None
+        return None
 
     tenant_hint = tenant
     uid = owner_id
@@ -281,13 +316,44 @@ def _resolve_owner_name(
     except RGWAdminError:
         user_payload = None
     if isinstance(user_payload, dict) and not user_payload.get("not_found"):
-        name = _normalize_optional_str(
-            user_payload.get("display_name")
-            or user_payload.get("display-name")
-            or (user_payload.get("user") or {}).get("display_name")
-        )
+        # Strict user owner-name resolution: only RGW "display_name" is accepted.
+        name = _normalize_optional_str(user_payload.get("display_name"))
     cache[owner_key] = name
     return name
+
+
+def _resolve_owner_names_for_buckets(
+    ctx: CephAdminContext,
+    buckets: list[CephAdminBucketSummary],
+    owner_scope: Literal["any", "account", "user"] = "any",
+) -> dict[str, str | None]:
+    owner_targets: dict[str, tuple[str | None, str]] = {}
+    for bucket in buckets:
+        if not bucket.owner:
+            continue
+        if owner_scope != "any":
+            bucket_owner_kind = _owner_kind_from_owner(bucket.owner)
+            if bucket_owner_kind != owner_scope:
+                continue
+        owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
+        if owner_key not in owner_targets:
+            owner_targets[owner_key] = (bucket.tenant, bucket.owner)
+
+    if not owner_targets:
+        return {}
+
+    if len(owner_targets) <= 1:
+        owner_key, (tenant, owner) = next(iter(owner_targets.items()))
+        return {owner_key: _resolve_owner_name(ctx, owner, tenant, {}, owner_scope=owner_scope)}
+
+    max_workers = min(BUCKET_OWNER_LOOKUP_MAX_WORKERS, len(owner_targets))
+
+    def resolve_owner_target(item: tuple[str, tuple[str | None, str]]) -> tuple[str, str | None]:
+        key, (tenant, owner) = item
+        return key, _resolve_owner_name(ctx, owner, tenant, {}, owner_scope=owner_scope)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        return dict(executor.map(resolve_owner_target, owner_targets.items()))
 
 
 def _parse_filter(raw: str | None) -> tuple[str | None, CephAdminBucketFilterQuery | None]:
@@ -326,12 +392,76 @@ def _coerce_number(value: object) -> float | None:
     return None
 
 
+def _match_tag_expression(tag_key: str, tag_value: str, expression: str, op: str) -> bool:
+    expr = expression.strip().lower()
+    if not expr:
+        return False
+    key = tag_key.strip().lower()
+    value = tag_value.strip().lower()
+    sep = "=" if "=" in expr else (":" if ":" in expr else None)
+    if sep:
+        expr_key, expr_value = expr.split(sep, 1)
+        expr_key = expr_key.strip()
+        expr_value = expr_value.strip()
+        if op == "contains":
+            return (expr_key in key) and (expr_value in value)
+        if op == "starts_with":
+            return key.startswith(expr_key) and value.startswith(expr_value)
+        if op == "ends_with":
+            return key.endswith(expr_key) and value.endswith(expr_value)
+        return key == expr_key and value == expr_value
+
+    if op == "contains":
+        return expr in key or expr in value
+    if op == "starts_with":
+        return key.startswith(expr) or value.startswith(expr)
+    if op == "ends_with":
+        return key.endswith(expr) or value.endswith(expr)
+    return key == expr or value == expr
+
+
+def _match_tag_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterRule) -> bool:
+    tags = bucket.tags or []
+    if not tags:
+        return False
+    op = rule.op or "contains"
+    allowed_ops = {"eq", "neq", "contains", "starts_with", "ends_with", "in", "not_in"}
+    if op not in allowed_ops:
+        return False
+    if op in {"in", "not_in"}:
+        if not isinstance(rule.value, list):
+            return False
+        expressions = [str(item or "").strip() for item in rule.value]
+        expressions = [expr for expr in expressions if expr]
+        if not expressions:
+            return False
+        matched = any(
+            _match_tag_expression(tag.key, tag.value, expr, "eq")
+            for tag in tags
+            for expr in expressions
+        )
+        return matched if op == "in" else not matched
+
+    expression = str(rule.value or "").strip()
+    if not expression:
+        return False
+    matched = any(_match_tag_expression(tag.key, tag.value, expression, op) for tag in tags)
+    if op == "neq":
+        return not matched
+    return matched
+
+
 def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilterRule) -> bool:
     field = rule.field
     op = rule.op
     if not field or not op:
         return False
-    value = getattr(bucket, field, None)
+    if field == "tag":
+        return _match_tag_rule(bucket, rule)
+    if field == "owner_kind":
+        value = _owner_kind_from_owner(bucket.owner)
+    else:
+        value = getattr(bucket, field, None)
     if op == "is_null":
         return value is None
     if op == "not_null":
@@ -339,10 +469,16 @@ def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilte
     if value is None:
         return False
 
-    string_fields = {"name", "tenant", "owner"}
+    string_fields = {"name", "tenant", "owner", "owner_name", "owner_kind"}
     if field in string_fields:
         left = _normalize_text(str(value))
-        right = _normalize_text(str(rule.value or ""))
+        if field == "owner_kind":
+            normalized_kind = _normalize_owner_kind(rule.value)
+            right = normalized_kind if normalized_kind else _normalize_text(str(rule.value or ""))
+            if not right:
+                return False
+        else:
+            right = _normalize_text(str(rule.value or ""))
         if op == "contains":
             return right in left
         if op == "starts_with":
@@ -356,7 +492,13 @@ def _match_field_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFilte
         if op in ("in", "not_in"):
             if not isinstance(rule.value, list):
                 return False
-            candidates = {_normalize_text(str(item)) for item in rule.value}
+            if field == "owner_kind":
+                candidates = {_normalize_owner_kind(item) for item in rule.value}
+                candidates = {item for item in candidates if item is not None}
+                if not candidates:
+                    return False
+            else:
+                candidates = {_normalize_text(str(item)) for item in rule.value}
             result = left in candidates
             return result if op == "in" else not result
         return False
@@ -450,6 +592,16 @@ def _filter_requires_stats(query: CephAdminBucketFilterQuery | None) -> bool:
         return False
     for rule in query.rules:
         if rule.field in {"used_bytes", "object_count", "quota_max_size_bytes", "quota_max_objects"}:
+            return True
+    return False
+
+
+def _filter_requires_owner_metadata(query: CephAdminBucketFilterQuery | None) -> bool:
+    if not query:
+        return False
+    owner_related_fields = {"tenant", "owner", "owner_name", "owner_kind"}
+    for rule in query.rules:
+        if rule.field in owner_related_fields:
             return True
     return False
 
@@ -772,6 +924,8 @@ def list_buckets(
 
     include_set = _parse_includes(include)
     wants_owner_name = "owner_name" in include_set
+    needs_owner_metadata = _filter_requires_owner_metadata(advanced_filter) or sort_by in {"tenant", "owner"}
+    fetch_with_stats = with_stats or needs_owner_metadata
     requested_features = include_set & {
         "tags",
         "versioning",
@@ -790,6 +944,7 @@ def list_buckets(
         sort_by=sort_by,
         sort_dir=sort_dir,
         with_stats=with_stats,
+        with_owner_metadata=needs_owner_metadata,
     )
 
     def build_listing() -> list[CephAdminBucketSummary]:
@@ -802,62 +957,104 @@ def list_buckets(
                     allowed_names = set(name_candidates)
                     entries = [
                         entry
-                        for entry in _get_cached_rgw_bucket_entries(ctx, with_stats=with_stats)
+                        for entry in _get_cached_rgw_bucket_entries(ctx, with_stats=fetch_with_stats)
                         if _extract_bucket_name(entry) in allowed_names
                     ]
             else:
-                entries = _get_cached_rgw_bucket_entries(ctx, with_stats=with_stats)
+                entries = _get_cached_rgw_bucket_entries(ctx, with_stats=fetch_with_stats)
         except RGWAdminError as exc:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
         results: list[CephAdminBucketSummary] = []
         for entry in entries:
             summary = _build_bucket_summary(entry)
             if summary:
+                if not with_stats:
+                    summary.used_bytes = None
+                    summary.object_count = None
+                    summary.quota_max_size_bytes = None
+                    summary.quota_max_objects = None
                 results.append(summary)
 
         if advanced_filter and advanced_filter.rules:
             field_rules = [rule for rule in advanced_filter.rules if rule.field]
             feature_rules = [rule for rule in advanced_filter.rules if rule.feature]
             match_mode = advanced_filter.match
+            expensive_field_rules = [
+                rule for rule in field_rules if rule.field in {"owner_name", "tag"}
+            ]
+            cheap_field_rules = [
+                rule for rule in field_rules if rule.field not in {"owner_name", "tag"}
+            ]
 
-            if field_rules and match_mode == "all":
-                results = [bucket for bucket in results if all(_match_field_rule(bucket, rule) for rule in field_rules)]
-            elif field_rules and match_mode == "any" and not feature_rules:
-                results = [bucket for bucket in results if any(_match_field_rule(bucket, rule) for rule in field_rules)]
+            if cheap_field_rules and match_mode == "all":
+                results = [bucket for bucket in results if all(_match_field_rule(bucket, rule) for rule in cheap_field_rules)]
+            elif cheap_field_rules and match_mode == "any" and not expensive_field_rules and not feature_rules:
+                results = [bucket for bucket in results if any(_match_field_rule(bucket, rule) for rule in cheap_field_rules)]
 
-            if feature_rules:
+            if expensive_field_rules or feature_rules:
                 filter_features = {rule.feature for rule in feature_rules if rule.feature}
+                requires_tag_lookup = any(rule.field == "tag" for rule in expensive_field_rules)
+                requires_owner_name_lookup = any(rule.field == "owner_name" for rule in expensive_field_rules)
                 service = BucketsService()
                 account = _build_endpoint_account(ctx)
                 field_matched: list[CephAdminBucketSummary] = []
-                feature_candidates = results
-                if match_mode == "any" and field_rules:
-                    # First apply cheap field predicates from bulk listing; only unresolved items need feature lookups.
+                expensive_candidates = results
+                if match_mode == "any" and cheap_field_rules:
+                    # Apply cheap predicates first and resolve expensive data only for unresolved buckets.
                     unresolved: list[CephAdminBucketSummary] = []
                     for bucket in results:
-                        if any(_match_field_rule(bucket, rule) for rule in field_rules):
+                        if any(_match_field_rule(bucket, rule) for rule in cheap_field_rules):
                             field_matched.append(bucket)
                         else:
                             unresolved.append(bucket)
-                    feature_candidates = unresolved
-                feature_enriched = _enrich_buckets(
-                    feature_candidates,
-                    {feature for feature in filter_features if feature != "tags"},
-                    include_tags="tags" in filter_features,
-                    service=service,
-                    account=account,
-                )
+                    expensive_candidates = unresolved
+
+                if requires_owner_name_lookup and expensive_candidates:
+                    owner_scope = _determine_owner_name_lookup_scope(advanced_filter)
+                    owner_name_by_key = _resolve_owner_names_for_buckets(
+                        ctx,
+                        expensive_candidates,
+                        owner_scope=owner_scope,
+                    )
+                    for bucket in expensive_candidates:
+                        if not bucket.owner:
+                            bucket.owner_name = None
+                            continue
+                        owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
+                        bucket.owner_name = owner_name_by_key.get(owner_key)
+
+                if expensive_candidates and (filter_features or requires_tag_lookup):
+                    expensive_candidates = _enrich_buckets(
+                        expensive_candidates,
+                        {feature for feature in filter_features if feature != "tags"},
+                        include_tags=requires_tag_lookup or ("tags" in filter_features),
+                        service=service,
+                        account=account,
+                    )
+
                 if match_mode == "all":
-                    results = [bucket for bucket in feature_enriched if all(_match_feature_rule(bucket, rule) for rule in feature_rules)]
-                elif field_rules:
-                    feature_matched = [
+                    results = [
                         bucket
-                        for bucket in feature_enriched
-                        if any(_match_feature_rule(bucket, rule) for rule in feature_rules)
+                        for bucket in expensive_candidates
+                        if (all(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else True)
+                        and (all(_match_feature_rule(bucket, rule) for rule in feature_rules) if feature_rules else True)
                     ]
-                    results = field_matched + feature_matched
+                elif cheap_field_rules:
+                    expensive_matched = [
+                        bucket
+                        for bucket in expensive_candidates
+                        if (any(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
+                        or (any(_match_feature_rule(bucket, rule) for rule in feature_rules) if feature_rules else False)
+                    ]
+                    results = field_matched + expensive_matched
                 else:
-                    results = [bucket for bucket in feature_enriched if any(_match_feature_rule(bucket, rule) for rule in feature_rules)]
+                    results = [
+                        bucket
+                        for bucket in expensive_candidates
+                        if (any(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
+                        or (any(_match_feature_rule(bucket, rule) for rule in feature_rules) if feature_rules else False)
+                    ]
+
                 for bucket in results:
                     bucket.features = None
                     bucket.tags = None
@@ -916,32 +1113,13 @@ def list_buckets(
         )
 
     if wants_owner_name and page_items:
-        owner_targets: dict[str, tuple[str | None, str]] = {}
-        for bucket in page_items:
-            if not bucket.owner:
-                continue
-            owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
-            if owner_key not in owner_targets:
-                owner_targets[owner_key] = (bucket.tenant, bucket.owner)
-        owner_name_by_key: dict[str, str | None] = {}
-        if owner_targets:
-            if len(owner_targets) <= 1:
-                owner_key, (tenant, owner) = next(iter(owner_targets.items()))
-                owner_name_by_key[owner_key] = _resolve_owner_name(ctx, owner, tenant, {})
-            else:
-                max_workers = min(BUCKET_OWNER_LOOKUP_MAX_WORKERS, len(owner_targets))
-                def resolve_owner_target(item: tuple[str, tuple[str | None, str]]) -> tuple[str, str | None]:
-                    key, (tenant, owner) = item
-                    return key, _resolve_owner_name(ctx, owner, tenant, {})
-
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    owner_name_by_key = dict(executor.map(resolve_owner_target, owner_targets.items()))
+        owner_name_by_key = _resolve_owner_names_for_buckets(ctx, page_items, owner_scope="any")
         for bucket in page_items:
             if not bucket.owner:
                 bucket.owner_name = None
                 continue
             owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
-            bucket.owner_name = owner_name_by_key.get(owner_key)
+            bucket.owner_name = owner_name_by_key.get(owner_key, bucket.owner_name)
 
     has_next = end < total
     return PaginatedCephAdminBucketsResponse(

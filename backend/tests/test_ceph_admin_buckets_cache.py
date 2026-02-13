@@ -34,7 +34,7 @@ class FakeRGWAdmin:
 
     def get_user(self, uid: str, tenant: str | None = None, allow_not_found: bool = True):
         self.get_user_calls += 1
-        return {"user": {"uid": uid, "display_name": f"User-{uid}"}}
+        return {"uid": uid, "display_name": f"User-{uid}"}
 
 
 @pytest.fixture(autouse=True)
@@ -250,10 +250,10 @@ def test_ceph_admin_bucket_listing_name_filter_uses_single_bulk_rgw_call():
     assert rgw_admin.get_bucket_info_calls == 0
 
 
-def test_ceph_admin_bucket_listing_owner_filter_supports_nested_owner_id():
+def test_ceph_admin_bucket_listing_owner_filter_requires_top_level_owner():
     payload = [
-        {"bucket": {"name": "bucket-a", "owner_id": "RGW00000000000000001"}},
-        {"bucket": {"name": "bucket-b", "owner_id": "RGW00000000000000002"}},
+        {"bucket": "bucket-a", "owner": "RGW00000000000000001"},
+        {"bucket": "bucket-b", "owner": "RGW00000000000000002"},
     ]
     ctx, rgw_admin = _build_ctx(endpoint_id=151, payload=payload)
 
@@ -340,6 +340,112 @@ def test_ceph_admin_bucket_listing_any_mixed_filter_prefers_bulk_field_rules(mon
     assert [item.name for item in response.items] == ["bucket-a", "bucket-b"]
 
 
+def test_ceph_admin_bucket_listing_tag_filter_matches_s3_tags(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=171, payload=payload)
+
+    def fake_enrich(
+        buckets: list[CephAdminBucketSummary],
+        requested: set[str],
+        include_tags: bool,
+        service,
+        account,
+    ) -> list[CephAdminBucketSummary]:
+        assert requested == set()
+        assert include_tags is True
+        enriched: list[CephAdminBucketSummary] = []
+        for bucket in buckets:
+            base = bucket.model_dump()
+            if bucket.name == "bucket-a":
+                base["tags"] = [{"key": "env", "value": "prod"}]
+            else:
+                base["tags"] = [{"key": "env", "value": "dev"}]
+            enriched.append(CephAdminBucketSummary(**base))
+        return enriched
+
+    monkeypatch.setattr(buckets_router, "_enrich_buckets", fake_enrich)
+
+    tag_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "tag", "op": "contains", "value": "env=prod"}],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=tag_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-a"]
+
+
+def test_ceph_admin_bucket_listing_any_tag_filter_prefers_bulk_field_rules(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+        {"name": "bucket-c", "owner": "owner-c"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=172, payload=payload)
+    captured: dict[str, object] = {}
+
+    def fake_enrich(
+        buckets: list[CephAdminBucketSummary],
+        requested: set[str],
+        include_tags: bool,
+        service,
+        account,
+    ) -> list[CephAdminBucketSummary]:
+        captured["names"] = [bucket.name for bucket in buckets]
+        captured["requested"] = requested
+        captured["include_tags"] = include_tags
+        enriched: list[CephAdminBucketSummary] = []
+        for bucket in buckets:
+            base = bucket.model_dump()
+            base["tags"] = [{"key": "env", "value": "prod"}] if bucket.name == "bucket-c" else [{"key": "env", "value": "dev"}]
+            enriched.append(CephAdminBucketSummary(**base))
+        return enriched
+
+    monkeypatch.setattr(buckets_router, "_enrich_buckets", fake_enrich)
+
+    mixed_filter = json.dumps(
+        {
+            "match": "any",
+            "rules": [
+                {"field": "owner", "op": "contains", "value": "owner-a"},
+                {"field": "tag", "op": "contains", "value": "env=prod"},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=mixed_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert captured["names"] == ["bucket-b", "bucket-c"]
+    assert captured["requested"] == set()
+    assert captured["include_tags"] is True
+    assert [item.name for item in response.items] == ["bucket-a", "bucket-c"]
+
+
 def test_ceph_admin_bucket_listing_owner_name_lookup_deduplicates_same_owner():
     payload = [
         {"name": "bucket-a", "owner": "RGW00000000000000001"},
@@ -362,3 +468,239 @@ def test_ceph_admin_bucket_listing_owner_name_lookup_deduplicates_same_owner():
 
     assert [item.owner_name for item in response.items] == ["Owner-RGW00000000000000001"] * 3
     assert rgw_admin.get_account_calls == 1
+
+
+def test_ceph_admin_bucket_listing_owner_name_filter_accounts_only_limits_rgw_calls():
+    payload = [
+        {"name": "bucket-account", "owner": "RGW00000000000000001"},
+        {"name": "bucket-user", "owner": "user-alpha"},
+    ]
+    ctx, rgw_admin = _build_ctx(endpoint_id=181, payload=payload)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "owner_name", "op": "contains", "value": "owner-rgw00000000000000001"},
+                {"field": "owner_kind", "op": "eq", "value": "account"},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-account"]
+    assert rgw_admin.get_account_calls == 1
+    assert rgw_admin.get_user_calls == 0
+
+
+def test_ceph_admin_bucket_listing_owner_name_filter_users_only_limits_rgw_calls():
+    payload = [
+        {"name": "bucket-account", "owner": "RGW00000000000000001"},
+        {"name": "bucket-user", "owner": "user-alpha"},
+    ]
+    ctx, rgw_admin = _build_ctx(endpoint_id=182, payload=payload)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"field": "owner_name", "op": "contains", "value": "user-user-alpha"},
+                {"field": "owner_kind", "op": "eq", "value": "user"},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-user"]
+    assert rgw_admin.get_account_calls == 0
+    assert rgw_admin.get_user_calls == 1
+
+
+def test_ceph_admin_bucket_listing_owner_name_filter_is_strict_for_user_display_name():
+    payload = [
+        {"name": "bucket-user", "owner": "user-alpha"},
+        {"name": "bucket-other", "owner": "user-beta"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=183, payload=payload)
+
+    class NoDisplayNameAdmin(FakeRGWAdmin):
+        def get_account(self, owner_id: str, allow_not_found: bool = True):
+            return None
+
+        def get_user(self, uid: str, tenant: str | None = None, allow_not_found: bool = True):
+            return {"user": {"uid": uid}}
+
+    ctx.rgw_admin = NoDisplayNameAdmin(payload)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "owner_name", "op": "contains", "value": "user-alpha"}],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == []
+
+
+def test_ceph_admin_bucket_listing_owner_name_filter_is_strict_for_account_name():
+    payload = [
+        {"name": "bucket-account", "owner": "RGW00000000000000001"},
+        {"name": "bucket-other", "owner": "RGW00000000000000002"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=184, payload=payload)
+
+    class IdOnlyAccountAdmin(FakeRGWAdmin):
+        def get_account(self, owner_id: str, allow_not_found: bool = True):
+            return {"id": owner_id}
+
+        def get_user(self, uid: str, tenant: str | None = None, allow_not_found: bool = True):
+            return None
+
+    ctx.rgw_admin = IdOnlyAccountAdmin(payload)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "owner_name", "op": "contains", "value": "rgw00000000000000001"}],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == []
+
+
+def test_ceph_admin_bucket_listing_owner_name_filter_is_strict_for_account_name_field():
+    payload = [
+        {"name": "bucket-account", "owner": "RGW00000000000000001"},
+        {"name": "bucket-other", "owner": "RGW00000000000000002"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=185, payload=payload)
+
+    class AccountNameOnlyAdmin(FakeRGWAdmin):
+        def get_account(self, owner_id: str, allow_not_found: bool = True):
+            return {"id": owner_id, "account_name": f"Owner-{owner_id}"}
+
+        def get_user(self, uid: str, tenant: str | None = None, allow_not_found: bool = True):
+            return None
+
+    ctx.rgw_admin = AccountNameOnlyAdmin(payload)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "owner_name", "op": "contains", "value": "owner-rgw00000000000000001"}],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == []
+
+
+def test_ceph_admin_bucket_listing_owner_name_filter_loads_owner_metadata_when_bulk_without_stats():
+    class NamesOnlyWithoutStatsAdmin:
+        def __init__(self):
+            self.calls: list[bool] = []
+
+        def get_all_buckets(self, with_stats: bool = True):
+            self.calls.append(with_stats)
+            if with_stats:
+                return [
+                    {"name": "bucket-a", "owner": "user-alpha"},
+                    {"name": "bucket-b", "owner": "user-beta"},
+                ]
+            return ["bucket-a", "bucket-b"]
+
+        def get_bucket_info(self, bucket_name: str, stats: bool = True, allow_not_found: bool = False):
+            return {"name": bucket_name}
+
+        def get_account(self, owner_id: str, allow_not_found: bool = True):
+            return None
+
+        def get_user(self, uid: str, tenant: str | None = None, allow_not_found: bool = True):
+            return {"uid": uid, "display_name": f"Display-{uid}"}
+
+    rgw_admin = NamesOnlyWithoutStatsAdmin()
+    ctx = SimpleNamespace(
+        endpoint=SimpleNamespace(id=186),
+        rgw_admin=rgw_admin,
+        access_key="AKIA_TEST",
+        secret_key="SECRET_TEST",
+    )
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [{"field": "owner_name", "op": "eq", "value": "Display-user-alpha"}],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-a"]
+    assert rgw_admin.calls[0] is True

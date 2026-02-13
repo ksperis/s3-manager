@@ -708,6 +708,31 @@ type FeatureKey =
   | "access_logging";
 type FeatureFilterState = "any" | "enabled" | "disabled" | "suspended" | "disabled_or_suspended";
 type TextMatchMode = "contains" | "exact";
+type AdvancedNumericField =
+  | "minUsedBytes"
+  | "maxUsedBytes"
+  | "minObjects"
+  | "maxObjects"
+  | "minQuotaBytes"
+  | "maxQuotaBytes"
+  | "minQuotaObjects"
+  | "maxQuotaObjects";
+type OwnerNameScope = "any" | "account" | "user";
+type AdvancedTextOrNumericField = "tenant" | "owner" | "ownerName" | "s3Tags" | AdvancedNumericField;
+type ActiveFilterRemoveAction =
+  | { type: "quick" }
+  | { type: "tag_mode" }
+  | { type: "tag"; tag: string }
+  | { type: "advanced_text"; field: "tenant" | "owner" | "ownerName" | "s3Tags" }
+  | { type: "advanced_owner_scope" }
+  | { type: "advanced_numeric"; field: AdvancedNumericField }
+  | { type: "advanced_feature"; feature: FeatureKey };
+type ActiveFilterSummaryItem = {
+  id: string;
+  label: string;
+  remove: ActiveFilterRemoveAction;
+};
+type FilterCostLevel = "none" | "low" | "medium" | "high";
 
 type FeatureTooltipState =
   | { status: "loading" }
@@ -723,6 +748,11 @@ type AdvancedFilterState = {
   tenantMatchMode: TextMatchMode;
   owner: string;
   ownerMatchMode: TextMatchMode;
+  ownerName: string;
+  ownerNameMatchMode: TextMatchMode;
+  ownerNameScope: OwnerNameScope;
+  s3Tags: string;
+  s3TagsMatchMode: TextMatchMode;
   minUsedBytes: string;
   maxUsedBytes: string;
   minObjects: string;
@@ -739,6 +769,11 @@ const defaultAdvancedFilter: AdvancedFilterState = {
   tenantMatchMode: "contains",
   owner: "",
   ownerMatchMode: "contains",
+  ownerName: "",
+  ownerNameMatchMode: "contains",
+  ownerNameScope: "any",
+  s3Tags: "",
+  s3TagsMatchMode: "contains",
   minUsedBytes: "",
   maxUsedBytes: "",
   minObjects: "",
@@ -775,12 +810,124 @@ const formatFeatureFilterStateLabel = (state: FeatureFilterState) => {
   return state.charAt(0).toUpperCase() + state.slice(1);
 };
 
-const featureSelectWidthCh = (state: FeatureFilterState) => {
-  const label = formatFeatureFilterStateLabel(state);
-  return Math.min(26, Math.max(8, label.length + 3));
+const formatTextMatchModeLabel = (mode: TextMatchMode) => (mode === "exact" ? "exact" : "contains");
+const FILTER_COST_LABEL: Record<FilterCostLevel, string> = {
+  none: "No additional cost",
+  low: "Low cost",
+  medium: "Medium cost",
+  high: "High cost",
 };
 
-const formatTextMatchModeLabel = (mode: TextMatchMode) => (mode === "exact" ? "exact" : "contains");
+const FILTER_COST_ENABLED_DOTS: Record<FilterCostLevel, number> = {
+  none: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+};
+
+const FILTER_COST_DOT_CLASS: Record<Exclude<FilterCostLevel, "none">, string> = {
+  low: "bg-emerald-500 dark:bg-emerald-300",
+  medium: "bg-amber-500 dark:bg-amber-300",
+  high: "bg-rose-500 dark:bg-rose-300",
+};
+
+const renderFilterCostIndicator = (level: FilterCostLevel, tooltip: string) => {
+  const enabledDots = FILTER_COST_ENABLED_DOTS[level];
+  const activeClass = level === "none" ? "" : FILTER_COST_DOT_CLASS[level];
+  return (
+    <span
+      className="inline-flex items-center gap-1"
+      title={tooltip}
+      aria-label={tooltip}
+    >
+      {[0, 1, 2].map((idx) => (
+        <span
+          key={`${level}-${idx}`}
+          className={`h-1.5 w-1.5 rounded-full ${idx < enabledDots ? activeClass : "bg-slate-300 dark:bg-slate-600"}`}
+        />
+      ))}
+    </span>
+  );
+};
+
+const parseS3TagExpressions = (value: string): string[] => {
+  const seen = new Set<string>();
+  const expressions: string[] = [];
+  value
+    .split(/[\n,]/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((item) => {
+      const normalized = item.toLowerCase();
+      if (seen.has(normalized)) return;
+      seen.add(normalized);
+      expressions.push(item);
+    });
+  return expressions;
+};
+
+type ParsedExactListInput = {
+  values: string[];
+  listProvided: boolean;
+};
+
+const parseExactListInput = (value: string): ParsedExactListInput => {
+  const raw = value.trim();
+  if (!raw) return { values: [], listProvided: false };
+  const listProvided = /[\n,]/.test(value);
+  if (!listProvided) {
+    return { values: [raw], listProvided: false };
+  }
+  const seen = new Set<string>();
+  const values: string[] = [];
+  value
+    .split(/[\n,]/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((item) => {
+      const normalized = item.toLowerCase();
+      if (seen.has(normalized)) return;
+      seen.add(normalized);
+      values.push(item);
+    });
+  return { values, listProvided: true };
+};
+
+const buildTextFieldRules = (
+  field: "name" | "tenant" | "owner" | "owner_name",
+  rawValue: string,
+  mode: TextMatchMode
+): Array<Record<string, unknown>> => {
+  const parsed = parseExactListInput(rawValue);
+  if (parsed.values.length === 0) return [];
+  if (parsed.listProvided) {
+    if (parsed.values.length === 1) {
+      return [{ field, op: "eq", value: parsed.values[0] }];
+    }
+    return [{ field, op: "in", value: parsed.values }];
+  }
+  return [{ field, op: mode === "exact" ? "eq" : "contains", value: parsed.values[0] }];
+};
+
+const formatTextFilterSummary = (
+  label: string,
+  rawValue: string,
+  mode: TextMatchMode
+) => {
+  const parsed = parseExactListInput(rawValue);
+  if (parsed.values.length === 0) return null;
+  if (parsed.listProvided) {
+    const preview = formatBucketNamesPreview(parsed.values, 2);
+    return `${label} exact list: ${preview}`;
+  }
+  return `${label} ${formatTextMatchModeLabel(mode)}: ${parsed.values[0]}`;
+};
+
+const serializeS3TagExpressions = (values: string[]) =>
+  values
+    .map((value) => value.toLowerCase())
+    .sort((a, b) => a.localeCompare(b))
+    .join("\u001f");
 
 const buildAdvancedFilterPayload = (
   basicFilter: string,
@@ -789,22 +936,39 @@ const buildAdvancedFilterPayload = (
   taggedBuckets: string[] | null,
   allowStatsFilters: boolean = true
 ) => {
-  const trimmedFilter = basicFilter.trim();
+  const parsedBasicFilter = parseExactListInput(basicFilter);
+  const trimmedFilter = parsedBasicFilter.values[0] ?? "";
   if (!advanced && !taggedBuckets) {
-    return trimmedFilter ? trimmedFilter : undefined;
+    if (parsedBasicFilter.values.length === 0) return undefined;
+    if (!parsedBasicFilter.listProvided && basicFilterMode === "contains") return trimmedFilter;
+    if (parsedBasicFilter.listProvided && parsedBasicFilter.values.length > 1) {
+      return JSON.stringify({
+        match: "all",
+        rules: [{ field: "name", op: "in", value: parsedBasicFilter.values }],
+      });
+    }
+    return JSON.stringify({
+      match: "all",
+      rules: [{ field: "name", op: "eq", value: trimmedFilter }],
+    });
   }
   const rules: Array<Record<string, unknown>> = [];
-  if (trimmedFilter) {
-    rules.push({ field: "name", op: basicFilterMode === "exact" ? "eq" : "contains", value: trimmedFilter });
-  }
+  rules.push(...buildTextFieldRules("name", basicFilter, basicFilterMode));
   if (advanced) {
-    const tenant = advanced.tenant.trim();
-    if (tenant) {
-      rules.push({ field: "tenant", op: advanced.tenantMatchMode === "exact" ? "eq" : "contains", value: tenant });
+    rules.push(...buildTextFieldRules("tenant", advanced.tenant, advanced.tenantMatchMode));
+    rules.push(...buildTextFieldRules("owner", advanced.owner, advanced.ownerMatchMode));
+    rules.push(...buildTextFieldRules("owner_name", advanced.ownerName, advanced.ownerNameMatchMode));
+    if (advanced.ownerNameScope !== "any") {
+      rules.push({ field: "owner_kind", op: "eq", value: advanced.ownerNameScope });
     }
-    const owner = advanced.owner.trim();
-    if (owner) {
-      rules.push({ field: "owner", op: advanced.ownerMatchMode === "exact" ? "eq" : "contains", value: owner });
+    const tagExpressions = parseS3TagExpressions(advanced.s3Tags);
+    if (tagExpressions.length > 0) {
+      const parsedS3Tags = parseExactListInput(advanced.s3Tags);
+      const tagsForceExact = parsedS3Tags.listProvided && parsedS3Tags.values.length > 0;
+      const tagOp = tagsForceExact || advanced.s3TagsMatchMode === "exact" ? "eq" : "contains";
+      tagExpressions.forEach((expression) => {
+        rules.push({ field: "tag", op: tagOp, value: expression });
+      });
     }
     const addNumericRule = (field: string, op: string, raw: string) => {
       const trimmed = raw.trim();
@@ -843,7 +1007,15 @@ const buildAdvancedFilterPayload = (
 
 const hasAdvancedFilters = (advanced: AdvancedFilterState | null, allowStatsFilters: boolean = true) => {
   if (!advanced) return false;
-  if (advanced.tenant.trim() || advanced.owner.trim()) return true;
+  if (
+    advanced.tenant.trim() ||
+    advanced.owner.trim() ||
+    advanced.ownerName.trim() ||
+    advanced.ownerNameScope !== "any" ||
+    parseS3TagExpressions(advanced.s3Tags).length > 0
+  ) {
+    return true;
+  }
   if (
     allowStatsFilters &&
     (
@@ -868,7 +1040,7 @@ const BUCKETS_STATE_STORAGE_KEY = "ceph-admin.bucket_list.state.v1";
 const BUCKET_UI_TAG_KEY_SEPARATOR = "\u001f";
 const DEFAULT_PAGE_SIZE = 25;
 const DEFAULT_SORT: { field: SortField; direction: "asc" | "desc" } = { field: "name", direction: "asc" };
-const defaultVisibleColumns: ColumnId[] = ["ui_tags", "used_bytes", "object_count"];
+const defaultVisibleColumns: ColumnId[] = ["ui_tags", "owner", "used_bytes", "object_count"];
 
 const loadVisibleColumns = (): ColumnId[] => {
   if (typeof window === "undefined") return defaultVisibleColumns;
@@ -922,15 +1094,11 @@ const buildBucketUiTagKey = (bucketName: string, tenant?: string | null) => {
 const parseBucketUiTagKey = (value: string): { name: string; tenant: string | null } | null => {
   if (typeof value !== "string") return null;
   const separatorIndex = value.indexOf(BUCKET_UI_TAG_KEY_SEPARATOR);
-  if (separatorIndex >= 0) {
-    const tenantPart = value.slice(0, separatorIndex).trim();
-    const namePart = value.slice(separatorIndex + BUCKET_UI_TAG_KEY_SEPARATOR.length).trim();
-    if (!namePart) return null;
-    return { name: namePart, tenant: tenantPart || null };
-  }
-  const legacyName = value.trim();
-  if (!legacyName) return null;
-  return { name: legacyName, tenant: null };
+  if (separatorIndex < 0) return null;
+  const tenantPart = value.slice(0, separatorIndex).trim();
+  const namePart = value.slice(separatorIndex + BUCKET_UI_TAG_KEY_SEPARATOR.length).trim();
+  if (!namePart) return null;
+  return { name: namePart, tenant: tenantPart || null };
 };
 
 const toBucketTagTarget = (bucketName: string, tenant?: string | null): BucketTagTarget => {
@@ -1048,11 +1216,20 @@ const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
   }
   const safeString = (input: unknown) => (typeof input === "string" ? input : "");
   const parseMatchMode = (input: unknown): TextMatchMode => (input === "exact" ? "exact" : "contains");
+  const parseOwnerNameScope = (input: unknown): OwnerNameScope => {
+    if (input === "account" || input === "user") return input;
+    return "any";
+  };
   return {
     tenant: safeString(data.tenant),
     tenantMatchMode: parseMatchMode(data.tenantMatchMode),
     owner: safeString(data.owner),
     ownerMatchMode: parseMatchMode(data.ownerMatchMode),
+    ownerName: safeString(data.ownerName),
+    ownerNameMatchMode: parseMatchMode(data.ownerNameMatchMode),
+    ownerNameScope: parseOwnerNameScope(data.ownerNameScope),
+    s3Tags: safeString(data.s3Tags),
+    s3TagsMatchMode: parseMatchMode(data.s3TagsMatchMode),
     minUsedBytes: safeString(data.minUsedBytes),
     maxUsedBytes: safeString(data.maxUsedBytes),
     minObjects: safeString(data.minObjects),
@@ -1284,6 +1461,26 @@ export default function CephAdminBucketsPage() {
   useEffect(() => {
     persistVisibleColumns(visibleColumns);
   }, [visibleColumns]);
+
+  useEffect(() => {
+    if (!showAdvancedFilter) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowAdvancedFilter(false);
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [showAdvancedFilter]);
+
+  useEffect(() => {
+    if (!showAdvancedFilter) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [showAdvancedFilter]);
 
   useEffect(() => {
     setUiTags(loadUiTags(selectedEndpointId));
@@ -1524,17 +1721,23 @@ export default function CephAdminBucketsPage() {
     return names;
   }, [tagFilters, tagFilterMode, uiTags]);
 
-  const effectiveQuickSearchValue = quickFilterMode === "contains" ? filterValue : "";
+  const quickFilterDraftParsed = useMemo(() => parseExactListInput(filter), [filter]);
+  const quickFilterAppliedParsed = useMemo(() => parseExactListInput(filterValue), [filterValue]);
+  const quickFilterDraftForcesExact = quickFilterDraftParsed.listProvided && quickFilterDraftParsed.values.length > 0;
+  const quickFilterAppliedForcesExact = quickFilterAppliedParsed.listProvided && quickFilterAppliedParsed.values.length > 0;
+  const quickFilterModeForDisplay: TextMatchMode = quickFilterDraftForcesExact ? "exact" : quickFilterMode;
+  const effectiveQuickFilterMode: TextMatchMode = quickFilterAppliedForcesExact ? "exact" : quickFilterMode;
+  const effectiveQuickSearchValue = effectiveQuickFilterMode === "contains" ? filterValue : "";
   const advancedFilterParam = useMemo(
     () =>
       buildAdvancedFilterPayload(
-        quickFilterMode === "exact" ? filterValue : "",
-        quickFilterMode,
+        effectiveQuickFilterMode === "exact" ? filterValue : "",
+        effectiveQuickFilterMode,
         advancedApplied,
         taggedBuckets,
         usageFeatureEnabled
       ),
-    [advancedApplied, filterValue, quickFilterMode, taggedBuckets, usageFeatureEnabled]
+    [advancedApplied, filterValue, effectiveQuickFilterMode, taggedBuckets, usageFeatureEnabled]
   );
 
   const {
@@ -1563,11 +1766,11 @@ export default function CephAdminBucketsPage() {
       JSON.stringify({
         endpoint: selectedEndpointId ?? null,
         filter: effectiveQuickSearchValue.trim() || null,
-        quickFilterMode,
+        quickFilterMode: effectiveQuickFilterMode,
         advanced: advancedFilterParam || null,
         withStats: baseRequiresStats,
       }),
-    [selectedEndpointId, effectiveQuickSearchValue, quickFilterMode, advancedFilterParam, baseRequiresStats]
+    [selectedEndpointId, effectiveQuickSearchValue, effectiveQuickFilterMode, advancedFilterParam, baseRequiresStats]
   );
 
   useEffect(() => {
@@ -2939,7 +3142,10 @@ export default function CephAdminBucketsPage() {
     setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
   };
 
-  const updateAdvancedMatchMode = (field: "tenantMatchMode" | "ownerMatchMode", value: TextMatchMode) => {
+  const updateAdvancedMatchMode = (
+    field: "tenantMatchMode" | "ownerMatchMode" | "ownerNameMatchMode" | "s3TagsMatchMode",
+    value: TextMatchMode
+  ) => {
     setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -2947,9 +3153,14 @@ export default function CephAdminBucketsPage() {
     setAdvancedDraft((prev) => ({ ...prev, features: { ...prev.features, [feature]: value } }));
   };
 
+  const closeAdvancedFilterDrawer = () => {
+    setShowAdvancedFilter(false);
+  };
+
   const applyAdvancedFilter = () => {
     setAdvancedApplied(advancedDraft);
     setPage(1);
+    setShowAdvancedFilter(false);
   };
 
   const resetAdvancedFilter = () => {
@@ -2971,7 +3182,6 @@ export default function CephAdminBucketsPage() {
   const hasAnyAdvancedToClear = advancedDraftPayload !== undefined || advancedAppliedPayload !== undefined;
   const advancedFilterActive = advancedFiltersApplied || tagFilters.length > 0;
   const quickFilterActive = filterValue.trim().length > 0;
-  const filtersActive = quickFilterActive || advancedFilterActive;
   const columnsCustomized = useMemo(() => {
     if (visibleColumns.length !== defaultVisibleColumns.length) return true;
     const current = new Set(visibleColumns);
@@ -2983,14 +3193,17 @@ export default function CephAdminBucketsPage() {
   }, [availableUiTags, tagFilters]);
   const showTagFilterBar = availableUiTags.length > 0 || tagFilters.length > 0;
   const activeFieldClass =
-    "border-primary-400 bg-primary-50/80 ring-1 ring-primary/25 dark:border-primary-400/60 dark:bg-primary-500/15";
-  const activeLabelClass = "text-primary-700 dark:text-primary-200";
+    "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/15 dark:ring-emerald-500/25";
+  const activeLabelClass = "text-emerald-700 dark:text-emerald-200";
   const pendingFieldClass =
-    "border-amber-400 bg-amber-50 ring-1 ring-amber-300/60 dark:border-amber-400/60 dark:bg-amber-500/15";
+    "border-amber-400 bg-amber-50 ring-2 ring-amber-300/70 dark:border-amber-400/70 dark:bg-amber-500/20 dark:ring-amber-500/25";
   const pendingLabelClass = "text-amber-700 dark:text-amber-300";
   const modeToggleBaseClass =
-    "absolute right-1 top-1/2 -translate-y-1/2 rounded border px-1 py-0 ui-caption font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-0";
-  const modeToggleClass = (mode: TextMatchMode, isPending: boolean) => {
+    "absolute right-1 top-1 rounded border px-1 py-0 ui-caption font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-0";
+  const modeToggleClass = (mode: TextMatchMode, isPending: boolean, locked: boolean = false) => {
+    if (locked) {
+      return `${modeToggleBaseClass} cursor-not-allowed border-primary-400 bg-primary-100 text-primary-700 opacity-80 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
+    }
     if (isPending) {
       return `${modeToggleBaseClass} border-amber-400 bg-amber-100 text-amber-700 focus:ring-amber-300 dark:border-amber-400/60 dark:bg-amber-500/20 dark:text-amber-200`;
     }
@@ -2999,6 +3212,18 @@ export default function CephAdminBucketsPage() {
     }
     return `${modeToggleBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
   };
+  const matchModeButtonClass = (active: boolean, locked: boolean = false) => {
+    if (locked) {
+      if (active) {
+        return "cursor-not-allowed rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 opacity-80 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
+      }
+      return "cursor-not-allowed rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-400 opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500";
+    }
+    if (active) {
+      return "rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
+    }
+    return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
+  };
   const fieldHighlight = (isApplied: boolean, isPending: boolean) => {
     if (isPending) return { labelClass: pendingLabelClass, fieldClass: pendingFieldClass };
     if (isApplied) return { labelClass: activeLabelClass, fieldClass: activeFieldClass };
@@ -3006,16 +3231,59 @@ export default function CephAdminBucketsPage() {
   };
   const tenantAppliedValue = (advancedApplied?.tenant ?? "").trim();
   const ownerAppliedValue = (advancedApplied?.owner ?? "").trim();
+  const ownerNameAppliedValue = (advancedApplied?.ownerName ?? "").trim();
+  const s3TagsAppliedExpressions = parseS3TagExpressions(advancedApplied?.s3Tags ?? "");
+  const s3TagsAppliedSerialized = serializeS3TagExpressions(s3TagsAppliedExpressions);
   const tenantAppliedMatchMode = advancedApplied?.tenantMatchMode ?? "contains";
   const ownerAppliedMatchMode = advancedApplied?.ownerMatchMode ?? "contains";
+  const ownerNameAppliedMatchMode = advancedApplied?.ownerNameMatchMode ?? "contains";
+  const s3TagsAppliedMatchMode = advancedApplied?.s3TagsMatchMode ?? "contains";
+  const tenantAppliedParsed = parseExactListInput(advancedApplied?.tenant ?? "");
+  const ownerAppliedParsed = parseExactListInput(advancedApplied?.owner ?? "");
+  const ownerNameAppliedParsed = parseExactListInput(advancedApplied?.ownerName ?? "");
+  const s3TagsAppliedParsed = parseExactListInput(advancedApplied?.s3Tags ?? "");
+  const tenantAppliedForcesExact = tenantAppliedParsed.listProvided && tenantAppliedParsed.values.length > 0;
+  const ownerAppliedForcesExact = ownerAppliedParsed.listProvided && ownerAppliedParsed.values.length > 0;
+  const ownerNameAppliedForcesExact = ownerNameAppliedParsed.listProvided && ownerNameAppliedParsed.values.length > 0;
+  const s3TagsAppliedForcesExact = s3TagsAppliedParsed.listProvided && s3TagsAppliedParsed.values.length > 0;
+  const tenantAppliedEffectiveMatchMode: TextMatchMode = tenantAppliedForcesExact ? "exact" : tenantAppliedMatchMode;
+  const ownerAppliedEffectiveMatchMode: TextMatchMode = ownerAppliedForcesExact ? "exact" : ownerAppliedMatchMode;
+  const ownerNameAppliedEffectiveMatchMode: TextMatchMode = ownerNameAppliedForcesExact ? "exact" : ownerNameAppliedMatchMode;
+  const s3TagsAppliedEffectiveMatchMode: TextMatchMode = s3TagsAppliedForcesExact ? "exact" : s3TagsAppliedMatchMode;
+  const ownerNameAppliedScope = advancedApplied?.ownerNameScope ?? "any";
   const tenantDraftValue = advancedDraft.tenant.trim();
   const ownerDraftValue = advancedDraft.owner.trim();
+  const ownerNameDraftValue = advancedDraft.ownerName.trim();
+  const s3TagsDraftExpressions = parseS3TagExpressions(advancedDraft.s3Tags);
+  const s3TagsDraftSerialized = serializeS3TagExpressions(s3TagsDraftExpressions);
   const tenantDraftMatchMode = advancedDraft.tenantMatchMode;
   const ownerDraftMatchMode = advancedDraft.ownerMatchMode;
+  const ownerNameDraftMatchMode = advancedDraft.ownerNameMatchMode;
+  const s3TagsDraftMatchMode = advancedDraft.s3TagsMatchMode;
+  const tenantDraftParsed = parseExactListInput(advancedDraft.tenant);
+  const ownerDraftParsed = parseExactListInput(advancedDraft.owner);
+  const ownerNameDraftParsed = parseExactListInput(advancedDraft.ownerName);
+  const s3TagsDraftParsed = parseExactListInput(advancedDraft.s3Tags);
+  const tenantDraftForcesExact = tenantDraftParsed.listProvided && tenantDraftParsed.values.length > 0;
+  const ownerDraftForcesExact = ownerDraftParsed.listProvided && ownerDraftParsed.values.length > 0;
+  const ownerNameDraftForcesExact = ownerNameDraftParsed.listProvided && ownerNameDraftParsed.values.length > 0;
+  const s3TagsDraftForcesExact = s3TagsDraftParsed.listProvided && s3TagsDraftParsed.values.length > 0;
+  const tenantDraftEffectiveMatchMode: TextMatchMode = tenantDraftForcesExact ? "exact" : tenantDraftMatchMode;
+  const ownerDraftEffectiveMatchMode: TextMatchMode = ownerDraftForcesExact ? "exact" : ownerDraftMatchMode;
+  const ownerNameDraftEffectiveMatchMode: TextMatchMode = ownerNameDraftForcesExact ? "exact" : ownerNameDraftMatchMode;
+  const s3TagsDraftEffectiveMatchMode: TextMatchMode = s3TagsDraftForcesExact ? "exact" : s3TagsDraftMatchMode;
+  const ownerNameDraftScope = advancedDraft.ownerNameScope;
   const tenantPending =
-    tenantDraftValue !== tenantAppliedValue || (tenantDraftValue.length > 0 && tenantDraftMatchMode !== tenantAppliedMatchMode);
+    tenantDraftValue !== tenantAppliedValue || (tenantDraftValue.length > 0 && tenantDraftEffectiveMatchMode !== tenantAppliedEffectiveMatchMode);
   const ownerPending =
-    ownerDraftValue !== ownerAppliedValue || (ownerDraftValue.length > 0 && ownerDraftMatchMode !== ownerAppliedMatchMode);
+    ownerDraftValue !== ownerAppliedValue || (ownerDraftValue.length > 0 && ownerDraftEffectiveMatchMode !== ownerAppliedEffectiveMatchMode);
+  const ownerNamePending =
+    ownerNameDraftValue !== ownerNameAppliedValue ||
+    ownerNameDraftScope !== ownerNameAppliedScope ||
+    (ownerNameDraftValue.length > 0 && ownerNameDraftEffectiveMatchMode !== ownerNameAppliedEffectiveMatchMode);
+  const s3TagsPending =
+    s3TagsDraftSerialized !== s3TagsAppliedSerialized ||
+    (s3TagsDraftExpressions.length > 0 && s3TagsDraftEffectiveMatchMode !== s3TagsAppliedEffectiveMatchMode);
   const tenantFieldState = fieldHighlight(
     Boolean(tenantAppliedValue),
     tenantPending
@@ -3024,6 +3292,14 @@ export default function CephAdminBucketsPage() {
     Boolean(ownerAppliedValue),
     ownerPending
   );
+  const ownerNameFieldState = fieldHighlight(
+    Boolean(ownerNameAppliedValue || ownerNameAppliedScope !== "any"),
+    ownerNamePending
+  );
+  const s3TagsFieldState = fieldHighlight(
+    s3TagsAppliedExpressions.length > 0,
+    s3TagsPending
+  );
   const quickDraftValue = filter.trim();
   const quickAppliedValue = filterValue.trim();
   const quickFilterPending = quickDraftValue !== quickAppliedValue;
@@ -3031,12 +3307,92 @@ export default function CephAdminBucketsPage() {
     quickAppliedValue.length > 0,
     quickFilterPending
   );
+  const ownerNameLookupActive = ownerNameDraftValue.length > 0;
+  const s3TagsLookupActive = s3TagsDraftExpressions.length > 0;
+  const ownerPrefilterActive = tenantDraftValue.length > 0 || ownerDraftValue.length > 0 || ownerNameDraftScope !== "any";
+  const advancedDraftIdentityCount =
+    Number(tenantDraftValue.length > 0) +
+    Number(ownerDraftValue.length > 0) +
+    Number(ownerNameLookupActive) +
+    Number(ownerNameDraftScope !== "any");
+  const advancedDraftRangeCount = useMemo(() => {
+    if (!usageFeatureEnabled) return 0;
+    return [
+      advancedDraft.minUsedBytes,
+      advancedDraft.maxUsedBytes,
+      advancedDraft.minObjects,
+      advancedDraft.maxObjects,
+      advancedDraft.minQuotaBytes,
+      advancedDraft.maxQuotaBytes,
+      advancedDraft.minQuotaObjects,
+      advancedDraft.maxQuotaObjects,
+    ].filter((value) => value.trim().length > 0).length;
+  }, [advancedDraft, usageFeatureEnabled]);
+  const advancedDraftFeatureCount = useMemo(
+    () => (Object.keys(advancedDraft.features) as FeatureKey[]).filter((key) => advancedDraft.features[key] !== "any").length,
+    [advancedDraft]
+  );
+  const advancedDraftTagCount = s3TagsDraftExpressions.length;
+  const advancedDraftActiveCount = advancedDraftIdentityCount + advancedDraftRangeCount + advancedDraftFeatureCount + advancedDraftTagCount;
+  const multipleFeatureFiltersActive = advancedDraftFeatureCount > 1;
+  const featureCostReducedByPrefilter =
+    advancedDraftFeatureCount === 1 && ownerPrefilterActive && !ownerNameLookupActive && !s3TagsLookupActive;
+  const advancedDraftGlobalCostLevel: FilterCostLevel = useMemo(() => {
+    if (ownerNameLookupActive || s3TagsLookupActive) return "high";
+    if (advancedDraftFeatureCount > 0) {
+      if (multipleFeatureFiltersActive) return "high";
+      return featureCostReducedByPrefilter ? "medium" : "high";
+    }
+    if (advancedDraftRangeCount > 0) return "medium";
+    if (advancedDraftIdentityCount > 0) return "low";
+    return "none";
+  }, [
+    advancedDraftFeatureCount,
+    advancedDraftRangeCount,
+    advancedDraftIdentityCount,
+    ownerNameLookupActive,
+    s3TagsLookupActive,
+    featureCostReducedByPrefilter,
+    multipleFeatureFiltersActive,
+  ]);
+  const advancedDraftGlobalCostTooltip = useMemo(() => {
+    if (advancedDraftGlobalCostLevel === "high") {
+      if (ownerNameLookupActive && s3TagsLookupActive) {
+        return `${FILTER_COST_LABEL.high}: owner-name and S3 tag filters require additional RGW lookups.`;
+      }
+      if (ownerNameLookupActive) {
+        return `${FILTER_COST_LABEL.high}: owner-name filters require owner identity lookups.`;
+      }
+      if (s3TagsLookupActive) {
+        return `${FILTER_COST_LABEL.high}: S3 tag filters require bucket tag retrieval.`;
+      }
+      if (multipleFeatureFiltersActive) {
+        return `${FILTER_COST_LABEL.high}: ${advancedDraftFeatureCount} feature-state filters are active, which increases per-bucket checks even with prefilters.`;
+      }
+      return `${FILTER_COST_LABEL.high}: feature-state filters are active and may require additional checks.`;
+    }
+    if (advancedDraftGlobalCostLevel === "medium") {
+      if (featureCostReducedByPrefilter) {
+        return `${FILTER_COST_LABEL.medium}: feature-state filters are active, but owner/tenant prefilters reduce buckets to inspect.`;
+      }
+      return `${FILTER_COST_LABEL.medium}: usage/quota filters are active and require stats retrieval.`;
+    }
+    if (advancedDraftGlobalCostLevel === "low") {
+      return `${FILTER_COST_LABEL.low}: identity filters use already available bucket fields.`;
+    }
+    return FILTER_COST_LABEL.none;
+  }, [
+    advancedDraftGlobalCostLevel,
+    ownerNameLookupActive,
+    s3TagsLookupActive,
+    featureCostReducedByPrefilter,
+    multipleFeatureFiltersActive,
+    advancedDraftFeatureCount,
+  ]);
   const toggleQuickFilterMode = () => {
+    if (quickFilterDraftForcesExact) return;
     setQuickFilterMode((prev) => (prev === "contains" ? "exact" : "contains"));
     setPage(1);
-  };
-  const toggleAdvancedTextMode = (field: "tenantMatchMode" | "ownerMatchMode") => {
-    updateAdvancedMatchMode(field, advancedDraft[field] === "contains" ? "exact" : "contains");
   };
   const resetAllFilters = () => {
     setFilter("");
@@ -3049,11 +3405,59 @@ export default function CephAdminBucketsPage() {
     setShowAdvancedFilter(false);
     setPage(1);
   };
+  const clearAdvancedTextOrNumericField = (field: AdvancedTextOrNumericField) => {
+    setAdvancedDraft((prev) => ({ ...prev, [field]: "" }));
+    setAdvancedApplied((prev) => (prev ? { ...prev, [field]: "" } : prev));
+    setPage(1);
+  };
+  const clearAdvancedOwnerScope = () => {
+    setAdvancedDraft((prev) => ({ ...prev, ownerNameScope: "any" }));
+    setAdvancedApplied((prev) => (prev ? { ...prev, ownerNameScope: "any" } : prev));
+    setPage(1);
+  };
+  const clearAdvancedFeatureField = (feature: FeatureKey) => {
+    setAdvancedDraft((prev) => ({ ...prev, features: { ...prev.features, [feature]: "any" } }));
+    setAdvancedApplied((prev) => (prev ? { ...prev, features: { ...prev.features, [feature]: "any" } } : prev));
+    setPage(1);
+  };
+  const removeActiveFilterItem = (action: ActiveFilterRemoveAction) => {
+    if (action.type === "quick") {
+      setFilter("");
+      setFilterValue("");
+      setPage(1);
+      return;
+    }
+    if (action.type === "tag_mode") {
+      setTagFilterMode("any");
+      setPage(1);
+      return;
+    }
+    if (action.type === "tag") {
+      removeTagFilter(action.tag);
+      return;
+    }
+    if (action.type === "advanced_owner_scope") {
+      clearAdvancedOwnerScope();
+      return;
+    }
+    if (action.type === "advanced_text" || action.type === "advanced_numeric") {
+      clearAdvancedTextOrNumericField(action.field);
+      return;
+    }
+    clearAdvancedFeatureField(action.feature);
+  };
   const activeFilterSummaryItems = useMemo(() => {
-    const items: Array<{ id: string; label: string }> = [];
+    const items: ActiveFilterSummaryItem[] = [];
     const quick = quickFilterActive ? filterValue.trim() : "";
     if (quickFilterActive && quick) {
-      items.push({ id: "quick", label: `Name ${formatTextMatchModeLabel(quickFilterMode)}: ${quick}` });
+      const quickLabel = formatTextFilterSummary("Name", filterValue, effectiveQuickFilterMode);
+      if (quickLabel) {
+        items.push({
+          id: "quick",
+          label: quickLabel,
+          remove: { type: "quick" },
+        });
+      }
     }
 
     const normalizedActiveTags = normalizeUiTagValues(tagFilters);
@@ -3062,21 +3466,71 @@ export default function CephAdminBucketsPage() {
         items.push({
           id: "tag-mode",
           label: `UI tags mode: ${tagFilterMode === "all" ? "AND" : "OR"}`,
+          remove: { type: "tag_mode" },
         });
       }
       normalizedActiveTags.forEach((tag) => {
-        items.push({ id: `tag-${tag.toLowerCase()}`, label: `UI tag: ${tag}` });
+        items.push({
+          id: `tag-${tag.toLowerCase()}`,
+          label: `UI tag: ${tag}`,
+          remove: { type: "tag", tag },
+        });
       });
     }
 
     if (advancedApplied && hasAdvancedFilters(advancedApplied, usageFeatureEnabled)) {
       const tenant = advancedApplied.tenant.trim();
-      if (tenant) items.push({ id: "tenant", label: `Tenant ${formatTextMatchModeLabel(advancedApplied.tenantMatchMode)}: ${tenant}` });
+      if (tenant) {
+        const label = formatTextFilterSummary("Tenant", advancedApplied.tenant, tenantAppliedEffectiveMatchMode);
+        if (label) {
+          items.push({
+            id: "tenant",
+            label,
+            remove: { type: "advanced_text", field: "tenant" },
+          });
+        }
+      }
 
       const owner = advancedApplied.owner.trim();
-      if (owner) items.push({ id: "owner", label: `Owner ${formatTextMatchModeLabel(advancedApplied.ownerMatchMode)}: ${owner}` });
+      if (owner) {
+        const label = formatTextFilterSummary("Owner", advancedApplied.owner, ownerAppliedEffectiveMatchMode);
+        if (label) {
+          items.push({
+            id: "owner",
+            label,
+            remove: { type: "advanced_text", field: "owner" },
+          });
+        }
+      }
+      const ownerName = advancedApplied.ownerName.trim();
+      if (ownerName) {
+        const label = formatTextFilterSummary("Owner name", advancedApplied.ownerName, ownerNameAppliedEffectiveMatchMode);
+        if (label) {
+          items.push({
+            id: "owner-name",
+            label,
+            remove: { type: "advanced_text", field: "ownerName" },
+          });
+        }
+      }
+      if (advancedApplied.ownerNameScope !== "any") {
+        items.push({
+          id: "owner-kind",
+          label: `Owner kind: ${advancedApplied.ownerNameScope === "account" ? "Accounts" : "Users"}`,
+          remove: { type: "advanced_owner_scope" },
+        });
+      }
+      const s3TagExpressions = parseS3TagExpressions(advancedApplied.s3Tags);
+      if (s3TagExpressions.length > 0) {
+        const preview = formatBucketNamesPreview(s3TagExpressions, 2);
+        items.push({
+          id: "s3-tags",
+          label: `S3 tags ${formatTextMatchModeLabel(s3TagsAppliedEffectiveMatchMode)}: ${preview}`,
+          remove: { type: "advanced_text", field: "s3Tags" },
+        });
+      }
 
-      const numericFilters: Array<{ id: keyof AdvancedFilterState; label: string }> = usageFeatureEnabled
+      const numericFilters: Array<{ id: AdvancedNumericField; label: string }> = usageFeatureEnabled
         ? [
             { id: "minUsedBytes", label: "Used bytes >=" },
             { id: "maxUsedBytes", label: "Used bytes <=" },
@@ -3093,7 +3547,11 @@ export default function CephAdminBucketsPage() {
         if (!value) return;
         const asNumber = Number(value);
         const display = Number.isFinite(asNumber) ? formatNumber(asNumber) : value;
-        items.push({ id: `num-${id}`, label: `${label} ${display}` });
+        items.push({
+          id: `num-${id}`,
+          label: `${label} ${display}`,
+          remove: { type: "advanced_numeric", field: id },
+        });
       });
 
       (Object.keys(advancedApplied.features) as FeatureKey[]).forEach((feature) => {
@@ -3102,6 +3560,7 @@ export default function CephAdminBucketsPage() {
         items.push({
           id: `feature-${feature}`,
           label: `${FEATURE_LABELS[feature]}: ${formatFeatureFilterStateLabel(state)}`,
+          remove: { type: "advanced_feature", feature },
         });
       });
     }
@@ -3110,11 +3569,90 @@ export default function CephAdminBucketsPage() {
   }, [
     quickFilterActive,
     filterValue,
-    quickFilterMode,
+    effectiveQuickFilterMode,
     tagFilters,
     tagFilterMode,
     advancedApplied,
     usageFeatureEnabled,
+    tenantAppliedEffectiveMatchMode,
+    ownerAppliedEffectiveMatchMode,
+    ownerNameAppliedEffectiveMatchMode,
+    s3TagsAppliedEffectiveMatchMode,
+  ]);
+  const showActiveFiltersCard =
+    activeFilterSummaryItems.length > 0 &&
+    !(
+      activeFilterSummaryItems.length === 1 &&
+      quickFilterActive &&
+      !advancedFiltersApplied &&
+      tagFilters.length === 0 &&
+      !quickFilterAppliedParsed.listProvided
+    );
+  const advancedDraftSummaryItems = useMemo(() => {
+    const items: Array<{ id: string; label: string }> = [];
+    const tenantLabel = formatTextFilterSummary("Tenant", advancedDraft.tenant, tenantDraftEffectiveMatchMode);
+    if (tenantLabel) items.push({ id: "draft-tenant", label: tenantLabel });
+
+    const ownerLabel = formatTextFilterSummary("Owner", advancedDraft.owner, ownerDraftEffectiveMatchMode);
+    if (ownerLabel) items.push({ id: "draft-owner", label: ownerLabel });
+    const ownerNameLabel = formatTextFilterSummary("Owner name", advancedDraft.ownerName, ownerNameDraftEffectiveMatchMode);
+    if (ownerNameLabel) {
+      items.push({
+        id: "draft-owner-name",
+        label: ownerNameLabel,
+      });
+    }
+    if (advancedDraft.ownerNameScope !== "any") {
+      items.push({
+        id: "draft-owner-kind",
+        label: `Owner kind: ${advancedDraft.ownerNameScope === "account" ? "Accounts" : "Users"}`,
+      });
+    }
+    const s3TagExpressions = parseS3TagExpressions(advancedDraft.s3Tags);
+    if (s3TagExpressions.length > 0) {
+      items.push({
+        id: "draft-s3-tags",
+        label: `S3 tags ${formatTextMatchModeLabel(s3TagsDraftEffectiveMatchMode)}: ${formatBucketNamesPreview(s3TagExpressions, 2)}`,
+      });
+    }
+
+    if (usageFeatureEnabled) {
+      const numericFilters: Array<{ id: keyof AdvancedFilterState; label: string }> = [
+        { id: "minUsedBytes", label: "Used bytes >=" },
+        { id: "maxUsedBytes", label: "Used bytes <=" },
+        { id: "minObjects", label: "Objects >=" },
+        { id: "maxObjects", label: "Objects <=" },
+        { id: "minQuotaBytes", label: "Quota bytes >=" },
+        { id: "maxQuotaBytes", label: "Quota bytes <=" },
+        { id: "minQuotaObjects", label: "Quota objects >=" },
+        { id: "maxQuotaObjects", label: "Quota objects <=" },
+      ];
+      numericFilters.forEach(({ id, label }) => {
+        const value = (advancedDraft[id] as string).trim();
+        if (!value) return;
+        const asNumber = Number(value);
+        const display = Number.isFinite(asNumber) ? formatNumber(asNumber) : value;
+        items.push({ id: `draft-num-${id}`, label: `${label} ${display}` });
+      });
+    }
+
+    (Object.keys(advancedDraft.features) as FeatureKey[]).forEach((feature) => {
+      const state = advancedDraft.features[feature];
+      if (state === "any") return;
+      items.push({
+        id: `draft-feature-${feature}`,
+        label: `${FEATURE_LABELS[feature]}: ${formatFeatureFilterStateLabel(state)}`,
+      });
+    });
+
+    return items;
+  }, [
+    advancedDraft,
+    usageFeatureEnabled,
+    tenantDraftEffectiveMatchMode,
+    ownerDraftEffectiveMatchMode,
+    ownerNameDraftEffectiveMatchMode,
+    s3TagsDraftEffectiveMatchMode,
   ]);
   const clearOrphanedTags = () => {
     if (orphanedTagBuckets.length === 0) return;
@@ -4050,14 +4588,13 @@ export default function CephAdminBucketsPage() {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filters</p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Quick filter + Advanced filter</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowAdvancedFilter((prev) => !prev)}
+                    onClick={() => setShowAdvancedFilter(true)}
                     className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                      advancedFiltersApplied
+                      showAdvancedFilter || advancedFiltersApplied
                         ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
                         : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                     }`}
@@ -4070,24 +4607,30 @@ export default function CephAdminBucketsPage() {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <div className="relative">
-                    <input
-                      type="text"
+                    <textarea
                       aria-label="Quick filter"
                       value={filter}
                       onChange={(e) => setFilter(e.target.value)}
-                      placeholder="Bucket name"
-                      className={`w-full rounded-md border bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
+                      onKeyDown={(event) => event.stopPropagation()}
+                      placeholder="Bucket name(s)"
+                      rows={1}
+                      className={`w-full resize-y rounded-md border bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
                         quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
                       }`}
                     />
                     <button
                       type="button"
                       onClick={toggleQuickFilterMode}
-                      className={modeToggleClass(quickFilterMode, quickFilterPending)}
-                      title={`Quick filter mode: ${quickFilterMode === "contains" ? "contains" : "exact"}`}
+                      disabled={quickFilterDraftForcesExact}
+                      className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
+                      title={
+                        quickFilterDraftForcesExact
+                          ? "Quick filter mode: exact (locked by list input)"
+                          : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
+                      }
                       aria-label="Toggle quick filter match mode"
                     >
-                      {quickFilterMode === "contains" ? "~" : "="}
+                      {quickFilterModeForDisplay === "contains" ? "~" : "="}
                     </button>
                   </div>
                 </div>
@@ -4157,217 +4700,482 @@ export default function CephAdminBucketsPage() {
               </div>
 
               {showAdvancedFilter && (
-                <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <div className="flex items-center gap-2">
-                      <label
-                        className={`w-16 shrink-0 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${tenantFieldState.labelClass}`}
-                      >
-                        Tenant
-                      </label>
-                      <div className="relative flex-1">
-                        <input
-                          type="text"
-                          value={advancedDraft.tenant}
-                          onChange={(e) => updateAdvancedField("tenant", e.target.value)}
-                          placeholder="tenant-a"
-                          className={`w-full rounded-md border border-slate-200 px-2 py-1 pr-8 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                            tenantFieldState.fieldClass
-                          }`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => toggleAdvancedTextMode("tenantMatchMode")}
-                          className={modeToggleClass(advancedDraft.tenantMatchMode, tenantPending)}
-                          title={`Tenant filter mode: ${advancedDraft.tenantMatchMode === "contains" ? "contains" : "exact"}`}
-                          aria-label="Toggle tenant match mode"
-                        >
-                          {advancedDraft.tenantMatchMode === "contains" ? "~" : "="}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label
-                        className={`w-16 shrink-0 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerFieldState.labelClass}`}
-                      >
-                        Owner
-                      </label>
-                      <div className="relative flex-1">
-                        <input
-                          type="text"
-                          value={advancedDraft.owner}
-                          onChange={(e) => updateAdvancedField("owner", e.target.value)}
-                          placeholder="owner uid"
-                          className={`w-full rounded-md border border-slate-200 px-2 py-1 pr-8 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                            ownerFieldState.fieldClass
-                          }`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => toggleAdvancedTextMode("ownerMatchMode")}
-                          className={modeToggleClass(advancedDraft.ownerMatchMode, ownerPending)}
-                          title={`Owner filter mode: ${advancedDraft.ownerMatchMode === "contains" ? "contains" : "exact"}`}
-                          aria-label="Toggle owner match mode"
-                        >
-                          {advancedDraft.ownerMatchMode === "contains" ? "~" : "="}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-2 grid gap-2 lg:grid-cols-2">
-                    {[
-                      {
-                        title: "Usage",
-                        rows: [
-                          { label: "Bytes", minId: "minUsedBytes" as const, maxId: "maxUsedBytes" as const },
-                          { label: "Objects", minId: "minObjects" as const, maxId: "maxObjects" as const },
-                        ],
-                      },
-                      {
-                        title: "Quota",
-                        rows: [
-                          { label: "Bytes", minId: "minQuotaBytes" as const, maxId: "maxQuotaBytes" as const },
-                          { label: "Objects", minId: "minQuotaObjects" as const, maxId: "maxQuotaObjects" as const },
-                        ],
-                      },
-                    ].map((section) => (
-                      <div key={section.title}>
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{section.title}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-3">
-                          {section.rows.map((row) => {
-                            const minApplied = usageFeatureEnabled ? (advancedApplied?.[row.minId] ?? "").trim() : "";
-                            const minDraft = usageFeatureEnabled ? advancedDraft[row.minId].trim() : "";
-                            const maxApplied = usageFeatureEnabled ? (advancedApplied?.[row.maxId] ?? "").trim() : "";
-                            const maxDraft = usageFeatureEnabled ? advancedDraft[row.maxId].trim() : "";
-                            const rowState = fieldHighlight(
-                              Boolean(minApplied || maxApplied),
-                              minDraft !== minApplied || maxDraft !== maxApplied
-                            );
-                            const minState = fieldHighlight(Boolean(minApplied), minDraft !== minApplied);
-                            const maxState = fieldHighlight(Boolean(maxApplied), maxDraft !== maxApplied);
-                            return (
-                              <div key={`${section.title}:${row.label}`} className="inline-flex items-center gap-1.5">
-                                <label
-                                  className={`ui-caption font-medium text-slate-600 dark:text-slate-200 ${rowState.labelClass} min-w-[3.75rem]`}
-                                >
-                                  {row.label}
-                                </label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  inputMode="numeric"
-                                  value={advancedDraft[row.minId]}
-                                  onChange={(e) => updateAdvancedField(row.minId, e.target.value)}
-                                  placeholder="min"
-                                  className={`w-24 rounded-md border border-slate-200 px-1.5 py-1 text-right ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${minState.fieldClass}`}
-                                />
-                                <input
-                                  type="number"
-                                  min="0"
-                                  inputMode="numeric"
-                                  value={advancedDraft[row.maxId]}
-                                  onChange={(e) => updateAdvancedField(row.maxId, e.target.value)}
-                                  placeholder="max"
-                                  className={`w-24 rounded-md border border-slate-200 px-1.5 py-1 text-right ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${maxState.fieldClass}`}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-2">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      {[
-                        { id: "versioning" as const, label: "Versioning" },
-                        { id: "object_lock" as const, label: "Object Lock" },
-                        { id: "block_public_access" as const, label: "Block public access" },
-                        { id: "lifecycle_rules" as const, label: "Lifecycle rules" },
-                        { id: "static_website" as const, label: "Static website" },
-                        { id: "bucket_policy" as const, label: "Bucket policy" },
-                        { id: "cors" as const, label: "CORS" },
-                        { id: "access_logging" as const, label: "Access logging" },
-                      ].map((feature) => {
-                        const appliedValue = advancedApplied?.features[feature.id] ?? "any";
-                        const draftValue = advancedDraft.features[feature.id];
-                        const state = fieldHighlight(appliedValue !== "any", draftValue !== appliedValue);
-                        return (
-                          <div
-                            key={feature.id}
-                            className={`inline-flex items-center gap-2 ${
-                              state.labelClass
-                            }`}
-                          >
-                            <span className="ui-caption font-medium text-slate-600 dark:text-slate-200">{feature.label}</span>
-                            <select
-                              value={advancedDraft.features[feature.id]}
-                              onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
-                              style={{ width: `${featureSelectWidthCh(advancedDraft.features[feature.id])}ch` }}
-                              className={`w-auto shrink-0 rounded-md border border-slate-200 px-2 py-1 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                                state.fieldClass
+                <div className="fixed inset-0 z-40">
+                  <button
+                    type="button"
+                    onClick={closeAdvancedFilterDrawer}
+                    className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+                    aria-label="Close advanced filter drawer"
+                  />
+                  <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                    <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Advanced filter</p>
+                          <p className="ui-caption text-slate-500 dark:text-slate-400">Buckets listing</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                              {advancedDraftActiveCount} rule{advancedDraftActiveCount > 1 ? "s" : ""}
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                              title={advancedDraftGlobalCostTooltip}
+                            >
+                              Global draft cost
+                              {renderFilterCostIndicator(advancedDraftGlobalCostLevel, advancedDraftGlobalCostTooltip)}
+                            </span>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 ui-caption font-semibold ${
+                                hasPendingAdvancedChanges
+                                  ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200"
+                                  : "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-200"
                               }`}
                             >
-                              {feature.id === "versioning" ? (
-                                <>
-                                  <option value="any">Any</option>
-                                  <option value="enabled">Enabled</option>
-                                  <option value="disabled">Disabled</option>
-                                  <option value="suspended">Suspended</option>
-                                  <option value="disabled_or_suspended">Disabled or Suspended</option>
-                                </>
-                              ) : (
-                                <>
-                                  <option value="any">Any</option>
-                                  <option value="enabled">Enabled</option>
-                                  <option value="disabled">Disabled</option>
-                                </>
-                              )}
-                            </select>
+                              {hasPendingAdvancedChanges ? "Unsaved changes" : "In sync"}
+                            </span>
                           </div>
-                        );
-                      })}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={closeAdvancedFilterDrawer}
+                          className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                        >
+                          Close
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="mt-3 flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={resetAdvancedFilter}
-                      disabled={!hasAnyAdvancedToClear}
-                      className={`rounded-md border px-2 py-1.5 ui-caption font-semibold ${
-                        hasAnyAdvancedToClear
-                          ? "border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-                          : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                      }`}
-                    >
-                      Clear
-                    </button>
-                    <button
-                      type="button"
-                      onClick={applyAdvancedFilter}
-                      disabled={!hasPendingAdvancedChanges}
-                      className={`rounded-md px-2 py-1.5 ui-caption font-semibold ${
-                        hasPendingAdvancedChanges
-                          ? "bg-primary text-white shadow-sm hover:bg-primary-600"
-                          : "cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-                      }`}
-                    >
-                      Apply filter
-                    </button>
+                    <div className="flex-1 overflow-y-auto px-4 py-4">
+                      <div className="space-y-4">
+                        <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+                          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Draft summary
+                          </p>
+                          {advancedDraftSummaryItems.length === 0 ? (
+                            <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                              No advanced rule in draft.
+                            </p>
+                          ) : (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {advancedDraftSummaryItems.map((item) => (
+                                <span
+                                  key={item.id}
+                                  className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
+                                >
+                                  {item.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+
+                        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              <span>Identity and tags</span>
+                            </p>
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <div className="flex items-center justify-between gap-2">
+                                <label
+                                  className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${tenantFieldState.labelClass}`}
+                                >
+                                  <span className="inline-flex items-center gap-1">
+                                    <span>Tenant</span>
+                                    {renderFilterCostIndicator("low", "Low cost: tenant filter runs on direct bucket metadata.")}
+                                  </span>
+                                </label>
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={tenantDraftForcesExact}
+                                    onClick={() => updateAdvancedMatchMode("tenantMatchMode", "contains")}
+                                    className={matchModeButtonClass(tenantDraftEffectiveMatchMode === "contains", tenantDraftForcesExact)}
+                                  >
+                                    Contains
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={tenantDraftForcesExact}
+                                    onClick={() => updateAdvancedMatchMode("tenantMatchMode", "exact")}
+                                    className={matchModeButtonClass(tenantDraftEffectiveMatchMode === "exact", tenantDraftForcesExact)}
+                                  >
+                                    Exact
+                                  </button>
+                                </div>
+                              </div>
+                              <textarea
+                                value={advancedDraft.tenant}
+                                onChange={(e) => updateAdvancedField("tenant", e.target.value)}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                placeholder="tenant-a, tenant-b"
+                                rows={2}
+                                className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                  tenantFieldState.fieldClass
+                                }`}
+                              />
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <div className="flex items-center justify-between gap-2">
+                                <label
+                                  className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerFieldState.labelClass}`}
+                                >
+                                  <span className="inline-flex items-center gap-1">
+                                    <span>Owner</span>
+                                    {renderFilterCostIndicator("low", "Low cost: owner filter runs on direct bucket metadata.")}
+                                  </span>
+                                </label>
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={ownerDraftForcesExact}
+                                    onClick={() => updateAdvancedMatchMode("ownerMatchMode", "contains")}
+                                    className={matchModeButtonClass(ownerDraftEffectiveMatchMode === "contains", ownerDraftForcesExact)}
+                                  >
+                                    Contains
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={ownerDraftForcesExact}
+                                    onClick={() => updateAdvancedMatchMode("ownerMatchMode", "exact")}
+                                    className={matchModeButtonClass(ownerDraftEffectiveMatchMode === "exact", ownerDraftForcesExact)}
+                                  >
+                                    Exact
+                                  </button>
+                                </div>
+                              </div>
+                              <textarea
+                                value={advancedDraft.owner}
+                                onChange={(e) => updateAdvancedField("owner", e.target.value)}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                placeholder="owner uid(s)"
+                                rows={2}
+                                className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                  ownerFieldState.fieldClass
+                                }`}
+                              />
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:col-span-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <label
+                                  className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerNameFieldState.labelClass}`}
+                                >
+                                  <span className="inline-flex items-center gap-1">
+                                    <span>Owner name</span>
+                                    {renderFilterCostIndicator("high", "High cost: owner-name filters require owner identity lookups.")}
+                                  </span>
+                                </label>
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={ownerNameDraftForcesExact}
+                                    onClick={() => updateAdvancedMatchMode("ownerNameMatchMode", "contains")}
+                                    className={matchModeButtonClass(ownerNameDraftEffectiveMatchMode === "contains", ownerNameDraftForcesExact)}
+                                  >
+                                    Contains
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={ownerNameDraftForcesExact}
+                                    onClick={() => updateAdvancedMatchMode("ownerNameMatchMode", "exact")}
+                                    className={matchModeButtonClass(ownerNameDraftEffectiveMatchMode === "exact", ownerNameDraftForcesExact)}
+                                  >
+                                    Exact
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
+                                <textarea
+                                  value={advancedDraft.ownerName}
+                                  onChange={(e) => updateAdvancedField("ownerName", e.target.value)}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                  placeholder="display name(s)"
+                                  rows={2}
+                                  className={`w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                    ownerNameFieldState.fieldClass
+                                  }`}
+                                />
+                                <select
+                                  value={advancedDraft.ownerNameScope}
+                                  onChange={(e) => setAdvancedDraft((prev) => ({ ...prev, ownerNameScope: e.target.value as OwnerNameScope }))}
+                                  className={`rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                    ownerNameFieldState.fieldClass
+                                  }`}
+                                  title="Owner entity scope"
+                                >
+                                  <option value="any">Accounts + Users</option>
+                                  <option value="account">Accounts only</option>
+                                  <option value="user">Users only</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:col-span-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <label
+                                  className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${s3TagsFieldState.labelClass}`}
+                                >
+                                  <span className="inline-flex items-center gap-1">
+                                    <span>S3 tags</span>
+                                    {renderFilterCostIndicator("high", "High cost: S3 tag filters require bucket tag retrieval.")}
+                                  </span>
+                                </label>
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={s3TagsDraftForcesExact}
+                                    onClick={() => updateAdvancedMatchMode("s3TagsMatchMode", "contains")}
+                                    className={matchModeButtonClass(s3TagsDraftEffectiveMatchMode === "contains", s3TagsDraftForcesExact)}
+                                  >
+                                    Contains
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={s3TagsDraftForcesExact}
+                                    onClick={() => updateAdvancedMatchMode("s3TagsMatchMode", "exact")}
+                                    className={matchModeButtonClass(s3TagsDraftEffectiveMatchMode === "exact", s3TagsDraftForcesExact)}
+                                  >
+                                    Exact
+                                  </button>
+                                </div>
+                              </div>
+                              <textarea
+                                value={advancedDraft.s3Tags}
+                                onChange={(e) => updateAdvancedField("s3Tags", e.target.value)}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                placeholder="env=prod, team=storage"
+                                rows={2}
+                                className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                  s3TagsFieldState.fieldClass
+                                }`}
+                              />
+                              <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                Comma or newline separated expressions. Format examples: <code>key=value</code>, <code>env</code>.
+                              </p>
+                            </div>
+                          </div>
+                        </section>
+
+                        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              <span>Usage and Quota</span>
+                            </p>
+                            {!usageFeatureEnabled && (
+                              <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200">
+                                Usage disabled on endpoint
+                              </span>
+                            )}
+                          </div>
+
+                          {!usageFeatureEnabled ? (
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">
+                              This endpoint does not expose usage stats, so range filters are disabled.
+                            </p>
+                          ) : (
+                            <div className="grid gap-3 lg:grid-cols-2">
+                              {[
+                                {
+                                  title: "Usage",
+                                  rows: [
+                                    { label: "Bytes", minId: "minUsedBytes" as const, maxId: "maxUsedBytes" as const },
+                                    { label: "Objects", minId: "minObjects" as const, maxId: "maxObjects" as const },
+                                  ],
+                                },
+                                {
+                                  title: "Quota",
+                                  rows: [
+                                    { label: "Bytes", minId: "minQuotaBytes" as const, maxId: "maxQuotaBytes" as const },
+                                    { label: "Objects", minId: "minQuotaObjects" as const, maxId: "maxQuotaObjects" as const },
+                                  ],
+                                },
+                              ].map((section) => (
+                                <div key={section.title} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    {section.title}
+                                  </p>
+                                  <div className="mt-2 space-y-2">
+                                    {section.rows.map((row) => {
+                                      const minApplied = (advancedApplied?.[row.minId] ?? "").trim();
+                                      const minDraft = advancedDraft[row.minId].trim();
+                                      const maxApplied = (advancedApplied?.[row.maxId] ?? "").trim();
+                                      const maxDraft = advancedDraft[row.maxId].trim();
+                                      const rowState = fieldHighlight(
+                                        Boolean(minApplied || maxApplied),
+                                        minDraft !== minApplied || maxDraft !== maxApplied
+                                      );
+                                      const minState = fieldHighlight(Boolean(minApplied), minDraft !== minApplied);
+                                      const maxState = fieldHighlight(Boolean(maxApplied), maxDraft !== maxApplied);
+                                      return (
+                                        <div key={`${section.title}:${row.label}`}>
+                                          <label className={`ui-caption font-medium text-slate-600 dark:text-slate-300 ${rowState.labelClass}`}>
+                                            <span className="inline-flex items-center gap-1">
+                                              <span>{row.label}</span>
+                                              {renderFilterCostIndicator("medium", "Medium cost: numeric usage/quota filters require bucket stats.")}
+                                            </span>
+                                          </label>
+                                          <div className="mt-1 grid grid-cols-2 gap-2">
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              inputMode="numeric"
+                                              value={advancedDraft[row.minId]}
+                                              onChange={(e) => updateAdvancedField(row.minId, e.target.value)}
+                                              placeholder="min"
+                                              className={`w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${minState.fieldClass}`}
+                                            />
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              inputMode="numeric"
+                                              value={advancedDraft[row.maxId]}
+                                              onChange={(e) => updateAdvancedField(row.maxId, e.target.value)}
+                                              placeholder="max"
+                                              className={`w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${maxState.fieldClass}`}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+
+                        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              <span>Feature states</span>
+                            </p>
+                            <span className="ui-caption text-slate-500 dark:text-slate-400">
+                              {advancedDraftFeatureCount} active
+                            </span>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {[
+                              { id: "versioning" as const, label: "Versioning" },
+                              { id: "object_lock" as const, label: "Object Lock" },
+                              { id: "block_public_access" as const, label: "Block public access" },
+                              { id: "lifecycle_rules" as const, label: "Lifecycle rules" },
+                              { id: "static_website" as const, label: "Static website" },
+                              { id: "bucket_policy" as const, label: "Bucket policy" },
+                              { id: "cors" as const, label: "CORS" },
+                              { id: "access_logging" as const, label: "Access logging" },
+                            ].map((feature) => {
+                              const appliedValue = advancedApplied?.features[feature.id] ?? "any";
+                              const draftValue = advancedDraft.features[feature.id];
+                              const state = fieldHighlight(appliedValue !== "any", draftValue !== appliedValue);
+                              return (
+                                <div key={feature.id} className="rounded-lg border border-slate-200 p-2.5 dark:border-slate-700">
+                                  <label className={`ui-caption font-medium text-slate-700 dark:text-slate-200 ${state.labelClass}`}>
+                                    <span className="inline-flex items-center gap-1">
+                                      <span>{feature.label}</span>
+                                      {renderFilterCostIndicator("high", "High cost: feature-state filters may trigger extra checks.")}
+                                    </span>
+                                  </label>
+                                  <select
+                                    value={advancedDraft.features[feature.id]}
+                                    onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
+                                    className={`mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${state.fieldClass}`}
+                                  >
+                                    {feature.id === "versioning" ? (
+                                      <>
+                                        <option value="any">Any</option>
+                                        <option value="enabled">Enabled</option>
+                                        <option value="disabled">Disabled</option>
+                                        <option value="suspended">Suspended</option>
+                                        <option value="disabled_or_suspended">Disabled or Suspended</option>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <option value="any">Any</option>
+                                        <option value="enabled">Enabled</option>
+                                        <option value="disabled">Disabled</option>
+                                      </>
+                                    )}
+                                  </select>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-200 bg-white/95 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/95">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          {hasPendingAdvancedChanges
+                            ? "Draft has unapplied changes."
+                            : advancedDraftActiveCount > 0
+                              ? "Draft matches applied filters."
+                              : "No advanced filter configured."}
+                        </p>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={resetAdvancedFilter}
+                            disabled={!hasAnyAdvancedToClear}
+                            className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
+                              hasAnyAdvancedToClear
+                                ? "border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                                : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                            }`}
+                          >
+                            Clear
+                          </button>
+                          <button
+                            type="button"
+                            onClick={closeAdvancedFilterDrawer}
+                            className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                          >
+                            Close
+                          </button>
+                          <button
+                            type="button"
+                            onClick={applyAdvancedFilter}
+                            disabled={!hasPendingAdvancedChanges}
+                            className={`rounded-md px-2.5 py-1.5 ui-caption font-semibold ${
+                              hasPendingAdvancedChanges
+                                ? "bg-primary text-white shadow-sm hover:bg-primary-600"
+                                : "cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+                            }`}
+                          >
+                            Apply filters
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {activeFilterSummaryItems.length > 0 && (
-                <div className="rounded-lg border border-slate-200 bg-white/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
-                  <div className="inline-flex items-center gap-2">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Active filters summary
-                    </p>
+              {showActiveFiltersCard && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-200">ACTIVE FILTERS</p>
+                    {activeFilterSummaryItems.map((item) => (
+                      <span
+                        key={item.id}
+                        className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
+                      >
+                        {item.label}
+                        <button
+                          type="button"
+                          onClick={() => removeActiveFilterItem(item.remove)}
+                          className="rounded-full px-1 leading-none opacity-75 transition hover:bg-primary/20 hover:opacity-100 dark:hover:bg-primary-400/20"
+                          title={`Remove ${item.label}`}
+                          aria-label={`Remove ${item.label}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
                     <button
                       type="button"
                       onClick={resetAllFilters}
@@ -4375,16 +5183,6 @@ export default function CephAdminBucketsPage() {
                     >
                       Clear all
                     </button>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {activeFilterSummaryItems.map((item) => (
-                      <span
-                        key={item.id}
-                        className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
-                      >
-                        {item.label}
-                      </span>
-                    ))}
                   </div>
                 </div>
               )}

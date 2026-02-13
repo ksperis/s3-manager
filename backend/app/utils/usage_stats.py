@@ -26,7 +26,9 @@ def extract_usage_stats(usage: Optional[Dict[str, Any]]) -> Tuple[Optional[int],
         return None, None
 
     total_bytes = usage.get("total_bytes")
-    total_objects = usage.get("total_objects") or usage.get("num_objects")
+    total_objects = usage.get("total_objects")
+    if total_objects is None:
+        total_objects = usage.get("num_objects")
     if total_bytes is None and "size_kb_actual" in usage:
         try:
             total_bytes = int(float(usage["size_kb_actual"]) * 1024)

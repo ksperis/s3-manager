@@ -16,6 +16,15 @@ import { tableActionMenuItemClasses } from "../../components/tableActionClasses"
 import CephAdminAccountCreateModal from "./CephAdminAccountCreateModal";
 import CephAdminAccountEditModal from "./CephAdminAccountEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import {
+  FILTER_COST_LABEL,
+  buildTextFieldRules,
+  formatTextFilterSummary,
+  parseExactListInput,
+  renderFilterCostIndicator,
+  type FilterCostLevel,
+  type TextMatchMode,
+} from "./filtering/advancedFilterShared";
 
 const extractError = (err: unknown): string => {
   if (axios.isAxiosError(err)) {
@@ -63,7 +72,6 @@ type SortField =
   | "quota_max_objects"
   | "bucket_count"
   | "user_count";
-type TextMatchMode = "contains" | "exact";
 
 type AdvancedFilterState = {
   accountName: string;
@@ -82,6 +90,28 @@ type AdvancedFilterState = {
   maxBucketCount: string;
   minUserCount: string;
   maxUserCount: string;
+};
+
+type AdvancedTextField = "accountName" | "email";
+type AdvancedNumericField =
+  | "minMaxUsers"
+  | "maxMaxUsers"
+  | "minMaxBuckets"
+  | "maxMaxBuckets"
+  | "minQuotaBytes"
+  | "maxQuotaBytes"
+  | "minQuotaObjects"
+  | "maxQuotaObjects"
+  | "minBucketCount"
+  | "maxBucketCount"
+  | "minUserCount"
+  | "maxUserCount";
+type AdvancedField = AdvancedTextField | AdvancedNumericField;
+type ActiveFilterRemoveAction = { type: "quick" } | { type: "advanced"; field: AdvancedField };
+type ActiveFilterSummaryItem = {
+  id: string;
+  label: string;
+  remove: ActiveFilterRemoveAction;
 };
 
 const COLUMNS_STORAGE_KEY = "ceph-admin.account_list.columns.v1";
@@ -133,11 +163,6 @@ const buildAdvancedFilterPayload = (
   quickMatchMode: TextMatchMode
 ) => {
   const rules: Array<Record<string, unknown>> = [];
-  const addTextRule = (field: string, raw: string, mode: TextMatchMode) => {
-    const value = raw.trim();
-    if (!value) return;
-    rules.push({ field, op: mode === "exact" ? "eq" : "contains", value });
-  };
   const addNumericRule = (field: string, op: "gte" | "lte", raw: string) => {
     const trimmed = raw.trim();
     if (!trimmed) return;
@@ -146,14 +171,14 @@ const buildAdvancedFilterPayload = (
     rules.push({ field, op, value: parsed });
   };
 
-  const trimmedQuick = quickSearch.trim();
-  if (trimmedQuick && quickMatchMode === "exact") {
-    rules.push({ field: "account_id", op: "eq", value: trimmedQuick });
+  const quickParsed = parseExactListInput(quickSearch);
+  if (quickParsed.values.length > 0 && (quickMatchMode === "exact" || quickParsed.listProvided)) {
+    rules.push(...buildTextFieldRules("account_id", quickSearch, "exact"));
   }
 
   if (advanced) {
-    addTextRule("account_name", advanced.accountName, advanced.accountNameMatchMode);
-    addTextRule("email", advanced.email, advanced.emailMatchMode);
+    rules.push(...buildTextFieldRules("account_name", advanced.accountName, advanced.accountNameMatchMode));
+    rules.push(...buildTextFieldRules("email", advanced.email, advanced.emailMatchMode));
 
     addNumericRule("max_users", "gte", advanced.minMaxUsers);
     addNumericRule("max_users", "lte", advanced.maxMaxUsers);
@@ -278,10 +303,16 @@ export default function CephAdminAccountsPage() {
     return Array.from(include.values());
   }, [visibleColumns]);
 
-  const effectiveSearchValue = quickFilterMode === "contains" ? searchValue : "";
+  const quickFilterDraftParsed = useMemo(() => parseExactListInput(filter), [filter]);
+  const quickFilterAppliedParsed = useMemo(() => parseExactListInput(searchValue), [searchValue]);
+  const quickFilterDraftForcesExact = quickFilterDraftParsed.listProvided && quickFilterDraftParsed.values.length > 0;
+  const quickFilterAppliedForcesExact = quickFilterAppliedParsed.listProvided && quickFilterAppliedParsed.values.length > 0;
+  const quickFilterModeForDisplay: TextMatchMode = quickFilterDraftForcesExact ? "exact" : quickFilterMode;
+  const effectiveQuickFilterMode: TextMatchMode = quickFilterAppliedForcesExact ? "exact" : quickFilterMode;
+  const effectiveSearchValue = effectiveQuickFilterMode === "contains" ? searchValue : "";
   const advancedFilterParam = useMemo(
-    () => buildAdvancedFilterPayload(advancedApplied, searchValue, quickFilterMode),
-    [advancedApplied, searchValue, quickFilterMode]
+    () => buildAdvancedFilterPayload(advancedApplied, searchValue, effectiveQuickFilterMode),
+    [advancedApplied, searchValue, effectiveQuickFilterMode]
   );
 
   useEffect(() => {
@@ -383,16 +414,119 @@ export default function CephAdminAccountsPage() {
   const updateAdvancedField = (field: keyof AdvancedFilterState, value: string) => {
     setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
   };
+  const modeToggleBaseClass =
+    "absolute right-1 top-1 rounded border px-1 py-0 ui-caption font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-0";
+  const modeToggleClass = (mode: TextMatchMode, isPending: boolean, locked: boolean = false) => {
+    if (locked) {
+      return `${modeToggleBaseClass} cursor-not-allowed border-primary-400 bg-primary-100 text-primary-700 opacity-80 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
+    }
+    if (isPending) {
+      return `${modeToggleBaseClass} border-amber-400 bg-amber-100 text-amber-700 focus:ring-amber-300 dark:border-amber-400/60 dark:bg-amber-500/20 dark:text-amber-200`;
+    }
+    if (mode === "exact") {
+      return `${modeToggleBaseClass} border-primary-400 bg-primary-100 text-primary-700 focus:ring-primary/35 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
+    }
+    return `${modeToggleBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
+  };
+  const matchModeButtonClass = (active: boolean, locked: boolean = false) => {
+    if (locked) {
+      if (active) {
+        return "cursor-not-allowed rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 opacity-80 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
+      }
+      return "cursor-not-allowed rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-400 opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500";
+    }
+    if (active) {
+      return "rounded-md border border-primary-300 bg-primary-100 px-2 py-1 ui-caption font-semibold text-primary-700 dark:border-primary-500/50 dark:bg-primary-500/20 dark:text-primary-100";
+    }
+    return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
+  };
+  const activeFieldClass =
+    "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/15 dark:ring-emerald-500/25";
+  const activeLabelClass = "text-emerald-700 dark:text-emerald-200";
+  const pendingFieldClass =
+    "border-amber-400 bg-amber-50 ring-2 ring-amber-300/70 dark:border-amber-400/70 dark:bg-amber-500/20 dark:ring-amber-500/25";
+  const pendingLabelClass = "text-amber-700 dark:text-amber-300";
+  const fieldHighlight = (isApplied: boolean, isPending: boolean) => {
+    if (isPending) return { labelClass: pendingLabelClass, fieldClass: pendingFieldClass };
+    if (isApplied) return { labelClass: activeLabelClass, fieldClass: activeFieldClass };
+    return { labelClass: "", fieldClass: "" };
+  };
+
+  const quickDraftValue = filter.trim();
+  const quickAppliedValue = searchValue.trim();
+  const quickFilterPending = quickDraftValue !== quickAppliedValue;
+  const quickFilterFieldState = fieldHighlight(quickAppliedValue.length > 0, quickFilterPending);
+
+  const accountNameAppliedValue = (advancedApplied?.accountName ?? "").trim();
+  const emailAppliedValue = (advancedApplied?.email ?? "").trim();
+  const accountNameDraftValue = advancedDraft.accountName.trim();
+  const emailDraftValue = advancedDraft.email.trim();
+
+  const accountNameAppliedParsed = parseExactListInput(advancedApplied?.accountName ?? "");
+  const accountNameDraftParsed = parseExactListInput(advancedDraft.accountName);
+  const emailAppliedParsed = parseExactListInput(advancedApplied?.email ?? "");
+  const emailDraftParsed = parseExactListInput(advancedDraft.email);
+  const accountNameDraftForcesExact = accountNameDraftParsed.listProvided && accountNameDraftParsed.values.length > 0;
+  const emailDraftForcesExact = emailDraftParsed.listProvided && emailDraftParsed.values.length > 0;
+
+  const accountNameAppliedMode: TextMatchMode =
+    accountNameAppliedParsed.listProvided && accountNameAppliedParsed.values.length > 0
+      ? "exact"
+      : (advancedApplied?.accountNameMatchMode ?? "contains");
+  const accountNameDraftMode: TextMatchMode =
+    accountNameDraftParsed.listProvided && accountNameDraftParsed.values.length > 0
+      ? "exact"
+      : advancedDraft.accountNameMatchMode;
+  const emailAppliedMode: TextMatchMode =
+    emailAppliedParsed.listProvided && emailAppliedParsed.values.length > 0 ? "exact" : (advancedApplied?.emailMatchMode ?? "contains");
+  const emailDraftMode: TextMatchMode =
+    emailDraftParsed.listProvided && emailDraftParsed.values.length > 0 ? "exact" : advancedDraft.emailMatchMode;
+
+  const accountNamePending =
+    accountNameDraftValue !== accountNameAppliedValue || (accountNameDraftValue.length > 0 && accountNameDraftMode !== accountNameAppliedMode);
+  const emailPending = emailDraftValue !== emailAppliedValue || (emailDraftValue.length > 0 && emailDraftMode !== emailAppliedMode);
+
+  const accountNameFieldState = fieldHighlight(Boolean(accountNameAppliedValue), accountNamePending);
+  const emailFieldState = fieldHighlight(Boolean(emailAppliedValue), emailPending);
+
+  const numericFields: Array<{ key: AdvancedNumericField; label: string }> = [
+    { key: "minMaxUsers", label: "Max users >=" },
+    { key: "maxMaxUsers", label: "Max users <=" },
+    { key: "minMaxBuckets", label: "Max buckets >=" },
+    { key: "maxMaxBuckets", label: "Max buckets <=" },
+    { key: "minQuotaBytes", label: "Quota bytes >=" },
+    { key: "maxQuotaBytes", label: "Quota bytes <=" },
+    { key: "minQuotaObjects", label: "Quota objects >=" },
+    { key: "maxQuotaObjects", label: "Quota objects <=" },
+    { key: "minBucketCount", label: "Bucket count >=" },
+    { key: "maxBucketCount", label: "Bucket count <=" },
+    { key: "minUserCount", label: "User count >=" },
+    { key: "maxUserCount", label: "User count <=" },
+  ];
+
+  const numericFieldStates = useMemo(() => {
+    const states = {} as Record<AdvancedNumericField, { labelClass: string; fieldClass: string }>;
+    numericFields.forEach(({ key }) => {
+      const draft = (advancedDraft[key] as string).trim();
+      const applied = (advancedApplied?.[key] as string | undefined)?.trim() ?? "";
+      const pending = draft !== applied;
+      states[key] = fieldHighlight(Boolean(applied), pending);
+    });
+    return states;
+  }, [advancedDraft, advancedApplied]);
+
   const toggleQuickFilterMode = () => {
+    if (quickFilterDraftForcesExact) return;
     setQuickFilterMode((prev) => (prev === "contains" ? "exact" : "contains"));
     setPage(1);
   };
-  const toggleAdvancedTextMode = (field: "accountNameMatchMode" | "emailMatchMode") => {
-    setAdvancedDraft((prev) => ({ ...prev, [field]: prev[field] === "contains" ? "exact" : "contains" }));
+  const updateAdvancedMatchMode = (field: "accountNameMatchMode" | "emailMatchMode", value: TextMatchMode) => {
+    setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
   };
 
   const applyAdvancedFilter = () => {
     setAdvancedApplied(advancedDraft);
+    setShowAdvancedFilter(false);
     setPage(1);
   };
 
@@ -401,6 +535,15 @@ export default function CephAdminAccountsPage() {
     setAdvancedApplied(null);
     setPage(1);
   };
+
+  const closeAdvancedFilterDrawer = () => {
+    setShowAdvancedFilter(false);
+  };
+
+  const advancedAppliedPayload = useMemo(() => buildAdvancedFilterPayload(advancedApplied, "", "contains"), [advancedApplied]);
+  const advancedDraftPayload = useMemo(() => buildAdvancedFilterPayload(advancedDraft, "", "contains"), [advancedDraft]);
+  const hasPendingAdvancedChanges = advancedDraftPayload !== advancedAppliedPayload;
+  const hasAnyAdvancedToClear = advancedDraftPayload !== undefined || advancedAppliedPayload !== undefined;
 
   const resetAllFilters = () => {
     setFilter("");
@@ -412,9 +555,99 @@ export default function CephAdminAccountsPage() {
     setPage(1);
   };
 
+  const clearAdvancedField = (field: AdvancedField) => {
+    setAdvancedDraft((prev) => ({ ...prev, [field]: "" }));
+    setAdvancedApplied((prev) => (prev ? { ...prev, [field]: "" } : prev));
+    setPage(1);
+  };
+  const removeActiveFilterItem = (action: ActiveFilterRemoveAction) => {
+    if (action.type === "quick") {
+      setFilter("");
+      setSearchValue("");
+      setPage(1);
+      return;
+    }
+    clearAdvancedField(action.field);
+  };
+
   const advancedFilterActive = hasAdvancedFilters(advancedApplied);
-  const quickFilterActive = searchValue.trim().length > 0;
-  const filtersActive = quickFilterActive || advancedFilterActive;
+  const quickFilterActive = quickAppliedValue.length > 0;
+  const activeFilterSummaryItems = useMemo(() => {
+    const items: ActiveFilterSummaryItem[] = [];
+    if (quickFilterActive) {
+      const label = formatTextFilterSummary("Account ID", searchValue, effectiveQuickFilterMode);
+      if (label) items.push({ id: "quick", label, remove: { type: "quick" } });
+    }
+    if (advancedApplied && hasAdvancedFilters(advancedApplied)) {
+      const accountNameLabel = formatTextFilterSummary("Account name", advancedApplied.accountName, accountNameAppliedMode);
+      if (accountNameLabel) items.push({ id: "accountName", label: accountNameLabel, remove: { type: "advanced", field: "accountName" } });
+      const emailLabel = formatTextFilterSummary("Email", advancedApplied.email, emailAppliedMode);
+      if (emailLabel) items.push({ id: "email", label: emailLabel, remove: { type: "advanced", field: "email" } });
+      numericFields.forEach(({ key, label }) => {
+        const raw = (advancedApplied[key] as string).trim();
+        if (!raw) return;
+        const numeric = Number(raw);
+        const display = Number.isFinite(numeric) ? formatNumber(numeric) : raw;
+        items.push({ id: `num-${key}`, label: `${label} ${display}`, remove: { type: "advanced", field: key } });
+      });
+    }
+    return items;
+  }, [
+    quickFilterActive,
+    searchValue,
+    effectiveQuickFilterMode,
+    advancedApplied,
+    accountNameAppliedMode,
+    emailAppliedMode,
+    numericFields,
+  ]);
+  const showActiveFiltersCard =
+    activeFilterSummaryItems.length > 0 &&
+    !(
+      activeFilterSummaryItems.length === 1 &&
+      quickFilterActive &&
+      !advancedFilterActive &&
+      !quickFilterAppliedParsed.listProvided
+    );
+
+  const advancedDraftSummaryItems = useMemo(() => {
+    const items: Array<{ id: string; label: string }> = [];
+    const accountNameLabel = formatTextFilterSummary("Account name", advancedDraft.accountName, accountNameDraftMode);
+    if (accountNameLabel) items.push({ id: "draft-accountName", label: accountNameLabel });
+    const emailLabel = formatTextFilterSummary("Email", advancedDraft.email, emailDraftMode);
+    if (emailLabel) items.push({ id: "draft-email", label: emailLabel });
+    numericFields.forEach(({ key, label }) => {
+      const raw = (advancedDraft[key] as string).trim();
+      if (!raw) return;
+      const numeric = Number(raw);
+      const display = Number.isFinite(numeric) ? formatNumber(numeric) : raw;
+      items.push({ id: `draft-${key}`, label: `${label} ${display}` });
+    });
+    return items;
+  }, [advancedDraft, accountNameDraftMode, emailDraftMode, numericFields]);
+
+  const advancedDraftTextCount = Number(accountNameDraftValue.length > 0) + Number(emailDraftValue.length > 0);
+  const advancedDraftNumericCount = numericFields.filter(({ key }) => (advancedDraft[key] as string).trim().length > 0).length;
+  const advancedDraftActiveCount = advancedDraftTextCount + advancedDraftNumericCount;
+  const advancedDraftGlobalCostLevel: FilterCostLevel = useMemo(() => {
+    if (advancedDraftNumericCount >= 6) return "high";
+    if (advancedDraftNumericCount > 0) return "medium";
+    if (advancedDraftTextCount > 0) return "low";
+    return "none";
+  }, [advancedDraftNumericCount, advancedDraftTextCount]);
+  const advancedDraftGlobalCostTooltip = useMemo(() => {
+    if (advancedDraftGlobalCostLevel === "high") {
+      return `${FILTER_COST_LABEL.high}: many numeric filters are active and may require heavier stats filtering.`;
+    }
+    if (advancedDraftGlobalCostLevel === "medium") {
+      return `${FILTER_COST_LABEL.medium}: numeric filters are active and rely on usage/quota counters.`;
+    }
+    if (advancedDraftGlobalCostLevel === "low") {
+      return `${FILTER_COST_LABEL.low}: only text filters are active.`;
+    }
+    return FILTER_COST_LABEL.none;
+  }, [advancedDraftGlobalCostLevel]);
+
   const columnsCustomized = useMemo(() => {
     if (visibleColumns.length !== defaultVisibleColumns.length) return true;
     const current = new Set(visibleColumns);
@@ -725,12 +958,11 @@ export default function CephAdminAccountsPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filters</p>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Quick filter + Advanced filter</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowAdvancedFilter((prev) => !prev)}
+                  onClick={() => setShowAdvancedFilter(true)}
                   className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
                     showAdvancedFilter || advancedFilterActive
                       ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
@@ -739,211 +971,263 @@ export default function CephAdminAccountsPage() {
                 >
                   Advanced filter{advancedFilterActive ? " · Active" : ""}
                 </button>
-                <button
-                  type="button"
-                  onClick={resetAllFilters}
-                  disabled={!filtersActive}
-                  className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                    filtersActive
-                      ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                      : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                  }`}
-                >
-                  Clear all filters
-                </button>
               </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <div className="relative">
-                  <input
-                    type="text"
+                  <textarea
                     aria-label="Quick filter"
                     value={filter}
                     onChange={(e) => setFilter(e.target.value)}
-                    placeholder="Search by account id"
-                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    onKeyDown={(event) => event.stopPropagation()}
+                    placeholder="Account ID(s)"
+                    rows={1}
+                    className={`w-full resize-y rounded-md border bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
+                      quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
+                    }`}
                   />
                   <button
                     type="button"
                     onClick={toggleQuickFilterMode}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                    title={`Quick filter mode: ${quickFilterMode === "contains" ? "contains" : "exact (account id)"}`}
+                    disabled={quickFilterDraftForcesExact}
+                    className={modeToggleClass(quickFilterModeForDisplay, quickFilterPending, quickFilterDraftForcesExact)}
+                    title={
+                      quickFilterDraftForcesExact
+                        ? "Quick filter mode: exact (locked by list input)"
+                        : `Quick filter mode: ${quickFilterModeForDisplay === "contains" ? "contains" : "exact"}`
+                    }
                     aria-label="Toggle quick filter match mode"
                   >
-                    {quickFilterMode === "contains" ? "~" : "="}
+                    {quickFilterModeForDisplay === "contains" ? "~" : "="}
                   </button>
                 </div>
               </div>
             </div>
 
-            {showAdvancedFilter && (
-              <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-                <div className="grid gap-3 lg:grid-cols-3">
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    <span className="flex items-center justify-between gap-2">
-                      <span>Account name</span>
+            {showActiveFiltersCard && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-200">ACTIVE FILTERS</p>
+                  {activeFilterSummaryItems.map((item) => (
+                    <span
+                      key={item.id}
+                      className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
+                    >
+                      <span>{item.label}</span>
                       <button
                         type="button"
-                        onClick={() => toggleAdvancedTextMode("accountNameMatchMode")}
-                        className="rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        title={`Account name mode: ${advancedDraft.accountNameMatchMode}`}
+                        onClick={() => removeActiveFilterItem(item.remove)}
+                        className="rounded-full px-1 leading-none opacity-70 hover:opacity-100"
+                        title="Remove filter"
+                        aria-label={`Remove ${item.label}`}
                       >
-                        {advancedDraft.accountNameMatchMode === "contains" ? "~" : "="}
+                        ×
                       </button>
                     </span>
-                    <input
-                      type="text"
-                      value={advancedDraft.accountName}
-                      onChange={(e) => updateAdvancedField("accountName", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    <span className="flex items-center justify-between gap-2">
-                      <span>Email</span>
-                      <button
-                        type="button"
-                        onClick={() => toggleAdvancedTextMode("emailMatchMode")}
-                        className="rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        title={`Email mode: ${advancedDraft.emailMatchMode}`}
-                      >
-                        {advancedDraft.emailMatchMode === "contains" ? "~" : "="}
-                      </button>
-                    </span>
-                    <input
-                      type="text"
-                      value={advancedDraft.email}
-                      onChange={(e) => updateAdvancedField("email", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Max users min
-                    <input
-                      type="number"
-                      value={advancedDraft.minMaxUsers}
-                      onChange={(e) => updateAdvancedField("minMaxUsers", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Max users max
-                    <input
-                      type="number"
-                      value={advancedDraft.maxMaxUsers}
-                      onChange={(e) => updateAdvancedField("maxMaxUsers", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Max buckets min
-                    <input
-                      type="number"
-                      value={advancedDraft.minMaxBuckets}
-                      onChange={(e) => updateAdvancedField("minMaxBuckets", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Max buckets max
-                    <input
-                      type="number"
-                      value={advancedDraft.maxMaxBuckets}
-                      onChange={(e) => updateAdvancedField("maxMaxBuckets", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Quota bytes min
-                    <input
-                      type="number"
-                      value={advancedDraft.minQuotaBytes}
-                      onChange={(e) => updateAdvancedField("minQuotaBytes", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Quota bytes max
-                    <input
-                      type="number"
-                      value={advancedDraft.maxQuotaBytes}
-                      onChange={(e) => updateAdvancedField("maxQuotaBytes", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Quota objects min
-                    <input
-                      type="number"
-                      value={advancedDraft.minQuotaObjects}
-                      onChange={(e) => updateAdvancedField("minQuotaObjects", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Quota objects max
-                    <input
-                      type="number"
-                      value={advancedDraft.maxQuotaObjects}
-                      onChange={(e) => updateAdvancedField("maxQuotaObjects", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Bucket count min
-                    <input
-                      type="number"
-                      value={advancedDraft.minBucketCount}
-                      onChange={(e) => updateAdvancedField("minBucketCount", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Bucket count max
-                    <input
-                      type="number"
-                      value={advancedDraft.maxBucketCount}
-                      onChange={(e) => updateAdvancedField("maxBucketCount", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    User count min
-                    <input
-                      type="number"
-                      value={advancedDraft.minUserCount}
-                      onChange={(e) => updateAdvancedField("minUserCount", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    User count max
-                    <input
-                      type="number"
-                      value={advancedDraft.maxUserCount}
-                      onChange={(e) => updateAdvancedField("maxUserCount", e.target.value)}
-                      className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    />
-                  </label>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                  >
+                    Clear all
+                  </button>
                 </div>
+              </div>
+            )}
 
-                <div className="mt-3 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={resetAdvancedFilter}
-                    className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-                  >
-                    Clear
-                  </button>
-                  <button
-                    type="button"
-                    onClick={applyAdvancedFilter}
-                    className="rounded-md bg-primary px-2 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
-                  >
-                    Apply filter
-                  </button>
+            {showAdvancedFilter && (
+              <div className="fixed inset-0 z-40">
+                <button
+                  type="button"
+                  onClick={closeAdvancedFilterDrawer}
+                  className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]"
+                  aria-label="Close advanced filter drawer"
+                />
+                <div className="absolute inset-y-0 right-0 flex w-full max-w-3xl flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                  <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Advanced filter</p>
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">RGW Accounts listing</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            {advancedDraftActiveCount} rule{advancedDraftActiveCount > 1 ? "s" : ""}
+                          </span>
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            title={advancedDraftGlobalCostTooltip}
+                          >
+                            Global draft cost
+                            {renderFilterCostIndicator(advancedDraftGlobalCostLevel, advancedDraftGlobalCostTooltip)}
+                          </span>
+                          <span
+                            className={`rounded-full border px-2 py-0.5 ui-caption font-semibold ${
+                              hasPendingAdvancedChanges
+                                ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200"
+                                : "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-200"
+                            }`}
+                          >
+                            {hasPendingAdvancedChanges ? "Unsaved changes" : "In sync"}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={closeAdvancedFilterDrawer}
+                        className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto px-4 py-4">
+                    <div className="space-y-4">
+                      <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Draft summary</p>
+                        {advancedDraftSummaryItems.length === 0 ? (
+                          <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">No advanced rule in draft.</p>
+                        ) : (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {advancedDraftSummaryItems.map((item) => (
+                              <span
+                                key={item.id}
+                                className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
+                              >
+                                {item.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+
+                      <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                        <p className="mb-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Identity</p>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${accountNameFieldState.labelClass}`}>
+                                <span className="inline-flex items-center gap-1">
+                                  <span>Account name</span>
+                                  {renderFilterCostIndicator("low", "Low cost: account name filters are text-based.")}
+                                </span>
+                              </label>
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={accountNameDraftForcesExact}
+                                  onClick={() => updateAdvancedMatchMode("accountNameMatchMode", "contains")}
+                                  className={matchModeButtonClass(accountNameDraftMode === "contains", accountNameDraftForcesExact)}
+                                >
+                                  Contains
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={accountNameDraftForcesExact}
+                                  onClick={() => updateAdvancedMatchMode("accountNameMatchMode", "exact")}
+                                  className={matchModeButtonClass(accountNameDraftMode === "exact", accountNameDraftForcesExact)}
+                                >
+                                  Exact
+                                </button>
+                              </div>
+                            </div>
+                            <textarea
+                              value={advancedDraft.accountName}
+                              onChange={(e) => updateAdvancedField("accountName", e.target.value)}
+                              onKeyDown={(event) => event.stopPropagation()}
+                              placeholder="account-a, account-b"
+                              rows={2}
+                              className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${accountNameFieldState.fieldClass}`}
+                            />
+                          </div>
+
+                          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${emailFieldState.labelClass}`}>
+                                <span className="inline-flex items-center gap-1">
+                                  <span>Email</span>
+                                  {renderFilterCostIndicator("low", "Low cost: email filters are text-based.")}
+                                </span>
+                              </label>
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={emailDraftForcesExact}
+                                  onClick={() => updateAdvancedMatchMode("emailMatchMode", "contains")}
+                                  className={matchModeButtonClass(emailDraftMode === "contains", emailDraftForcesExact)}
+                                >
+                                  Contains
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={emailDraftForcesExact}
+                                  onClick={() => updateAdvancedMatchMode("emailMatchMode", "exact")}
+                                  className={matchModeButtonClass(emailDraftMode === "exact", emailDraftForcesExact)}
+                                >
+                                  Exact
+                                </button>
+                              </div>
+                            </div>
+                            <textarea
+                              value={advancedDraft.email}
+                              onChange={(e) => updateAdvancedField("email", e.target.value)}
+                              onKeyDown={(event) => event.stopPropagation()}
+                              placeholder="ops@example.com"
+                              rows={2}
+                              className={`mt-2 w-full resize-y rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${emailFieldState.fieldClass}`}
+                            />
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                        <p className="mb-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Limits and Quotas</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {numericFields.map((field) => (
+                            <label key={field.key} className={`flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200 ${numericFieldStates[field.key].labelClass}`}>
+                              <span className="inline-flex items-center gap-1">
+                                <span>{field.label}</span>
+                                {renderFilterCostIndicator("medium", "Medium cost: numeric filters rely on counters/stats.")}
+                              </span>
+                              <input
+                                type="number"
+                                value={advancedDraft[field.key]}
+                                onChange={(e) => updateAdvancedField(field.key, e.target.value)}
+                                className={`rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${numericFieldStates[field.key].fieldClass}`}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </section>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={resetAdvancedFilter}
+                        disabled={!hasAnyAdvancedToClear}
+                        className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
+                          hasAnyAdvancedToClear
+                            ? "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                            : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                        }`}
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={applyAdvancedFilter}
+                        className="rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
+                      >
+                        Apply filter
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
