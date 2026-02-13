@@ -4320,7 +4320,7 @@ export default function CephAdminBucketsPage() {
         label: "Used",
         field: "used_bytes",
         headerClassName: "w-28",
-        render: (bucket) => formatBytes(bucket.used_bytes ?? 0),
+        render: (bucket) => formatBytes(bucket.used_bytes),
       });
     }
     if (visible.has("quota_max_size_bytes")) {
@@ -4341,7 +4341,7 @@ export default function CephAdminBucketsPage() {
         label: "Objects",
         field: "object_count",
         headerClassName: "w-24",
-        render: (bucket) => formatNumber(bucket.object_count ?? 0),
+        render: (bucket) => formatNumber(bucket.object_count),
       });
     }
     if (visible.has("quota_max_objects")) {

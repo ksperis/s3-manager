@@ -704,3 +704,38 @@ def test_ceph_admin_bucket_listing_owner_name_filter_loads_owner_metadata_when_b
 
     assert [item.name for item in response.items] == ["bucket-a"]
     assert rgw_admin.calls[0] is True
+
+
+def test_ceph_admin_bucket_listing_sort_by_usage_keeps_zero_before_missing_values():
+    payload = [
+        {"name": "bucket-max", "owner": "owner-a", "usage": {"total_bytes": 4096, "total_objects": 7}},
+        {"name": "bucket-zero", "owner": "owner-b", "usage": {"total_bytes": 0, "total_objects": 0}},
+        {"name": "bucket-missing", "owner": "owner-c", "usage": {}},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=187, payload=payload)
+
+    used_desc = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="used_bytes",
+        sort_dir="desc",
+        include=[],
+        with_stats=True,
+        ctx=ctx,
+    )
+    objects_desc = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="object_count",
+        sort_dir="desc",
+        include=[],
+        with_stats=True,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in used_desc.items] == ["bucket-max", "bucket-zero", "bucket-missing"]
+    assert [item.name for item in objects_desc.items] == ["bucket-max", "bucket-zero", "bucket-missing"]

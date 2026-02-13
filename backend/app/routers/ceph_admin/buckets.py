@@ -1059,8 +1059,7 @@ def list_buckets(
                     bucket.features = None
                     bucket.tags = None
 
-        def sort_key(bucket: CephAdminBucketSummary):
-            value = None
+        def sort_value(bucket: CephAdminBucketSummary):
             if sort_by == "tenant":
                 value = bucket.tenant or ""
             elif sort_by == "owner":
@@ -1071,13 +1070,21 @@ def list_buckets(
                 value = bucket.object_count
             else:
                 value = bucket.name
-            if value is None:
-                return (1, "")
             if isinstance(value, str):
-                return (0, value.lower())
-            return (0, value)
+                return value.lower()
+            return value
 
-        results.sort(key=sort_key, reverse=sort_dir == "desc")
+        sortable: list[tuple[object, CephAdminBucketSummary]] = []
+        missing_values: list[CephAdminBucketSummary] = []
+        for bucket in results:
+            value = sort_value(bucket)
+            if value is None:
+                missing_values.append(bucket)
+            else:
+                sortable.append((value, bucket))
+
+        sortable.sort(key=lambda item: item[0], reverse=sort_dir == "desc")
+        results = [bucket for _, bucket in sortable] + missing_values
         return results
 
     results = _get_cached_bucket_listing(cache_key, build_listing)
