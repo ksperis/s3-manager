@@ -1065,9 +1065,9 @@ def list_buckets(
             elif sort_by == "owner":
                 value = bucket.owner or ""
             elif sort_by == "used_bytes":
-                value = bucket.used_bytes
+                value = bucket.used_bytes if bucket.used_bytes is not None else 0
             elif sort_by == "object_count":
-                value = bucket.object_count
+                value = bucket.object_count if bucket.object_count is not None else 0
             else:
                 value = bucket.name
             if isinstance(value, str):

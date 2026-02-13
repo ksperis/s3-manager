@@ -706,11 +706,11 @@ def test_ceph_admin_bucket_listing_owner_name_filter_loads_owner_metadata_when_b
     assert rgw_admin.calls[0] is True
 
 
-def test_ceph_admin_bucket_listing_sort_by_usage_keeps_zero_before_missing_values():
+def test_ceph_admin_bucket_listing_sort_by_usage_treats_missing_values_as_zero():
     payload = [
         {"name": "bucket-max", "owner": "owner-a", "usage": {"total_bytes": 4096, "total_objects": 7}},
-        {"name": "bucket-zero", "owner": "owner-b", "usage": {"total_bytes": 0, "total_objects": 0}},
         {"name": "bucket-missing", "owner": "owner-c", "usage": {}},
+        {"name": "bucket-zero", "owner": "owner-b", "usage": {"total_bytes": 0, "total_objects": 0}},
     ]
     ctx, _ = _build_ctx(endpoint_id=187, payload=payload)
 
@@ -721,6 +721,17 @@ def test_ceph_admin_bucket_listing_sort_by_usage_keeps_zero_before_missing_value
         advanced_filter=None,
         sort_by="used_bytes",
         sort_dir="desc",
+        include=[],
+        with_stats=True,
+        ctx=ctx,
+    )
+    used_asc = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="used_bytes",
+        sort_dir="asc",
         include=[],
         with_stats=True,
         ctx=ctx,
@@ -736,6 +747,19 @@ def test_ceph_admin_bucket_listing_sort_by_usage_keeps_zero_before_missing_value
         with_stats=True,
         ctx=ctx,
     )
+    objects_asc = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="object_count",
+        sort_dir="asc",
+        include=[],
+        with_stats=True,
+        ctx=ctx,
+    )
 
-    assert [item.name for item in used_desc.items] == ["bucket-max", "bucket-zero", "bucket-missing"]
-    assert [item.name for item in objects_desc.items] == ["bucket-max", "bucket-zero", "bucket-missing"]
+    assert [item.name for item in used_desc.items] == ["bucket-max", "bucket-missing", "bucket-zero"]
+    assert [item.name for item in used_asc.items] == ["bucket-missing", "bucket-zero", "bucket-max"]
+    assert [item.name for item in objects_desc.items] == ["bucket-max", "bucket-missing", "bucket-zero"]
+    assert [item.name for item in objects_asc.items] == ["bucket-missing", "bucket-zero", "bucket-max"]
