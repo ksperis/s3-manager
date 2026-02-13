@@ -66,6 +66,27 @@ const formatNumber = (value?: number | null) => {
   return value.toLocaleString();
 };
 
+const sanitizeExportFilenamePart = (value?: string | null) => {
+  const normalized = (value ?? "").trim();
+  const cleaned = normalized.replace(/[^a-zA-Z0-9-_]+/g, "_").replace(/^_+|_+$/g, "");
+  return cleaned || "buckets";
+};
+
+const csvEscape = (value: string) => `"${value.replace(/"/g, "\"\"")}"`;
+
+const triggerDownload = (filename: string, content: string, mimeType: string) => {
+  if (typeof window === "undefined") return;
+  const blob = new Blob([content], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 function SpinnerIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
     <svg
@@ -2152,6 +2173,25 @@ export default function CephAdminBucketsPage() {
     () => Array.from(selectedBuckets.values()).sort((a, b) => a.localeCompare(b)),
     [selectedBuckets]
   );
+
+  const exportSelectedBuckets = () => {
+    if (selectedBucketList.length === 0) return;
+    try {
+      const exportedAt = new Date().toISOString();
+      const timestamp = exportedAt.replace(/[:.]/g, "-");
+      const endpointPart = sanitizeExportFilenamePart(
+        selectedEndpoint?.name ?? (selectedEndpointId ? `endpoint-${selectedEndpointId}` : "endpoint")
+      );
+      const csv = ["bucket_name", ...selectedBucketList.map((bucketName) => csvEscape(bucketName))].join("\n");
+      triggerDownload(
+        `ceph-admin-buckets-${endpointPart}-${timestamp}.csv`,
+        csv,
+        "text/csv;charset=utf-8"
+      );
+    } catch (err) {
+      setError(extractError(err));
+    }
+  };
 
   const resetBulkPreview = () => {
     setBulkPreview([]);
@@ -5216,6 +5256,13 @@ export default function CephAdminBucketsPage() {
                     className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
                   >
                     {tagEditorLoading ? "Resolving..." : "Edit UI tags"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exportSelectedBuckets}
+                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                  >
+                    Export list
                   </button>
                   <button
                     type="button"
