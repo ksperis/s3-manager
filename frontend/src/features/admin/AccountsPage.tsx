@@ -38,6 +38,7 @@ type SortField = "name" | "rgw_account_id";
 type TriState = "inherit" | "enabled" | "disabled";
 type PolicyMode = "inherit" | "actions";
 type EditTab = "general" | "portal";
+type TextMatchMode = "contains" | "exact";
 
 const hasOwn = (value: Record<string, unknown> | null | undefined, key: string) =>
   Boolean(value && Object.prototype.hasOwnProperty.call(value, key));
@@ -79,6 +80,7 @@ export default function S3AccountsPage() {
     direction: "asc",
   });
   const [filter, setFilter] = useState("");
+  const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [form, setForm] = useState({
@@ -266,22 +268,57 @@ export default function S3AccountsPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await listS3Accounts({
-        page,
-        page_size: pageSize,
-        search: filter.trim() || undefined,
-        sort_by: sort.field,
-        sort_dir: sort.direction,
-        include_quota: false,
-        include_rgw_details: false,
-      });
-      const totalPages = Math.max(1, Math.ceil((response.total || 0) / pageSize));
-      if (response.total > 0 && page > totalPages) {
-        setPage(totalPages);
-        return;
+      const quick = filter.trim();
+      if (quick && quickFilterMode === "exact") {
+        const allMatches: S3Account[] = [];
+        let nextPage = 1;
+        while (true) {
+          const response = await listS3Accounts({
+            page: nextPage,
+            page_size: 200,
+            search: quick,
+            sort_by: sort.field,
+            sort_dir: sort.direction,
+            include_quota: false,
+            include_rgw_details: false,
+          });
+          allMatches.push(...response.items);
+          if (!response.has_next) break;
+          nextPage += 1;
+        }
+
+        const needle = quick.toLowerCase();
+        const exactMatches = allMatches.filter((account) => {
+          const candidates = [account.name, account.rgw_account_id ?? "", account.id ?? ""];
+          return candidates.some((candidate) => candidate.trim().toLowerCase() === needle);
+        });
+        const totalExact = exactMatches.length;
+        const totalPages = Math.max(1, Math.ceil(totalExact / pageSize));
+        if (totalExact > 0 && page > totalPages) {
+          setPage(totalPages);
+          return;
+        }
+        const start = (page - 1) * pageSize;
+        setS3Accounts(exactMatches.slice(start, start + pageSize));
+        setTotalAccounts(totalExact);
+      } else {
+        const response = await listS3Accounts({
+          page,
+          page_size: pageSize,
+          search: quick || undefined,
+          sort_by: sort.field,
+          sort_dir: sort.direction,
+          include_quota: false,
+          include_rgw_details: false,
+        });
+        const totalPages = Math.max(1, Math.ceil((response.total || 0) / pageSize));
+        if (response.total > 0 && page > totalPages) {
+          setPage(totalPages);
+          return;
+        }
+        setS3Accounts(response.items);
+        setTotalAccounts(response.total);
       }
-      setS3Accounts(response.items);
-      setTotalAccounts(response.total);
     } catch (err) {
       console.error(err);
       const msg = extractError(err);
@@ -293,7 +330,7 @@ export default function S3AccountsPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter, page, pageSize, sort.direction, sort.field]);
+  }, [filter, quickFilterMode, page, pageSize, sort.direction, sort.field]);
 
   const userOptions = useMemo(() => users.map((u) => ({ id: u.id, label: u.email })), [users]);
   const userLabelById = useMemo(() => {
@@ -409,6 +446,16 @@ export default function S3AccountsPage() {
     setFilter(value);
     setPage(1);
   };
+  const clearAllFilters = () => {
+    setFilter("");
+    setQuickFilterMode("contains");
+    setPage(1);
+  };
+  const toggleQuickFilterMode = () => {
+    setQuickFilterMode((prev) => (prev === "contains" ? "exact" : "contains"));
+    setPage(1);
+  };
+  const quickFilterActive = filter.trim().length > 0;
 
   const handlePageChange = (nextPage: number) => {
     if (nextPage === page) return;
@@ -1878,24 +1925,64 @@ export default function S3AccountsPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
-            <input
-              type="text"
-              value={filter}
-              onChange={(e) => handleFilterChange(e.target.value)}
-              placeholder="Search by name or RGW ID"
-              className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
-            />
+            <div className="relative w-full sm:w-64 md:w-72">
+              <input
+                type="text"
+                value={filter}
+                onChange={(e) => handleFilterChange(e.target.value)}
+                placeholder="Search by name or RGW ID"
+                className={`${toolbarCompactInputClasses} w-full pr-9 ${quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""}`}
+              />
+              <button
+                type="button"
+                onClick={toggleQuickFilterMode}
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                title={`Filter mode: ${quickFilterMode === "contains" ? "contains" : "exact"}`}
+                aria-label="Toggle filter match mode"
+              >
+                {quickFilterMode === "contains" ? "~" : "="}
+              </button>
+            </div>
           </div>
         </div>
+        {quickFilterActive && (
+          <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-2 dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="inline-flex items-center gap-2">
+              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active filters summary</p>
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+              >
+                Clear all
+              </button>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100">
+                Search {quickFilterMode === "exact" ? "exact" : "contains"}: {filter.trim()}
+              </span>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
-        <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+        <table className="compact-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
-              {columns.map((col) => (
+              {columns.map((col, idx) => (
                 <th
                   key={col.label}
                   onClick={col.field ? () => toggleSort(col.field) : undefined}
                   className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
+                    idx === 0
+                      ? "sticky left-0 z-20 min-w-[16rem] bg-slate-50 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
+                      : idx === 1
+                        ? "w-56 min-w-[11rem]"
+                        : idx === 2
+                          ? "w-48 min-w-[10rem]"
+                          : idx === 3
+                            ? "min-w-[14rem] max-w-[26rem]"
+                            : "w-44 min-w-[9rem]"
+                  } ${
                     col.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : col.align === "right" ? "text-right" : ""
                   }`}
                 >
@@ -1939,7 +2026,7 @@ export default function S3AccountsPage() {
                   const accountUserLinks = resolveAccountUserLinks(account);
                   return (
                     <tr key={account.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
+                  <td className="sticky left-0 z-10 min-w-[16rem] bg-white px-6 py-4 ui-body font-semibold text-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:text-slate-100 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]">
                     <div className="flex flex-wrap items-center gap-2">
                       {isSuperAdmin ? (
                         <button
@@ -1955,15 +2042,15 @@ export default function S3AccountsPage() {
                       {renderS3AccountTypeBadge(account)}
                     </div>
                   </td>
-                  <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
+                  <td className="w-56 min-w-[11rem] px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
                     {account.rgw_account_id ?? account.id}
                   </td>
-                  <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
+                  <td className="w-48 min-w-[10rem] px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
                     <span title={account.storage_endpoint_url || undefined}>
                       {account.storage_endpoint_name || "—"}
                     </span>
                   </td>
-                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                  <td className="min-w-[14rem] max-w-[26rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                     {accountUserLinks.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {accountUserLinks.map((link) => {
@@ -1999,7 +2086,7 @@ export default function S3AccountsPage() {
                       <span className="ui-caption text-slate-500 dark:text-slate-400">None</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="w-44 min-w-[9rem] px-6 py-4 text-right">
                     {isSuperAdmin ? (
                       <div className="flex justify-end gap-2">
                         <button onClick={() => startEditS3Account(account)} className={tableActionButtonClasses}>

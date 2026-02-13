@@ -27,6 +27,8 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
+type TextMatchMode = "contains" | "exact";
+
 export default function S3UsersPage() {
   const resolveQuotaForEdit = (quotaGb?: number | null) => {
     if (quotaGb == null) {
@@ -47,6 +49,7 @@ export default function S3UsersPage() {
   const [pageSize, setPageSize] = useState(25);
   const [totalUsers, setTotalUsers] = useState(0);
   const [filter, setFilter] = useState("");
+  const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
   const MAX_LINK_OPTIONS = 10;
   const [storageEndpoints, setStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
@@ -94,6 +97,16 @@ export default function S3UsersPage() {
     setFilter(value);
     setPage(1);
   };
+  const clearAllFilters = () => {
+    setFilter("");
+    setQuickFilterMode("contains");
+    setPage(1);
+  };
+  const toggleQuickFilterMode = () => {
+    setQuickFilterMode((prev) => (prev === "contains" ? "exact" : "contains"));
+    setPage(1);
+  };
+  const quickFilterActive = filter.trim().length > 0;
   const handlePageChange = (nextPage: number) => {
     if (nextPage === page) return;
     setPage(Math.max(1, nextPage));
@@ -133,25 +146,57 @@ export default function S3UsersPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await listS3Users({
-        page,
-        page_size: pageSize,
-        search: filter.trim() || undefined,
-        include_quota: false,
-      });
-      const totalPages = Math.max(1, Math.ceil((response.total || 0) / pageSize));
-      if (response.total > 0 && page > totalPages) {
-        setPage(totalPages);
-        return;
+      const quick = filter.trim();
+      if (quick && quickFilterMode === "exact") {
+        const allMatches: S3User[] = [];
+        let nextPage = 1;
+        while (true) {
+          const response = await listS3Users({
+            page: nextPage,
+            page_size: 200,
+            search: quick,
+            include_quota: false,
+          });
+          allMatches.push(...response.items);
+          if (!response.has_next) break;
+          nextPage += 1;
+        }
+
+        const needle = quick.toLowerCase();
+        const exactMatches = allMatches.filter((user) => {
+          const candidates = [user.name, user.rgw_user_uid, user.email ?? ""];
+          return candidates.some((candidate) => candidate.trim().toLowerCase() === needle);
+        });
+        const totalExact = exactMatches.length;
+        const totalPages = Math.max(1, Math.ceil(totalExact / pageSize));
+        if (totalExact > 0 && page > totalPages) {
+          setPage(totalPages);
+          return;
+        }
+        const start = (page - 1) * pageSize;
+        setUsers(exactMatches.slice(start, start + pageSize));
+        setTotalUsers(totalExact);
+      } else {
+        const response = await listS3Users({
+          page,
+          page_size: pageSize,
+          search: quick || undefined,
+          include_quota: false,
+        });
+        const totalPages = Math.max(1, Math.ceil((response.total || 0) / pageSize));
+        if (response.total > 0 && page > totalPages) {
+          setPage(totalPages);
+          return;
+        }
+        setUsers(response.items);
+        setTotalUsers(response.total);
       }
-      setUsers(response.items);
-      setTotalUsers(response.total);
     } catch (err) {
       setError(extractError(err));
     } finally {
       setLoading(false);
     }
-  }, [filter, page, pageSize]);
+  }, [filter, quickFilterMode, page, pageSize]);
 
   useEffect(() => {
     fetchUsers();
@@ -565,21 +610,64 @@ export default function S3UsersPage() {
             <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Filter
             </span>
-            <input
-              type="text"
-              value={filter}
-              onChange={(e) => handleFilterChange(e.target.value)}
-              placeholder="Search by name, UID, or email"
-              className={`${toolbarCompactInputClasses} w-full sm:w-64`}
-            />
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                value={filter}
+                onChange={(e) => handleFilterChange(e.target.value)}
+                placeholder="Search by name, UID, or email"
+                className={`${toolbarCompactInputClasses} w-full pr-9 ${quickFilterActive ? "border-primary/50 bg-primary/5 dark:bg-primary/10" : ""}`}
+              />
+              <button
+                type="button"
+                onClick={toggleQuickFilterMode}
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                title={`Filter mode: ${quickFilterMode === "contains" ? "contains" : "exact"}`}
+                aria-label="Toggle filter match mode"
+              >
+                {quickFilterMode === "contains" ? "~" : "="}
+              </button>
+            </div>
           </div>
         </div>
+        {quickFilterActive && (
+          <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-2 dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="inline-flex items-center gap-2">
+              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active filters summary</p>
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+              >
+                Clear all
+              </button>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100">
+                Search {quickFilterMode === "exact" ? "exact" : "contains"}: {filter.trim()}
+              </span>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
-          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+          <table className="compact-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                {["Name", "UID", "Storage", "UI Users", "Actions"].map((label) => (
-                  <th key={label} className="px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {["Name", "UID", "Storage", "UI Users", "Actions"].map((label, idx) => (
+                  <th
+                    key={label}
+                    className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
+                      idx === 0
+                        ? "sticky left-0 z-20 min-w-[14rem] bg-slate-50 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
+                        : idx === 1
+                          ? "w-56 min-w-[11rem]"
+                          : idx === 2
+                            ? "w-48 min-w-[10rem]"
+                            : idx === 3
+                              ? "min-w-[14rem] max-w-[24rem]"
+                              : "w-44 min-w-[9rem] text-right"
+                    }`}
+                  >
                     {label}
                   </th>
                 ))}
@@ -605,14 +693,16 @@ export default function S3UsersPage() {
                   const deleteBusy = deleteBusyId === user.id;
                   return (
                     <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                      <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{user.name}</td>
-                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{user.rgw_user_uid}</td>
-                      <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
+                      <td className="sticky left-0 z-10 min-w-[14rem] bg-white px-6 py-4 ui-body font-semibold text-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:text-slate-100 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]">
+                        {user.name}
+                      </td>
+                      <td className="w-56 min-w-[11rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{user.rgw_user_uid}</td>
+                      <td className="w-48 min-w-[10rem] px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
                         <span title={user.storage_endpoint_url || undefined}>
                           {user.storage_endpoint_name || "—"}
                         </span>
                       </td>
-                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      <td className="min-w-[14rem] max-w-[24rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                         {user.user_ids && user.user_ids.length > 0 ? (
                           <div className="flex flex-wrap gap-2">
                             {user.user_ids.map((id) => (
@@ -625,7 +715,7 @@ export default function S3UsersPage() {
                           <span className="ui-caption text-slate-400">None</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="w-44 min-w-[9rem] px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
                           <button onClick={() => openEditModal(user)} className={tableActionButtonClasses}>
                             Edit

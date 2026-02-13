@@ -32,6 +32,7 @@ type UseCephAdminBucketListingResult = {
 };
 
 const bucketRowKey = (bucket: CephAdminBucket) => `${bucket.tenant ?? ""}:${bucket.name}`;
+const DETAILS_FETCH_DELAY_MS = 120;
 
 export function useCephAdminBucketListing({
   selectedEndpointId,
@@ -89,6 +90,11 @@ export function useCephAdminBucketListing({
 
       setLoadingDetails(true);
       try {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, DETAILS_FETCH_DELAY_MS);
+        });
+        if (requestId !== requestSeqRef.current) return;
+
         const detailResponse = await listCephAdminBuckets(selectedEndpointId, {
           page,
           page_size: pageSize,

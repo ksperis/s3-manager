@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Lock
 from time import monotonic
@@ -51,6 +52,8 @@ router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/buckets", tags=["
 BUCKET_LIST_CACHE_TTL_SECONDS = 30.0
 BUCKET_LIST_CACHE_MAX_ENTRIES = 64
 RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES = 16
+BUCKET_ENRICH_MAX_WORKERS = 6
+BUCKET_OWNER_LOOKUP_MAX_WORKERS = 6
 
 
 @dataclass(frozen=True)
@@ -160,7 +163,12 @@ def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
     tenant = str(tenant_value).strip() if isinstance(tenant_value, str) and tenant_value.strip() else None
     owner_value = entry.get("owner") or entry.get("owner_id") or entry.get("user") or entry.get("uid")
     if not owner_value and isinstance(bucket_value, dict):
-        owner_value = bucket_value.get("owner") or bucket_value.get("user") or bucket_value.get("uid")
+        owner_value = (
+            bucket_value.get("owner")
+            or bucket_value.get("owner_id")
+            or bucket_value.get("user")
+            or bucket_value.get("uid")
+        )
     owner = str(owner_value).strip() if isinstance(owner_value, str) and owner_value.strip() else None
     usage_bytes, objects = extract_usage_stats(entry.get("usage"))
     quota_size = None
@@ -460,9 +468,11 @@ def _enrich_buckets(
     wants_website = "static_website" in requested
     wants_policy = "bucket_policy" in requested
     wants_logging = "access_logging" in requested
+    props_feature_keys = {"versioning", "object_lock", "block_public_access", "lifecycle_rules", "cors"}
+    requested_props_features = requested & props_feature_keys
+    use_props_bundle = len(requested_props_features) > 1
 
-    enriched: list[CephAdminBucketSummary] = []
-    for bucket in buckets:
+    def enrich_one(bucket: CephAdminBucketSummary) -> CephAdminBucketSummary:
         tags: list[BucketTag] | None = None
         if wants_tags:
             try:
@@ -471,10 +481,28 @@ def _enrich_buckets(
                 tags = []
 
         feature_map: dict[str, BucketFeatureStatus] = {}
+        props: BucketProperties | None = None
+        props_error = False
+        if use_props_bundle:
+            try:
+                props = service.get_bucket_properties(bucket.name, account)
+            except RuntimeError:
+                props_error = True
 
         if "versioning" in requested:
-            try:
-                raw = service.get_bucket_versioning_status(bucket.name, account) or "Disabled"
+            raw_versioning: str | None = None
+            if use_props_bundle:
+                if props_error:
+                    feature_map["versioning"] = _feature_status_unavailable()
+                else:
+                    raw_versioning = props.versioning_status if props else None
+            else:
+                try:
+                    raw_versioning = service.get_bucket_versioning_status(bucket.name, account)
+                except RuntimeError:
+                    feature_map["versioning"] = _feature_status_unavailable()
+            if "versioning" not in feature_map:
+                raw = raw_versioning or "Disabled"
                 normalized = str(raw).strip().lower()
                 if normalized == "enabled":
                     feature_map["versioning"] = _feature_status_active(raw)
@@ -482,20 +510,35 @@ def _enrich_buckets(
                     feature_map["versioning"] = BucketFeatureStatus(state=raw, tone="unknown")
                 else:
                     feature_map["versioning"] = _feature_status_inactive(raw)
-            except RuntimeError:
-                feature_map["versioning"] = _feature_status_unavailable()
 
         if "object_lock" in requested:
-            try:
-                object_lock = service.get_bucket_object_lock(bucket.name, account)
-                enabled = bool(object_lock and object_lock.enabled is True)
-                feature_map["object_lock"] = _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
-            except RuntimeError:
-                feature_map["object_lock"] = _feature_status_unavailable()
+            if use_props_bundle:
+                if props_error:
+                    feature_map["object_lock"] = _feature_status_unavailable()
+                else:
+                    enabled = bool((props.object_lock_enabled if props else None) is True)
+                    feature_map["object_lock"] = _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
+            else:
+                try:
+                    object_lock = service.get_bucket_object_lock(bucket.name, account)
+                    enabled = bool(object_lock and object_lock.enabled is True)
+                    feature_map["object_lock"] = _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
+                except RuntimeError:
+                    feature_map["object_lock"] = _feature_status_unavailable()
 
         if "block_public_access" in requested:
-            try:
-                cfg = service.get_public_access_block(bucket.name, account)
+            cfg = None
+            if use_props_bundle:
+                if props_error:
+                    feature_map["block_public_access"] = _feature_status_unavailable()
+                else:
+                    cfg = props.public_access_block if props else None
+            else:
+                try:
+                    cfg = service.get_public_access_block(bucket.name, account)
+                except RuntimeError:
+                    feature_map["block_public_access"] = _feature_status_unavailable()
+            if "block_public_access" not in feature_map:
                 if not cfg:
                     feature_map["block_public_access"] = _feature_status_inactive("Disabled")
                 else:
@@ -513,24 +556,38 @@ def _enrich_buckets(
                         feature_map["block_public_access"] = _feature_status_active("Partial")
                     else:
                         feature_map["block_public_access"] = _feature_status_inactive("Disabled")
-            except RuntimeError:
-                feature_map["block_public_access"] = _feature_status_unavailable()
 
         if "lifecycle_rules" in requested:
-            try:
-                rules = service.get_lifecycle(bucket.name, account).rules or []
+            rules = None
+            if use_props_bundle:
+                if props_error:
+                    feature_map["lifecycle_rules"] = _feature_status_unavailable()
+                else:
+                    rules = props.lifecycle_rules if props else []
+            else:
+                try:
+                    rules = service.get_lifecycle(bucket.name, account).rules or []
+                except RuntimeError:
+                    feature_map["lifecycle_rules"] = _feature_status_unavailable()
+            if "lifecycle_rules" not in feature_map:
                 has_rules = bool(rules and len(rules) > 0)
                 feature_map["lifecycle_rules"] = _feature_status_active("Enabled") if has_rules else _feature_status_inactive("Disabled")
-            except RuntimeError:
-                feature_map["lifecycle_rules"] = _feature_status_unavailable()
 
         if "cors" in requested:
-            try:
-                rules = service.get_bucket_cors(bucket.name, account) or []
+            rules = None
+            if use_props_bundle:
+                if props_error:
+                    feature_map["cors"] = _feature_status_unavailable()
+                else:
+                    rules = props.cors_rules if props else []
+            else:
+                try:
+                    rules = service.get_bucket_cors(bucket.name, account) or []
+                except RuntimeError:
+                    feature_map["cors"] = _feature_status_unavailable()
+            if "cors" not in feature_map:
                 has_rules = bool(rules and len(rules) > 0)
                 feature_map["cors"] = _feature_status_active("Configured") if has_rules else _feature_status_inactive("Not set")
-            except RuntimeError:
-                feature_map["cors"] = _feature_status_unavailable()
 
         if wants_website and "static_website" in requested:
             try:
@@ -568,10 +625,16 @@ def _enrich_buckets(
             update["features"] = feature_map
         if update:
             base = bucket.model_dump() if hasattr(bucket, "model_dump") else bucket.dict()
-            enriched.append(CephAdminBucketSummary(**{**base, **update}))
-        else:
-            enriched.append(bucket)
-    return enriched
+            return CephAdminBucketSummary(**{**base, **update})
+        return bucket
+
+    max_workers = min(BUCKET_ENRICH_MAX_WORKERS, len(buckets))
+    if max_workers <= 1:
+        return [enrich_one(bucket) for bucket in buckets]
+
+    # Bucket-level S3 reads are network-bound and independent; run a bounded parallel fan-out.
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        return list(executor.map(enrich_one, buckets))
 
 
 def _feature_status_unavailable() -> BucketFeatureStatus:
@@ -766,17 +829,35 @@ def list_buckets(
                 filter_features = {rule.feature for rule in feature_rules if rule.feature}
                 service = BucketsService()
                 account = _build_endpoint_account(ctx)
-                results = _enrich_buckets(
-                    results,
+                field_matched: list[CephAdminBucketSummary] = []
+                feature_candidates = results
+                if match_mode == "any" and field_rules:
+                    # First apply cheap field predicates from bulk listing; only unresolved items need feature lookups.
+                    unresolved: list[CephAdminBucketSummary] = []
+                    for bucket in results:
+                        if any(_match_field_rule(bucket, rule) for rule in field_rules):
+                            field_matched.append(bucket)
+                        else:
+                            unresolved.append(bucket)
+                    feature_candidates = unresolved
+                feature_enriched = _enrich_buckets(
+                    feature_candidates,
                     {feature for feature in filter_features if feature != "tags"},
                     include_tags="tags" in filter_features,
                     service=service,
                     account=account,
                 )
                 if match_mode == "all":
-                    results = [bucket for bucket in results if all(_match_feature_rule(bucket, rule) for rule in feature_rules)]
+                    results = [bucket for bucket in feature_enriched if all(_match_feature_rule(bucket, rule) for rule in feature_rules)]
+                elif field_rules:
+                    feature_matched = [
+                        bucket
+                        for bucket in feature_enriched
+                        if any(_match_feature_rule(bucket, rule) for rule in feature_rules)
+                    ]
+                    results = field_matched + feature_matched
                 else:
-                    results = [bucket for bucket in results if _match_rules(bucket, advanced_filter.rules, match_mode)]
+                    results = [bucket for bucket in feature_enriched if any(_match_feature_rule(bucket, rule) for rule in feature_rules)]
                 for bucket in results:
                     bucket.features = None
                     bucket.tags = None
@@ -835,9 +916,32 @@ def list_buckets(
         )
 
     if wants_owner_name and page_items:
-        owner_cache: dict[str, str | None] = {}
+        owner_targets: dict[str, tuple[str | None, str]] = {}
         for bucket in page_items:
-            bucket.owner_name = _resolve_owner_name(ctx, bucket.owner, bucket.tenant, owner_cache)
+            if not bucket.owner:
+                continue
+            owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
+            if owner_key not in owner_targets:
+                owner_targets[owner_key] = (bucket.tenant, bucket.owner)
+        owner_name_by_key: dict[str, str | None] = {}
+        if owner_targets:
+            if len(owner_targets) <= 1:
+                owner_key, (tenant, owner) = next(iter(owner_targets.items()))
+                owner_name_by_key[owner_key] = _resolve_owner_name(ctx, owner, tenant, {})
+            else:
+                max_workers = min(BUCKET_OWNER_LOOKUP_MAX_WORKERS, len(owner_targets))
+                def resolve_owner_target(item: tuple[str, tuple[str | None, str]]) -> tuple[str, str | None]:
+                    key, (tenant, owner) = item
+                    return key, _resolve_owner_name(ctx, owner, tenant, {})
+
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    owner_name_by_key = dict(executor.map(resolve_owner_target, owner_targets.items()))
+        for bucket in page_items:
+            if not bucket.owner:
+                bucket.owner_name = None
+                continue
+            owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
+            bucket.owner_name = owner_name_by_key.get(owner_key)
 
     has_next = end < total
     return PaginatedCephAdminBucketsResponse(

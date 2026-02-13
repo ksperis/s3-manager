@@ -12,7 +12,7 @@ import TableEmptyState from "../../components/TableEmptyState";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
 import { CephAdminRgwAccount, CephAdminRgwAccountDetail, listCephAdminAccounts } from "../../api/cephAdmin";
-import { tableActionMenuItemClasses, tableIconActionButtonClasses } from "../../components/tableActionClasses";
+import { tableActionMenuItemClasses } from "../../components/tableActionClasses";
 import CephAdminAccountCreateModal from "./CephAdminAccountCreateModal";
 import CephAdminAccountEditModal from "./CephAdminAccountEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
@@ -43,25 +43,6 @@ const formatNumber = (value?: number | null) => {
   return value.toLocaleString();
 };
 
-function ConfigureIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
-      <path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z" />
-      <path d="m19.4 15.2 1.1 1.9-1.9 3.3-2.3-.5a7.9 7.9 0 0 1-1.7 1l-.6 2.2H10l-.6-2.2a7.9 7.9 0 0 1-1.7-1l-2.3.5-1.9-3.3 1.1-1.9a8.3 8.3 0 0 1 0-2.4L3.5 11l1.9-3.3 2.3.5c.5-.4 1.1-.7 1.7-1L10 5h3.8l.6 2.2c.6.3 1.2.6 1.7 1l2.3-.5 1.9 3.3-1.1 1.8c.1.8.1 1.6 0 2.4Z" />
-    </svg>
-  );
-}
-
-function MoreIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <circle cx="5" cy="12" r="1.9" />
-      <circle cx="12" cy="12" r="1.9" />
-      <circle cx="19" cy="12" r="1.9" />
-    </svg>
-  );
-}
-
 type ColumnId =
   | "account_name"
   | "email"
@@ -82,10 +63,13 @@ type SortField =
   | "quota_max_objects"
   | "bucket_count"
   | "user_count";
+type TextMatchMode = "contains" | "exact";
 
 type AdvancedFilterState = {
   accountName: string;
+  accountNameMatchMode: TextMatchMode;
   email: string;
+  emailMatchMode: TextMatchMode;
   minMaxUsers: string;
   maxMaxUsers: string;
   minMaxBuckets: string;
@@ -106,7 +90,9 @@ const DEFAULT_SORT: { field: SortField; direction: "asc" | "desc" } = { field: "
 
 const defaultAdvancedFilter: AdvancedFilterState = {
   accountName: "",
+  accountNameMatchMode: "contains",
   email: "",
+  emailMatchMode: "contains",
   minMaxUsers: "",
   maxMaxUsers: "",
   minMaxBuckets: "",
@@ -141,13 +127,16 @@ const hasAdvancedFilters = (advanced: AdvancedFilterState | null) => {
   );
 };
 
-const buildAdvancedFilterPayload = (advanced: AdvancedFilterState | null) => {
-  if (!advanced) return undefined;
+const buildAdvancedFilterPayload = (
+  advanced: AdvancedFilterState | null,
+  quickSearch: string,
+  quickMatchMode: TextMatchMode
+) => {
   const rules: Array<Record<string, unknown>> = [];
-  const addTextRule = (field: string, raw: string) => {
+  const addTextRule = (field: string, raw: string, mode: TextMatchMode) => {
     const value = raw.trim();
     if (!value) return;
-    rules.push({ field, op: "contains", value });
+    rules.push({ field, op: mode === "exact" ? "eq" : "contains", value });
   };
   const addNumericRule = (field: string, op: "gte" | "lte", raw: string) => {
     const trimmed = raw.trim();
@@ -157,23 +146,30 @@ const buildAdvancedFilterPayload = (advanced: AdvancedFilterState | null) => {
     rules.push({ field, op, value: parsed });
   };
 
-  addTextRule("account_name", advanced.accountName);
-  addTextRule("email", advanced.email);
+  const trimmedQuick = quickSearch.trim();
+  if (trimmedQuick && quickMatchMode === "exact") {
+    rules.push({ field: "account_id", op: "eq", value: trimmedQuick });
+  }
 
-  addNumericRule("max_users", "gte", advanced.minMaxUsers);
-  addNumericRule("max_users", "lte", advanced.maxMaxUsers);
-  addNumericRule("max_buckets", "gte", advanced.minMaxBuckets);
-  addNumericRule("max_buckets", "lte", advanced.maxMaxBuckets);
+  if (advanced) {
+    addTextRule("account_name", advanced.accountName, advanced.accountNameMatchMode);
+    addTextRule("email", advanced.email, advanced.emailMatchMode);
 
-  addNumericRule("quota_max_size_bytes", "gte", advanced.minQuotaBytes);
-  addNumericRule("quota_max_size_bytes", "lte", advanced.maxQuotaBytes);
-  addNumericRule("quota_max_objects", "gte", advanced.minQuotaObjects);
-  addNumericRule("quota_max_objects", "lte", advanced.maxQuotaObjects);
+    addNumericRule("max_users", "gte", advanced.minMaxUsers);
+    addNumericRule("max_users", "lte", advanced.maxMaxUsers);
+    addNumericRule("max_buckets", "gte", advanced.minMaxBuckets);
+    addNumericRule("max_buckets", "lte", advanced.maxMaxBuckets);
 
-  addNumericRule("bucket_count", "gte", advanced.minBucketCount);
-  addNumericRule("bucket_count", "lte", advanced.maxBucketCount);
-  addNumericRule("user_count", "gte", advanced.minUserCount);
-  addNumericRule("user_count", "lte", advanced.maxUserCount);
+    addNumericRule("quota_max_size_bytes", "gte", advanced.minQuotaBytes);
+    addNumericRule("quota_max_size_bytes", "lte", advanced.maxQuotaBytes);
+    addNumericRule("quota_max_objects", "gte", advanced.minQuotaObjects);
+    addNumericRule("quota_max_objects", "lte", advanced.maxQuotaObjects);
+
+    addNumericRule("bucket_count", "gte", advanced.minBucketCount);
+    addNumericRule("bucket_count", "lte", advanced.maxBucketCount);
+    addNumericRule("user_count", "gte", advanced.minUserCount);
+    addNumericRule("user_count", "lte", advanced.maxUserCount);
+  }
 
   if (rules.length === 0) return undefined;
   return JSON.stringify({ match: "all", rules });
@@ -220,6 +216,7 @@ export default function CephAdminAccountsPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [searchValue, setSearchValue] = useState("");
+  const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
   const [advancedApplied, setAdvancedApplied] = useState<AdvancedFilterState | null>(null);
@@ -265,6 +262,7 @@ export default function CephAdminAccountsPage() {
     setPageSize(25);
     setFilter("");
     setSearchValue("");
+    setQuickFilterMode("contains");
     setAdvancedDraft(defaultAdvancedFilter);
     setAdvancedApplied(null);
     setSort(DEFAULT_SORT);
@@ -280,7 +278,11 @@ export default function CephAdminAccountsPage() {
     return Array.from(include.values());
   }, [visibleColumns]);
 
-  const advancedFilterParam = useMemo(() => buildAdvancedFilterPayload(advancedApplied), [advancedApplied]);
+  const effectiveSearchValue = quickFilterMode === "contains" ? searchValue : "";
+  const advancedFilterParam = useMemo(
+    () => buildAdvancedFilterPayload(advancedApplied, searchValue, quickFilterMode),
+    [advancedApplied, searchValue, quickFilterMode]
+  );
 
   useEffect(() => {
     if (!selectedEndpointId) {
@@ -302,7 +304,7 @@ export default function CephAdminAccountsPage() {
         const baseResponse = await listCephAdminAccounts(selectedEndpointId, {
           page,
           page_size: pageSize,
-          search: searchValue || undefined,
+          search: effectiveSearchValue || undefined,
           advanced_filter: advancedFilterParam,
           sort_by: sort.field,
           sort_dir: sort.direction,
@@ -321,7 +323,7 @@ export default function CephAdminAccountsPage() {
           const detailResponse = await listCephAdminAccounts(selectedEndpointId, {
             page,
             page_size: pageSize,
-            search: searchValue || undefined,
+            search: effectiveSearchValue || undefined,
             advanced_filter: advancedFilterParam,
             sort_by: sort.field,
             sort_dir: sort.direction,
@@ -351,6 +353,7 @@ export default function CephAdminAccountsPage() {
     selectedEndpointId,
     page,
     pageSize,
+    effectiveSearchValue,
     searchValue,
     advancedFilterParam,
     sort.field,
@@ -380,6 +383,13 @@ export default function CephAdminAccountsPage() {
   const updateAdvancedField = (field: keyof AdvancedFilterState, value: string) => {
     setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
   };
+  const toggleQuickFilterMode = () => {
+    setQuickFilterMode((prev) => (prev === "contains" ? "exact" : "contains"));
+    setPage(1);
+  };
+  const toggleAdvancedTextMode = (field: "accountNameMatchMode" | "emailMatchMode") => {
+    setAdvancedDraft((prev) => ({ ...prev, [field]: prev[field] === "contains" ? "exact" : "contains" }));
+  };
 
   const applyAdvancedFilter = () => {
     setAdvancedApplied(advancedDraft);
@@ -395,6 +405,7 @@ export default function CephAdminAccountsPage() {
   const resetAllFilters = () => {
     setFilter("");
     setSearchValue("");
+    setQuickFilterMode("contains");
     setAdvancedDraft(defaultAdvancedFilter);
     setAdvancedApplied(null);
     setShowAdvancedFilter(false);
@@ -526,32 +537,37 @@ export default function CephAdminAccountsPage() {
 
     cols.push({
       id: "actions",
-      label: "Actions",
+      label: "Act.",
       field: null,
       align: "right",
+      headerClassName: "w-16",
+      cellClassName: "!py-1.5",
       render: (account) => (
-        <div className="inline-flex items-center gap-2">
-          <button
-            type="button"
-            className={tableIconActionButtonClasses}
-            onClick={() => setEditingAccountId(account.account_id)}
-            aria-label="Configure account"
-            title="Configure"
-          >
-            <ConfigureIcon />
-          </button>
+        <div className="inline-flex items-center">
           <details className="relative">
             <summary
-              className={`${tableIconActionButtonClasses} list-none [&::-webkit-details-marker]:hidden`}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 list-none [&::-webkit-details-marker]:hidden"
               aria-label="More actions"
               title="More actions"
             >
-              <MoreIcon />
+              ⋮
             </summary>
-            <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className="absolute right-0 z-20 mt-1 w-40 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
               <button
                 type="button"
-                className={tableActionMenuItemClasses}
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setEditingAccountId(account.account_id);
+                  const parent = event.currentTarget.closest("details");
+                  if (parent) parent.removeAttribute("open");
+                }}
+              >
+                Configure
+              </button>
+              <button
+                type="button"
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
                 onClick={(event) => {
                   event.preventDefault();
                   navigate(`/ceph-admin/buckets?owner=${encodeURIComponent(account.account_id)}`);
@@ -740,14 +756,25 @@ export default function CephAdminAccountsPage() {
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div>
-                <input
-                  type="text"
-                  aria-label="Quick filter"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Search by account id"
-                  className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    aria-label="Quick filter"
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                    placeholder="Search by account id"
+                    className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={toggleQuickFilterMode}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                    title={`Quick filter mode: ${quickFilterMode === "contains" ? "contains" : "exact (account id)"}`}
+                    aria-label="Toggle quick filter match mode"
+                  >
+                    {quickFilterMode === "contains" ? "~" : "="}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -755,7 +782,17 @@ export default function CephAdminAccountsPage() {
               <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
                 <div className="grid gap-3 lg:grid-cols-3">
                   <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Account name contains
+                    <span className="flex items-center justify-between gap-2">
+                      <span>Account name</span>
+                      <button
+                        type="button"
+                        onClick={() => toggleAdvancedTextMode("accountNameMatchMode")}
+                        className="rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        title={`Account name mode: ${advancedDraft.accountNameMatchMode}`}
+                      >
+                        {advancedDraft.accountNameMatchMode === "contains" ? "~" : "="}
+                      </button>
+                    </span>
                     <input
                       type="text"
                       value={advancedDraft.accountName}
@@ -764,7 +801,17 @@ export default function CephAdminAccountsPage() {
                     />
                   </label>
                   <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
-                    Email contains
+                    <span className="flex items-center justify-between gap-2">
+                      <span>Email</span>
+                      <button
+                        type="button"
+                        onClick={() => toggleAdvancedTextMode("emailMatchMode")}
+                        className="rounded border border-slate-200 bg-white px-1 py-0 ui-caption font-semibold text-slate-500 hover:border-primary hover:text-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        title={`Email mode: ${advancedDraft.emailMatchMode}`}
+                      >
+                        {advancedDraft.emailMatchMode === "contains" ? "~" : "="}
+                      </button>
+                    </span>
                     <input
                       type="text"
                       value={advancedDraft.email}

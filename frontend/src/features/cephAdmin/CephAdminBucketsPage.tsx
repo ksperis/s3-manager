@@ -14,15 +14,18 @@ import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import {
+  BucketProperties,
   CephAdminBucket,
   deleteCephAdminBucketCors,
   deleteCephAdminBucketLifecycle,
   deleteCephAdminBucketPolicy,
   getCephAdminBucketCors,
   getCephAdminBucketLifecycle,
+  getCephAdminBucketLogging,
   getCephAdminBucketPolicy,
   getCephAdminBucketProperties,
   getCephAdminBucketPublicAccessBlock,
+  getCephAdminBucketWebsite,
   listCephAdminBuckets,
   putCephAdminBucketCors,
   putCephAdminBucketLifecycle,
@@ -31,7 +34,7 @@ import {
   updateCephAdminBucketPublicAccessBlock,
   updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
-import { tableActionMenuItemClasses, tableIconActionButtonClasses } from "../../components/tableActionClasses";
+import { tableActionMenuItemClasses } from "../../components/tableActionClasses";
 import { parseCorsRules, parseLifecycleRules, parsePolicyStatements, parseRuleIds, stableStringify } from "./bucketJsonParsers";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import { useCephAdminBucketListing } from "./useCephAdminBucketListing";
@@ -63,21 +66,16 @@ const formatNumber = (value?: number | null) => {
   return value.toLocaleString();
 };
 
-function ConfigureIcon({ className = "h-4 w-4" }: { className?: string }) {
+function SpinnerIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
-      <path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z" />
-      <path d="m19.4 15.2 1.1 1.9-1.9 3.3-2.3-.5a7.9 7.9 0 0 1-1.7 1l-.6 2.2H10l-.6-2.2a7.9 7.9 0 0 1-1.7-1l-2.3.5-1.9-3.3 1.1-1.9a8.3 8.3 0 0 1 0-2.4L3.5 11l1.9-3.3 2.3.5c.5-.4 1.1-.7 1.7-1L10 5h3.8l.6 2.2c.6.3 1.2.6 1.7 1l2.3-.5 1.9 3.3-1.1 1.8c.1.8.1 1.6 0 2.4Z" />
-    </svg>
-  );
-}
-
-function MoreIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <circle cx="5" cy="12" r="1.9" />
-      <circle cx="12" cy="12" r="1.9" />
-      <circle cx="19" cy="12" r="1.9" />
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className={`${className} animate-spin`}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" className="opacity-30" stroke="currentColor" strokeWidth="2.5" />
+      <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -660,39 +658,22 @@ const formatVersioningStatus = (status?: string | null) => {
   return status;
 };
 
-function QuotaBar({ usedBytes, quotaBytes }: { usedBytes?: number | null; quotaBytes?: number | null }) {
-  if (!quotaBytes || quotaBytes <= 0) {
-    return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
-  }
-  const used = usedBytes ?? 0;
-  const ratio = Math.min(100, Math.round((used / quotaBytes) * 100));
-  const usedDisplay = formatBytes(used);
-  const quotaDisplay = formatBytes(quotaBytes);
-  return (
-    <div className="flex items-center gap-2" title={`${usedDisplay} / ${quotaDisplay}`}>
-      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-        <div className="h-full bg-primary-500" style={{ width: `${ratio}%` }} />
-      </div>
-      <span className="ui-caption font-semibold text-slate-600 dark:text-slate-300">{ratio}%</span>
-    </div>
-  );
-}
+const computeQuotaUsagePercent = (used?: number | null, quota?: number | null) => {
+  const normalizedQuota = normalizeQuotaLimit(quota);
+  if (normalizedQuota === null) return null;
+  const safeUsed = Math.max(0, used ?? 0);
+  if (normalizedQuota <= 0) return null;
+  const percent = (safeUsed / normalizedQuota) * 100;
+  if (!Number.isFinite(percent)) return null;
+  return Math.max(0, percent);
+};
 
-function QuotaObjectsBar({ usedObjects, quotaObjects }: { usedObjects?: number | null; quotaObjects?: number | null }) {
-  if (!quotaObjects || quotaObjects <= 0) {
-    return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
-  }
-  const used = usedObjects ?? 0;
-  const ratio = Math.min(100, Math.round((used / quotaObjects) * 100));
-  return (
-    <div className="flex items-center gap-2" title={`${used.toLocaleString()} / ${quotaObjects.toLocaleString()} objects`}>
-      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-        <div className="h-full bg-primary-500" style={{ width: `${ratio}%` }} />
-      </div>
-      <span className="ui-caption font-semibold text-slate-600 dark:text-slate-300">{ratio}%</span>
-    </div>
-  );
-}
+const formatQuotaPercent = (value?: number | null) => {
+  if (value === null || value === undefined) return null;
+  if (value >= 100) return `${Math.round(value)}%`;
+  if (value >= 10) return `${value.toFixed(1)}%`;
+  return `${value.toFixed(2)}%`;
+};
 
 type ColumnId =
   | "tenant"
@@ -702,6 +683,7 @@ type ColumnId =
   | "object_count"
   | "quota_max_size_bytes"
   | "quota_max_objects"
+  | "quota_usage_percent"
   | "tags"
   | "ui_tags"
   | "versioning"
@@ -725,10 +707,22 @@ type FeatureKey =
   | "cors"
   | "access_logging";
 type FeatureFilterState = "any" | "enabled" | "disabled" | "suspended" | "disabled_or_suspended";
+type TextMatchMode = "contains" | "exact";
+
+type FeatureTooltipState =
+  | { status: "loading" }
+  | { status: "ready"; lines: string[] }
+  | { status: "error"; message: string };
+type OwnerTooltipState =
+  | { status: "loading" }
+  | { status: "ready"; ownerName: string | null }
+  | { status: "error"; message: string };
 
 type AdvancedFilterState = {
   tenant: string;
+  tenantMatchMode: TextMatchMode;
   owner: string;
+  ownerMatchMode: TextMatchMode;
   minUsedBytes: string;
   maxUsedBytes: string;
   minObjects: string;
@@ -742,7 +736,9 @@ type AdvancedFilterState = {
 
 const defaultAdvancedFilter: AdvancedFilterState = {
   tenant: "",
+  tenantMatchMode: "contains",
   owner: "",
+  ownerMatchMode: "contains",
   minUsedBytes: "",
   maxUsedBytes: "",
   minObjects: "",
@@ -763,8 +759,32 @@ const defaultAdvancedFilter: AdvancedFilterState = {
   },
 };
 
+const FEATURE_LABELS: Record<FeatureKey, string> = {
+  versioning: "Versioning",
+  object_lock: "Object Lock",
+  block_public_access: "Block public access",
+  lifecycle_rules: "Lifecycle rules",
+  static_website: "Static website",
+  bucket_policy: "Bucket policy",
+  cors: "CORS",
+  access_logging: "Access logging",
+};
+
+const formatFeatureFilterStateLabel = (state: FeatureFilterState) => {
+  if (state === "disabled_or_suspended") return "Disabled or Suspended";
+  return state.charAt(0).toUpperCase() + state.slice(1);
+};
+
+const featureSelectWidthCh = (state: FeatureFilterState) => {
+  const label = formatFeatureFilterStateLabel(state);
+  return Math.min(26, Math.max(8, label.length + 3));
+};
+
+const formatTextMatchModeLabel = (mode: TextMatchMode) => (mode === "exact" ? "exact" : "contains");
+
 const buildAdvancedFilterPayload = (
   basicFilter: string,
+  basicFilterMode: TextMatchMode,
   advanced: AdvancedFilterState | null,
   taggedBuckets: string[] | null,
   allowStatsFilters: boolean = true
@@ -775,16 +795,16 @@ const buildAdvancedFilterPayload = (
   }
   const rules: Array<Record<string, unknown>> = [];
   if (trimmedFilter) {
-    rules.push({ field: "name", op: "contains", value: trimmedFilter });
+    rules.push({ field: "name", op: basicFilterMode === "exact" ? "eq" : "contains", value: trimmedFilter });
   }
   if (advanced) {
     const tenant = advanced.tenant.trim();
     if (tenant) {
-      rules.push({ field: "tenant", op: "contains", value: tenant });
+      rules.push({ field: "tenant", op: advanced.tenantMatchMode === "exact" ? "eq" : "contains", value: tenant });
     }
     const owner = advanced.owner.trim();
     if (owner) {
-      rules.push({ field: "owner", op: "contains", value: owner });
+      rules.push({ field: "owner", op: advanced.ownerMatchMode === "exact" ? "eq" : "contains", value: owner });
     }
     const addNumericRule = (field: string, op: string, raw: string) => {
       const trimmed = raw.trim();
@@ -845,6 +865,7 @@ const hasAdvancedFilters = (advanced: AdvancedFilterState | null, allowStatsFilt
 const COLUMNS_STORAGE_KEY = "ceph-admin.bucket_list.columns.v1";
 const UI_TAGS_STORAGE_KEY = "ceph-admin.bucket_list.ui_tags.v1";
 const BUCKETS_STATE_STORAGE_KEY = "ceph-admin.bucket_list.state.v1";
+const BUCKET_UI_TAG_KEY_SEPARATOR = "\u001f";
 const DEFAULT_PAGE_SIZE = 25;
 const DEFAULT_SORT: { field: SortField; direction: "asc" | "desc" } = { field: "name", direction: "asc" };
 const defaultVisibleColumns: ColumnId[] = ["ui_tags", "used_bytes", "object_count"];
@@ -864,6 +885,7 @@ const loadVisibleColumns = (): ColumnId[] => {
       "object_count",
       "quota_max_size_bytes",
       "quota_max_objects",
+      "quota_usage_percent",
       "tags",
       "ui_tags",
       "versioning",
@@ -889,6 +911,58 @@ const persistVisibleColumns = (value: ColumnId[]) => {
 };
 
 type BucketUiTags = Record<string, string[]>;
+type BucketTagTarget = { key: string; name: string; tenant: string | null };
+
+const buildBucketUiTagKey = (bucketName: string, tenant?: string | null) => {
+  const normalizedName = bucketName.trim();
+  const normalizedTenant = (tenant ?? "").trim();
+  return `${normalizedTenant}${BUCKET_UI_TAG_KEY_SEPARATOR}${normalizedName}`;
+};
+
+const parseBucketUiTagKey = (value: string): { name: string; tenant: string | null } | null => {
+  if (typeof value !== "string") return null;
+  const separatorIndex = value.indexOf(BUCKET_UI_TAG_KEY_SEPARATOR);
+  if (separatorIndex >= 0) {
+    const tenantPart = value.slice(0, separatorIndex).trim();
+    const namePart = value.slice(separatorIndex + BUCKET_UI_TAG_KEY_SEPARATOR.length).trim();
+    if (!namePart) return null;
+    return { name: namePart, tenant: tenantPart || null };
+  }
+  const legacyName = value.trim();
+  if (!legacyName) return null;
+  return { name: legacyName, tenant: null };
+};
+
+const toBucketTagTarget = (bucketName: string, tenant?: string | null): BucketTagTarget => {
+  const name = bucketName.trim();
+  const normalizedTenant = (tenant ?? "").trim();
+  const tenantValue = normalizedTenant || null;
+  return {
+    key: buildBucketUiTagKey(name, tenantValue),
+    name,
+    tenant: tenantValue,
+  };
+};
+
+const parseBucketNamesInput = (value: string): string[] => {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  value
+    .split(/[\n,]/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((name) => {
+      if (seen.has(name)) return;
+      seen.add(name);
+      names.push(name);
+    });
+  return names;
+};
+
+const formatBucketNamesPreview = (names: string[], max: number = 8) => {
+  if (names.length <= max) return names.join(", ");
+  return `${names.slice(0, max).join(", ")} (+${names.length - max} more)`;
+};
 
 const normalizeUiTagValues = (values: string[]) => {
   const seen = new Set<string>();
@@ -916,9 +990,12 @@ const loadUiTags = (endpointId?: number | null): BucketUiTags => {
     const cleaned: BucketUiTags = {};
     Object.entries(tags).forEach(([key, value]) => {
       if (!Array.isArray(value)) return;
+      const parsedKey = parseBucketUiTagKey(key);
+      if (!parsedKey) return;
+      const normalizedKey = buildBucketUiTagKey(parsedKey.name, parsedKey.tenant);
       const items = normalizeUiTagValues(value as string[]);
       if (items.length > 0) {
-        cleaned[key] = items;
+        cleaned[normalizedKey] = normalizeUiTagValues([...(cleaned[normalizedKey] ?? []), ...items]);
       }
     });
     return cleaned;
@@ -937,6 +1014,7 @@ const persistUiTags = (endpointId: number | null | undefined, value: BucketUiTag
 
 type BucketListState = {
   filter: string;
+  quickFilterMode: TextMatchMode;
   advancedApplied: AdvancedFilterState | null;
   tagFilters: string[];
   tagFilterMode: "any" | "all";
@@ -969,9 +1047,12 @@ const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
     });
   }
   const safeString = (input: unknown) => (typeof input === "string" ? input : "");
+  const parseMatchMode = (input: unknown): TextMatchMode => (input === "exact" ? "exact" : "contains");
   return {
     tenant: safeString(data.tenant),
+    tenantMatchMode: parseMatchMode(data.tenantMatchMode),
     owner: safeString(data.owner),
+    ownerMatchMode: parseMatchMode(data.ownerMatchMode),
     minUsedBytes: safeString(data.minUsedBytes),
     maxUsedBytes: safeString(data.maxUsedBytes),
     minObjects: safeString(data.minObjects),
@@ -1019,6 +1100,7 @@ const loadBucketListState = (endpointId?: number | null): BucketListState | null
     const data = stored as Record<string, unknown>;
     return {
       filter: typeof data.filter === "string" ? data.filter : "",
+      quickFilterMode: data.quickFilterMode === "exact" ? "exact" : "contains",
       advancedApplied: data.advancedApplied ? sanitizeAdvancedFilter(data.advancedApplied) : null,
       tagFilters: normalizeUiTagValues(sanitizeStringArray(data.tagFilters) as string[]),
       tagFilterMode: data.tagFilterMode === "all" ? "all" : "any",
@@ -1072,6 +1154,7 @@ export default function CephAdminBucketsPage() {
   const usageFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
   const [filter, setFilter] = useState("");
   const [filterValue, setFilterValue] = useState("");
+  const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
@@ -1141,19 +1224,46 @@ export default function CephAdminBucketsPage() {
   const [bulkApplySummary, setBulkApplySummary] = useState<string | null>(null);
   const [bulkApplyProgress, setBulkApplyProgress] = useState<BulkApplyProgress | null>(null);
   const [showTagEditor, setShowTagEditor] = useState(false);
-  const [tagTargets, setTagTargets] = useState<string[]>([]);
+  const [tagTargets, setTagTargets] = useState<BucketTagTarget[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [tagRemoveInput, setTagRemoveInput] = useState("");
+  const [tagBucketListInput, setTagBucketListInput] = useState("");
+  const [tagEditorError, setTagEditorError] = useState<string | null>(null);
+  const [tagEditorLoading, setTagEditorLoading] = useState(false);
   const [tagSuggestionBucket, setTagSuggestionBucket] = useState<string | null>(null);
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
+  const [activeOwnerTooltipKey, setActiveOwnerTooltipKey] = useState<string | null>(null);
+  const [ownerTooltipState, setOwnerTooltipState] = useState<Record<string, OwnerTooltipState>>({});
+  const ownerTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
+  const ownerNameCacheRef = useRef<Record<string, string | null>>({});
+  const [activeFeatureTooltipKey, setActiveFeatureTooltipKey] = useState<string | null>(null);
+  const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, FeatureTooltipState>>({});
+  const featureTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
+  const bucketPropertiesCacheRef = useRef<Record<string, BucketProperties>>({});
+  const bucketPropertiesInflightRef = useRef<Record<string, Promise<BucketProperties>>>({});
   const selectionHeaderRef = useRef<HTMLInputElement | null>(null);
   const restoreFilterRef = useRef<string | null>(null);
   const [sort, setSort] = useState<{ field: SortField; direction: "asc" | "desc" }>(DEFAULT_SORT);
-  const tagBucketNames = useMemo(
-    () => Object.keys(uiTags).filter((bucketName) => (uiTags[bucketName] ?? []).length > 0),
-    [uiTags]
+  const taggedBucketTargets = useMemo(() => {
+    const byKey = new Map<string, BucketTagTarget>();
+    Object.entries(uiTags).forEach(([storageKey, tags]) => {
+      if (!Array.isArray(tags) || tags.length === 0) return;
+      const parsed = parseBucketUiTagKey(storageKey);
+      if (!parsed) return;
+      const target = toBucketTagTarget(parsed.name, parsed.tenant);
+      byKey.set(target.key, target);
+    });
+    return Array.from(byKey.values());
+  }, [uiTags]);
+  const tagBucketSignature = useMemo(
+    () =>
+      taggedBucketTargets
+        .map((target) => target.key)
+        .sort((a, b) => a.localeCompare(b))
+        .join("|"),
+    [taggedBucketTargets]
   );
-  const tagBucketSignature = useMemo(() => tagBucketNames.slice().sort().join("|"), [tagBucketNames]);
+  const parsedTagBucketListNames = useMemo(() => parseBucketNamesInput(tagBucketListInput), [tagBucketListInput]);
   const ownerQueryFilter = useMemo(() => ownerFilterFromSearch(location.search), [location.search]);
 
   useEffect(() => {
@@ -1178,12 +1288,35 @@ export default function CephAdminBucketsPage() {
   useEffect(() => {
     setUiTags(loadUiTags(selectedEndpointId));
     setEditingBucketName(null);
+    setShowTagEditor(false);
+    setTagTargets([]);
+    setTagInput("");
+    setTagRemoveInput("");
+    setTagBucketListInput("");
+    setTagEditorError(null);
+    setTagEditorLoading(false);
+    setTagSuggestionBucket(null);
+    setTagDrafts({});
+    setActiveOwnerTooltipKey(null);
+    setOwnerTooltipState({});
+    ownerTooltipInflightRef.current = {};
+    ownerNameCacheRef.current = {};
+    setActiveFeatureTooltipKey(null);
+    setFeatureTooltipState({});
+    featureTooltipInflightRef.current = {};
+    bucketPropertiesCacheRef.current = {};
+    bucketPropertiesInflightRef.current = {};
     const stored = loadBucketListState(selectedEndpointId);
     if (ownerQueryFilter) {
-      const ownerPrefill: AdvancedFilterState = { ...defaultAdvancedFilter, owner: ownerQueryFilter };
+      const ownerPrefill: AdvancedFilterState = {
+        ...defaultAdvancedFilter,
+        owner: ownerQueryFilter,
+        ownerMatchMode: "exact",
+      };
       restoreFilterRef.current = null;
       setFilter("");
       setFilterValue("");
+      setQuickFilterMode("contains");
       setAdvancedApplied(ownerPrefill);
       setAdvancedDraft(ownerPrefill);
       setTagFilters([]);
@@ -1196,6 +1329,7 @@ export default function CephAdminBucketsPage() {
       restoreFilterRef.current = stored.filter;
       setFilter(stored.filter);
       setFilterValue(stored.filter.trim());
+      setQuickFilterMode(stored.quickFilterMode);
       setAdvancedApplied(stored.advancedApplied);
       setAdvancedDraft(stored.advancedApplied ? stored.advancedApplied : defaultAdvancedFilter);
       setTagFilters(stored.tagFilters);
@@ -1208,6 +1342,7 @@ export default function CephAdminBucketsPage() {
       restoreFilterRef.current = null;
       setFilter("");
       setFilterValue("");
+      setQuickFilterMode("contains");
       setAdvancedApplied(null);
       setAdvancedDraft(defaultAdvancedFilter);
       setTagFilters([]);
@@ -1227,6 +1362,7 @@ export default function CephAdminBucketsPage() {
     if (!selectedEndpointId) return;
     persistBucketListState(selectedEndpointId, {
       filter,
+      quickFilterMode,
       advancedApplied,
       tagFilters,
       tagFilterMode,
@@ -1235,36 +1371,46 @@ export default function CephAdminBucketsPage() {
       pageSize,
       sort,
     });
-  }, [selectedEndpointId, filter, advancedApplied, tagFilters, tagFilterMode, selectedBuckets, page, pageSize, sort]);
+  }, [selectedEndpointId, filter, quickFilterMode, advancedApplied, tagFilters, tagFilterMode, selectedBuckets, page, pageSize, sort]);
 
   useEffect(() => {
-    if (!selectedEndpointId || tagBucketNames.length === 0) {
+    if (!selectedEndpointId || taggedBucketTargets.length === 0) {
       setOrphanedTagBuckets([]);
       return;
     }
     let active = true;
     const loadOrphanedTags = async () => {
       try {
-        const knownBuckets = new Set<string>();
+        const knownBucketKeys = new Set<string>();
+        const uniqueNames = Array.from(new Set(taggedBucketTargets.map((target) => target.name)));
         const chunkSize = 50;
-        for (let start = 0; start < tagBucketNames.length; start += chunkSize) {
-          const chunk = tagBucketNames.slice(start, start + chunkSize);
+        for (let start = 0; start < uniqueNames.length; start += chunkSize) {
+          const chunk = uniqueNames.slice(start, start + chunkSize);
           const advancedFilter = JSON.stringify({
             match: "any",
             rules: [{ field: "name", op: "in", value: chunk }],
           });
-          const response = await listCephAdminBuckets(selectedEndpointId, {
-            page: 1,
-            page_size: 200,
-            advanced_filter: advancedFilter,
-            with_stats: false,
-          });
-          if (!active) return;
-          response.items.forEach((bucket) => knownBuckets.add(normalizeBucketName(bucket.name)));
+          let nextPage = 1;
+          while (true) {
+            const response = await listCephAdminBuckets(selectedEndpointId, {
+              page: nextPage,
+              page_size: 200,
+              advanced_filter: advancedFilter,
+              with_stats: false,
+            });
+            if (!active) return;
+            (response.items ?? []).forEach((bucket) => {
+              const target = toBucketTagTarget(bucket.name, bucket.tenant);
+              knownBucketKeys.add(target.key);
+            });
+            if (!response.has_next) break;
+            nextPage += 1;
+          }
         }
         if (!active) return;
-        const missing = tagBucketNames
-          .filter((bucketName) => !knownBuckets.has(normalizeBucketName(bucketName)))
+        const missing = taggedBucketTargets
+          .filter((target) => !knownBucketKeys.has(target.key))
+          .map((target) => target.key)
           .sort((a, b) => a.localeCompare(b));
         setOrphanedTagBuckets(missing);
       } catch (err) {
@@ -1277,7 +1423,7 @@ export default function CephAdminBucketsPage() {
     return () => {
       active = false;
     };
-  }, [selectedEndpointId, tagBucketSignature]);
+  }, [selectedEndpointId, tagBucketSignature, taggedBucketTargets]);
 
   useEffect(() => {
     if (!showColumnPicker) return;
@@ -1335,6 +1481,7 @@ export default function CephAdminBucketsPage() {
       visibleColumns.includes("object_count") ||
       visibleColumns.includes("quota_max_size_bytes") ||
       visibleColumns.includes("quota_max_objects") ||
+      visibleColumns.includes("quota_usage_percent") ||
       visibleColumns.includes("quota_status")
     );
   }, [advancedStatsRequired, usageFeatureEnabled, visibleColumns]);
@@ -1343,6 +1490,13 @@ export default function CephAdminBucketsPage() {
     () => usageFeatureEnabled && (advancedStatsRequired || sortRequiresStats),
     [advancedStatsRequired, sortRequiresStats, usageFeatureEnabled]
   );
+  const detailLoadingColumnIds = useMemo(() => {
+    const ids = new Set<string>(includeParams);
+    if (requiresStats && !baseRequiresStats) {
+      ["used_bytes", "object_count", "quota_max_size_bytes", "quota_max_objects", "quota_usage_percent", "quota_status"].forEach((id) => ids.add(id));
+    }
+    return ids;
+  }, [includeParams, requiresStats, baseRequiresStats]);
 
   const availableUiTags = useMemo(() => {
     const tags: string[] = [];
@@ -1355,7 +1509,7 @@ export default function CephAdminBucketsPage() {
   const taggedBuckets = useMemo(() => {
     if (tagFilters.length === 0) return null;
     const normalizedFilters = normalizeUiTagValues(tagFilters).map((tag) => tag.toLowerCase());
-    const names = Object.entries(uiTags)
+    const matchedNames = Object.entries(uiTags)
       .filter(([, tags]) => {
         const lowerTags = normalizeUiTagValues(tags).map((tag) => tag.toLowerCase());
         if (tagFilterMode === "all") {
@@ -1363,14 +1517,24 @@ export default function CephAdminBucketsPage() {
         }
         return normalizedFilters.some((filterTag) => lowerTags.includes(filterTag));
       })
-      .map(([name]) => name)
+      .map(([storageKey]) => parseBucketUiTagKey(storageKey)?.name ?? null)
+      .filter((value): value is string => Boolean(value));
+    const names = Array.from(new Set(matchedNames))
       .sort((a, b) => a.localeCompare(b));
     return names;
   }, [tagFilters, tagFilterMode, uiTags]);
 
+  const effectiveQuickSearchValue = quickFilterMode === "contains" ? filterValue : "";
   const advancedFilterParam = useMemo(
-    () => buildAdvancedFilterPayload("", advancedApplied, taggedBuckets, usageFeatureEnabled),
-    [advancedApplied, taggedBuckets, usageFeatureEnabled]
+    () =>
+      buildAdvancedFilterPayload(
+        quickFilterMode === "exact" ? filterValue : "",
+        quickFilterMode,
+        advancedApplied,
+        taggedBuckets,
+        usageFeatureEnabled
+      ),
+    [advancedApplied, filterValue, quickFilterMode, taggedBuckets, usageFeatureEnabled]
   );
 
   const {
@@ -1385,7 +1549,7 @@ export default function CephAdminBucketsPage() {
     selectedEndpointId,
     page,
     pageSize,
-    filterValue,
+    filterValue: effectiveQuickSearchValue,
     advancedFilterParam,
     sort,
     includeParams,
@@ -1398,11 +1562,12 @@ export default function CephAdminBucketsPage() {
     () =>
       JSON.stringify({
         endpoint: selectedEndpointId ?? null,
-        filter: filterValue.trim() || null,
+        filter: effectiveQuickSearchValue.trim() || null,
+        quickFilterMode,
         advanced: advancedFilterParam || null,
         withStats: baseRequiresStats,
       }),
-    [selectedEndpointId, filterValue, advancedFilterParam, baseRequiresStats]
+    [selectedEndpointId, effectiveQuickSearchValue, quickFilterMode, advancedFilterParam, baseRequiresStats]
   );
 
   useEffect(() => {
@@ -1461,7 +1626,7 @@ export default function CephAdminBucketsPage() {
       const response = await listCephAdminBuckets(selectedEndpointId, {
         page: nextPage,
         page_size: 200,
-        filter: filterValue.trim() || undefined,
+        filter: effectiveQuickSearchValue.trim() || undefined,
         advanced_filter: advancedFilterParam,
         sort_by: sort.field,
         sort_dir: sort.direction,
@@ -1548,8 +1713,8 @@ export default function CephAdminBucketsPage() {
     setBulkApplySummary(null);
   };
 
-  const updateTagDraft = (bucketName: string, value: string) => {
-    setTagDrafts((prev) => ({ ...prev, [bucketName]: value }));
+  const updateTagDraft = (bucketKey: string, value: string) => {
+    setTagDrafts((prev) => ({ ...prev, [bucketKey]: value }));
   };
 
   const addTagFilter = (value: string) => {
@@ -1566,26 +1731,26 @@ export default function CephAdminBucketsPage() {
     setPage(1);
   };
 
-  const addTagsForBucket = (bucketName: string, raw: string) => {
+  const addTagsForBucket = (target: BucketTagTarget, raw: string) => {
     const parsed = parseUiTags(raw);
     if (parsed.length === 0) return;
     setUiTags((prev) => {
-      const existing = prev[bucketName] ?? [];
+      const existing = prev[target.key] ?? [];
       const merged = mergeUiTags(existing, parsed);
-      return { ...prev, [bucketName]: merged };
+      return { ...prev, [target.key]: merged };
     });
   };
 
-  const removeTagForBucket = (bucketName: string, tag: string) => {
-    const target = tag.trim().toLowerCase();
+  const removeTagForBucket = (bucketTarget: BucketTagTarget, tag: string) => {
+    const normalizedTag = tag.trim().toLowerCase();
     setUiTags((prev) => {
-      const existing = normalizeUiTagValues(prev[bucketName] ?? []);
-      const next = existing.filter((item) => item.toLowerCase() !== target);
+      const existing = normalizeUiTagValues(prev[bucketTarget.key] ?? []);
+      const next = existing.filter((item) => item.toLowerCase() !== normalizedTag);
       const updated = { ...prev };
       if (next.length === 0) {
-        delete updated[bucketName];
+        delete updated[bucketTarget.key];
       } else {
-        updated[bucketName] = next;
+        updated[bucketTarget.key] = next;
       }
       return updated;
     });
@@ -1612,10 +1777,68 @@ export default function CephAdminBucketsPage() {
     selectionHeaderRef.current.indeterminate = headerIndeterminate;
   }, [headerIndeterminate]);
 
-  const openTagEditor = (targets: string[]) => {
-    setTagTargets(targets);
-    if (targets.length === 1) {
-      const existing = uiTags[targets[0]] ?? [];
+  const resolveBucketTargetsByNames = async (bucketNames: string[]) => {
+    if (!selectedEndpointId || bucketNames.length === 0) {
+      return { targets: [] as BucketTagTarget[], missingNames: bucketNames };
+    }
+    const chunks: string[][] = [];
+    const chunkSize = 50;
+    for (let start = 0; start < bucketNames.length; start += chunkSize) {
+      chunks.push(bucketNames.slice(start, start + chunkSize));
+    }
+    const chunkResults = await runWithConcurrency(chunks, 4, async (chunk) => {
+      const resolved: BucketTagTarget[] = [];
+      let nextPage = 1;
+      const advancedFilter = JSON.stringify({
+        match: "any",
+        rules: [{ field: "name", op: "in", value: chunk }],
+      });
+      while (true) {
+        const response = await listCephAdminBuckets(selectedEndpointId, {
+          page: nextPage,
+          page_size: 200,
+          advanced_filter: advancedFilter,
+          with_stats: false,
+        });
+        (response.items ?? []).forEach((bucket) => {
+          resolved.push(toBucketTagTarget(bucket.name, bucket.tenant));
+        });
+        if (!response.has_next) break;
+        nextPage += 1;
+      }
+      return resolved;
+    });
+    const targetByKey = new Map<string, BucketTagTarget>();
+    const existingNames = new Set<string>();
+    chunkResults.flat().forEach((target) => {
+      targetByKey.set(target.key, target);
+      existingNames.add(target.name);
+    });
+    const missingNames = bucketNames.filter((name) => !existingNames.has(name));
+    const targets = Array.from(targetByKey.values()).sort((a, b) => {
+      if (a.name !== b.name) return a.name.localeCompare(b.name);
+      return (a.tenant ?? "").localeCompare(b.tenant ?? "");
+    });
+    return { targets, missingNames };
+  };
+
+  const closeTagEditor = () => {
+    setShowTagEditor(false);
+    setTagTargets([]);
+    setTagInput("");
+    setTagRemoveInput("");
+    setTagBucketListInput("");
+    setTagEditorError(null);
+    setTagEditorLoading(false);
+  };
+
+  const openTagEditor = (targets: BucketTagTarget[]) => {
+    const dedupedTargets = Array.from(new Map(targets.map((target) => [target.key, target])).values());
+    setTagTargets(dedupedTargets);
+    setTagEditorError(null);
+    setTagBucketListInput("");
+    if (dedupedTargets.length === 1) {
+      const existing = uiTags[dedupedTargets[0].key] ?? [];
       setTagInput(existing.join(", "));
       setTagRemoveInput("");
     } else {
@@ -1625,20 +1848,43 @@ export default function CephAdminBucketsPage() {
     setShowTagEditor(true);
   };
 
-  const applyTagsToTargets = () => {
-    if (tagTargets.length === 0) return;
-    const isMulti = tagTargets.length > 1;
-    const parsedAdd = parseUiTags(tagInput);
-    const parsedRemove = parseUiTags(tagRemoveInput);
+  const openTagEditorForSelection = async () => {
+    if (!selectedEndpointId || selectedBucketList.length === 0 || tagEditorLoading) return;
+    setTagEditorLoading(true);
+    try {
+      const { targets, missingNames } = await resolveBucketTargetsByNames(selectedBucketList);
+      if (targets.length === 0) {
+        setError("Unable to resolve selected buckets for UI tag editing.");
+        return;
+      }
+      if (missingNames.length > 0) {
+        setError(`Some selected buckets no longer exist: ${formatBucketNamesPreview(missingNames)}.`);
+      }
+      openTagEditor(targets);
+    } catch (err) {
+      setError(extractError(err));
+    } finally {
+      setTagEditorLoading(false);
+    }
+  };
+
+  const applyUiTagsToTargets = (
+    targets: BucketTagTarget[],
+    parsedAdd: string[],
+    parsedRemove: string[],
+    replaceWhenSingle: boolean
+  ) => {
+    if (targets.length === 0) return;
+    const removeSet = new Set(parsedRemove.map((tag) => tag.toLowerCase()));
     setUiTags((prev) => {
       const next = { ...prev };
-      tagTargets.forEach((name) => {
-        const existing = prev[name] ?? [];
-        if (!isMulti) {
+      targets.forEach((target) => {
+        const existing = prev[target.key] ?? [];
+        if (replaceWhenSingle && targets.length === 1) {
           if (parsedAdd.length === 0) {
-            delete next[name];
+            delete next[target.key];
           } else {
-            next[name] = parsedAdd;
+            next[target.key] = parsedAdd;
           }
           return;
         }
@@ -1646,22 +1892,57 @@ export default function CephAdminBucketsPage() {
         if (parsedAdd.length > 0) {
           updated = mergeUiTags(updated, parsedAdd);
         }
-        if (parsedRemove.length > 0) {
-          const removeSet = new Set(parsedRemove.map((tag) => tag.toLowerCase()));
+        if (removeSet.size > 0) {
           updated = updated.filter((tag) => !removeSet.has(tag.toLowerCase()));
         }
         if (updated.length === 0) {
-          delete next[name];
+          delete next[target.key];
         } else {
-          next[name] = updated;
+          next[target.key] = updated;
         }
       });
       return next;
     });
-    setShowTagEditor(false);
-    setTagTargets([]);
-    setTagInput("");
-    setTagRemoveInput("");
+  };
+
+  const applyTagsToTargets = () => {
+    if (tagTargets.length === 0) return;
+    const parsedAdd = parseUiTags(tagInput);
+    const parsedRemove = parseUiTags(tagRemoveInput);
+    applyUiTagsToTargets(tagTargets, parsedAdd, parsedRemove, true);
+    closeTagEditor();
+  };
+
+  const applyTagsFromBucketList = async () => {
+    if (!selectedEndpointId || tagEditorLoading) return;
+    const parsedAdd = parseUiTags(tagInput);
+    if (parsedTagBucketListNames.length === 0) {
+      setTagEditorError("Provide at least one exact bucket name.");
+      return;
+    }
+    if (parsedAdd.length === 0) {
+      setTagEditorError("Provide at least one UI tag to add.");
+      return;
+    }
+    setTagEditorLoading(true);
+    setTagEditorError(null);
+    try {
+      const { targets, missingNames } = await resolveBucketTargetsByNames(parsedTagBucketListNames);
+      if (missingNames.length > 0) {
+        setTagEditorError(`Unknown bucket(s): ${formatBucketNamesPreview(missingNames)}.`);
+        return;
+      }
+      if (targets.length === 0) {
+        setTagEditorError("No matching buckets found.");
+        return;
+      }
+      applyUiTagsToTargets(targets, parsedAdd, [], false);
+      closeTagEditor();
+    } catch (err) {
+      setTagEditorError(extractError(err));
+    } finally {
+      setTagEditorLoading(false);
+    }
   };
 
   const selectedBucketList = useMemo(
@@ -2658,6 +2939,10 @@ export default function CephAdminBucketsPage() {
     setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
   };
 
+  const updateAdvancedMatchMode = (field: "tenantMatchMode" | "ownerMatchMode", value: TextMatchMode) => {
+    setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
+  };
+
   const updateFeatureFilter = (feature: FeatureKey, value: FeatureFilterState) => {
     setAdvancedDraft((prev) => ({ ...prev, features: { ...prev.features, [feature]: value } }));
   };
@@ -2673,7 +2958,18 @@ export default function CephAdminBucketsPage() {
     setPage(1);
   };
 
-  const advancedFilterActive = hasAdvancedFilters(advancedApplied, usageFeatureEnabled) || tagFilters.length > 0;
+  const advancedFiltersApplied = hasAdvancedFilters(advancedApplied, usageFeatureEnabled);
+  const advancedAppliedPayload = useMemo(
+    () => buildAdvancedFilterPayload("", "contains", advancedApplied, null, usageFeatureEnabled),
+    [advancedApplied, usageFeatureEnabled]
+  );
+  const advancedDraftPayload = useMemo(
+    () => buildAdvancedFilterPayload("", "contains", advancedDraft, null, usageFeatureEnabled),
+    [advancedDraft, usageFeatureEnabled]
+  );
+  const hasPendingAdvancedChanges = advancedDraftPayload !== advancedAppliedPayload;
+  const hasAnyAdvancedToClear = advancedDraftPayload !== undefined || advancedAppliedPayload !== undefined;
+  const advancedFilterActive = advancedFiltersApplied || tagFilters.length > 0;
   const quickFilterActive = filterValue.trim().length > 0;
   const filtersActive = quickFilterActive || advancedFilterActive;
   const columnsCustomized = useMemo(() => {
@@ -2686,14 +2982,66 @@ export default function CephAdminBucketsPage() {
     return availableUiTags.filter((tag) => !selected.has(tag.toLowerCase()));
   }, [availableUiTags, tagFilters]);
   const showTagFilterBar = availableUiTags.length > 0 || tagFilters.length > 0;
-  const isActiveTextFilter = (value: string) => value.trim().length > 0;
-  const isActiveNumericFilter = (value: string) => value.trim().length > 0;
-  const isActiveFeatureFilter = (value: FeatureFilterState) => value !== "any";
-  const activeFieldClass = "border-primary/60 bg-primary/5 dark:bg-primary/10";
-  const activeLabelClass = "text-primary";
+  const activeFieldClass =
+    "border-primary-400 bg-primary-50/80 ring-1 ring-primary/25 dark:border-primary-400/60 dark:bg-primary-500/15";
+  const activeLabelClass = "text-primary-700 dark:text-primary-200";
+  const pendingFieldClass =
+    "border-amber-400 bg-amber-50 ring-1 ring-amber-300/60 dark:border-amber-400/60 dark:bg-amber-500/15";
+  const pendingLabelClass = "text-amber-700 dark:text-amber-300";
+  const modeToggleBaseClass =
+    "absolute right-1 top-1/2 -translate-y-1/2 rounded border px-1 py-0 ui-caption font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-0";
+  const modeToggleClass = (mode: TextMatchMode, isPending: boolean) => {
+    if (isPending) {
+      return `${modeToggleBaseClass} border-amber-400 bg-amber-100 text-amber-700 focus:ring-amber-300 dark:border-amber-400/60 dark:bg-amber-500/20 dark:text-amber-200`;
+    }
+    if (mode === "exact") {
+      return `${modeToggleBaseClass} border-primary-400 bg-primary-100 text-primary-700 focus:ring-primary/35 dark:border-primary-400/60 dark:bg-primary-500/20 dark:text-primary-100`;
+    }
+    return `${modeToggleBaseClass} border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100`;
+  };
+  const fieldHighlight = (isApplied: boolean, isPending: boolean) => {
+    if (isPending) return { labelClass: pendingLabelClass, fieldClass: pendingFieldClass };
+    if (isApplied) return { labelClass: activeLabelClass, fieldClass: activeFieldClass };
+    return { labelClass: "", fieldClass: "" };
+  };
+  const tenantAppliedValue = (advancedApplied?.tenant ?? "").trim();
+  const ownerAppliedValue = (advancedApplied?.owner ?? "").trim();
+  const tenantAppliedMatchMode = advancedApplied?.tenantMatchMode ?? "contains";
+  const ownerAppliedMatchMode = advancedApplied?.ownerMatchMode ?? "contains";
+  const tenantDraftValue = advancedDraft.tenant.trim();
+  const ownerDraftValue = advancedDraft.owner.trim();
+  const tenantDraftMatchMode = advancedDraft.tenantMatchMode;
+  const ownerDraftMatchMode = advancedDraft.ownerMatchMode;
+  const tenantPending =
+    tenantDraftValue !== tenantAppliedValue || (tenantDraftValue.length > 0 && tenantDraftMatchMode !== tenantAppliedMatchMode);
+  const ownerPending =
+    ownerDraftValue !== ownerAppliedValue || (ownerDraftValue.length > 0 && ownerDraftMatchMode !== ownerAppliedMatchMode);
+  const tenantFieldState = fieldHighlight(
+    Boolean(tenantAppliedValue),
+    tenantPending
+  );
+  const ownerFieldState = fieldHighlight(
+    Boolean(ownerAppliedValue),
+    ownerPending
+  );
+  const quickDraftValue = filter.trim();
+  const quickAppliedValue = filterValue.trim();
+  const quickFilterPending = quickDraftValue !== quickAppliedValue;
+  const quickFilterFieldState = fieldHighlight(
+    quickAppliedValue.length > 0,
+    quickFilterPending
+  );
+  const toggleQuickFilterMode = () => {
+    setQuickFilterMode((prev) => (prev === "contains" ? "exact" : "contains"));
+    setPage(1);
+  };
+  const toggleAdvancedTextMode = (field: "tenantMatchMode" | "ownerMatchMode") => {
+    updateAdvancedMatchMode(field, advancedDraft[field] === "contains" ? "exact" : "contains");
+  };
   const resetAllFilters = () => {
     setFilter("");
     setFilterValue("");
+    setQuickFilterMode("contains");
     setAdvancedDraft(defaultAdvancedFilter);
     setAdvancedApplied(null);
     setTagFilters([]);
@@ -2701,6 +3049,73 @@ export default function CephAdminBucketsPage() {
     setShowAdvancedFilter(false);
     setPage(1);
   };
+  const activeFilterSummaryItems = useMemo(() => {
+    const items: Array<{ id: string; label: string }> = [];
+    const quick = quickFilterActive ? filterValue.trim() : "";
+    if (quickFilterActive && quick) {
+      items.push({ id: "quick", label: `Name ${formatTextMatchModeLabel(quickFilterMode)}: ${quick}` });
+    }
+
+    const normalizedActiveTags = normalizeUiTagValues(tagFilters);
+    if (normalizedActiveTags.length > 0) {
+      if (normalizedActiveTags.length > 1) {
+        items.push({
+          id: "tag-mode",
+          label: `UI tags mode: ${tagFilterMode === "all" ? "AND" : "OR"}`,
+        });
+      }
+      normalizedActiveTags.forEach((tag) => {
+        items.push({ id: `tag-${tag.toLowerCase()}`, label: `UI tag: ${tag}` });
+      });
+    }
+
+    if (advancedApplied && hasAdvancedFilters(advancedApplied, usageFeatureEnabled)) {
+      const tenant = advancedApplied.tenant.trim();
+      if (tenant) items.push({ id: "tenant", label: `Tenant ${formatTextMatchModeLabel(advancedApplied.tenantMatchMode)}: ${tenant}` });
+
+      const owner = advancedApplied.owner.trim();
+      if (owner) items.push({ id: "owner", label: `Owner ${formatTextMatchModeLabel(advancedApplied.ownerMatchMode)}: ${owner}` });
+
+      const numericFilters: Array<{ id: keyof AdvancedFilterState; label: string }> = usageFeatureEnabled
+        ? [
+            { id: "minUsedBytes", label: "Used bytes >=" },
+            { id: "maxUsedBytes", label: "Used bytes <=" },
+            { id: "minObjects", label: "Objects >=" },
+            { id: "maxObjects", label: "Objects <=" },
+            { id: "minQuotaBytes", label: "Quota bytes >=" },
+            { id: "maxQuotaBytes", label: "Quota bytes <=" },
+            { id: "minQuotaObjects", label: "Quota objects >=" },
+            { id: "maxQuotaObjects", label: "Quota objects <=" },
+          ]
+        : [];
+      numericFilters.forEach(({ id, label }) => {
+        const value = (advancedApplied[id] as string).trim();
+        if (!value) return;
+        const asNumber = Number(value);
+        const display = Number.isFinite(asNumber) ? formatNumber(asNumber) : value;
+        items.push({ id: `num-${id}`, label: `${label} ${display}` });
+      });
+
+      (Object.keys(advancedApplied.features) as FeatureKey[]).forEach((feature) => {
+        const state = advancedApplied.features[feature];
+        if (state === "any") return;
+        items.push({
+          id: `feature-${feature}`,
+          label: `${FEATURE_LABELS[feature]}: ${formatFeatureFilterStateLabel(state)}`,
+        });
+      });
+    }
+
+    return items;
+  }, [
+    quickFilterActive,
+    filterValue,
+    quickFilterMode,
+    tagFilters,
+    tagFilterMode,
+    advancedApplied,
+    usageFeatureEnabled,
+  ]);
   const clearOrphanedTags = () => {
     if (orphanedTagBuckets.length === 0) return;
     setUiTags((prev) => {
@@ -2760,10 +3175,15 @@ export default function CephAdminBucketsPage() {
     label: string;
     field?: SortField | null;
     align?: "left" | "right";
+    expensive?: boolean;
     header?: ReactNode;
     headerClassName?: string;
+    cellClassName?: string;
     render: (bucket: CephAdminBucket) => ReactNode;
   };
+
+  const expensiveColumnClass = "bg-amber-50/60 dark:bg-amber-900/20";
+  const defaultColumnMinWidthClass = "min-w-[9rem]";
 
   const quotaConfigured = (bucket: CephAdminBucket) =>
     Boolean((bucket.quota_max_size_bytes ?? 0) > 0 || (bucket.quota_max_objects ?? 0) > 0);
@@ -2799,9 +3219,10 @@ export default function CephAdminBucketsPage() {
     );
   };
 
-  const renderUiTags = (bucketName: string) => {
-    const tags = uiTags[bucketName] ?? [];
-    const draft = tagDrafts[bucketName] ?? "";
+  const renderUiTags = (bucket: CephAdminBucket) => {
+    const bucketTarget = toBucketTagTarget(bucket.name, bucket.tenant);
+    const tags = uiTags[bucketTarget.key] ?? [];
+    const draft = tagDrafts[bucketTarget.key] ?? "";
     const normalizedDraft = draft.trim().toLowerCase();
     const existingSet = new Set(tags.map((tag) => tag.toLowerCase()));
     const suggestions = normalizedDraft
@@ -2809,22 +3230,22 @@ export default function CephAdminBucketsPage() {
           (tag) => tag.toLowerCase().includes(normalizedDraft) && !existingSet.has(tag.toLowerCase())
         )
       : availableUiTags.filter((tag) => !existingSet.has(tag.toLowerCase()));
-    const showSuggestions = tagSuggestionBucket === bucketName && suggestions.length > 0;
+    const showSuggestions = tagSuggestionBucket === bucketTarget.key && suggestions.length > 0;
     return (
       <div className="group relative flex flex-wrap items-center gap-2">
         {tags.map((tag) => {
           const colors = getTagColors(tag);
           return (
             <span
-              key={`${bucketName}:${tag}`}
-              className="flex items-center gap-1 rounded-full border px-2 py-0.5 ui-caption font-semibold"
+              key={`${bucketTarget.key}:${tag}`}
+              className="flex items-center gap-0.5 rounded-full border px-1.5 py-0 text-[10px] font-semibold leading-4"
               style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
             >
               {tag}
               <button
                 type="button"
-                onClick={() => removeTagForBucket(bucketName, tag)}
-                className="opacity-70 hover:opacity-100"
+                onClick={() => removeTagForBucket(bucketTarget, tag)}
+                className="ml-0.5 leading-none opacity-70 hover:opacity-100"
                 title="Remove tag"
               >
                 ×
@@ -2832,28 +3253,30 @@ export default function CephAdminBucketsPage() {
             </span>
           );
         })}
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => updateTagDraft(bucketName, e.target.value)}
-          onFocus={() => setTagSuggestionBucket(bucketName)}
-          onBlur={() => {
-            window.setTimeout(() => {
-              setTagSuggestionBucket((prev) => (prev === bucketName ? null : prev));
-            }, 120);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === ",") {
-              e.preventDefault();
-              addTagsForBucket(bucketName, draft);
-              updateTagDraft(bucketName, "");
-            }
-          }}
-          placeholder="+"
-          className={`border-0 bg-transparent p-0 ui-caption text-slate-500 placeholder:text-slate-400 transition-all duration-150 focus:outline-none focus:ring-0 dark:text-slate-300 ${
-            draft ? "w-24 opacity-100" : "w-0 opacity-0 group-hover:w-6 group-hover:opacity-100 focus:w-24 focus:opacity-100"
-          }`}
-        />
+        <div className="w-24 shrink-0">
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => updateTagDraft(bucketTarget.key, e.target.value)}
+            onFocus={() => setTagSuggestionBucket(bucketTarget.key)}
+            onBlur={() => {
+              window.setTimeout(() => {
+                setTagSuggestionBucket((prev) => (prev === bucketTarget.key ? null : prev));
+              }, 120);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                addTagsForBucket(bucketTarget, draft);
+                updateTagDraft(bucketTarget.key, "");
+              }
+            }}
+            placeholder="+"
+            className={`w-full border-0 bg-transparent p-0 ui-caption text-slate-500 placeholder:text-slate-400 transition-opacity duration-150 focus:outline-none focus:ring-0 dark:text-slate-300 ${
+              draft ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+            }`}
+          />
+        </div>
         {showSuggestions && (
           <div
             className="absolute left-0 top-full z-20 mt-1 max-h-40 w-56 overflow-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
@@ -2861,11 +3284,11 @@ export default function CephAdminBucketsPage() {
           >
             {suggestions.map((tag) => (
               <button
-                key={`${bucketName}:suggest:${tag}`}
+                key={`${bucketTarget.key}:suggest:${tag}`}
                 type="button"
                 onClick={() => {
-                  addTagsForBucket(bucketName, tag);
-                  updateTagDraft(bucketName, "");
+                  addTagsForBucket(bucketTarget, tag);
+                  updateTagDraft(bucketTarget.key, "");
                 }}
                 className="flex w-full items-center rounded-md px-2 py-1 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
               >
@@ -2878,11 +3301,349 @@ export default function CephAdminBucketsPage() {
     );
   };
 
+  const bucketTooltipCacheKey = (bucket: CephAdminBucket) => `${bucket.tenant ?? ""}:${bucket.name}`;
+  const ownerTooltipCacheKey = (bucket: CephAdminBucket) =>
+    `${bucketTooltipCacheKey(bucket)}:${bucket.owner ?? ""}:owner`;
+  const featureTooltipCacheKey = (bucket: CephAdminBucket, featureKey: FeatureKey) =>
+    `${bucketTooltipCacheKey(bucket)}:${featureKey}`;
 
-  const renderFeatureChip = (featureKey: string, bucket: CephAdminBucket) => {
+  const resolveOwnerNameForBucket = async (bucket: CephAdminBucket): Promise<string | null> => {
+    const inlineOwnerName = (bucket.owner_name || "").trim();
+    if (inlineOwnerName) {
+      return inlineOwnerName;
+    }
+    if (!selectedEndpointId) return null;
+    const bucketKey = bucketTooltipCacheKey(bucket);
+    if (Object.prototype.hasOwnProperty.call(ownerNameCacheRef.current, bucketKey)) {
+      return ownerNameCacheRef.current[bucketKey];
+    }
+
+    const rules: Array<Record<string, unknown>> = [{ field: "name", op: "eq", value: bucket.name }];
+    if (bucket.tenant && bucket.tenant.trim()) {
+      rules.push({ field: "tenant", op: "eq", value: bucket.tenant });
+    }
+    if (bucket.owner && bucket.owner.trim()) {
+      rules.push({ field: "owner", op: "eq", value: bucket.owner });
+    }
+    const response = await listCephAdminBuckets(selectedEndpointId, {
+      page: 1,
+      page_size: 5,
+      advanced_filter: JSON.stringify({ match: "all", rules }),
+      include: ["owner_name"],
+      with_stats: false,
+    });
+    const candidate = (response.items ?? []).find(
+      (item) =>
+        item.name === bucket.name &&
+        (item.tenant ?? "") === (bucket.tenant ?? "") &&
+        (item.owner ?? "") === (bucket.owner ?? "")
+    );
+    const resolvedOwnerName = (candidate?.owner_name || "").trim() || null;
+    ownerNameCacheRef.current[bucketKey] = resolvedOwnerName;
+    return resolvedOwnerName;
+  };
+
+  const loadOwnerTooltip = (bucket: CephAdminBucket) => {
+    if (!selectedEndpointId || !bucket.owner) return;
+    const key = ownerTooltipCacheKey(bucket);
+    const current = ownerTooltipState[key];
+    if (current?.status === "ready" || current?.status === "loading") return;
+    if (ownerTooltipInflightRef.current[key]) return;
+
+    const work = (async () => {
+      setOwnerTooltipState((prev) => ({ ...prev, [key]: { status: "loading" } }));
+      try {
+        const ownerName = await resolveOwnerNameForBucket(bucket);
+        setOwnerTooltipState((prev) => ({ ...prev, [key]: { status: "ready", ownerName } }));
+      } catch (err) {
+        setOwnerTooltipState((prev) => ({
+          ...prev,
+          [key]: { status: "error", message: extractError(err) },
+        }));
+      } finally {
+        delete ownerTooltipInflightRef.current[key];
+      }
+    })();
+    ownerTooltipInflightRef.current[key] = work;
+  };
+
+  const getBucketPropertiesCached = async (bucket: CephAdminBucket): Promise<BucketProperties> => {
+    if (!selectedEndpointId) {
+      throw new Error("No endpoint selected.");
+    }
+    const bucketKey = bucketTooltipCacheKey(bucket);
+    const cached = bucketPropertiesCacheRef.current[bucketKey];
+    if (cached) return cached;
+    const inflight = bucketPropertiesInflightRef.current[bucketKey];
+    if (inflight) return inflight;
+    const promise = getCephAdminBucketProperties(selectedEndpointId, bucket.name)
+      .then((props) => {
+        bucketPropertiesCacheRef.current[bucketKey] = props;
+        return props;
+      })
+      .finally(() => {
+        delete bucketPropertiesInflightRef.current[bucketKey];
+      });
+    bucketPropertiesInflightRef.current[bucketKey] = promise;
+    return promise;
+  };
+
+  const buildFeatureTooltipLines = async (bucket: CephAdminBucket, featureKey: FeatureKey): Promise<string[]> => {
+    if (!selectedEndpointId) return ["No endpoint selected."];
+
+    if (featureKey === "versioning") {
+      const props = await getBucketPropertiesCached(bucket);
+      const status = (props.versioning_status || "Disabled").trim() || "Disabled";
+      return [`Versioning: ${status}`];
+    }
+
+    if (featureKey === "object_lock") {
+      const props = await getBucketPropertiesCached(bucket);
+      const objectLock = props.object_lock;
+      const enabled = Boolean(props.object_lock_enabled ?? objectLock?.enabled);
+      const lines = [`Enabled: ${enabled ? "Yes" : "No"}`];
+      if (objectLock?.mode) lines.push(`Mode: ${objectLock.mode}`);
+      if (objectLock?.days != null) lines.push(`Default retention: ${objectLock.days} day(s)`);
+      if (objectLock?.years != null) lines.push(`Default retention: ${objectLock.years} year(s)`);
+      return lines;
+    }
+
+    if (featureKey === "block_public_access") {
+      const props = await getBucketPropertiesCached(bucket);
+      const cfg = normalizePublicAccessBlockState(props.public_access_block);
+      const lines = [`State: ${formatPublicAccessBlockState(cfg)}`];
+      PUBLIC_ACCESS_BLOCK_OPTIONS.forEach((option) => {
+        lines.push(`${option.label}: ${formatPublicAccessBlockFlag(cfg[option.key])}`);
+      });
+      return lines;
+    }
+
+    if (featureKey === "lifecycle_rules") {
+      const props = await getBucketPropertiesCached(bucket);
+      const rules = Array.isArray(props.lifecycle_rules) ? props.lifecycle_rules : [];
+      if (rules.length === 0) {
+        return ["Rules: 0 (disabled)"];
+      }
+      const lines = [`Rules: ${rules.length}`];
+      rules.slice(0, 3).forEach((rule, idx) => {
+        const id = (rule.id || "").trim() || `Rule ${idx + 1}`;
+        const status = (rule.status || "Unknown").trim() || "Unknown";
+        const prefix = (rule.prefix || "/").trim() || "/";
+        lines.push(`${id}: ${status} · prefix ${prefix}`);
+      });
+      if (rules.length > 3) {
+        lines.push(`+${rules.length - 3} more rule(s)`);
+      }
+      return lines;
+    }
+
+    if (featureKey === "cors") {
+      const props = await getBucketPropertiesCached(bucket);
+      const rules = Array.isArray(props.cors_rules) ? props.cors_rules : [];
+      if (rules.length === 0) {
+        return ["Rules: 0 (not configured)"];
+      }
+      const lines = [`Rules: ${rules.length}`];
+      const firstRule = rules[0] as Record<string, unknown>;
+      const methods = Array.isArray(firstRule?.AllowedMethods)
+        ? firstRule.AllowedMethods.map((item) => String(item)).filter(Boolean)
+        : [];
+      const origins = Array.isArray(firstRule?.AllowedOrigins)
+        ? firstRule.AllowedOrigins.map((item) => String(item)).filter(Boolean)
+        : [];
+      if (methods.length > 0) lines.push(`Methods: ${methods.slice(0, 4).join(", ")}`);
+      if (origins.length > 0) lines.push(`Origins: ${origins.slice(0, 3).join(", ")}`);
+      if (rules.length > 1) lines.push(`+${rules.length - 1} additional rule(s)`);
+      return lines;
+    }
+
+    if (featureKey === "static_website") {
+      const website = await getCephAdminBucketWebsite(selectedEndpointId, bucket.name);
+      const routingRules = Array.isArray(website.routing_rules) ? website.routing_rules : [];
+      const redirectHost = (website.redirect_all_requests_to?.host_name || "").trim();
+      const indexDocument = (website.index_document || "").trim();
+      const errorDocument = (website.error_document || "").trim();
+      const enabled = Boolean(redirectHost || indexDocument || routingRules.length > 0);
+      const lines = [`Enabled: ${enabled ? "Yes" : "No"}`];
+      if (indexDocument) lines.push(`Index document: ${indexDocument}`);
+      if (errorDocument) lines.push(`Error document: ${errorDocument}`);
+      if (redirectHost) lines.push(`Redirect host: ${redirectHost}`);
+      if (routingRules.length > 0) lines.push(`Routing rules: ${routingRules.length}`);
+      return lines;
+    }
+
+    if (featureKey === "bucket_policy") {
+      const payload = await getCephAdminBucketPolicy(selectedEndpointId, bucket.name);
+      const policy = payload.policy;
+      if (!policy || typeof policy !== "object") {
+        return ["Policy: Not set"];
+      }
+      const doc = policy as Record<string, unknown>;
+      const rawStatements = doc.Statement;
+      const statements = Array.isArray(rawStatements) ? rawStatements : rawStatements ? [rawStatements] : [];
+      const lines = ["Policy: Configured", `Statements: ${statements.length}`];
+      if (typeof doc.Version === "string" && doc.Version.trim()) {
+        lines.push(`Version: ${doc.Version}`);
+      }
+      const hasConditions = statements.some(
+        (statement) =>
+          statement &&
+          typeof statement === "object" &&
+          Object.keys((statement as Record<string, unknown>).Condition || {}).length > 0
+      );
+      lines.push(`Has conditions: ${hasConditions ? "Yes" : "No"}`);
+      return lines;
+    }
+
+    if (featureKey === "access_logging") {
+      const logging = await getCephAdminBucketLogging(selectedEndpointId, bucket.name);
+      const targetBucket = (logging.target_bucket || "").trim();
+      const targetPrefix = (logging.target_prefix || "").trim();
+      const enabled = Boolean(logging.enabled && targetBucket);
+      const lines = [`Enabled: ${enabled ? "Yes" : "No"}`];
+      if (targetBucket) lines.push(`Target bucket: ${targetBucket}`);
+      if (targetPrefix) lines.push(`Target prefix: ${targetPrefix}`);
+      return lines;
+    }
+
+    return ["No additional details available."];
+  };
+
+  const loadFeatureTooltip = (bucket: CephAdminBucket, featureKey: FeatureKey) => {
+    if (!selectedEndpointId) return;
+    const key = featureTooltipCacheKey(bucket, featureKey);
+    const current = featureTooltipState[key];
+    if (current?.status === "ready" || current?.status === "loading") return;
+    if (featureTooltipInflightRef.current[key]) return;
+
+    const work = (async () => {
+      setFeatureTooltipState((prev) => ({ ...prev, [key]: { status: "loading" } }));
+      try {
+        const lines = await buildFeatureTooltipLines(bucket, featureKey);
+        setFeatureTooltipState((prev) => ({ ...prev, [key]: { status: "ready", lines } }));
+      } catch (err) {
+        setFeatureTooltipState((prev) => ({
+          ...prev,
+          [key]: { status: "error", message: extractError(err) },
+        }));
+      } finally {
+        delete featureTooltipInflightRef.current[key];
+      }
+    })();
+    featureTooltipInflightRef.current[key] = work;
+  };
+
+  const renderOwnerCell = (bucket: CephAdminBucket) => {
+    const owner = (bucket.owner || "").trim();
+    if (!owner) return "-";
+    const tooltipKey = ownerTooltipCacheKey(bucket);
+    const tooltip = ownerTooltipState[tooltipKey];
+    const isTooltipVisible = activeOwnerTooltipKey === tooltipKey;
+    return (
+      <div
+        className="relative inline-flex"
+        onMouseEnter={() => {
+          setActiveOwnerTooltipKey(tooltipKey);
+          loadOwnerTooltip(bucket);
+        }}
+        onMouseLeave={() => {
+          setActiveOwnerTooltipKey((prev) => (prev === tooltipKey ? null : prev));
+        }}
+      >
+        <button
+          type="button"
+          className="inline-flex cursor-help text-left decoration-dotted underline-offset-2 hover:underline focus:underline"
+          onFocus={() => {
+            setActiveOwnerTooltipKey(tooltipKey);
+            loadOwnerTooltip(bucket);
+          }}
+          onBlur={() => {
+            setActiveOwnerTooltipKey((prev) => (prev === tooltipKey ? null : prev));
+          }}
+          aria-label="Resolve owner name"
+        >
+          {owner}
+        </button>
+        {isTooltipVisible && (
+          <div className="pointer-events-none absolute left-0 top-full z-40 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">Owner</p>
+            <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">UID: {owner}</p>
+            {(!tooltip || tooltip.status === "loading") && (
+              <div className="mt-1.5 inline-flex items-center gap-1.5 ui-caption text-slate-500 dark:text-slate-300">
+                <SpinnerIcon />
+                Resolving owner name...
+              </div>
+            )}
+            {tooltip?.status === "error" && (
+              <p className="mt-1.5 ui-caption text-rose-600 dark:text-rose-300">{tooltip.message}</p>
+            )}
+            {tooltip?.status === "ready" && (
+              <p className="mt-1.5 ui-caption text-slate-600 dark:text-slate-300">
+                Owner name: {tooltip.ownerName ? tooltip.ownerName : "Not found"}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderFeatureChip = (featureKey: FeatureKey, bucket: CephAdminBucket) => {
     const status = bucket.features?.[featureKey] ?? null;
     if (!status) return <span className="ui-body text-slate-500 dark:text-slate-400">-</span>;
-    return <PropertySummaryChip compact state={status.state} tone={status.tone} title={`${featureKey}: ${status.state}`} />;
+    const tooltipKey = featureTooltipCacheKey(bucket, featureKey);
+    const tooltip = featureTooltipState[tooltipKey];
+    const isTooltipVisible = activeFeatureTooltipKey === tooltipKey;
+    return (
+      <div
+        className="relative inline-flex"
+        onMouseEnter={() => {
+          setActiveFeatureTooltipKey(tooltipKey);
+          loadFeatureTooltip(bucket, featureKey);
+        }}
+        onMouseLeave={() => {
+          setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev));
+        }}
+      >
+        <button
+          type="button"
+          className="inline-flex cursor-default"
+          onFocus={() => {
+            setActiveFeatureTooltipKey(tooltipKey);
+            loadFeatureTooltip(bucket, featureKey);
+          }}
+          onBlur={() => {
+            setActiveFeatureTooltipKey((prev) => (prev === tooltipKey ? null : prev));
+          }}
+          aria-label={`${FEATURE_LABELS[featureKey]} details`}
+        >
+          <PropertySummaryChip compact state={status.state} tone={status.tone} />
+        </button>
+        {isTooltipVisible && (
+          <div className="pointer-events-none absolute left-0 top-full z-40 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">{FEATURE_LABELS[featureKey]}</p>
+            {(!tooltip || tooltip.status === "loading") && (
+              <div className="mt-1.5 inline-flex items-center gap-1.5 ui-caption text-slate-500 dark:text-slate-300">
+                <SpinnerIcon />
+                Loading configuration...
+              </div>
+            )}
+            {tooltip?.status === "error" && (
+              <p className="mt-1.5 ui-caption text-rose-600 dark:text-rose-300">{tooltip.message}</p>
+            )}
+            {tooltip?.status === "ready" && (
+              <div className="mt-1.5 space-y-1">
+                {tooltip.lines.map((line, idx) => (
+                  <p key={`${tooltipKey}:${idx}`} className="ui-caption text-slate-600 dark:text-slate-300">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const bucketTableColumns: ColumnDef[] = (() => {
@@ -2917,11 +3678,14 @@ export default function CephAdminBucketsPage() {
         id: "name",
         label: "Name",
         field: "name",
+        headerClassName: "w-[12rem] min-w-[10rem] max-w-[20rem]",
+        cellClassName: "w-[12rem] min-w-[10rem] max-w-[20rem]",
         render: (bucket) => (
           <button
             type="button"
             onClick={() => setEditingBucketName(bucket.name)}
-            className="text-left hover:text-primary-700 dark:hover:text-primary-200"
+            className="block w-full truncate text-left hover:text-primary-700 dark:hover:text-primary-200"
+            title={bucket.name}
           >
             {bucket.name}
           </button>
@@ -2936,8 +3700,9 @@ export default function CephAdminBucketsPage() {
         label: "UI tags",
         field: null,
         header: <span>UI tags</span>,
-        headerClassName: "min-w-[200px]",
-        render: (bucket) => renderUiTags(bucket.name),
+        headerClassName: "min-w-[12rem] max-w-[24rem]",
+        cellClassName: "min-w-[12rem] max-w-[24rem]",
+        render: (bucket) => renderUiTags(bucket),
       });
     }
     if (visible.has("tenant")) {
@@ -2945,6 +3710,8 @@ export default function CephAdminBucketsPage() {
         id: "tenant",
         label: "Tenant",
         field: "tenant",
+        headerClassName: "min-w-[8rem] max-w-[12rem]",
+        cellClassName: "min-w-[8rem] max-w-[12rem]",
         render: (bucket) => bucket.tenant ?? "-",
       });
     }
@@ -2953,7 +3720,9 @@ export default function CephAdminBucketsPage() {
         id: "owner",
         label: "Owner",
         field: "owner",
-        render: (bucket) => bucket.owner ?? "-",
+        headerClassName: "min-w-[14rem]",
+        cellClassName: "min-w-[12rem] max-w-[24rem]",
+        render: (bucket) => renderOwnerCell(bucket),
       });
     }
     if (visible.has("owner_name")) {
@@ -2961,6 +3730,9 @@ export default function CephAdminBucketsPage() {
         id: "owner_name",
         label: "Owner name",
         field: null,
+        expensive: true,
+        headerClassName: "min-w-[12rem] max-w-[24rem]",
+        cellClassName: "min-w-[12rem] max-w-[24rem]",
         render: (bucket) => bucket.owner_name ?? "-",
       });
     }
@@ -2969,7 +3741,8 @@ export default function CephAdminBucketsPage() {
         id: "used_bytes",
         label: "Used",
         field: "used_bytes",
-        render: (bucket) => formatBytes(bucket.used_bytes),
+        headerClassName: "w-28",
+        render: (bucket) => formatBytes(bucket.used_bytes ?? 0),
       });
     }
     if (visible.has("quota_max_size_bytes")) {
@@ -2977,7 +3750,11 @@ export default function CephAdminBucketsPage() {
         id: "quota_max_size_bytes",
         label: "Quota",
         field: null,
-        render: (bucket) => <QuotaBar usedBytes={bucket.used_bytes} quotaBytes={bucket.quota_max_size_bytes ?? null} />,
+        headerClassName: "w-36",
+        render: (bucket) => {
+          const quota = normalizeQuotaLimit(bucket.quota_max_size_bytes);
+          return quota !== null ? formatBytes(quota) : "-";
+        },
       });
     }
     if (visible.has("object_count")) {
@@ -2985,7 +3762,8 @@ export default function CephAdminBucketsPage() {
         id: "object_count",
         label: "Objects",
         field: "object_count",
-        render: (bucket) => formatNumber(bucket.object_count),
+        headerClassName: "w-24",
+        render: (bucket) => formatNumber(bucket.object_count ?? 0),
       });
     }
     if (visible.has("quota_max_objects")) {
@@ -2993,7 +3771,40 @@ export default function CephAdminBucketsPage() {
         id: "quota_max_objects",
         label: "Object quota",
         field: null,
-        render: (bucket) => <QuotaObjectsBar usedObjects={bucket.object_count} quotaObjects={bucket.quota_max_objects ?? null} />,
+        headerClassName: "w-36",
+        render: (bucket) => {
+          const quota = normalizeQuotaLimit(bucket.quota_max_objects);
+          return quota !== null ? formatNumber(quota) : "-";
+        },
+      });
+    }
+    if (visible.has("quota_usage_percent")) {
+      cols.push({
+        id: "quota_usage_percent",
+        label: "Quota usage %",
+        field: null,
+        headerClassName: "w-40",
+        render: (bucket) => {
+          const sizePercent = computeQuotaUsagePercent(bucket.used_bytes, bucket.quota_max_size_bytes);
+          const objectPercent = computeQuotaUsagePercent(bucket.object_count, bucket.quota_max_objects);
+          if (sizePercent === null && objectPercent === null) {
+            return "-";
+          }
+          return (
+            <div className="space-y-0.5">
+              {sizePercent !== null && (
+                <p className="ui-caption text-slate-600 dark:text-slate-300">
+                  Size: <span className="font-semibold">{formatQuotaPercent(sizePercent)}</span>
+                </p>
+              )}
+              {objectPercent !== null && (
+                <p className="ui-caption text-slate-600 dark:text-slate-300">
+                  Obj: <span className="font-semibold">{formatQuotaPercent(objectPercent)}</span>
+                </p>
+              )}
+            </div>
+          );
+        },
       });
     }
     if (visible.has("tags")) {
@@ -3001,11 +3812,14 @@ export default function CephAdminBucketsPage() {
         id: "tags",
         label: "Tags",
         field: null,
+        expensive: true,
+        headerClassName: "min-w-[12rem] max-w-[24rem]",
+        cellClassName: "min-w-[12rem] max-w-[24rem]",
         render: (bucket) => renderTagList(bucket.tags),
       });
     }
 
-    const featureColumns: { id: ColumnId; label: string; key: string }[] = [
+    const featureColumns: { id: ColumnId; label: string; key: FeatureKey }[] = [
       { id: "versioning", label: "Versioning", key: "versioning" },
       { id: "object_lock", label: "Object Lock", key: "object_lock" },
       { id: "block_public_access", label: "Block public access", key: "block_public_access" },
@@ -3022,6 +3836,8 @@ export default function CephAdminBucketsPage() {
         id: c.id,
         label: c.label,
         field: null,
+        expensive: true,
+        headerClassName: "w-36",
         render: (bucket) => renderFeatureChip(c.key, bucket),
       });
     });
@@ -3031,6 +3847,7 @@ export default function CephAdminBucketsPage() {
         id: "quota_status",
         label: "Quota status",
         field: null,
+        headerClassName: "w-32",
         render: (bucket) => (
           <PropertySummaryChip
             compact
@@ -3044,35 +3861,40 @@ export default function CephAdminBucketsPage() {
 
     cols.push({
       id: "actions",
-      label: "Actions",
+      label: "Act.",
       field: null,
       align: "right",
+      headerClassName: "w-16",
+      cellClassName: "!py-1.5",
       render: (bucket) => (
-        <div className="inline-flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setEditingBucketName(bucket.name)}
-            className={tableIconActionButtonClasses}
-            aria-label="Configure bucket"
-            title="Configure"
-          >
-            <ConfigureIcon />
-          </button>
+        <div className="inline-flex items-center">
           <details className="relative">
             <summary
-              className={`${tableIconActionButtonClasses} list-none [&::-webkit-details-marker]:hidden`}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 list-none [&::-webkit-details-marker]:hidden"
               aria-label="More actions"
               title="More actions"
             >
-              <MoreIcon />
+              ⋮
             </summary>
-            <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
               <button
                 type="button"
-                className={tableActionMenuItemClasses}
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
                 onClick={(event) => {
                   event.preventDefault();
-                  openTagEditor([bucket.name]);
+                  setEditingBucketName(bucket.name);
+                  const parent = event.currentTarget.closest("details");
+                  if (parent) parent.removeAttribute("open");
+                }}
+              >
+                Configure
+              </button>
+              <button
+                type="button"
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  openTagEditor([toBucketTagTarget(bucket.name, bucket.tenant)]);
                   const parent = event.currentTarget.closest("details");
                   if (parent) parent.removeAttribute("open");
                 }}
@@ -3103,7 +3925,6 @@ export default function CephAdminBucketsPage() {
         </PageBanner>
       )}
       {error && <PageBanner tone="error">{error}</PageBanner>}
-      {loadingDetails && !loading && <PageBanner tone="info">Loading selected column details...</PageBanner>}
       {orphanedTagBuckets.length > 0 && (
         <PageBanner tone="warning">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -3163,6 +3984,7 @@ export default function CephAdminBucketsPage() {
                             { id: "object_count" as const, label: "Objects" },
                             { id: "quota_max_size_bytes" as const, label: "Quota" },
                             { id: "quota_max_objects" as const, label: "Object quota" },
+                            { id: "quota_usage_percent" as const, label: "Quota usage %" },
                             { id: "quota_status" as const, label: "Quota status" },
                             { id: "tags" as const, label: "S3 Tags" },
                           ].map((opt) => (
@@ -3235,40 +4057,39 @@ export default function CephAdminBucketsPage() {
                     type="button"
                     onClick={() => setShowAdvancedFilter((prev) => !prev)}
                     className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                      showAdvancedFilter || advancedFilterActive
+                      advancedFiltersApplied
                         ? "border-primary/40 bg-primary-50 text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/10 dark:text-primary-100"
                         : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
-                    Advanced filter{advancedFilterActive ? " · Active" : ""}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={resetAllFilters}
-                    disabled={!filtersActive}
-                    className={`rounded-md border px-2.5 py-1.5 ui-caption font-semibold ${
-                      filtersActive
-                        ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
-                        : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
-                    }`}
-                  >
-                    Clear all filters
+                    Advanced filter{advancedFiltersApplied ? " · Active" : ""}
                   </button>
                 </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
-                  <input
-                    type="text"
-                    aria-label="Quick filter"
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    placeholder="Bucket name"
-                    className={`w-full rounded-md border bg-white px-2.5 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
-                      quickFilterActive ? activeFieldClass : "border-slate-200 dark:border-slate-700"
-                    }`}
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      aria-label="Quick filter"
+                      value={filter}
+                      onChange={(e) => setFilter(e.target.value)}
+                      placeholder="Bucket name"
+                      className={`w-full rounded-md border bg-white px-2.5 py-1.5 pr-9 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:bg-slate-900 dark:text-slate-100 ${
+                        quickFilterFieldState.fieldClass || "border-slate-200 dark:border-slate-700"
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={toggleQuickFilterMode}
+                      className={modeToggleClass(quickFilterMode, quickFilterPending)}
+                      title={`Quick filter mode: ${quickFilterMode === "contains" ? "contains" : "exact"}`}
+                      aria-label="Toggle quick filter match mode"
+                    >
+                      {quickFilterMode === "contains" ? "~" : "="}
+                    </button>
+                  </div>
                 </div>
                 {showTagFilterBar && (
                   <div className="space-y-1 sm:col-span-2">
@@ -3316,6 +4137,20 @@ export default function CephAdminBucketsPage() {
                         <option value="any">OR</option>
                         <option value="all">AND</option>
                       </select>
+                      <button
+                        type="button"
+                        onClick={() => openTagEditor([])}
+                        disabled={!selectedEndpointId}
+                        className={`inline-flex h-6 w-6 items-center justify-center rounded-md border text-xs font-semibold transition ${
+                          selectedEndpointId
+                            ? "border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
+                        }`}
+                        title="Tag bucket list"
+                        aria-label="Tag bucket list"
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
                 )}
@@ -3323,149 +4158,234 @@ export default function CephAdminBucketsPage() {
 
               {showAdvancedFilter && (
                 <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-1">
-                  <label
-                    className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
-                      isActiveTextFilter(advancedDraft.tenant) ? activeLabelClass : ""
-                    }`}
-                  >
-                    Tenant
-                  </label>
-                  <input
-                    type="text"
-                    value={advancedDraft.tenant}
-                    onChange={(e) => updateAdvancedField("tenant", e.target.value)}
-                    placeholder="tenant-a"
-                    className={`w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                      isActiveTextFilter(advancedDraft.tenant) ? activeFieldClass : ""
-                    }`}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label
-                    className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
-                      isActiveTextFilter(advancedDraft.owner) ? activeLabelClass : ""
-                    }`}
-                  >
-                    Owner
-                  </label>
-                  <input
-                    type="text"
-                    value={advancedDraft.owner}
-                    onChange={(e) => updateAdvancedField("owner", e.target.value)}
-                    placeholder="owner uid"
-                    className={`w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                      isActiveTextFilter(advancedDraft.owner) ? activeFieldClass : ""
-                    }`}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-2 grid gap-2 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
-                {[
-                  { id: "minUsedBytes" as const, label: "Used ≥" },
-                  { id: "maxUsedBytes" as const, label: "Used ≤" },
-                  { id: "minObjects" as const, label: "Objects ≥" },
-                  { id: "maxObjects" as const, label: "Objects ≤" },
-                  { id: "minQuotaBytes" as const, label: "Quota bytes ≥" },
-                  { id: "maxQuotaBytes" as const, label: "Quota bytes ≤" },
-                  { id: "minQuotaObjects" as const, label: "Quota objects ≥" },
-                  { id: "maxQuotaObjects" as const, label: "Quota objects ≤" },
-                ].map((field) => {
-                  const isActive = isActiveNumericFilter(advancedDraft[field.id]);
-                  return (
-                    <div key={field.id} className="space-y-1">
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <div className="flex items-center gap-2">
                       <label
-                        className={`ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
-                          isActive ? activeLabelClass : ""
-                        }`}
+                        className={`w-16 shrink-0 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${tenantFieldState.labelClass}`}
                       >
-                        {field.label}
+                        Tenant
                       </label>
-                      <input
-                        type="number"
-                        min="0"
-                        inputMode="numeric"
-                        value={advancedDraft[field.id]}
-                        onChange={(e) => updateAdvancedField(field.id, e.target.value)}
-                        className={`w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                          isActive ? activeFieldClass : ""
-                        }`}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">Numeric values are in bytes.</p>
-
-              <div className="mt-2">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
-                  {[
-                    { id: "versioning" as const, label: "Versioning" },
-                    { id: "object_lock" as const, label: "Object Lock" },
-                    { id: "block_public_access" as const, label: "Block public access" },
-                    { id: "lifecycle_rules" as const, label: "Lifecycle rules" },
-                    { id: "static_website" as const, label: "Static website" },
-                    { id: "bucket_policy" as const, label: "Bucket policy" },
-                    { id: "cors" as const, label: "CORS" },
-                    { id: "access_logging" as const, label: "Access logging" },
-                  ].map((feature) => {
-                    const isActive = isActiveFeatureFilter(advancedDraft.features[feature.id]);
-                    return (
-                      <label
-                        key={feature.id}
-                        className={`flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200 ${
-                          isActive ? activeLabelClass : ""
-                        }`}
-                      >
-                        <span>{feature.label}</span>
-                        <select
-                          value={advancedDraft.features[feature.id]}
-                          onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
-                          className={`w-full rounded-md border border-slate-200 px-2 py-1 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
-                            isActive ? activeFieldClass : ""
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={advancedDraft.tenant}
+                          onChange={(e) => updateAdvancedField("tenant", e.target.value)}
+                          placeholder="tenant-a"
+                          className={`w-full rounded-md border border-slate-200 px-2 py-1 pr-8 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                            tenantFieldState.fieldClass
                           }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleAdvancedTextMode("tenantMatchMode")}
+                          className={modeToggleClass(advancedDraft.tenantMatchMode, tenantPending)}
+                          title={`Tenant filter mode: ${advancedDraft.tenantMatchMode === "contains" ? "contains" : "exact"}`}
+                          aria-label="Toggle tenant match mode"
                         >
-                          {feature.id === "versioning" ? (
-                            <>
-                              <option value="any">Any</option>
-                              <option value="enabled">Enabled</option>
-                              <option value="disabled">Disabled</option>
-                              <option value="suspended">Suspended</option>
-                              <option value="disabled_or_suspended">Disabled or Suspended</option>
-                            </>
-                          ) : (
-                            <>
-                              <option value="any">Any</option>
-                              <option value="enabled">Enabled</option>
-                              <option value="disabled">Disabled</option>
-                            </>
-                          )}
-                        </select>
+                          {advancedDraft.tenantMatchMode === "contains" ? "~" : "="}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label
+                        className={`w-16 shrink-0 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${ownerFieldState.labelClass}`}
+                      >
+                        Owner
                       </label>
-                    );
-                  })}
-                </div>
-              </div>
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={advancedDraft.owner}
+                          onChange={(e) => updateAdvancedField("owner", e.target.value)}
+                          placeholder="owner uid"
+                          className={`w-full rounded-md border border-slate-200 px-2 py-1 pr-8 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                            ownerFieldState.fieldClass
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleAdvancedTextMode("ownerMatchMode")}
+                          className={modeToggleClass(advancedDraft.ownerMatchMode, ownerPending)}
+                          title={`Owner filter mode: ${advancedDraft.ownerMatchMode === "contains" ? "contains" : "exact"}`}
+                          aria-label="Toggle owner match mode"
+                        >
+                          {advancedDraft.ownerMatchMode === "contains" ? "~" : "="}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
 
-              <div className="mt-3 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={resetAdvancedFilter}
-                  className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  onClick={applyAdvancedFilter}
-                  className="rounded-md bg-primary px-2 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
-                >
-                  Apply filter
-                </button>
-              </div>
+                  <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                    {[
+                      {
+                        title: "Usage",
+                        rows: [
+                          { label: "Bytes", minId: "minUsedBytes" as const, maxId: "maxUsedBytes" as const },
+                          { label: "Objects", minId: "minObjects" as const, maxId: "maxObjects" as const },
+                        ],
+                      },
+                      {
+                        title: "Quota",
+                        rows: [
+                          { label: "Bytes", minId: "minQuotaBytes" as const, maxId: "maxQuotaBytes" as const },
+                          { label: "Objects", minId: "minQuotaObjects" as const, maxId: "maxQuotaObjects" as const },
+                        ],
+                      },
+                    ].map((section) => (
+                      <div key={section.title}>
+                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{section.title}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-3">
+                          {section.rows.map((row) => {
+                            const minApplied = usageFeatureEnabled ? (advancedApplied?.[row.minId] ?? "").trim() : "";
+                            const minDraft = usageFeatureEnabled ? advancedDraft[row.minId].trim() : "";
+                            const maxApplied = usageFeatureEnabled ? (advancedApplied?.[row.maxId] ?? "").trim() : "";
+                            const maxDraft = usageFeatureEnabled ? advancedDraft[row.maxId].trim() : "";
+                            const rowState = fieldHighlight(
+                              Boolean(minApplied || maxApplied),
+                              minDraft !== minApplied || maxDraft !== maxApplied
+                            );
+                            const minState = fieldHighlight(Boolean(minApplied), minDraft !== minApplied);
+                            const maxState = fieldHighlight(Boolean(maxApplied), maxDraft !== maxApplied);
+                            return (
+                              <div key={`${section.title}:${row.label}`} className="inline-flex items-center gap-1.5">
+                                <label
+                                  className={`ui-caption font-medium text-slate-600 dark:text-slate-200 ${rowState.labelClass} min-w-[3.75rem]`}
+                                >
+                                  {row.label}
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  inputMode="numeric"
+                                  value={advancedDraft[row.minId]}
+                                  onChange={(e) => updateAdvancedField(row.minId, e.target.value)}
+                                  placeholder="min"
+                                  className={`w-24 rounded-md border border-slate-200 px-1.5 py-1 text-right ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${minState.fieldClass}`}
+                                />
+                                <input
+                                  type="number"
+                                  min="0"
+                                  inputMode="numeric"
+                                  value={advancedDraft[row.maxId]}
+                                  onChange={(e) => updateAdvancedField(row.maxId, e.target.value)}
+                                  placeholder="max"
+                                  className={`w-24 rounded-md border border-slate-200 px-1.5 py-1 text-right ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${maxState.fieldClass}`}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-2">
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {[
+                        { id: "versioning" as const, label: "Versioning" },
+                        { id: "object_lock" as const, label: "Object Lock" },
+                        { id: "block_public_access" as const, label: "Block public access" },
+                        { id: "lifecycle_rules" as const, label: "Lifecycle rules" },
+                        { id: "static_website" as const, label: "Static website" },
+                        { id: "bucket_policy" as const, label: "Bucket policy" },
+                        { id: "cors" as const, label: "CORS" },
+                        { id: "access_logging" as const, label: "Access logging" },
+                      ].map((feature) => {
+                        const appliedValue = advancedApplied?.features[feature.id] ?? "any";
+                        const draftValue = advancedDraft.features[feature.id];
+                        const state = fieldHighlight(appliedValue !== "any", draftValue !== appliedValue);
+                        return (
+                          <div
+                            key={feature.id}
+                            className={`inline-flex items-center gap-2 ${
+                              state.labelClass
+                            }`}
+                          >
+                            <span className="ui-caption font-medium text-slate-600 dark:text-slate-200">{feature.label}</span>
+                            <select
+                              value={advancedDraft.features[feature.id]}
+                              onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
+                              style={{ width: `${featureSelectWidthCh(advancedDraft.features[feature.id])}ch` }}
+                              className={`w-auto shrink-0 rounded-md border border-slate-200 px-2 py-1 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${
+                                state.fieldClass
+                              }`}
+                            >
+                              {feature.id === "versioning" ? (
+                                <>
+                                  <option value="any">Any</option>
+                                  <option value="enabled">Enabled</option>
+                                  <option value="disabled">Disabled</option>
+                                  <option value="suspended">Suspended</option>
+                                  <option value="disabled_or_suspended">Disabled or Suspended</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="any">Any</option>
+                                  <option value="enabled">Enabled</option>
+                                  <option value="disabled">Disabled</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={resetAdvancedFilter}
+                      disabled={!hasAnyAdvancedToClear}
+                      className={`rounded-md border px-2 py-1.5 ui-caption font-semibold ${
+                        hasAnyAdvancedToClear
+                          ? "border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                          : "cursor-not-allowed border-slate-200 text-slate-400 dark:border-slate-700 dark:text-slate-500"
+                      }`}
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={applyAdvancedFilter}
+                      disabled={!hasPendingAdvancedChanges}
+                      className={`rounded-md px-2 py-1.5 ui-caption font-semibold ${
+                        hasPendingAdvancedChanges
+                          ? "bg-primary text-white shadow-sm hover:bg-primary-600"
+                          : "cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+                      }`}
+                    >
+                      Apply filter
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {activeFilterSummaryItems.length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-white/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/70">
+                  <div className="inline-flex items-center gap-2">
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Active filters summary
+                    </p>
+                    <button
+                      type="button"
+                      onClick={resetAllFilters}
+                      className="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {activeFilterSummaryItems.map((item) => (
+                      <span
+                        key={item.id}
+                        className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 ui-caption font-semibold text-primary-700 dark:border-primary-400/40 dark:bg-primary-500/15 dark:text-primary-100"
+                      >
+                        {item.label}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -3491,10 +4411,13 @@ export default function CephAdminBucketsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => openTagEditor(Array.from(selectedBuckets))}
+                    onClick={() => {
+                      void openTagEditorForSelection();
+                    }}
+                    disabled={tagEditorLoading}
                     className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
                   >
-                    Edit UI tags
+                    {tagEditorLoading ? "Resolving..." : "Edit UI tags"}
                   </button>
                   <button
                     type="button"
@@ -3509,20 +4432,33 @@ export default function CephAdminBucketsPage() {
           )}
 
         <div className="overflow-x-auto">
-          <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+          <table className="manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                {bucketTableColumns.map((col) =>
-                  col.header ? (
+                {bucketTableColumns.map((col) => {
+                  const detailLoadingClass = loadingDetails && detailLoadingColumnIds.has(col.id) ? "animate-pulse" : "";
+                  const minWidthClass =
+                    col.id !== "select" && !col.headerClassName ? defaultColumnMinWidthClass : "";
+                  const stickyHeaderClass =
+                    col.id === "select"
+                      ? "sticky left-0 z-40 bg-slate-100 dark:bg-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),10px_0_14px_-12px_rgba(15,23,42,0.4)] dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),10px_0_14px_-12px_rgba(2,6,23,0.85)]"
+                      : col.id === "name"
+                        ? "sticky left-10 z-30 bg-slate-100 dark:bg-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
+                        : "";
+                  const headerClass = `${minWidthClass} ${col.headerClassName ?? ""} ${col.expensive ? expensiveColumnClass : ""} ${detailLoadingClass} ${stickyHeaderClass}`;
+                  if (col.header || !col.field) {
+                    return (
                     <th
                       key={col.id}
                       className={`py-3 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
                         col.align === "right" ? "text-right" : "text-left"
-                      } ${col.id === "select" ? "w-10 px-3" : "px-6"} ${col.headerClassName ?? ""}`}
+                      } ${col.id === "select" ? "w-10 px-3" : "px-6"} ${headerClass}`}
                     >
-                      <div className="flex items-start">{col.header}</div>
+                      <div className="flex items-start">{col.header ?? col.label}</div>
                     </th>
-                  ) : (
+                    );
+                  }
+                  return (
                     <SortableHeader
                       key={col.id}
                       label={col.label}
@@ -3530,10 +4466,11 @@ export default function CephAdminBucketsPage() {
                       activeField={sort.field}
                       direction={sort.direction}
                       align={col.align ?? (col.label === "Actions" ? "right" : "left")}
+                      className={headerClass}
                       onSort={col.field ? (field) => toggleSort(field as SortField) : undefined}
                     />
-                  )
-                )}
+                  );
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -3547,14 +4484,14 @@ export default function CephAdminBucketsPage() {
               {!loading &&
                 !error &&
                 items.map((bucket) => (
-                  <tr key={`${bucket.tenant ?? ""}:${bucket.name}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                  <tr key={`${bucket.tenant ?? ""}:${bucket.name}`} className="group hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     {bucketTableColumns.map((col) => {
                       const align = col.align ?? (col.id === "actions" ? "right" : "left");
                       const cellBase =
                         align === "right"
                           ? "px-6 py-4 text-right"
                           : col.id === "select"
-                            ? "px-3 py-4"
+                            ? "w-10 px-3 py-4"
                             : "px-6 py-4";
                       const isSelect = col.id === "select";
                       const textClass =
@@ -3563,8 +4500,23 @@ export default function CephAdminBucketsPage() {
                           : col.id === "name"
                           ? "manager-table-cell ui-body font-semibold text-slate-900 dark:text-slate-100"
                           : "ui-body text-slate-600 dark:text-slate-300";
+                      const isDetailLoadingColumn = loadingDetails && detailLoadingColumnIds.has(col.id);
+                      const detailLoadingCellClass = isDetailLoadingColumn
+                        ? col.expensive
+                          ? "animate-pulse bg-amber-100/70 dark:bg-amber-900/30"
+                          : "animate-pulse bg-slate-100/70 dark:bg-slate-800/60"
+                        : "";
+                      const stickyCellClass =
+                        col.id === "select"
+                          ? "sticky left-0 z-20 bg-white dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),10px_0_14px_-12px_rgba(15,23,42,0.4)] dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),10px_0_14px_-12px_rgba(2,6,23,0.85)]"
+                          : col.id === "name"
+                            ? "sticky left-10 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-100 dark:group-hover:bg-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
+                            : "";
                       return (
-                        <td key={`${bucket.name}:${col.id}`} className={`${cellBase} ${textClass}`}>
+                        <td
+                          key={`${bucket.name}:${col.id}`}
+                          className={`${cellBase} ${textClass} ${col.cellClassName ?? ""} ${col.expensive ? expensiveColumnClass : ""} ${detailLoadingCellClass} ${stickyCellClass}`}
+                        >
                           {col.render(bucket)}
                         </td>
                       );
@@ -4079,17 +5031,82 @@ export default function CephAdminBucketsPage() {
         </Modal>
       )}
       {showTagEditor && (
-        <Modal
-          title="UI tags"
-          onClose={() => {
-            setShowTagEditor(false);
-            setTagTargets([]);
-            setTagInput("");
-            setTagRemoveInput("");
-          }}
-          maxWidthClass="max-w-lg"
-        >
-          {tagTargets.length > 1 ? (
+        <Modal title="UI tags" onClose={closeTagEditor} maxWidthClass="max-w-lg">
+          {tagTargets.length === 0 ? (
+            <div className="space-y-4">
+              <p className="ui-body text-slate-700 dark:text-slate-200">
+                Add UI tags to buckets provided below. Bucket names must match exactly.
+              </p>
+              <div className="space-y-2">
+                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Bucket names (exact, comma/newline separated)
+                </label>
+                <textarea
+                  value={tagBucketListInput}
+                  onChange={(e) => setTagBucketListInput(e.target.value)}
+                  rows={6}
+                  placeholder={"bucket-a\nbucket-b, bucket-c"}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  {parsedTagBucketListNames.length} unique bucket name{parsedTagBucketListNames.length > 1 ? "s" : ""} parsed.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Tags to add (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={tagInput}
+                  list="ui-tag-options"
+                  onChange={(e) => setTagInput(e.target.value)}
+                  placeholder="team-a, analytics, archived"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+              </div>
+              {availableUiTags.length > 0 && (
+                <div className="space-y-2">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Existing tags
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {availableUiTags.map((tag) => (
+                      <button
+                        type="button"
+                        key={tag}
+                        onClick={() => setTagInput((prev) => (prev ? `${prev}, ${tag}` : tag))}
+                        className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 ui-caption font-semibold text-amber-700 hover:border-amber-300 dark:border-amber-700/60 dark:bg-amber-900/40 dark:text-amber-100"
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {tagEditorError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{tagEditorError}</p>}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-full border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
+                  onClick={closeTagEditor}
+                  disabled={tagEditorLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => {
+                    void applyTagsFromBucketList();
+                  }}
+                  disabled={tagEditorLoading}
+                >
+                  {tagEditorLoading ? "Validating..." : "Validate & apply"}
+                </button>
+              </div>
+            </div>
+          ) : tagTargets.length > 1 ? (
             <div className="space-y-4">
               <p className="ui-body text-slate-700 dark:text-slate-200">
                 Add or remove UI tags for{" "}
@@ -4143,16 +5160,12 @@ export default function CephAdminBucketsPage() {
                   </div>
                 </div>
               )}
+              {tagEditorError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{tagEditorError}</p>}
               <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
                   className="rounded-full border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
-                  onClick={() => {
-                    setShowTagEditor(false);
-                    setTagTargets([]);
-                    setTagInput("");
-                    setTagRemoveInput("");
-                  }}
+                  onClick={closeTagEditor}
                 >
                   Cancel
                 </button>
@@ -4166,68 +5179,64 @@ export default function CephAdminBucketsPage() {
               </div>
             </div>
           ) : (
-          <div className="space-y-4">
-            <p className="ui-body text-slate-700 dark:text-slate-200">
-              Apply UI tags to{" "}
-              <span className="font-semibold">
-                {tagTargets.length} bucket{tagTargets.length > 1 ? "s" : ""}
-              </span>
-              .
-            </p>
-            <div className="space-y-2">
-              <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Tags (comma separated)
-              </label>
-              <input
-                type="text"
-                value={tagInput}
-                list="ui-tag-options"
-                onChange={(e) => setTagInput(e.target.value)}
-                placeholder="team-a, analytics, archived"
-                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </div>
-            {availableUiTags.length > 0 && (
+            <div className="space-y-4">
+              <p className="ui-body text-slate-700 dark:text-slate-200">
+                Apply UI tags to{" "}
+                <span className="font-semibold">
+                  {tagTargets[0].tenant ? `${tagTargets[0].tenant}/${tagTargets[0].name}` : tagTargets[0].name}
+                </span>
+                .
+              </p>
               <div className="space-y-2">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Existing tags
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {availableUiTags.map((tag) => (
-                    <button
-                      type="button"
-                      key={tag}
-                      onClick={() => setTagInput((prev) => (prev ? `${prev}, ${tag}` : tag))}
-                      className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 ui-caption font-semibold text-amber-700 hover:border-amber-300 dark:border-amber-700/60 dark:bg-amber-900/40 dark:text-amber-100"
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
+                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Tags (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={tagInput}
+                  list="ui-tag-options"
+                  onChange={(e) => setTagInput(e.target.value)}
+                  placeholder="team-a, analytics, archived"
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
               </div>
-            )}
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-full border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
-                onClick={() => {
-                  setShowTagEditor(false);
-                  setTagTargets([]);
-                  setTagInput("");
-                  setTagRemoveInput("");
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
-                onClick={applyTagsToTargets}
-              >
-                Save tags
-              </button>
+              {availableUiTags.length > 0 && (
+                <div className="space-y-2">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Existing tags
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {availableUiTags.map((tag) => (
+                      <button
+                        type="button"
+                        key={tag}
+                        onClick={() => setTagInput((prev) => (prev ? `${prev}, ${tag}` : tag))}
+                        className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 ui-caption font-semibold text-amber-700 hover:border-amber-300 dark:border-amber-700/60 dark:bg-amber-900/40 dark:text-amber-100"
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {tagEditorError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{tagEditorError}</p>}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-full border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
+                  onClick={closeTagEditor}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
+                  onClick={applyTagsToTargets}
+                >
+                  Save tags
+                </button>
+              </div>
             </div>
-          </div>
           )}
         </Modal>
       )}
