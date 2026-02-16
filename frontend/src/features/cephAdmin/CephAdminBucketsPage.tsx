@@ -5231,14 +5231,23 @@ export default function CephAdminBucketsPage() {
           {selectedCount > 0 && (
             <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
-                  {selectedCount} bucket{selectedCount > 1 ? "s" : ""} selected
-                  {hiddenSelectedCount > 0 && (
-                    <span className="ml-2 ui-caption font-semibold text-red-600 dark:text-red-400">
-                      ({hiddenSelectedCount} not visible)
-                    </span>
-                  )}
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
+                    {selectedCount} bucket{selectedCount > 1 ? "s" : ""} selected
+                    {hiddenSelectedCount > 0 && (
+                      <span className="ml-2 ui-caption font-semibold text-red-600 dark:text-red-400">
+                        ({hiddenSelectedCount} not visible)
+                      </span>
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                  >
+                    Clear selection
+                  </button>
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -5263,13 +5272,6 @@ export default function CephAdminBucketsPage() {
                     className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
                   >
                     Export list
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearSelection}
-                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-                  >
-                    Clear selection
                   </button>
                 </div>
               </div>
