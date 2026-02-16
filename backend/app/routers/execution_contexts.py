@@ -106,6 +106,7 @@ def _build_connection_context(connection: S3Connection, *, hidden: bool = False)
             "static_website": False,
             "iam": False,
             "sns": sns_enabled,
+            "sse": False,
         },
         capabilities=ExecutionContextCapabilities(
             iam_capable=False,

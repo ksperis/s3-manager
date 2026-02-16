@@ -19,6 +19,7 @@ export type StorageEndpointFeatures = {
   static_website: StorageEndpointFeature;
   iam: StorageEndpointFeature;
   sns: StorageEndpointFeature;
+  sse: StorageEndpointFeature;
 };
 
 export type StorageEndpointAdminOpsPermissions = {

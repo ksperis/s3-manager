@@ -33,7 +33,7 @@ type FormState = {
   features: FeaturesState;
 };
 
-type FeatureKey = "admin" | "sts" | "usage" | "metrics" | "static_website" | "iam" | "sns";
+type FeatureKey = "admin" | "sts" | "usage" | "metrics" | "static_website" | "iam" | "sns" | "sse";
 
 type FeatureState = {
   enabled: boolean;
@@ -42,7 +42,7 @@ type FeatureState = {
 
 type FeaturesState = Record<FeatureKey, FeatureState>;
 
-const FEATURE_KEYS: FeatureKey[] = ["admin", "sts", "usage", "metrics", "static_website", "iam", "sns"];
+const FEATURE_KEYS: FeatureKey[] = ["admin", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse"];
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-admin" \\',
@@ -71,6 +71,7 @@ function createEmptyFeatures(): FeaturesState {
     static_website: { enabled: false, endpoint: "" },
     iam: { enabled: false, endpoint: "" },
     sns: { enabled: false, endpoint: "" },
+    sse: { enabled: false, endpoint: "" },
   };
 }
 
@@ -80,19 +81,21 @@ function defaultFeaturesForProvider(provider: StorageProvider): FeaturesState {
     return {
       ...base,
       admin: { ...base.admin, enabled: true },
-      usage: { ...base.usage, enabled: true },
+      usage: { ...base.usage, enabled: false },
       metrics: { ...base.metrics, enabled: true },
-      sts: { ...base.sts, enabled: true },
-      static_website: { ...base.static_website, enabled: true },
+      sts: { ...base.sts, enabled: false },
+      static_website: { ...base.static_website, enabled: false },
       iam: { ...base.iam, enabled: true },
-      sns: { ...base.sns, enabled: true },
+      sns: { ...base.sns, enabled: false },
+      sse: { ...base.sse, enabled: false },
     };
   }
   return {
     ...base,
-    sts: { ...base.sts, enabled: true },
-    static_website: { ...base.static_website, enabled: true },
+    sts: { ...base.sts, enabled: false },
+    static_website: { ...base.static_website, enabled: false },
     iam: { ...base.iam, enabled: true },
+    sse: { ...base.sse, enabled: false },
   };
 }
 
@@ -105,6 +108,7 @@ function applyFeatureConstraints(features: FeaturesState, provider: StorageProvi
     static_website: { ...features.static_website },
     iam: { ...features.iam },
     sns: { ...features.sns },
+    sse: { ...features.sse },
   };
   if (provider !== "ceph") {
     next.admin.enabled = false;
@@ -236,6 +240,10 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
           enabled: Boolean(endpoint.features.sns?.enabled),
           endpoint: "",
         },
+        sse: {
+          enabled: Boolean(endpoint.features.sse?.enabled),
+          endpoint: "",
+        },
       },
       provider
     );
@@ -248,6 +256,7 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
     static_website: { enabled: resolveCapability(endpoint, "static_website"), endpoint: "" },
     iam: { enabled: resolveCapability(endpoint, "iam"), endpoint: "" },
     sns: { enabled: resolveCapability(endpoint, "sns"), endpoint: "" },
+    sse: { enabled: resolveCapability(endpoint, "sse"), endpoint: "" },
   };
   return applyFeatureConstraints(fallback, provider);
 }
@@ -519,6 +528,7 @@ export default function StorageEndpointsPage() {
     const staticWebsiteEnabled = features.static_website.enabled;
     const iamEnabled = features.iam.enabled;
     const snsEnabled = features.sns.enabled;
+    const sseEnabled = features.sse.enabled;
     const settingDefault = defaultBusyId === endpoint.id;
     const adminEndpointOverride = features.admin.endpoint.trim();
     const stsEndpointOverride = features.sts.endpoint.trim();
@@ -718,6 +728,15 @@ export default function StorageEndpointsPage() {
                 }`}
               >
                 IAM {iamEnabled ? "on" : "off"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  sseEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                SSE {sseEnabled ? "on" : "off"}
               </span>
             </div>
           </div>
@@ -1090,6 +1109,20 @@ export default function StorageEndpointsPage() {
                             updateFeatures((current) => ({
                               ...current,
                               iam: { ...current.iam, enabled: e.target.checked },
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                        />
+                      </label>
+                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        Server-Side Encryption (SSE) enabled
+                        <input
+                          type="checkbox"
+                          checked={form.features.sse.enabled}
+                          onChange={(e) =>
+                            updateFeatures((current) => ({
+                              ...current,
+                              sse: { ...current.sse, enabled: e.target.checked },
                             }))
                           }
                           className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"

@@ -190,6 +190,7 @@ def list_manager_accounts(
                     "static_website": False,
                     "iam": False,
                     "sns": sns_enabled,
+                    "sse": False,
                 },
             )
         )

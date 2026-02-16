@@ -21,6 +21,7 @@ class StorageEndpointFeatures(BaseModel):
     static_website: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     iam: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     sns: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
+    sse: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
 
 
 class StorageEndpointAdminOpsPermissions(BaseModel):

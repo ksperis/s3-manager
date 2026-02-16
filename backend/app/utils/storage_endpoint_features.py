@@ -11,7 +11,7 @@ from app.db import StorageEndpoint, StorageProvider
 from app.utils.normalize import normalize_storage_provider
 
 
-FEATURE_KEYS: tuple[str, ...] = ("admin", "sts", "usage", "metrics", "static_website", "iam", "sns")
+FEATURE_KEYS: tuple[str, ...] = ("admin", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse")
 
 DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
     StorageProvider.CEPH: {
@@ -21,7 +21,8 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "metrics": {"enabled": False, "endpoint": None},
         "static_website": {"enabled": False, "endpoint": None},
         "iam": {"enabled": False, "endpoint": None},
-        "sns": {"enabled": True, "endpoint": None},
+        "sns": {"enabled": False, "endpoint": None},
+        "sse": {"enabled": False, "endpoint": None},
     },
     StorageProvider.OTHER: {
         "admin": {"enabled": False, "endpoint": None},
@@ -31,6 +32,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "static_website": {"enabled": False, "endpoint": None},
         "iam": {"enabled": False, "endpoint": None},
         "sns": {"enabled": False, "endpoint": None},
+        "sse": {"enabled": False, "endpoint": None},
     },
 }
 
@@ -46,6 +48,7 @@ class EndpointFeatureFlags:
     static_website_enabled: bool
     iam_enabled: bool
     sns_enabled: bool
+    sse_enabled: bool
 
 
 def _normalize_url(value: Optional[str]) -> Optional[str]:
@@ -134,6 +137,7 @@ def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
         static_website_enabled=bool(features["static_website"]["enabled"]),
         iam_enabled=bool(features.get("iam", {}).get("enabled")),
         sns_enabled=bool(features.get("sns", {}).get("enabled")),
+        sse_enabled=bool(features.get("sse", {}).get("enabled")),
     )
 
 
@@ -165,4 +169,5 @@ def features_to_capabilities(features: dict[str, dict[str, Any]]) -> dict[str, b
         "static_website": bool(features.get("static_website", {}).get("enabled")),
         "iam": bool(features.get("iam", {}).get("enabled")),
         "sns": bool(features.get("sns", {}).get("enabled")),
+        "sse": bool(features.get("sse", {}).get("enabled")),
     }
