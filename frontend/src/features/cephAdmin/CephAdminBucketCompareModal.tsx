@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import Modal from "../../components/Modal";
 import {
@@ -20,7 +20,7 @@ type CompareMapping = {
 type CompareRunItem = {
   sourceBucket: string;
   targetBucket: string;
-  status: "pending" | "running" | "success" | "failed";
+  status: "pending" | "running" | "success" | "failed" | "cancelled";
   result?: CephAdminBucketCompareResult;
   error?: string;
 };
@@ -183,14 +183,17 @@ export default function CephAdminBucketCompareModal({
   const [sizeOnly, setSizeOnly] = useState(false);
   const [parallelism, setParallelism] = useState(4);
   const [running, setRunning] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
-  const [progress, setProgress] = useState({ completed: 0, total: 0, failed: 0 });
+  const [progress, setProgress] = useState({ completed: 0, total: 0, failed: 0, cancelled: 0 });
   const [items, setItems] = useState<CompareRunItem[]>([]);
   const [resultSearch, setResultSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | CompareRunItem["status"]>("all");
   const [diffFilter, setDiffFilter] = useState<"all" | "with_diff" | "no_diff">("all");
   const sameEndpointSelected = targetEndpointId === sourceEndpointId;
   const parsedRawMapping = useMemo(() => parseRawMappingText(rawMappingText), [rawMappingText]);
+  const cancelRequestedRef = useRef(false);
+  const requestControllersRef = useRef(new Set<AbortController>());
 
   useEffect(() => {
     if (targetEndpointOptions.length === 0) {
@@ -423,8 +426,10 @@ export default function CephAdminBucketCompareModal({
     const safeParallelism = Number.isFinite(parallelism) ? Math.max(1, Math.min(20, Math.floor(parallelism))) : 4;
     const mappings = comparePlan.mappings;
     setRunError(null);
+    cancelRequestedRef.current = false;
     setRunning(true);
-    setProgress({ completed: 0, total: mappings.length, failed: 0 });
+    setStopping(false);
+    setProgress({ completed: 0, total: mappings.length, failed: 0, cancelled: 0 });
     setItems(
       mappings.map((mapping) => ({
         sourceBucket: mapping.sourceBucket,
@@ -437,6 +442,9 @@ export default function CephAdminBucketCompareModal({
       mappings,
       safeParallelism,
       async (mapping, index) => {
+        if (cancelRequestedRef.current) {
+          throw new DOMException("Comparison cancelled", "AbortError");
+        }
         setItems((prev) =>
           prev.map((item, itemIdx) =>
             itemIdx === index
@@ -447,23 +455,52 @@ export default function CephAdminBucketCompareModal({
               : item
           )
         );
-        return compareCephAdminBucketPair(sourceEndpointId, {
-          target_endpoint_id: targetEndpointId,
-          source_bucket: mapping.sourceBucket,
-          target_bucket: mapping.targetBucket,
-          include_config: includeConfig,
-          size_only: sizeOnly,
-        });
+        const controller = new AbortController();
+        requestControllersRef.current.add(controller);
+        try {
+          return await compareCephAdminBucketPair(
+            sourceEndpointId,
+            {
+              target_endpoint_id: targetEndpointId,
+              source_bucket: mapping.sourceBucket,
+              target_bucket: mapping.targetBucket,
+              include_config: includeConfig,
+              size_only: sizeOnly,
+            },
+            { signal: controller.signal }
+          );
+        } finally {
+          requestControllersRef.current.delete(controller);
+        }
       },
       (result, index) => {
+        const cancelled =
+          cancelRequestedRef.current ||
+          (result.status === "rejected" && axios.isAxiosError(result.reason) && result.reason.code === "ERR_CANCELED") ||
+          (result.status === "rejected" && result.reason instanceof DOMException && result.reason.name === "AbortError");
         setProgress((prev) => ({
           completed: prev.completed + 1,
           total: prev.total,
-          failed: prev.failed + (result.status === "rejected" ? 1 : 0),
+          failed: prev.failed + (!cancelled && result.status === "rejected" ? 1 : 0),
+          cancelled: prev.cancelled + (cancelled ? 1 : 0),
         }));
-        if (result.status === "fulfilled") {
+        if (result.status === "fulfilled" && !cancelRequestedRef.current) {
           setItems((prev) =>
             prev.map((item, itemIdx) => (itemIdx === index ? { ...item, status: "success", result: result.value } : item))
+          );
+          return;
+        }
+        if (cancelled) {
+          setItems((prev) =>
+            prev.map((item, itemIdx) =>
+              itemIdx === index
+                ? {
+                    ...item,
+                    status: "cancelled",
+                    error: "Comparison cancelled.",
+                  }
+                : item
+            )
           );
           return;
         }
@@ -480,14 +517,18 @@ export default function CephAdminBucketCompareModal({
         );
       }
     );
+    requestControllersRef.current.forEach((controller) => controller.abort());
+    requestControllersRef.current.clear();
     setRunning(false);
+    setStopping(false);
   };
 
   const resultSummary = useMemo(() => {
     const success = items.filter((item) => item.status === "success").length;
     const failed = items.filter((item) => item.status === "failed").length;
+    const cancelled = items.filter((item) => item.status === "cancelled").length;
     const withDiff = items.filter((item) => item.result?.has_differences).length;
-    return { success, failed, withDiff };
+    return { success, failed, cancelled, withDiff };
   }, [items]);
 
   const filteredItems = useMemo(() => {
@@ -512,6 +553,38 @@ export default function CephAdminBucketCompareModal({
     setStatusFilter("all");
     setDiffFilter("all");
   };
+
+  const stopComparison = useCallback(() => {
+    if (!running) return;
+    cancelRequestedRef.current = true;
+    setStopping(true);
+    requestControllersRef.current.forEach((controller) => controller.abort());
+    requestControllersRef.current.clear();
+    setItems((prev) =>
+      prev.map((item) =>
+        item.status === "pending" || item.status === "running"
+          ? {
+              ...item,
+              status: "cancelled",
+              error: "Comparison cancelled.",
+            }
+          : item
+      )
+    );
+  }, [running]);
+
+  const handleClose = useCallback(() => {
+    stopComparison();
+    onClose();
+  }, [onClose, stopComparison]);
+
+  useEffect(() => {
+    return () => {
+      cancelRequestedRef.current = true;
+      requestControllersRef.current.forEach((controller) => controller.abort());
+      requestControllersRef.current.clear();
+    };
+  }, []);
 
   const exportGlobalDiff = () => {
     if (items.length === 0) return;
@@ -538,6 +611,7 @@ export default function CephAdminBucketCompareModal({
         total: items.length,
         success: resultSummary.success,
         failed: resultSummary.failed,
+        cancelled: resultSummary.cancelled,
         with_differences: resultSummary.withDiff,
       },
       items: items.map((item) => ({
@@ -554,7 +628,7 @@ export default function CephAdminBucketCompareModal({
   };
 
   return (
-    <Modal title="Compare buckets" onClose={onClose} maxWidthClass="max-w-7xl" maxBodyHeightClass="max-h-[85vh]">
+    <Modal title="Compare buckets" onClose={handleClose} maxWidthClass="max-w-7xl" maxBodyHeightClass="max-h-[85vh]">
       <div className="space-y-4">
         <p className="ui-body text-slate-700 dark:text-slate-200">
           Compare <span className="font-semibold">{sortedSourceBuckets.length}</span> source bucket
@@ -743,6 +817,11 @@ export default function CephAdminBucketCompareModal({
             {progress.failed > 0 && (
               <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">Failures so far: {progress.failed}</p>
             )}
+            {progress.cancelled > 0 && (
+              <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">
+                Cancelled so far: {progress.cancelled}
+              </p>
+            )}
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
@@ -756,6 +835,14 @@ export default function CephAdminBucketCompareModal({
           </button>
           <button
             type="button"
+            onClick={stopComparison}
+            disabled={!running}
+            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-body font-semibold text-amber-700 hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:border-amber-800"
+          >
+            {stopping ? "Stopping..." : "Stop"}
+          </button>
+          <button
+            type="button"
             onClick={exportGlobalDiff}
             disabled={running || items.length === 0}
             className="rounded-md border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
@@ -764,7 +851,8 @@ export default function CephAdminBucketCompareModal({
           </button>
           {items.length > 0 && !running && (
             <p className="ui-caption text-slate-600 dark:text-slate-300">
-              Success: {resultSummary.success} / Failed: {resultSummary.failed} / With differences: {resultSummary.withDiff}
+              Success: {resultSummary.success} / Failed: {resultSummary.failed} / Cancelled: {resultSummary.cancelled} / With
+              differences: {resultSummary.withDiff}
             </p>
           )}
         </div>
@@ -788,6 +876,7 @@ export default function CephAdminBucketCompareModal({
                 <option value="running">Running</option>
                 <option value="success">Success</option>
                 <option value="failed">Failed</option>
+                <option value="cancelled">Cancelled</option>
               </select>
               <select
                 value={diffFilter}
@@ -895,6 +984,8 @@ export default function CephAdminBucketCompareModal({
                               : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
                             : item.status === "failed"
                               ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100"
+                              : item.status === "cancelled"
+                                ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
                               : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200"
                         }`}
                       >

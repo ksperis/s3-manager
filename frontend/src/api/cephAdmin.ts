@@ -554,11 +554,13 @@ export type CephAdminBucketCompareResult = {
 
 export async function compareCephAdminBucketPair(
   sourceEndpointId: number,
-  payload: CephAdminBucketCompareRequest
+  payload: CephAdminBucketCompareRequest,
+  options?: { signal?: AbortSignal }
 ): Promise<CephAdminBucketCompareResult> {
   const { data } = await client.post<CephAdminBucketCompareResult>(
     `/ceph-admin/endpoints/${sourceEndpointId}/buckets/compare`,
-    payload
+    payload,
+    { signal: options?.signal }
   );
   return data;
 }
