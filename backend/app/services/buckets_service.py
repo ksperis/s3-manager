@@ -5,7 +5,7 @@ import logging
 
 from app.db import S3Account
 from app.services import s3_client
-from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.models.bucket import (
     Bucket,
     BucketAcl,
@@ -146,10 +146,13 @@ class BucketsService:
             usage_bytes, objects = extract_usage_stats(usage)
             quota = stats.get("bucket_quota") if isinstance(stats, dict) else None
             if isinstance(quota, dict):
-                max_size = quota.get("max_size") or quota.get("max_size_kb")
                 try:
-                    if max_size is not None:
-                        quota_size = int(max_size) * (1024 if "max_size_kb" in quota else 1)
+                    # RGW may expose both max_size (bytes) and max_size_kb (KiB).
+                    # Prefer max_size when available to avoid double-scaling.
+                    if quota.get("max_size") is not None:
+                        quota_size = int(quota.get("max_size"))
+                    elif quota.get("max_size_kb") is not None:
+                        quota_size = int(quota.get("max_size_kb")) * 1024
                 except (TypeError, ValueError):
                     quota_size = None
                 try:
@@ -574,29 +577,41 @@ class BucketsService:
             restrict_public_buckets=(updated or {}).get("restrict_public_buckets"),
         )
 
-    def set_bucket_quota(self, name: str, account: S3Account, payload: BucketQuotaUpdate) -> None:
+    def set_bucket_quota(
+        self,
+        name: str,
+        account: S3Account,
+        payload: BucketQuotaUpdate,
+        rgw_admin: Optional[RGWAdminClient] = None,
+    ) -> None:
         account_id, tenant = resolve_account_scope(account.rgw_account_id)
         root_identifier = account_id or tenant
-        root_uid = resolve_admin_uid(root_identifier, account.rgw_user_uid) if root_identifier else None
-        rgw_admin = self._rgw_admin_for_account(account)
+        root_uid = resolve_admin_uid(root_identifier, account.rgw_user_uid)
+        if not root_uid:
+            raise RuntimeError("Unable to set bucket quota: bucket owner uid is missing")
+        client = rgw_admin or self._rgw_admin_for_account(account)
         max_size_bytes = None
         if payload.max_size_gb is not None:
             try:
                 max_size_bytes = size_to_bytes(payload.max_size_gb, payload.max_size_unit)
             except ValueError as exc:
                 raise ValueError(str(exc)) from exc
+        enabled = max_size_bytes is not None or payload.max_objects is not None
         try:
-            rgw_admin.set_bucket_quota(
+            response = client.set_bucket_quota(
                 bucket=name,
                 tenant=tenant,
                 uid=root_uid,
                 max_size_bytes=max_size_bytes,
                 max_objects=payload.max_objects,
-                enabled=max_size_bytes is not None or payload.max_objects is not None,
-                account_id=account_id,
+                enabled=enabled,
             )
         except RGWAdminError as exc:
             raise RuntimeError(f"Unable to set bucket quota: {exc}") from exc
+        if isinstance(response, dict) and response.get("not_found"):
+            raise RuntimeError("Unable to set bucket quota: bucket or owner scope not found")
+        if isinstance(response, dict) and response.get("not_implemented"):
+            raise RuntimeError("Unable to set bucket quota: operation not supported on this cluster")
 
     def get_policy(self, name: str, account: S3Account) -> Optional[dict]:
         access_key, secret_key = self._account_credentials(account)

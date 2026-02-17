@@ -16,6 +16,7 @@ import PropertySummaryChip from "../../components/PropertySummaryChip";
 import {
   BucketProperties,
   CephAdminBucket,
+  deleteCephAdminBucketLogging,
   deleteCephAdminBucketCors,
   deleteCephAdminBucketLifecycle,
   deleteCephAdminBucketPolicy,
@@ -27,10 +28,12 @@ import {
   getCephAdminBucketPublicAccessBlock,
   getCephAdminBucketWebsite,
   listCephAdminBuckets,
+  putCephAdminBucketLogging,
   putCephAdminBucketCors,
   putCephAdminBucketLifecycle,
   putCephAdminBucketPolicy,
   setCephAdminBucketVersioning,
+  updateCephAdminBucketObjectLock,
   updateCephAdminBucketPublicAccessBlock,
   updateCephAdminBucketQuota,
 } from "../../api/cephAdmin";
@@ -105,6 +108,8 @@ const BULK_CONCURRENCY_LIMIT = 6;
 
 type BulkOperation =
   | ""
+  | "copy_configs"
+  | "paste_configs"
   | "set_quota"
   | "add_public_access_block"
   | "remove_public_access_block"
@@ -129,6 +134,69 @@ type BulkApplyProgress = {
   completed: number;
   total: number;
   failed: number;
+};
+
+type BulkCopyFeatureKey =
+  | "quota"
+  | "versioning"
+  | "object_lock"
+  | "public_access_block"
+  | "lifecycle"
+  | "cors"
+  | "policy"
+  | "access_logging";
+
+type BulkCopyFeatureSelection = Record<BulkCopyFeatureKey, boolean>;
+
+type BulkQuotaSnapshot = {
+  maxSizeBytes: number | null;
+  maxObjects: number | null;
+};
+
+type BulkObjectLockSnapshot = {
+  enabled: boolean;
+  mode: string | null;
+  days: number | null;
+  years: number | null;
+};
+
+type BulkAccessLoggingSnapshot = {
+  enabled: boolean;
+  target_bucket: string | null;
+  target_prefix: string | null;
+};
+
+type BulkConfigClipboardBucket = {
+  name: string;
+  quota: BulkQuotaSnapshot | null;
+  versioningEnabled: boolean | null;
+  objectLock: BulkObjectLockSnapshot | null;
+  publicAccessBlock: PublicAccessBlockState | null;
+  lifecycleRules: Record<string, unknown>[] | null;
+  corsRules: Record<string, unknown>[] | null;
+  policy: Record<string, unknown> | null;
+  accessLogging: BulkAccessLoggingSnapshot | null;
+};
+
+type BulkConfigClipboard = {
+  version: 1;
+  copiedAt: string;
+  sourceEndpointId: number;
+  sourceEndpointName: string | null;
+  features: BulkCopyFeatureSelection;
+  buckets: BulkConfigClipboardBucket[];
+};
+
+type BulkPastePlanItem = {
+  sourceBucket: string;
+  destinationBucket: string;
+  sourceConfig: BulkConfigClipboardBucket;
+};
+
+type BulkPastePlan = {
+  mode: "one_to_many" | "one_to_one" | null;
+  mappings: BulkPastePlanItem[];
+  error: string | null;
 };
 
 type QuotaSizeUnit = "MiB" | "GiB" | "TiB";
@@ -248,6 +316,47 @@ const formatPublicAccessBlockState = (state: PublicAccessBlockState) => {
 
 const formatPublicAccessBlockFlag = (value: boolean) => (value ? "Blocked" : "Unblocked");
 
+const normalizeObjectLockSnapshot = (value?: Record<string, unknown> | null): BulkObjectLockSnapshot => {
+  const enabled = Boolean(value?.enabled);
+  const rawMode = value?.mode;
+  const mode = typeof rawMode === "string" && rawMode.trim() ? rawMode.trim() : null;
+  const rawDays = value?.days;
+  const rawYears = value?.years;
+  const days = typeof rawDays === "number" && Number.isFinite(rawDays) ? rawDays : null;
+  const years = typeof rawYears === "number" && Number.isFinite(rawYears) ? rawYears : null;
+  return { enabled, mode, days, years };
+};
+
+const isObjectLockSnapshotEqual = (a: BulkObjectLockSnapshot, b: BulkObjectLockSnapshot) =>
+  a.enabled === b.enabled &&
+  a.mode === b.mode &&
+  a.days === b.days &&
+  a.years === b.years;
+
+const formatObjectLockSnapshot = (value: BulkObjectLockSnapshot) =>
+  JSON.stringify(
+    {
+      enabled: value.enabled,
+      mode: value.mode,
+      days: value.days,
+      years: value.years,
+    },
+    null,
+    2
+  );
+
+const normalizeAccessLoggingSnapshot = (value?: Record<string, unknown> | null): BulkAccessLoggingSnapshot => {
+  const rawTargetBucket = value?.target_bucket;
+  const rawTargetPrefix = value?.target_prefix;
+  const target_bucket = typeof rawTargetBucket === "string" && rawTargetBucket.trim() ? rawTargetBucket.trim() : null;
+  const target_prefix = typeof rawTargetPrefix === "string" && rawTargetPrefix.trim() ? rawTargetPrefix.trim() : null;
+  const enabled = Boolean(value?.enabled && target_bucket);
+  return { enabled, target_bucket, target_prefix };
+};
+
+const isAccessLoggingSnapshotEqual = (a: BulkAccessLoggingSnapshot, b: BulkAccessLoggingSnapshot) =>
+  a.enabled === b.enabled && a.target_bucket === b.target_bucket && a.target_prefix === b.target_prefix;
+
 const applyPublicAccessBlockTargets = (
   current: PublicAccessBlockState,
   desiredEnabled: boolean,
@@ -258,6 +367,28 @@ const applyPublicAccessBlockTargets = (
     next[key] = desiredEnabled;
   });
   return next;
+};
+
+const BULK_COPY_FEATURE_LABELS: Record<BulkCopyFeatureKey, string> = {
+  quota: "Quota",
+  versioning: "Versioning",
+  object_lock: "Object Lock",
+  public_access_block: "Block public access",
+  lifecycle: "Lifecycle rules",
+  cors: "CORS",
+  policy: "Bucket policy",
+  access_logging: "Access logging",
+};
+
+const DEFAULT_BULK_COPY_FEATURE_SELECTION: BulkCopyFeatureSelection = {
+  quota: false,
+  versioning: false,
+  object_lock: false,
+  public_access_block: false,
+  lifecycle: false,
+  cors: false,
+  policy: false,
+  access_logging: false,
 };
 
 const runWithConcurrency = async <T, R>(
@@ -1058,6 +1189,7 @@ const hasAdvancedFilters = (advanced: AdvancedFilterState | null, allowStatsFilt
 const COLUMNS_STORAGE_KEY = "ceph-admin.bucket_list.columns.v1";
 const UI_TAGS_STORAGE_KEY = "ceph-admin.bucket_list.ui_tags.v1";
 const BUCKETS_STATE_STORAGE_KEY = "ceph-admin.bucket_list.state.v1";
+const BULK_CONFIG_CLIPBOARD_STORAGE_KEY = "ceph-admin.bucket_list.bulk_config_clipboard.v1";
 const BUCKET_UI_TAG_KEY_SEPARATOR = "\u001f";
 const DEFAULT_PAGE_SIZE = 25;
 const DEFAULT_SORT: { field: SortField; direction: "asc" | "desc" } = { field: "name", direction: "asc" };
@@ -1101,6 +1233,114 @@ const loadVisibleColumns = (): ColumnId[] => {
 const persistVisibleColumns = (value: ColumnId[]) => {
   if (typeof window === "undefined") return;
   localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(value));
+};
+
+const loadBulkConfigClipboard = (): BulkConfigClipboard | null => {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(BULK_CONFIG_CLIPBOARD_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<BulkConfigClipboard> | null;
+    if (!parsed || typeof parsed !== "object") return null;
+    const sourceEndpointId = Number(parsed.sourceEndpointId);
+    if (!Number.isFinite(sourceEndpointId) || sourceEndpointId <= 0) return null;
+    const rawFeatures = (parsed.features ?? {}) as Partial<Record<BulkCopyFeatureKey, unknown>>;
+    const features: BulkCopyFeatureSelection = {
+      quota: rawFeatures.quota === true,
+      versioning: rawFeatures.versioning === true,
+      object_lock: rawFeatures.object_lock === true,
+      public_access_block: rawFeatures.public_access_block === true,
+      lifecycle: rawFeatures.lifecycle === true,
+      cors: rawFeatures.cors === true,
+      policy: rawFeatures.policy === true,
+      access_logging: rawFeatures.access_logging === true,
+    };
+    const bucketsRaw = Array.isArray(parsed.buckets) ? parsed.buckets : [];
+    const byName = new Map<string, BulkConfigClipboardBucket>();
+    bucketsRaw.forEach((entry) => {
+      if (!entry || typeof entry !== "object") return;
+      const rawName = (entry as { name?: unknown }).name;
+      if (typeof rawName !== "string" || !rawName.trim()) return;
+      const name = rawName.trim();
+      const parseRules = (value: unknown): Record<string, unknown>[] | null => {
+        if (!Array.isArray(value)) return null;
+        return value.filter(
+          (rule): rule is Record<string, unknown> => Boolean(rule) && typeof rule === "object" && !Array.isArray(rule)
+        );
+      };
+      const rawQuota = (entry as { quota?: unknown }).quota;
+      const quota =
+        rawQuota && typeof rawQuota === "object"
+          ? {
+              maxSizeBytes: normalizeQuotaLimit((rawQuota as { maxSizeBytes?: number | null }).maxSizeBytes),
+              maxObjects: normalizeQuotaLimit((rawQuota as { maxObjects?: number | null }).maxObjects),
+            }
+          : null;
+      const rawVersioning = (entry as { versioningEnabled?: unknown }).versioningEnabled;
+      const versioningEnabled = typeof rawVersioning === "boolean" ? rawVersioning : null;
+      const rawObjectLock = (entry as { objectLock?: unknown }).objectLock;
+      const objectLock =
+        rawObjectLock && typeof rawObjectLock === "object"
+          ? normalizeObjectLockSnapshot(rawObjectLock as Record<string, unknown>)
+          : null;
+      const rawPublicAccessBlock = (entry as { publicAccessBlock?: unknown }).publicAccessBlock;
+      const publicAccessBlock =
+        rawPublicAccessBlock && typeof rawPublicAccessBlock === "object"
+          ? normalizePublicAccessBlockState(rawPublicAccessBlock as Partial<PublicAccessBlockState>)
+          : null;
+      const lifecycleRules = parseRules((entry as { lifecycleRules?: unknown }).lifecycleRules);
+      const corsRules = parseRules((entry as { corsRules?: unknown }).corsRules);
+      const rawPolicy = (entry as { policy?: unknown }).policy;
+      const policy = rawPolicy && typeof rawPolicy === "object" && !Array.isArray(rawPolicy)
+        ? (rawPolicy as Record<string, unknown>)
+        : null;
+      const rawAccessLogging = (entry as { accessLogging?: unknown }).accessLogging;
+      const accessLogging =
+        rawAccessLogging && typeof rawAccessLogging === "object"
+          ? normalizeAccessLoggingSnapshot(rawAccessLogging as Record<string, unknown>)
+          : null;
+      byName.set(name.toLowerCase(), {
+        name,
+        quota,
+        versioningEnabled,
+        objectLock,
+        publicAccessBlock,
+        lifecycleRules,
+        corsRules,
+        policy,
+        accessLogging,
+      });
+    });
+    const buckets = Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
+    if (buckets.length === 0) return null;
+    const sourceEndpointName =
+      typeof parsed.sourceEndpointName === "string" && parsed.sourceEndpointName.trim()
+        ? parsed.sourceEndpointName.trim()
+        : null;
+    const copiedAt =
+      typeof parsed.copiedAt === "string" && !Number.isNaN(Date.parse(parsed.copiedAt))
+        ? parsed.copiedAt
+        : new Date().toISOString();
+    return {
+      version: 1,
+      copiedAt,
+      sourceEndpointId,
+      sourceEndpointName,
+      features,
+      buckets,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const persistBulkConfigClipboard = (value: BulkConfigClipboard | null) => {
+  if (typeof window === "undefined") return;
+  if (!value) {
+    localStorage.removeItem(BULK_CONFIG_CLIPBOARD_STORAGE_KEY);
+    return;
+  }
+  localStorage.setItem(BULK_CONFIG_CLIPBOARD_STORAGE_KEY, JSON.stringify(value));
 };
 
 type BucketUiTags = Record<string, string[]>;
@@ -1329,6 +1569,17 @@ const mergeUiTags = (existing: string[], incoming: string[]) => {
 };
 
 const normalizeBucketName = (value: string) => value.trim().toLowerCase();
+const areStringMapEqual = (a: Record<string, string>, b: Record<string, string>) => {
+  const aKeys = Object.keys(a).sort((x, y) => x.localeCompare(y));
+  const bKeys = Object.keys(b).sort((x, y) => x.localeCompare(y));
+  if (aKeys.length !== bKeys.length) return false;
+  for (let i = 0; i < aKeys.length; i += 1) {
+    const key = aKeys[i];
+    if (key !== bKeys[i]) return false;
+    if ((a[key] ?? "") !== (b[key] ?? "")) return false;
+  }
+  return true;
+};
 const ownerFilterFromSearch = (search: string) => {
   if (!search) return null;
   const value = new URLSearchParams(search).get("owner");
@@ -1372,6 +1623,12 @@ export default function CephAdminBucketsPage() {
   const [orphanedTagBuckets, setOrphanedTagBuckets] = useState<string[]>([]);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
+  const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(loadBulkConfigClipboard);
+  const [bulkCopyFeatures, setBulkCopyFeatures] = useState<BulkCopyFeatureSelection>(DEFAULT_BULK_COPY_FEATURE_SELECTION);
+  const [bulkCopyLoading, setBulkCopyLoading] = useState(false);
+  const [bulkCopyError, setBulkCopyError] = useState<string | null>(null);
+  const [bulkCopySummary, setBulkCopySummary] = useState<string | null>(null);
+  const [bulkPasteMapping, setBulkPasteMapping] = useState<Record<string, string>>({});
   const [bulkQuotaSizeValue, setBulkQuotaSizeValue] = useState("");
   const [bulkQuotaSizeUnit, setBulkQuotaSizeUnit] = useState<QuotaSizeUnit>("GiB");
   const [bulkQuotaObjects, setBulkQuotaObjects] = useState("");
@@ -1575,6 +1832,10 @@ export default function CephAdminBucketsPage() {
   useEffect(() => {
     persistUiTags(selectedEndpointId, uiTags);
   }, [uiTags, selectedEndpointId]);
+
+  useEffect(() => {
+    persistBulkConfigClipboard(bulkConfigClipboard);
+  }, [bulkConfigClipboard]);
 
   useEffect(() => {
     if (!selectedEndpointId) return;
@@ -1903,6 +2164,7 @@ export default function CephAdminBucketsPage() {
   const clearSelection = () => {
     setSelectedBuckets(new Set());
     setBulkOperation("");
+    setBulkCopyFeatures(DEFAULT_BULK_COPY_FEATURE_SELECTION);
     setBulkLifecycleRuleText("");
     setBulkLifecycleUpdateOnlyExisting(false);
     setBulkLifecycleDeleteIds("");
@@ -1930,6 +2192,9 @@ export default function CephAdminBucketsPage() {
         {} as Record<PolicyRuleTypeKey, boolean>
       )
     );
+    setBulkPasteMapping({});
+    setBulkCopyError(null);
+    setBulkCopySummary(null);
     setBulkPreview([]);
     setBulkPreviewError(null);
     setBulkPreviewReady(false);
@@ -2174,15 +2439,358 @@ export default function CephAdminBucketsPage() {
     [selectedBuckets]
   );
 
-  const exportSelectedBuckets = () => {
+  const bulkClipboardSourceBuckets = useMemo(
+    () => (bulkConfigClipboard ? bulkConfigClipboard.buckets.map((bucket) => bucket.name) : []),
+    [bulkConfigClipboard]
+  );
+  const bulkClipboardSameEndpoint = Boolean(
+    bulkConfigClipboard && selectedEndpointId && bulkConfigClipboard.sourceEndpointId === selectedEndpointId
+  );
+  const bulkPastePlan = useMemo<BulkPastePlan>(() => {
+    if (!bulkConfigClipboard) {
+      return { mode: null, mappings: [], error: "No copied configuration available." };
+    }
+    if (!selectedEndpointId) {
+      return { mode: null, mappings: [], error: "Select an endpoint first." };
+    }
+    const enabledFeatures = (Object.keys(bulkConfigClipboard.features) as BulkCopyFeatureKey[]).filter(
+      (feature) => bulkConfigClipboard.features[feature]
+    );
+    if (enabledFeatures.length === 0) {
+      return { mode: null, mappings: [], error: "Clipboard does not include any copied configuration." };
+    }
+    const sourceBuckets = bulkConfigClipboard.buckets;
+    if (sourceBuckets.length === 0) {
+      return { mode: null, mappings: [], error: "Copied selection is empty." };
+    }
+    if (selectedBucketList.length === 0) {
+      return { mode: null, mappings: [], error: "Select destination buckets first." };
+    }
+
+    if (sourceBuckets.length === 1) {
+      const source = sourceBuckets[0];
+      if (bulkClipboardSameEndpoint) {
+        const conflictingDestinations = selectedBucketList.filter(
+          (destination) => normalizeBucketName(destination) === normalizeBucketName(source.name)
+        );
+        if (conflictingDestinations.length > 0) {
+          return {
+            mode: "one_to_many",
+            mappings: [],
+            error: `Copy/paste on the same bucket is not allowed: ${formatBucketNamesPreview(conflictingDestinations)}.`,
+          };
+        }
+      }
+      return {
+        mode: "one_to_many",
+        mappings: selectedBucketList.map((destinationBucket) => ({
+          sourceBucket: source.name,
+          destinationBucket,
+          sourceConfig: source,
+        })),
+        error: null,
+      };
+    }
+
+    if (sourceBuckets.length !== selectedBucketList.length) {
+      return {
+        mode: null,
+        mappings: [],
+        error: `Mapping impossible: source has ${sourceBuckets.length} bucket(s), destination has ${selectedBucketList.length}.`,
+      };
+    }
+
+    const destinationByNormalized = new Map<string, string>();
+    selectedBucketList.forEach((destination) => {
+      destinationByNormalized.set(normalizeBucketName(destination), destination);
+    });
+
+    const usedDestinations = new Set<string>();
+    const unresolvedSources: string[] = [];
+    const duplicateDestinations: string[] = [];
+    const invalidDestinations: string[] = [];
+    const sameBucketConflicts: string[] = [];
+    const mappings: BulkPastePlanItem[] = [];
+
+    sourceBuckets.forEach((source) => {
+      const selectedDestination = (bulkPasteMapping[source.name] ?? "").trim();
+      if (!selectedDestination) {
+        unresolvedSources.push(source.name);
+        return;
+      }
+      const normalizedDestination = normalizeBucketName(selectedDestination);
+      const destinationBucket = destinationByNormalized.get(normalizedDestination);
+      if (!destinationBucket) {
+        invalidDestinations.push(selectedDestination);
+        return;
+      }
+      if (bulkClipboardSameEndpoint && normalizedDestination === normalizeBucketName(source.name)) {
+        sameBucketConflicts.push(source.name);
+        return;
+      }
+      if (usedDestinations.has(normalizedDestination)) {
+        duplicateDestinations.push(destinationBucket);
+        return;
+      }
+      usedDestinations.add(normalizedDestination);
+      mappings.push({
+        sourceBucket: source.name,
+        destinationBucket,
+        sourceConfig: source,
+      });
+    });
+
+    if (unresolvedSources.length > 0) {
+      return {
+        mode: "one_to_one",
+        mappings: [],
+        error: `Complete the mapping for all source buckets (${unresolvedSources.length} missing).`,
+      };
+    }
+    if (invalidDestinations.length > 0) {
+      return {
+        mode: "one_to_one",
+        mappings: [],
+        error: `Some mapped destinations are invalid: ${formatBucketNamesPreview(invalidDestinations)}.`,
+      };
+    }
+    if (sameBucketConflicts.length > 0) {
+      return {
+        mode: "one_to_one",
+        mappings: [],
+        error: `Copy/paste on the same bucket is not allowed: ${formatBucketNamesPreview(sameBucketConflicts)}.`,
+      };
+    }
+    if (duplicateDestinations.length > 0) {
+      return {
+        mode: "one_to_one",
+        mappings: [],
+        error: "Each destination bucket can only be used once in 1:1 mapping.",
+      };
+    }
+
+    return { mode: "one_to_one", mappings, error: null };
+  }, [bulkConfigClipboard, bulkClipboardSameEndpoint, bulkPasteMapping, selectedBucketList, selectedEndpointId]);
+
+  useEffect(() => {
+    if (!showBulkUpdateModal || bulkOperation !== "paste_configs" || !bulkConfigClipboard) return;
+    const sourceBuckets = bulkConfigClipboard.buckets.map((bucket) => bucket.name);
+    if (sourceBuckets.length <= 1 || sourceBuckets.length !== selectedBucketList.length) {
+      setBulkPasteMapping((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+    const destinationByNormalized = new Map<string, string>();
+    selectedBucketList.forEach((destination) => {
+      destinationByNormalized.set(normalizeBucketName(destination), destination);
+    });
+
+    setBulkPasteMapping((prev) => {
+      const next: Record<string, string> = {};
+      const usedDestinations = new Set<string>();
+
+      sourceBuckets.forEach((sourceBucket) => {
+        const previousValue = (prev[sourceBucket] ?? "").trim();
+        if (!previousValue) return;
+        const normalizedDestination = normalizeBucketName(previousValue);
+        const destination = destinationByNormalized.get(normalizedDestination);
+        if (!destination) return;
+        if (bulkClipboardSameEndpoint && normalizedDestination === normalizeBucketName(sourceBucket)) return;
+        if (usedDestinations.has(normalizedDestination)) return;
+        next[sourceBucket] = destination;
+        usedDestinations.add(normalizedDestination);
+      });
+
+      if (!bulkClipboardSameEndpoint) {
+        sourceBuckets.forEach((sourceBucket) => {
+          if (next[sourceBucket]) return;
+          const normalizedSource = normalizeBucketName(sourceBucket);
+          const destination = destinationByNormalized.get(normalizedSource);
+          if (!destination) return;
+          if (usedDestinations.has(normalizedSource)) return;
+          next[sourceBucket] = destination;
+          usedDestinations.add(normalizedSource);
+        });
+      }
+
+      return areStringMapEqual(prev, next) ? prev : next;
+    });
+  }, [bulkConfigClipboard, bulkClipboardSameEndpoint, bulkOperation, selectedBucketList, showBulkUpdateModal]);
+
+  const exportSelectedBuckets = async () => {
     if (selectedBucketList.length === 0) return;
     try {
+      const bucketsByName = new Map<string, CephAdminBucket>();
+      items.forEach((bucket) => {
+        if (selectedBuckets.has(bucket.name)) {
+          bucketsByName.set(bucket.name, bucket);
+        }
+      });
+
+      const missingNames = selectedBucketList.filter((name) => !bucketsByName.has(name));
+      if (selectedEndpointId && missingNames.length > 0) {
+        const chunkSize = 50;
+        for (let start = 0; start < missingNames.length; start += chunkSize) {
+          const chunk = missingNames.slice(start, start + chunkSize);
+          const advancedFilter = JSON.stringify({
+            match: "any",
+            rules: [{ field: "name", op: "in", value: chunk }],
+          });
+          let nextPage = 1;
+          while (true) {
+            const response = await listCephAdminBuckets(selectedEndpointId, {
+              page: nextPage,
+              page_size: 200,
+              advanced_filter: advancedFilter,
+              include: includeParams,
+              with_stats: usageFeatureEnabled && requiresStats,
+            });
+            (response.items ?? []).forEach((bucket) => {
+              if (selectedBuckets.has(bucket.name) && !bucketsByName.has(bucket.name)) {
+                bucketsByName.set(bucket.name, bucket);
+              }
+            });
+            if (!response.has_next) break;
+            nextPage += 1;
+          }
+        }
+      }
+
+      const featureColumns: Array<{ id: ColumnId; label: string; key: FeatureKey }> = [
+        { id: "versioning", label: "Versioning", key: "versioning" },
+        { id: "object_lock", label: "Object Lock", key: "object_lock" },
+        { id: "block_public_access", label: "Block public access", key: "block_public_access" },
+        { id: "lifecycle_rules", label: "Lifecycle rules", key: "lifecycle_rules" },
+        { id: "static_website", label: "Static website", key: "static_website" },
+        { id: "bucket_policy", label: "Bucket policy", key: "bucket_policy" },
+        { id: "cors", label: "CORS", key: "cors" },
+        { id: "access_logging", label: "Access logging", key: "access_logging" },
+      ];
+      const featureColumnById = new Map(featureColumns.map((col) => [col.id, col]));
+      const visibleFeatureColumns = featureColumns.filter((col) => visibleColumns.includes(col.id));
+
+      const exportColumns: Array<{ id: string; label: string; getValue: (bucket: CephAdminBucket) => string }> = [
+        { id: "name", label: "Name", getValue: (bucket) => bucket.name ?? "-" },
+      ];
+
+      visibleColumns.forEach((col) => {
+        if (col === "tenant") {
+          exportColumns.push({ id: col, label: "Tenant", getValue: (bucket) => bucket.tenant ?? "-" });
+          return;
+        }
+        if (col === "owner") {
+          exportColumns.push({ id: col, label: "Owner", getValue: (bucket) => bucket.owner ?? "-" });
+          return;
+        }
+        if (col === "owner_name") {
+          exportColumns.push({ id: col, label: "Owner name", getValue: (bucket) => bucket.owner_name ?? "-" });
+          return;
+        }
+        if (col === "used_bytes") {
+          exportColumns.push({ id: col, label: "Used", getValue: (bucket) => formatBytes(bucket.used_bytes) });
+          return;
+        }
+        if (col === "quota_max_size_bytes") {
+          exportColumns.push({
+            id: col,
+            label: "Quota",
+            getValue: (bucket) => {
+              const quota = normalizeQuotaLimit(bucket.quota_max_size_bytes);
+              return quota !== null ? formatBytes(quota) : "-";
+            },
+          });
+          return;
+        }
+        if (col === "object_count") {
+          exportColumns.push({ id: col, label: "Objects", getValue: (bucket) => formatNumber(bucket.object_count) });
+          return;
+        }
+        if (col === "quota_max_objects") {
+          exportColumns.push({
+            id: col,
+            label: "Object quota",
+            getValue: (bucket) => {
+              const quota = normalizeQuotaLimit(bucket.quota_max_objects);
+              return quota !== null ? formatNumber(quota) : "-";
+            },
+          });
+          return;
+        }
+        if (col === "quota_usage_percent") {
+          exportColumns.push({
+            id: col,
+            label: "Quota usage %",
+            getValue: (bucket) => {
+              const sizePercent = computeQuotaUsagePercent(bucket.used_bytes, bucket.quota_max_size_bytes);
+              const objectPercent = computeQuotaUsagePercent(bucket.object_count, bucket.quota_max_objects);
+              if (sizePercent === null && objectPercent === null) return "-";
+              const parts: string[] = [];
+              if (sizePercent !== null) parts.push(`Size: ${formatQuotaPercent(sizePercent)}`);
+              if (objectPercent !== null) parts.push(`Obj: ${formatQuotaPercent(objectPercent)}`);
+              return parts.join("; ");
+            },
+          });
+          return;
+        }
+        if (col === "tags") {
+          exportColumns.push({
+            id: col,
+            label: "Tags",
+            getValue: (bucket) => {
+              const tags = Array.isArray(bucket.tags) ? bucket.tags : [];
+              if (tags.length === 0) return "-";
+              return tags
+                .filter((tag) => (tag.key ?? "").trim())
+                .map((tag) => `${tag.key}=${tag.value}`)
+                .join(", ");
+            },
+          });
+          return;
+        }
+        if (col === "ui_tags") {
+          exportColumns.push({
+            id: col,
+            label: "UI tags",
+            getValue: (bucket) => {
+              const key = toBucketTagTarget(bucket.name, bucket.tenant).key;
+              const tags = uiTags[key] ?? [];
+              return tags.length > 0 ? tags.join(", ") : "-";
+            },
+          });
+          return;
+        }
+        if (col === "quota_status") {
+          exportColumns.push({
+            id: col,
+            label: "Quota status",
+            getValue: (bucket) => (quotaConfigured(bucket) ? "Configured" : "Not set"),
+          });
+          return;
+        }
+        const featureColumn = featureColumnById.get(col);
+        if (featureColumn && visibleFeatureColumns.some((item) => item.id === col)) {
+          exportColumns.push({
+            id: col,
+            label: featureColumn.label,
+            getValue: (bucket) => bucket.features?.[featureColumn.key]?.state ?? "-",
+          });
+        }
+      });
+
+      const lines = [
+        exportColumns.map((column) => csvEscape(column.label)).join(","),
+        ...selectedBucketList.map((bucketName) => {
+          const bucket = bucketsByName.get(bucketName);
+          const values = exportColumns.map((column) => (bucket ? column.getValue(bucket) : "-"));
+          return values.map((value) => csvEscape(String(value ?? "-"))).join(",");
+        }),
+      ];
+
       const exportedAt = new Date().toISOString();
       const timestamp = exportedAt.replace(/[:.]/g, "-");
       const endpointPart = sanitizeExportFilenamePart(
         selectedEndpoint?.name ?? (selectedEndpointId ? `endpoint-${selectedEndpointId}` : "endpoint")
       );
-      const csv = ["bucket_name", ...selectedBucketList.map((bucketName) => csvEscape(bucketName))].join("\n");
+      const csv = lines.join("\n");
       triggerDownload(
         `ceph-admin-buckets-${endpointPart}-${timestamp}.csv`,
         csv,
@@ -2226,6 +2834,9 @@ export default function CephAdminBucketsPage() {
     bulkPolicyUpdateOnlyExisting,
     bulkPolicyDeleteIds,
     bulkPolicyDeleteTypes,
+    bulkCopyFeatures,
+    bulkPasteMapping,
+    bulkConfigClipboard,
     selectedBuckets,
     showBulkUpdateModal,
   ]);
@@ -2239,6 +2850,10 @@ export default function CephAdminBucketsPage() {
   const openBulkUpdateModal = () => {
     setShowBulkUpdateModal(true);
     setBulkOperation("");
+    setBulkCopyFeatures(DEFAULT_BULK_COPY_FEATURE_SELECTION);
+    setBulkCopyError(null);
+    setBulkCopySummary(null);
+    setBulkPasteMapping({});
     setBulkQuotaSizeValue("");
     setBulkQuotaSizeUnit("GiB");
     setBulkQuotaObjects("");
@@ -2287,6 +2902,8 @@ export default function CephAdminBucketsPage() {
   const closeBulkUpdateModal = () => {
     setShowBulkUpdateModal(false);
     resetBulkPreview();
+    setBulkCopyError(null);
+    setBulkCopySummary(null);
     setBulkApplyError(null);
     setBulkApplySummary(null);
     setBulkApplyProgress(null);
@@ -2672,17 +3289,345 @@ export default function CephAdminBucketsPage() {
     };
   };
 
+  const copyBulkConfigs = async () => {
+    if (!selectedEndpointId || selectedBucketList.length === 0) return;
+    const selectedFeatures = (Object.keys(bulkCopyFeatures) as BulkCopyFeatureKey[]).filter(
+      (feature) => bulkCopyFeatures[feature]
+    );
+    if (selectedFeatures.length === 0) {
+      setBulkCopyError("Select at least one configuration to copy.");
+      return;
+    }
+    setBulkCopyLoading(true);
+    setBulkCopyError(null);
+    setBulkCopySummary(null);
+    try {
+      const results = await runWithConcurrencySettled(
+        selectedBucketList,
+        BULK_CONCURRENCY_LIMIT,
+        async (bucketName) => {
+          let props: BucketProperties | null = null;
+          if (bulkCopyFeatures.versioning || bulkCopyFeatures.object_lock) {
+            props = await getCephAdminBucketProperties(selectedEndpointId, bucketName);
+          }
+          const quota = bulkCopyFeatures.quota ? await fetchBucketQuota(bucketName) : null;
+          const versioningEnabled = bulkCopyFeatures.versioning
+            ? normalizeVersioningStatus(props?.versioning_status) === true
+            : null;
+          const rawObjectLock =
+            props?.object_lock && typeof props.object_lock === "object"
+              ? (props.object_lock as Record<string, unknown>)
+              : {};
+          const objectLock = bulkCopyFeatures.object_lock
+            ? normalizeObjectLockSnapshot({
+                ...rawObjectLock,
+                enabled: Boolean(props?.object_lock_enabled ?? rawObjectLock.enabled),
+              })
+            : null;
+          const publicAccessBlock = bulkCopyFeatures.public_access_block
+            ? normalizePublicAccessBlockState(await getCephAdminBucketPublicAccessBlock(selectedEndpointId, bucketName))
+            : null;
+          const lifecycleRules = bulkCopyFeatures.lifecycle
+            ? ((await getCephAdminBucketLifecycle(selectedEndpointId, bucketName)).rules ?? []) as Record<string, unknown>[]
+            : null;
+          const corsRules = bulkCopyFeatures.cors
+            ? ((await getCephAdminBucketCors(selectedEndpointId, bucketName)).rules ?? []) as Record<string, unknown>[]
+            : null;
+          const policy = bulkCopyFeatures.policy
+            ? (((await getCephAdminBucketPolicy(selectedEndpointId, bucketName)).policy ?? null) as Record<string, unknown> | null)
+            : null;
+          const accessLogging = bulkCopyFeatures.access_logging
+            ? normalizeAccessLoggingSnapshot(
+                (await getCephAdminBucketLogging(selectedEndpointId, bucketName)) as unknown as Record<string, unknown>
+              )
+            : null;
+          return {
+            name: bucketName,
+            quota,
+            versioningEnabled,
+            objectLock,
+            publicAccessBlock,
+            lifecycleRules,
+            corsRules,
+            policy,
+            accessLogging,
+          };
+        }
+      );
+      const failed = results.filter((result) => result.status === "rejected");
+      if (failed.length > 0) {
+        setBulkCopyError(`${failed.length} source bucket(s) failed while copying configs.`);
+        return;
+      }
+      const copiedBuckets = results
+        .filter(
+          (
+            result
+          ): result is PromiseFulfilledResult<{
+            name: string;
+            quota: BulkQuotaSnapshot | null;
+            versioningEnabled: boolean | null;
+            objectLock: BulkObjectLockSnapshot | null;
+            publicAccessBlock: PublicAccessBlockState | null;
+            lifecycleRules: Record<string, unknown>[] | null;
+            corsRules: Record<string, unknown>[] | null;
+            policy: Record<string, unknown> | null;
+            accessLogging: BulkAccessLoggingSnapshot | null;
+          }> => result.status === "fulfilled"
+        )
+        .map((result) => ({
+          name: result.value.name,
+          quota: result.value.quota,
+          versioningEnabled: result.value.versioningEnabled,
+          objectLock: result.value.objectLock,
+          publicAccessBlock: result.value.publicAccessBlock,
+          lifecycleRules: result.value.lifecycleRules,
+          corsRules: result.value.corsRules,
+          policy: result.value.policy,
+          accessLogging: result.value.accessLogging,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      if (copiedBuckets.length === 0) {
+        setBulkCopyError("No source bucket configuration could be copied.");
+        return;
+      }
+      setBulkConfigClipboard({
+        version: 1,
+        copiedAt: new Date().toISOString(),
+        sourceEndpointId: selectedEndpointId,
+        sourceEndpointName: selectedEndpoint?.name ?? null,
+        features: {
+          quota: bulkCopyFeatures.quota,
+          versioning: bulkCopyFeatures.versioning,
+          object_lock: bulkCopyFeatures.object_lock,
+          public_access_block: bulkCopyFeatures.public_access_block,
+          lifecycle: bulkCopyFeatures.lifecycle,
+          cors: bulkCopyFeatures.cors,
+          policy: bulkCopyFeatures.policy,
+          access_logging: bulkCopyFeatures.access_logging,
+        },
+        buckets: copiedBuckets,
+      });
+      const featureLabelText = selectedFeatures.map((feature) => BULK_COPY_FEATURE_LABELS[feature]).join(", ");
+      setBulkCopySummary(`Copied ${featureLabelText} from ${copiedBuckets.length} bucket(s).`);
+    } catch (err) {
+      setBulkCopyError(extractError(err));
+    } finally {
+      setBulkCopyLoading(false);
+    }
+  };
+
+  const buildPasteConfigPreview = async (mapping: BulkPastePlanItem): Promise<BulkPreviewItem> => {
+    const features = bulkConfigClipboard?.features;
+    const source = mapping.sourceConfig;
+    if (!features) {
+      return {
+        bucket: mapping.destinationBucket,
+        changed: false,
+        before: [{ text: "Clipboard unavailable." }],
+        after: [{ text: "Clipboard unavailable." }],
+      };
+    }
+    let changed = false;
+    const before: BulkPreviewLine[] = [{ text: `Source bucket: ${mapping.sourceBucket}` }];
+    const after: BulkPreviewLine[] = [{ text: `Source bucket: ${mapping.sourceBucket}` }];
+    const pushSection = (label: string, beforeLines: BulkPreviewLine[], afterLines: BulkPreviewLine[]) => {
+      before.push({ text: `[${label}]` }, ...beforeLines);
+      after.push({ text: `[${label}]` }, ...afterLines);
+    };
+
+    let props: BucketProperties | null = null;
+    if (features.versioning || features.object_lock) {
+      props = await getCephAdminBucketProperties(selectedEndpointId!, mapping.destinationBucket);
+    }
+
+    if (features.quota && source.quota) {
+      const currentQuota = await fetchBucketQuota(mapping.destinationBucket);
+      const sectionChanged =
+        currentQuota.maxSizeBytes !== source.quota.maxSizeBytes || currentQuota.maxObjects !== source.quota.maxObjects;
+      changed = changed || sectionChanged;
+      pushSection(
+        "Quota",
+        [
+          {
+            text: `Size: ${currentQuota.maxSizeBytes != null ? formatBytes(currentQuota.maxSizeBytes) : "Not set"}`,
+            tone: sectionChanged ? "removed" : undefined,
+          },
+          {
+            text: `Objects: ${currentQuota.maxObjects != null ? formatNumber(currentQuota.maxObjects) : "Not set"}`,
+            tone: sectionChanged ? "removed" : undefined,
+          },
+        ],
+        [
+          {
+            text: `Size: ${source.quota.maxSizeBytes != null ? formatBytes(source.quota.maxSizeBytes) : "Not set"}`,
+            tone: sectionChanged ? "added" : undefined,
+          },
+          {
+            text: `Objects: ${source.quota.maxObjects != null ? formatNumber(source.quota.maxObjects) : "Not set"}`,
+            tone: sectionChanged ? "added" : undefined,
+          },
+        ]
+      );
+    }
+
+    if (features.versioning && source.versioningEnabled !== null) {
+      const currentEnabled = normalizeVersioningStatus(props?.versioning_status);
+      const currentStatus = formatVersioningStatus(props?.versioning_status);
+      const targetStatus = source.versioningEnabled ? "Enabled" : "Suspended";
+      const sectionChanged = currentEnabled === null ? true : currentEnabled !== source.versioningEnabled;
+      changed = changed || sectionChanged;
+      pushSection(
+        "Versioning",
+        [{ text: currentStatus, tone: sectionChanged ? "removed" : undefined }],
+        [{ text: targetStatus, tone: sectionChanged ? "added" : undefined }]
+      );
+    }
+
+    if (features.object_lock && source.objectLock) {
+      const rawCurrentObjectLock =
+        props?.object_lock && typeof props.object_lock === "object"
+          ? (props.object_lock as Record<string, unknown>)
+          : {};
+      const currentObjectLock = normalizeObjectLockSnapshot({
+        ...rawCurrentObjectLock,
+        enabled: Boolean(props?.object_lock_enabled ?? rawCurrentObjectLock.enabled),
+      });
+      const sectionChanged = !isObjectLockSnapshotEqual(currentObjectLock, source.objectLock);
+      changed = changed || sectionChanged;
+      pushSection(
+        "Object Lock",
+        [{ text: formatObjectLockSnapshot(currentObjectLock), tone: sectionChanged ? "removed" : undefined }],
+        [{ text: formatObjectLockSnapshot(source.objectLock), tone: sectionChanged ? "added" : undefined }]
+      );
+    }
+
+    if (features.public_access_block && source.publicAccessBlock) {
+      const currentPublicAccessBlock = normalizePublicAccessBlockState(
+        await getCephAdminBucketPublicAccessBlock(selectedEndpointId!, mapping.destinationBucket)
+      );
+      const sectionChanged = !isPublicAccessBlockEquivalent(currentPublicAccessBlock, source.publicAccessBlock);
+      changed = changed || sectionChanged;
+      pushSection(
+        "Block Public Access",
+        [{ text: JSON.stringify(currentPublicAccessBlock, null, 2), tone: sectionChanged ? "removed" : undefined }],
+        [{ text: JSON.stringify(source.publicAccessBlock, null, 2), tone: sectionChanged ? "added" : undefined }]
+      );
+    }
+
+    if (features.lifecycle && source.lifecycleRules) {
+      const currentLifecycle = ((await getCephAdminBucketLifecycle(selectedEndpointId!, mapping.destinationBucket)).rules ??
+        []) as Record<string, unknown>[];
+      const sectionChanged = stableStringify(currentLifecycle) !== stableStringify(source.lifecycleRules);
+      changed = changed || sectionChanged;
+      pushSection(
+        "Lifecycle",
+        currentLifecycle.length === 0
+          ? [{ text: "(no rules)" }]
+          : currentLifecycle.map((rule) => ({ text: formatLifecycleRule(rule), tone: sectionChanged ? "removed" : undefined })),
+        source.lifecycleRules.length === 0
+          ? [{ text: "(no rules)" }]
+          : source.lifecycleRules.map((rule) => ({ text: formatLifecycleRule(rule), tone: sectionChanged ? "added" : undefined }))
+      );
+    }
+
+    if (features.cors && source.corsRules) {
+      const currentCors = ((await getCephAdminBucketCors(selectedEndpointId!, mapping.destinationBucket)).rules ??
+        []) as Record<string, unknown>[];
+      const sectionChanged = stableStringify(currentCors) !== stableStringify(source.corsRules);
+      changed = changed || sectionChanged;
+      pushSection(
+        "CORS",
+        currentCors.length === 0
+          ? [{ text: "(no rules)" }]
+          : currentCors.map((rule) => ({ text: formatCorsRule(rule), tone: sectionChanged ? "removed" : undefined })),
+        source.corsRules.length === 0
+          ? [{ text: "(no rules)" }]
+          : source.corsRules.map((rule) => ({ text: formatCorsRule(rule), tone: sectionChanged ? "added" : undefined }))
+      );
+    }
+
+    if (features.policy) {
+      const currentPolicy = ((await getCephAdminBucketPolicy(selectedEndpointId!, mapping.destinationBucket)).policy ??
+        null) as Record<string, unknown> | null;
+      const sectionChanged = stableStringify(currentPolicy) !== stableStringify(source.policy);
+      changed = changed || sectionChanged;
+      pushSection(
+        "Bucket Policy",
+        [{ text: currentPolicy ? JSON.stringify(currentPolicy, null, 2) : "(no policy)", tone: sectionChanged ? "removed" : undefined }],
+        [{ text: source.policy ? JSON.stringify(source.policy, null, 2) : "(no policy)", tone: sectionChanged ? "added" : undefined }]
+      );
+    }
+
+    if (features.access_logging && source.accessLogging) {
+      const currentAccessLogging = normalizeAccessLoggingSnapshot(
+        (await getCephAdminBucketLogging(selectedEndpointId!, mapping.destinationBucket)) as unknown as Record<string, unknown>
+      );
+      const sectionChanged = !isAccessLoggingSnapshotEqual(currentAccessLogging, source.accessLogging);
+      changed = changed || sectionChanged;
+      pushSection(
+        "Access logging",
+        [{ text: JSON.stringify(currentAccessLogging, null, 2), tone: sectionChanged ? "removed" : undefined }],
+        [{ text: JSON.stringify(source.accessLogging, null, 2), tone: sectionChanged ? "added" : undefined }]
+      );
+    }
+
+    return {
+      bucket: mapping.destinationBucket,
+      changed,
+      before,
+      after,
+    };
+  };
+
   const runBulkPreview = async () => {
     if (!selectedEndpointId || selectedBucketList.length === 0) return;
     if (!bulkOperation) {
       setBulkPreviewError("Select an operation first.");
       return;
     }
+    if (bulkOperation === "copy_configs") {
+      setBulkPreviewError("Use 'Copy selected configs' for this operation.");
+      return;
+    }
+    if (bulkOperation === "paste_configs") {
+      if (bulkPastePlan.error) {
+        setBulkPreviewError(bulkPastePlan.error);
+        return;
+      }
+      setBulkPreviewLoading(true);
+      setBulkPreviewError(null);
+      setBulkPreview([]);
+      setBulkPreviewReady(false);
+      setBulkApplyError(null);
+      setBulkApplySummary(null);
+
+      const previewItems = await runWithConcurrency(
+        bulkPastePlan.mappings,
+        BULK_CONCURRENCY_LIMIT,
+        async (mapping) => {
+          try {
+            return await buildPasteConfigPreview(mapping);
+          } catch (err) {
+            return {
+              bucket: mapping.destinationBucket,
+              before: [{ text: `Source bucket: ${mapping.sourceBucket}` }, { text: "Preview failed." }],
+              after: [{ text: `Source bucket: ${mapping.sourceBucket}` }, { text: "Preview failed." }],
+              changed: false,
+              error: extractError(err),
+            };
+          }
+        }
+      );
+      setBulkPreview(previewItems);
+      setBulkPreviewReady(true);
+      setBulkPreviewLoading(false);
+      return;
+    }
     let parsedQuota: ParsedQuotaInput | null = null;
     let parsedRules: Record<string, unknown>[] | null = null;
     let parsedCorsRules: Record<string, unknown>[] | null = null;
     let parsedPolicyStatements: Record<string, unknown>[] | null = null;
-    let parsedPolicy: Record<string, unknown> | null = null;
     let deleteIds: Set<string> | null = null;
     let deleteTypes: Set<LifecycleRuleTypeKey> | null = null;
     let deleteCorsIds: Set<string> | null = null;
@@ -2859,10 +3804,196 @@ export default function CephAdminBucketsPage() {
       setBulkApplyError("Select an operation first.");
       return;
     }
+    if (bulkOperation === "copy_configs") {
+      setBulkApplyError("Use 'Copy selected configs' for this operation.");
+      return;
+    }
+    if (bulkOperation === "paste_configs") {
+      if (bulkPastePlan.error) {
+        setBulkApplyError(bulkPastePlan.error);
+        return;
+      }
+      setBulkApplyLoading(true);
+      setBulkApplyError(null);
+      setBulkApplySummary(null);
+      setBulkApplyProgress({ completed: 0, total: bulkPastePlan.mappings.length, failed: 0 });
+
+      const results = await runWithConcurrencySettled(
+        bulkPastePlan.mappings,
+        BULK_CONCURRENCY_LIMIT,
+        async (mapping) => {
+          const features = bulkConfigClipboard?.features;
+          if (!features) {
+            throw new Error("Copied configuration is no longer available.");
+          }
+          const source = mapping.sourceConfig;
+          let changed = false;
+
+          let props: BucketProperties | null = null;
+          if (features.versioning || features.object_lock) {
+            props = await getCephAdminBucketProperties(selectedEndpointId, mapping.destinationBucket);
+          }
+
+          if (features.quota && source.quota) {
+            const currentQuota = await fetchBucketQuota(mapping.destinationBucket);
+            const quotaChanged =
+              currentQuota.maxSizeBytes !== source.quota.maxSizeBytes || currentQuota.maxObjects !== source.quota.maxObjects;
+            if (quotaChanged) {
+              const payloadSizeGb = source.quota.maxSizeBytes != null ? bytesToGiB(source.quota.maxSizeBytes) : null;
+              await updateCephAdminBucketQuota(selectedEndpointId, mapping.destinationBucket, {
+                max_size_gb: payloadSizeGb,
+                max_size_unit: payloadSizeGb != null ? "GiB" : null,
+                max_objects: source.quota.maxObjects,
+              });
+              changed = true;
+            }
+          }
+
+          if (features.versioning && source.versioningEnabled !== null) {
+            const currentEnabled = normalizeVersioningStatus(props?.versioning_status);
+            const versioningChanged = currentEnabled === null ? true : currentEnabled !== source.versioningEnabled;
+            if (versioningChanged) {
+              await setCephAdminBucketVersioning(selectedEndpointId, mapping.destinationBucket, source.versioningEnabled);
+              changed = true;
+            }
+          }
+
+          if (features.object_lock && source.objectLock) {
+            const rawCurrentObjectLock =
+              props?.object_lock && typeof props.object_lock === "object"
+                ? (props.object_lock as Record<string, unknown>)
+                : {};
+            const currentObjectLock = normalizeObjectLockSnapshot({
+              ...rawCurrentObjectLock,
+              enabled: Boolean(props?.object_lock_enabled ?? rawCurrentObjectLock.enabled),
+            });
+            if (!isObjectLockSnapshotEqual(currentObjectLock, source.objectLock)) {
+              await updateCephAdminBucketObjectLock(selectedEndpointId, mapping.destinationBucket, source.objectLock);
+              changed = true;
+            }
+          }
+
+          if (features.public_access_block && source.publicAccessBlock) {
+            const currentPublicAccessBlock = normalizePublicAccessBlockState(
+              await getCephAdminBucketPublicAccessBlock(selectedEndpointId, mapping.destinationBucket)
+            );
+            if (!isPublicAccessBlockEquivalent(currentPublicAccessBlock, source.publicAccessBlock)) {
+              await updateCephAdminBucketPublicAccessBlock(selectedEndpointId, mapping.destinationBucket, source.publicAccessBlock);
+              changed = true;
+            }
+          }
+
+          if (features.lifecycle && source.lifecycleRules) {
+            const currentLifecycle = (
+              (await getCephAdminBucketLifecycle(selectedEndpointId, mapping.destinationBucket)).rules ?? []
+            ) as Record<string, unknown>[];
+            if (stableStringify(currentLifecycle) !== stableStringify(source.lifecycleRules)) {
+              if (source.lifecycleRules.length === 0) {
+                if (currentLifecycle.length > 0) {
+                  await deleteCephAdminBucketLifecycle(selectedEndpointId, mapping.destinationBucket);
+                  changed = true;
+                }
+              } else {
+                await putCephAdminBucketLifecycle(selectedEndpointId, mapping.destinationBucket, source.lifecycleRules);
+                changed = true;
+              }
+            }
+          }
+
+          if (features.cors && source.corsRules) {
+            const currentCors = (
+              (await getCephAdminBucketCors(selectedEndpointId, mapping.destinationBucket)).rules ?? []
+            ) as Record<string, unknown>[];
+            if (stableStringify(currentCors) !== stableStringify(source.corsRules)) {
+              if (source.corsRules.length === 0) {
+                if (currentCors.length > 0) {
+                  await deleteCephAdminBucketCors(selectedEndpointId, mapping.destinationBucket);
+                  changed = true;
+                }
+              } else {
+                await putCephAdminBucketCors(selectedEndpointId, mapping.destinationBucket, source.corsRules);
+                changed = true;
+              }
+            }
+          }
+
+          if (features.policy) {
+            const currentPolicy = (
+              (await getCephAdminBucketPolicy(selectedEndpointId, mapping.destinationBucket)).policy ?? null
+            ) as Record<string, unknown> | null;
+            if (stableStringify(currentPolicy) !== stableStringify(source.policy)) {
+              if (!source.policy) {
+                if (currentPolicy) {
+                  await deleteCephAdminBucketPolicy(selectedEndpointId, mapping.destinationBucket);
+                  changed = true;
+                }
+              } else {
+                await putCephAdminBucketPolicy(selectedEndpointId, mapping.destinationBucket, source.policy);
+                changed = true;
+              }
+            }
+          }
+
+          if (features.access_logging && source.accessLogging) {
+            const currentAccessLogging = normalizeAccessLoggingSnapshot(
+              (await getCephAdminBucketLogging(selectedEndpointId, mapping.destinationBucket)) as unknown as Record<string, unknown>
+            );
+            if (!isAccessLoggingSnapshotEqual(currentAccessLogging, source.accessLogging)) {
+              const hasTargetBucket = Boolean(source.accessLogging.target_bucket);
+              if (!source.accessLogging.enabled || !hasTargetBucket) {
+                if (currentAccessLogging.enabled || currentAccessLogging.target_bucket) {
+                  await deleteCephAdminBucketLogging(selectedEndpointId, mapping.destinationBucket);
+                  changed = true;
+                }
+              } else {
+                await putCephAdminBucketLogging(selectedEndpointId, mapping.destinationBucket, {
+                  enabled: source.accessLogging.enabled,
+                  target_bucket: source.accessLogging.target_bucket,
+                  target_prefix: source.accessLogging.target_prefix ?? "",
+                });
+                changed = true;
+              }
+            }
+          }
+
+          return { changed };
+        },
+        (result) => {
+          setBulkApplyProgress((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              completed: Math.min(prev.total, prev.completed + 1),
+              failed: prev.failed + (result.status === "rejected" ? 1 : 0),
+            };
+          });
+        }
+      );
+
+      const failed = results.filter((result) => result.status === "rejected");
+      const changedCount = results.filter(
+        (result): result is PromiseFulfilledResult<{ changed: boolean }> =>
+          result.status === "fulfilled" && result.value.changed
+      ).length;
+      const unchangedCount = results.filter(
+        (result): result is PromiseFulfilledResult<{ changed: boolean }> =>
+          result.status === "fulfilled" && !result.value.changed
+      ).length;
+      if (failed.length > 0) {
+        setBulkApplyError(`${failed.length} bucket(s) failed to update.`);
+      }
+      setBulkApplySummary(
+        `Updated ${changedCount} bucket${changedCount !== 1 ? "s" : ""}${unchangedCount > 0 ? ` (${unchangedCount} unchanged)` : ""}.`
+      );
+      setBulkApplyLoading(false);
+      refreshBuckets();
+      return;
+    }
     let parsedQuota: ParsedQuotaInput | null = null;
     let parsedRules: Record<string, unknown>[] | null = null;
     let parsedCorsRules: Record<string, unknown>[] | null = null;
     let parsedPolicyStatements: Record<string, unknown>[] | null = null;
+    let parsedPolicy: Record<string, unknown> | null = null;
     let deleteIds: Set<string> | null = null;
     let deleteTypes: Set<LifecycleRuleTypeKey> | null = null;
     let deleteCorsIds: Set<string> | null = null;
@@ -3378,11 +4509,12 @@ export default function CephAdminBucketsPage() {
   const featureCostReducedByPrefilter =
     advancedDraftFeatureCount === 1 && ownerPrefilterActive && !ownerNameLookupActive && !s3TagsLookupActive;
   const advancedDraftGlobalCostLevel: FilterCostLevel = useMemo(() => {
-    if (ownerNameLookupActive || s3TagsLookupActive) return "high";
+    if (s3TagsLookupActive) return "high";
     if (advancedDraftFeatureCount > 0) {
       if (multipleFeatureFiltersActive) return "high";
       return featureCostReducedByPrefilter ? "medium" : "high";
     }
+    if (ownerNameLookupActive) return "medium";
     if (advancedDraftRangeCount > 0) return "medium";
     if (advancedDraftIdentityCount > 0) return "low";
     return "none";
@@ -3397,12 +4529,6 @@ export default function CephAdminBucketsPage() {
   ]);
   const advancedDraftGlobalCostTooltip = useMemo(() => {
     if (advancedDraftGlobalCostLevel === "high") {
-      if (ownerNameLookupActive && s3TagsLookupActive) {
-        return `${FILTER_COST_LABEL.high}: owner-name and S3 tag filters require additional RGW lookups.`;
-      }
-      if (ownerNameLookupActive) {
-        return `${FILTER_COST_LABEL.high}: owner-name filters require owner identity lookups.`;
-      }
       if (s3TagsLookupActive) {
         return `${FILTER_COST_LABEL.high}: S3 tag filters require bucket tag retrieval.`;
       }
@@ -3412,6 +4538,9 @@ export default function CephAdminBucketsPage() {
       return `${FILTER_COST_LABEL.high}: feature-state filters are active and may require additional checks.`;
     }
     if (advancedDraftGlobalCostLevel === "medium") {
+      if (ownerNameLookupActive) {
+        return `${FILTER_COST_LABEL.medium}: owner-name filters require owner identity lookups.`;
+      }
       if (featureCostReducedByPrefilter) {
         return `${FILTER_COST_LABEL.medium}: feature-state filters are active, but owner/tenant prefilters reduce buckets to inspect.`;
       }
@@ -3722,6 +4851,22 @@ export default function CephAdminBucketsPage() {
   const hasPolicyDeleteCriteria =
     bulkPolicyDeleteIds.trim().length > 0 || Object.values(bulkPolicyDeleteTypes).some(Boolean);
   const hasPublicAccessBlockTargetCriteria = Object.values(bulkPublicAccessBlockTargets).some(Boolean);
+  const hasSelectedCopyFeatures = useMemo(
+    () => (Object.keys(bulkCopyFeatures) as BulkCopyFeatureKey[]).some((feature) => bulkCopyFeatures[feature]),
+    [bulkCopyFeatures]
+  );
+  const bulkClipboardCopiedAtLabel = useMemo(() => {
+    if (!bulkConfigClipboard) return null;
+    const parsed = new Date(bulkConfigClipboard.copiedAt);
+    if (Number.isNaN(parsed.getTime())) return bulkConfigClipboard.copiedAt;
+    return parsed.toLocaleString();
+  }, [bulkConfigClipboard]);
+  const bulkClipboardFeatureLabels = useMemo(() => {
+    if (!bulkConfigClipboard) return [];
+    return (Object.keys(bulkConfigClipboard.features) as BulkCopyFeatureKey[])
+      .filter((feature) => bulkConfigClipboard.features[feature])
+      .map((feature) => BULK_COPY_FEATURE_LABELS[feature]);
+  }, [bulkConfigClipboard]);
 
   const diffToneClasses = (tone?: BulkPreviewTone) => {
     if (tone === "added") {
@@ -4905,7 +6050,7 @@ export default function CephAdminBucketsPage() {
                                 >
                                   <span className="inline-flex items-center gap-1">
                                     <span>Owner name</span>
-                                    {renderFilterCostIndicator("high", "High cost: owner-name filters require owner identity lookups.")}
+                                    {renderFilterCostIndicator("medium", "Medium cost: owner-name filters require owner identity lookups.")}
                                   </span>
                                 </label>
                                 <div className="inline-flex items-center gap-1">
@@ -5268,7 +6413,9 @@ export default function CephAdminBucketsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={exportSelectedBuckets}
+                    onClick={() => {
+                      void exportSelectedBuckets();
+                    }}
                     className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
                   >
                     Export list
@@ -5422,6 +6569,10 @@ export default function CephAdminBucketsPage() {
                   className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 >
                   <option value="">Select an operation</option>
+                  <option value="copy_configs">Copy configs</option>
+                  <option value="paste_configs" disabled={!bulkConfigClipboard}>
+                    {bulkConfigClipboard ? "Paste copied configs" : "Paste copied configs (nothing copied)"}
+                  </option>
                   <option value="set_quota" disabled={!usageFeatureEnabled}>
                     {usageFeatureEnabled ? "Set bucket quota" : "Set bucket quota (usage disabled)"}
                   </option>
@@ -5438,6 +6589,160 @@ export default function CephAdminBucketsPage() {
                 </select>
               </div>
             </div>
+            {bulkOperation === "copy_configs" && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Configurations to copy
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {(Object.keys(BULK_COPY_FEATURE_LABELS) as BulkCopyFeatureKey[]).map((feature) => (
+                      <label
+                        key={feature}
+                        className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={bulkCopyFeatures[feature]}
+                          onChange={(event) =>
+                            setBulkCopyFeatures((prev) => ({ ...prev, [feature]: event.target.checked }))
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                        />
+                        {BULK_COPY_FEATURE_LABELS[feature]}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {bulkConfigClipboard && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/40">
+                    <p className="ui-caption text-slate-600 dark:text-slate-300">
+                      Clipboard currently contains config from{" "}
+                      <span className="font-semibold">{bulkConfigClipboard.buckets.length}</span> bucket
+                      {bulkConfigClipboard.buckets.length > 1 ? "s" : ""} on{" "}
+                      <span className="font-semibold">
+                        {bulkConfigClipboard.sourceEndpointName ?? `Endpoint #${bulkConfigClipboard.sourceEndpointId}`}
+                      </span>
+                      {bulkClipboardCopiedAtLabel ? ` (copied ${bulkClipboardCopiedAtLabel})` : ""}.
+                    </p>
+                    {bulkClipboardFeatureLabels.length > 0 && (
+                      <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                        Features: {bulkClipboardFeatureLabels.join(", ")}.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {bulkOperation === "paste_configs" && (
+              <div className="space-y-4">
+                {!bulkConfigClipboard ? (
+                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+                    No copied configuration available. Use "Copy configs" first.
+                  </p>
+                ) : (
+                  <>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/40">
+                      <p className="ui-caption text-slate-700 dark:text-slate-200">
+                        Source:{" "}
+                        <span className="font-semibold">
+                          {bulkConfigClipboard.sourceEndpointName ?? `Endpoint #${bulkConfigClipboard.sourceEndpointId}`}
+                        </span>{" "}
+                        · {bulkConfigClipboard.buckets.length} bucket{bulkConfigClipboard.buckets.length > 1 ? "s" : ""} ·
+                        {bulkClipboardCopiedAtLabel ? ` copied ${bulkClipboardCopiedAtLabel}` : " copied recently"}
+                      </p>
+                      <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                        Destination selection: {selectedBucketList.length} bucket{selectedBucketList.length > 1 ? "s" : ""}.
+                      </p>
+                      {bulkClipboardFeatureLabels.length > 0 && (
+                        <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                          Pasted features: {bulkClipboardFeatureLabels.join(", ")}.
+                        </p>
+                      )}
+                    </div>
+                    {bulkPastePlan.mode === "one_to_many" && (
+                      <div className="space-y-1 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+                        <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                          Proposed mapping: 1 source to all selected destinations.
+                        </p>
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Source bucket:{" "}
+                          <span className="font-semibold">{bulkConfigClipboard.buckets[0]?.name ?? "-"}</span>
+                        </p>
+                      </div>
+                    )}
+                    {bulkPastePlan.mode === "one_to_one" && (
+                      <div className="space-y-2">
+                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Proposed mapping (1:1)
+                        </p>
+                        <div className="overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
+                          <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
+                            <thead className="bg-slate-100 dark:bg-slate-900/60">
+                              <tr>
+                                <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  Source bucket
+                                </th>
+                                <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  Destination bucket
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                              {bulkClipboardSourceBuckets.map((sourceBucket) => {
+                                const usedByOther = new Set(
+                                  Object.entries(bulkPasteMapping)
+                                    .filter(([otherSource, destination]) => otherSource !== sourceBucket && destination.trim())
+                                    .map(([, destination]) => normalizeBucketName(destination))
+                                );
+                                return (
+                                  <tr key={sourceBucket}>
+                                    <td className="px-3 py-2 font-semibold text-slate-900 dark:text-slate-100">{sourceBucket}</td>
+                                    <td className="px-3 py-2">
+                                      <select
+                                        value={bulkPasteMapping[sourceBucket] ?? ""}
+                                        onChange={(event) =>
+                                          setBulkPasteMapping((prev) => ({ ...prev, [sourceBucket]: event.target.value }))
+                                        }
+                                        className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                      >
+                                        <option value="">Select destination bucket</option>
+                                        {selectedBucketList.map((destinationBucket) => {
+                                          const normalizedDestination = normalizeBucketName(destinationBucket);
+                                          const isUsed = usedByOther.has(normalizedDestination);
+                                          const isSameBucketConflict =
+                                            bulkClipboardSameEndpoint &&
+                                            normalizeBucketName(sourceBucket) === normalizedDestination;
+                                          return (
+                                            <option
+                                              key={`${sourceBucket}-${destinationBucket}`}
+                                              value={destinationBucket}
+                                              disabled={isUsed || isSameBucketConflict}
+                                            >
+                                              {destinationBucket}
+                                              {isSameBucketConflict ? " (same bucket not allowed)" : isUsed ? " (already used)" : ""}
+                                            </option>
+                                          );
+                                        })}
+                                      </select>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                    {!bulkPastePlan.mode && (
+                      <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+                        Mapping impossible with current source/destination selections.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
             {bulkOperation === "set_quota" && (
               <div className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -5755,6 +7060,11 @@ export default function CephAdminBucketsPage() {
                 </div>
               </div>
             )}
+            {bulkOperation === "paste_configs" && bulkPastePlan.error && (
+              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkPastePlan.error}</p>
+            )}
+            {bulkCopyError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkCopyError}</p>}
+            {bulkCopySummary && <p className="ui-caption font-semibold text-emerald-600 dark:text-emerald-200">{bulkCopySummary}</p>}
             {bulkPreviewError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkPreviewError}</p>}
             {bulkApplyError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{bulkApplyError}</p>}
             {bulkApplySummary && <p className="ui-caption font-semibold text-emerald-600 dark:text-emerald-200">{bulkApplySummary}</p>}
@@ -5777,30 +7087,46 @@ export default function CephAdminBucketsPage() {
               </div>
             )}
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={runBulkPreview}
-                disabled={
-                  bulkPreviewLoading ||
-                  bulkApplyLoading ||
-                  !bulkOperation ||
-                  ((bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") &&
-                    !hasPublicAccessBlockTargetCriteria) ||
-                  (bulkOperation === "add_lifecycle" && !bulkLifecycleRuleText.trim()) ||
-                  (bulkOperation === "delete_lifecycle" && !hasDeleteCriteria) ||
-                  (bulkOperation === "add_cors" && !bulkCorsRuleText.trim()) ||
-                  (bulkOperation === "delete_cors" && !hasCorsDeleteCriteria) ||
-                  (bulkOperation === "add_policy" && !bulkPolicyText.trim()) ||
-                  (bulkOperation === "delete_policy" && !hasPolicyDeleteCriteria)
-                }
-                className="rounded-md bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {bulkPreviewLoading ? "Previewing..." : "Preview"}
-              </button>
-              {bulkPreviewReady && (
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Changes: {previewStats.changed} / Unchanged: {previewStats.unchanged} / Errors: {previewStats.errors}
-                </p>
+              {bulkOperation === "copy_configs" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyBulkConfigs();
+                  }}
+                  disabled={bulkCopyLoading || !hasSelectedCopyFeatures}
+                  className="rounded-md bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {bulkCopyLoading ? "Copying..." : "Copy selected configs"}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={runBulkPreview}
+                    disabled={
+                      bulkPreviewLoading ||
+                      bulkApplyLoading ||
+                      !bulkOperation ||
+                      ((bulkOperation === "add_public_access_block" || bulkOperation === "remove_public_access_block") &&
+                        !hasPublicAccessBlockTargetCriteria) ||
+                      (bulkOperation === "add_lifecycle" && !bulkLifecycleRuleText.trim()) ||
+                      (bulkOperation === "delete_lifecycle" && !hasDeleteCriteria) ||
+                      (bulkOperation === "add_cors" && !bulkCorsRuleText.trim()) ||
+                      (bulkOperation === "delete_cors" && !hasCorsDeleteCriteria) ||
+                      (bulkOperation === "add_policy" && !bulkPolicyText.trim()) ||
+                      (bulkOperation === "delete_policy" && !hasPolicyDeleteCriteria) ||
+                      (bulkOperation === "paste_configs" && Boolean(bulkPastePlan.error))
+                    }
+                    className="rounded-md bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {bulkPreviewLoading ? "Previewing..." : "Preview"}
+                  </button>
+                  {bulkPreviewReady && (
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Changes: {previewStats.changed} / Unchanged: {previewStats.unchanged} / Errors: {previewStats.errors}
+                    </p>
+                  )}
+                </>
               )}
             </div>
             {bulkPreview.length > 0 && (
@@ -5865,14 +7191,16 @@ export default function CephAdminBucketsPage() {
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={applyBulkUpdate}
-                disabled={!bulkPreviewReady || bulkApplyLoading}
-              >
-                {bulkApplyLoading ? "Applying..." : "Apply changes"}
-              </button>
+              {bulkOperation !== "copy_configs" && (
+                <button
+                  type="button"
+                  className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={applyBulkUpdate}
+                  disabled={!bulkPreviewReady || bulkApplyLoading}
+                >
+                  {bulkApplyLoading ? "Applying..." : "Apply changes"}
+                </button>
+              )}
             </div>
           </div>
         </Modal>

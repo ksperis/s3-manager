@@ -763,3 +763,35 @@ def test_ceph_admin_bucket_listing_sort_by_usage_treats_missing_values_as_zero()
     assert [item.name for item in used_asc.items] == ["bucket-missing", "bucket-zero", "bucket-max"]
     assert [item.name for item in objects_desc.items] == ["bucket-max", "bucket-missing", "bucket-zero"]
     assert [item.name for item in objects_asc.items] == ["bucket-missing", "bucket-zero", "bucket-max"]
+
+
+def test_ceph_admin_bucket_listing_prefers_quota_max_size_bytes_when_both_units_are_present():
+    max_size_bytes = 10 * 1024 * 1024 * 1024
+    payload = [
+        {
+            "name": "bucket-a",
+            "owner": "owner-a",
+            "bucket_quota": {
+                "max_size": max_size_bytes,
+                "max_size_kb": max_size_bytes // 1024,
+                "max_objects": 1000,
+            },
+        }
+    ]
+    ctx, _ = _build_ctx(endpoint_id=188, payload=payload)
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=True,
+        ctx=ctx,
+    )
+
+    assert len(response.items) == 1
+    assert response.items[0].quota_max_size_bytes == max_size_bytes
+    assert response.items[0].quota_max_size_bytes != max_size_bytes * 1024

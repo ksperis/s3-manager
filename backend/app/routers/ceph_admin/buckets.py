@@ -194,6 +194,17 @@ def _extract_bucket_owner_scope(entry: dict) -> tuple[str | None, str | None]:
     return tenant, owner
 
 
+def _resolve_bucket_owner_identity(entry: dict) -> tuple[str | None, str | None]:
+    tenant, owner = _extract_bucket_owner_scope(entry)
+    if not owner:
+        return None, None
+    if is_rgw_account_id(owner):
+        return owner, None
+    if tenant:
+        return None, f"{tenant}${owner}"
+    return None, owner
+
+
 def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
     if not isinstance(entry, dict):
         return None
@@ -207,10 +218,13 @@ def _build_bucket_summary(entry: dict) -> CephAdminBucketSummary | None:
     quota_objects = None
     quota = entry.get("bucket_quota") or entry.get("quota")
     if isinstance(quota, dict):
-        max_size = quota.get("max_size") or quota.get("max_size_kb")
         try:
-            if max_size is not None:
-                quota_size = int(max_size) * (1024 if "max_size_kb" in quota else 1)
+            # RGW may return both max_size (bytes) and max_size_kb (KiB).
+            # max_size has priority and must not be scaled again.
+            if quota.get("max_size") is not None:
+                quota_size = int(quota.get("max_size"))
+            elif quota.get("max_size_kb") is not None:
+                quota_size = int(quota.get("max_size_kb")) * 1024
         except (TypeError, ValueError):
             quota_size = None
         try:
@@ -1185,22 +1199,17 @@ def update_quota(
     if not bucket_info or (isinstance(bucket_info, dict) and bucket_info.get("not_found")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bucket not found")
 
-    tenant, owner = _extract_bucket_owner_scope(bucket_info)
-    if not owner:
+    owner_account_id, owner_uid = _resolve_bucket_owner_identity(bucket_info)
+    if not owner_account_id and not owner_uid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unable to resolve bucket owner for quota update",
         )
-
-    if is_rgw_account_id(owner):
-        account.rgw_account_id = owner
-        account.rgw_user_uid = None
-    else:
-        account.rgw_account_id = tenant
-        account.rgw_user_uid = owner
+    account.rgw_account_id = owner_account_id
+    account.rgw_user_uid = owner_uid
 
     try:
-        service.set_bucket_quota(bucket_name, account, payload)
+        service.set_bucket_quota(bucket_name, account, payload, rgw_admin=ctx.rgw_admin)
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return {"message": "Bucket quota updated"}
     except ValueError as exc:
