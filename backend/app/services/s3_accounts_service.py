@@ -165,7 +165,7 @@ class S3AccountsService:
     def _account_usage(self, acc: S3Account) -> tuple[Optional[int], Optional[int], Optional[int]]:
         try:
             endpoint = self._resolve_storage_endpoint(acc.storage_endpoint_id)
-            if not resolve_feature_flags(endpoint).usage_enabled:
+            if not resolve_feature_flags(endpoint).metrics_enabled:
                 return None, None, None
         except Exception:
             return None, None, None
@@ -713,6 +713,9 @@ class S3AccountsService:
             raise ValueError("S3Account already exists")
 
         endpoint = self._resolve_storage_endpoint(payload.storage_endpoint_id, require_ceph=True)
+        endpoint_capabilities = self._endpoint_capabilities(endpoint) or {}
+        if not endpoint_capabilities.get("account", False):
+            raise ValueError("Selected endpoint does not support RGW account API (/admin/account).")
         admin = self._admin_for_endpoint(endpoint)
         if not admin:
             raise ValueError("Unable to create account: RGW credentials are missing for the selected endpoint.")

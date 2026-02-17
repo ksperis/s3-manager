@@ -74,8 +74,8 @@ function ManagerShell() {
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
   const iamFeatureEnabled = endpointCaps ? endpointCaps.iam !== false : true;
   const canManageIam = !isS3User && !isConnection && capabilities.can_manage_iam !== false && iamFeatureEnabled;
-  const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
-  const metricsFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
+  const usageFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
+  const metricsFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
   const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
   const canViewMetricsMenu = Boolean(managerStatsEnabled) && (usageFeatureEnabled || metricsFeatureEnabled);
   const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";

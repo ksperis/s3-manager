@@ -5,7 +5,7 @@ from typing import Optional
 import pytest
 
 from app.services.s3_accounts_service import S3AccountsService
-from app.db import S3Account, User, UserRole, UserS3Account
+from app.db import S3Account, StorageEndpoint, StorageProvider, User, UserRole, UserS3Account
 from app.models.s3_account import S3AccountImport
 from app.services.rgw_admin import RGWAdminError
 
@@ -80,6 +80,44 @@ def test_create_account_with_root(db_session):
     # No interface user is created; only RGW root keys stored on account
     root_user = db_session.query(User).filter(User.email.like("%-admin")).first()
     assert root_user is None
+
+
+def test_create_account_requires_account_api_feature(db_session):
+    endpoint = StorageEndpoint(
+        name="ceph-no-account-api",
+        endpoint_url="https://ceph-no-account-api.example.test",
+        provider=StorageProvider.CEPH.value,
+        admin_access_key="AKIA-ADMIN",
+        admin_secret_key="SECRET-ADMIN",
+        features_config=(
+            "features:\n"
+            "  admin:\n"
+            "    enabled: true\n"
+            "  account:\n"
+            "    enabled: false\n"
+        ),
+        is_default=False,
+    )
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
+
+    svc = S3AccountsService(db_session)
+    svc.rgw_admin = FakeRGWAdmin()
+    payload = type(
+        "obj",
+        (),
+        {
+            "name": "BlockedByFeature",
+            "email": None,
+            "quota_max_size_gb": None,
+            "quota_max_objects": None,
+            "storage_endpoint_id": endpoint.id,
+        },
+    )
+
+    with pytest.raises(ValueError, match="does not support RGW account API"):
+        svc.create_account_with_manager(payload)
 
 
 class FakeRGWAdminImport:

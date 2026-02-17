@@ -2409,7 +2409,7 @@ export default function BrowserPage({
       setBucketInspectorLoading(true);
       setBucketInspectorError(null);
       try {
-        const usageFeatureEnabled = effectiveCaps ? effectiveCaps.usage !== false : true;
+        const usageFeatureEnabled = effectiveCaps ? effectiveCaps.metrics !== false : true;
         const staticWebsiteEnabled = effectiveCaps?.static_website ?? true;
         const results = await Promise.allSettled([
           listBuckets(accountIdForApi, { with_stats: usageFeatureEnabled }),

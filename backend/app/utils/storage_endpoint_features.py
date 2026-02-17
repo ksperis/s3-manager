@@ -11,11 +11,12 @@ from app.db import StorageEndpoint, StorageProvider
 from app.utils.normalize import normalize_storage_provider
 
 
-FEATURE_KEYS: tuple[str, ...] = ("admin", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse")
+FEATURE_KEYS: tuple[str, ...] = ("admin", "account", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse")
 
 DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
     StorageProvider.CEPH: {
         "admin": {"enabled": False, "endpoint": None},
+        "account": {"enabled": False, "endpoint": None},
         "sts": {"enabled": False, "endpoint": None},
         "usage": {"enabled": False, "endpoint": None},
         "metrics": {"enabled": False, "endpoint": None},
@@ -26,6 +27,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
     },
     StorageProvider.OTHER: {
         "admin": {"enabled": False, "endpoint": None},
+        "account": {"enabled": False, "endpoint": None},
         "sts": {"enabled": False, "endpoint": None},
         "usage": {"enabled": False, "endpoint": None},
         "metrics": {"enabled": False, "endpoint": None},
@@ -41,6 +43,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
 class EndpointFeatureFlags:
     admin_enabled: bool
     admin_endpoint: Optional[str]
+    account_enabled: bool
     sts_enabled: bool
     sts_endpoint: Optional[str]
     usage_enabled: bool
@@ -103,8 +106,12 @@ def normalize_features_config(
                 raise ValueError(f"Feature '{key}.endpoint' must be a string.")
             features[key]["endpoint"] = _normalize_url(endpoint)
 
+    if normalized_provider == StorageProvider.CEPH and "account" not in raw_features:
+        # Backward compatibility for endpoints saved before the "account" feature existed.
+        features["account"]["enabled"] = bool(features.get("admin", {}).get("enabled"))
+
     if normalized_provider != StorageProvider.CEPH:
-        for key in ("admin", "usage", "metrics", "sns"):
+        for key in ("admin", "account", "usage", "metrics", "sns"):
             if features[key]["enabled"]:
                 raise ValueError(
                     f"Feature '{key}' is only available for Ceph endpoints."
@@ -130,6 +137,7 @@ def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
     return EndpointFeatureFlags(
         admin_enabled=bool(features["admin"]["enabled"]),
         admin_endpoint=features["admin"].get("endpoint"),
+        account_enabled=bool(features.get("account", {}).get("enabled")),
         sts_enabled=bool(features["sts"]["enabled"]),
         sts_endpoint=features["sts"].get("endpoint"),
         usage_enabled=bool(features["usage"]["enabled"]),
@@ -163,6 +171,7 @@ def resolve_sts_endpoint(endpoint: StorageEndpoint) -> Optional[str]:
 def features_to_capabilities(features: dict[str, dict[str, Any]]) -> dict[str, bool]:
     return {
         "admin": bool(features.get("admin", {}).get("enabled")),
+        "account": bool(features.get("account", {}).get("enabled")),
         "sts": bool(features.get("sts", {}).get("enabled")),
         "usage": bool(features.get("usage", {}).get("enabled")),
         "metrics": bool(features.get("metrics", {}).get("enabled")),

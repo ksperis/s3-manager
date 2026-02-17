@@ -153,8 +153,8 @@ def portal_usage(
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     endpoint = getattr(access.account, "storage_endpoint", None)
-    if endpoint and not resolve_feature_flags(endpoint).usage_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are disabled for this endpoint")
+    if endpoint and not resolve_feature_flags(endpoint).metrics_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage metrics are disabled for this endpoint")
     try:
         return service.get_usage(actor, access)
     except RuntimeError as exc:
@@ -482,8 +482,8 @@ def portal_traffic(
     access: AccountAccess = Depends(get_portal_account_access),
 ) -> dict:
     endpoint = getattr(account, "storage_endpoint", None)
-    if endpoint and not resolve_feature_flags(endpoint).metrics_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Traffic metrics are disabled for this endpoint")
+    if endpoint and not resolve_feature_flags(endpoint).usage_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage logs are disabled for this endpoint")
     try:
         service = TrafficService(account)
     except ValueError as exc:

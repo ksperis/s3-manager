@@ -36,13 +36,13 @@ export function useAdminAccountStats(
       setStats(data);
       setError(null);
     } catch (err) {
-      let message = "Unable to load usage stats.";
+      let message = "Unable to load storage stats.";
       if (axios.isAxiosError(err)) {
         const detail = err.response?.data?.detail;
         if (typeof detail === "string" && detail.trim()) {
           message = detail;
         } else if (err.response?.status === 403) {
-          message = "Usage metrics are not available for this account.";
+          message = "Storage metrics are not available for this account.";
         }
       }
       setError(message);

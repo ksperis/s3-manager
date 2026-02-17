@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db import StorageEndpoint, StorageProvider, S3Account, S3User
 from app.models.storage_endpoint import (
+    StorageEndpointFeatureDetectionRequest,
+    StorageEndpointFeatureDetectionResult,
     StorageEndpointAdminOpsPermissions,
     StorageEndpoint as StorageEndpointSchema,
     StorageEndpointCreate,
@@ -292,6 +294,101 @@ class StorageEndpointsService:
         # Provider is not Ceph: clear Ceph-only credentials
         return None, None, None, None, None, None
 
+    def detect_features(self, payload: StorageEndpointFeatureDetectionRequest) -> StorageEndpointFeatureDetectionResult:
+        endpoint_url = self._normalize_url(payload.endpoint_url)
+        if not endpoint_url:
+            raise ValueError("Endpoint URL is required.")
+
+        stored_endpoint: Optional[StorageEndpoint] = None
+        if payload.endpoint_id is not None:
+            stored_endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == payload.endpoint_id).first()
+            if not stored_endpoint:
+                raise ValueError("Endpoint not found.")
+
+        region = self._clean_optional(payload.region) or (stored_endpoint.region if stored_endpoint else None)
+        admin_endpoint = self._normalize_url(payload.admin_endpoint) or endpoint_url
+
+        admin_access_key = self._clean_optional(payload.admin_access_key)
+        admin_secret_key = self._clean_optional(payload.admin_secret_key)
+        supervision_access_key = self._clean_optional(payload.supervision_access_key)
+        supervision_secret_key = self._clean_optional(payload.supervision_secret_key)
+
+        if stored_endpoint:
+            if admin_access_key and not admin_secret_key and admin_access_key == (stored_endpoint.admin_access_key or ""):
+                admin_secret_key = stored_endpoint.admin_secret_key
+            if (
+                supervision_access_key
+                and not supervision_secret_key
+                and supervision_access_key == (stored_endpoint.supervision_access_key or "")
+            ):
+                supervision_secret_key = stored_endpoint.supervision_secret_key
+
+        result = StorageEndpointFeatureDetectionResult()
+
+        admin_client = None
+        if admin_access_key and admin_secret_key:
+            try:
+                admin_client = get_rgw_admin_client(
+                    access_key=admin_access_key,
+                    secret_key=admin_secret_key,
+                    endpoint=admin_endpoint,
+                    region=region,
+                )
+                admin_payload = admin_client.get_user_by_access_key(admin_access_key, allow_not_found=True)
+                if admin_payload:
+                    result.admin = True
+                else:
+                    result.admin_error = "Admin access key is not recognized by RGW."
+            except RGWAdminError as exc:
+                result.admin_error = str(exc)
+        elif admin_access_key or admin_secret_key:
+            result.admin_error = "Admin detection requires both access key and secret key."
+
+        if admin_client is not None:
+            try:
+                # Probe /admin/account directly with a synthetic account id.
+                # If the account does not exist, RGW returns not_found and the API is still available.
+                admin_client.get_account("RGW00000000000000000", allow_not_found=True)
+                result.account = True
+            except RGWAdminError as exc:
+                result.account_error = str(exc)
+
+        if supervision_access_key and supervision_secret_key:
+            supervision_client = None
+            try:
+                supervision_client = get_rgw_admin_client(
+                    access_key=supervision_access_key,
+                    secret_key=supervision_secret_key,
+                    endpoint=admin_endpoint,
+                    region=region,
+                )
+                supervision_client.get_all_buckets(with_stats=False)
+                result.metrics = True
+            except RGWAdminError as exc:
+                result.metrics_error = str(exc)
+
+            if supervision_client is not None:
+                try:
+                    usage_payload = supervision_client.get_usage(show_entries=False, show_summary=False)
+                    if isinstance(usage_payload, dict) and usage_payload.get("not_found"):
+                        result.usage = False
+                        result.usage_error = "RGW usage logs endpoint is unavailable."
+                    else:
+                        result.usage = True
+                except RGWAdminError as exc:
+                    result.usage_error = str(exc)
+        elif supervision_access_key or supervision_secret_key:
+            message = "Supervision detection requires both access key and secret key."
+            result.metrics_error = message
+            result.usage_error = message
+
+        if result.metrics and not result.usage:
+            result.warnings.append(
+                "Usage logs do not appear enabled on this RGW endpoint; activity traffic stats will not be available."
+            )
+
+        return result
+
     def sync_env_endpoints(self) -> list[StorageEndpointSchema]:
         env_endpoints = self._load_env_endpoints()
         if not env_endpoints:
@@ -360,7 +457,7 @@ class StorageEndpointsService:
                 supervision_secret,
                 ceph_admin_access,
                 ceph_admin_secret,
-                bool(features.get("admin", {}).get("enabled")),
+                bool(features.get("admin", {}).get("enabled")) or bool(features.get("account", {}).get("enabled")),
                 bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
             )
 
@@ -479,7 +576,7 @@ class StorageEndpointsService:
             supervision_secret,
             ceph_admin_access,
             ceph_admin_secret,
-            bool(features.get("admin", {}).get("enabled")),
+            bool(features.get("admin", {}).get("enabled")) or bool(features.get("account", {}).get("enabled")),
             bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
         )
 
@@ -592,7 +689,7 @@ class StorageEndpointsService:
             supervision_secret,
             ceph_admin_access,
             ceph_admin_secret,
-            bool(features.get("admin", {}).get("enabled")),
+            bool(features.get("admin", {}).get("enabled")) or bool(features.get("account", {}).get("enabled")),
             bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
         )
 
@@ -691,7 +788,7 @@ class StorageEndpointsService:
             supervision_secret,
             ceph_admin_access,
             ceph_admin_secret,
-            bool(features.get("admin", {}).get("enabled")),
+            bool(features.get("admin", {}).get("enabled")) or bool(features.get("account", {}).get("enabled")),
             bool(features.get("usage", {}).get("enabled")) or bool(features.get("metrics", {}).get("enabled")),
         )
         entry = StorageEndpoint(

@@ -587,20 +587,20 @@ def _require_supervision_access(
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint:
         flags = resolve_feature_flags(endpoint)
-        if enabled_flag == "usage" and not flags.usage_enabled:
+        if enabled_flag == "usage" and not flags.metrics_enabled:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=disabled_detail)
-        if enabled_flag == "metrics" and not flags.metrics_enabled:
+        if enabled_flag == "metrics" and not flags.usage_enabled:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=disabled_detail)
     if not has_supervision_credentials(account):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are not configured for this account")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Supervision credentials are not configured for this account")
     if isinstance(actor, ManagerSessionPrincipal) and not actor.capabilities.can_view_traffic:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Metrics are not available for this profile")
     if caps and not caps.can_manage_buckets:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this account")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Metrics are not available for this account")
     if caps and isinstance(actor, User) and not caps.using_root_key:
         settings = load_app_settings()
         if not settings.manager.allow_manager_user_usage_stats:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics not available for this profile")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Metrics are not available for this profile")
     return actor
 
 
@@ -619,7 +619,7 @@ def require_usage_capable_manager(
     return _require_supervision_access(
         account,
         actor,
-        disabled_detail="Usage metrics are disabled for this endpoint",
+        disabled_detail="Storage metrics are disabled for this endpoint",
         enabled_flag="usage",
     )
 
@@ -644,7 +644,7 @@ def require_metrics_capable_manager(
     return _require_supervision_access(
         account,
         actor,
-        disabled_detail="Traffic metrics are disabled for this endpoint",
+        disabled_detail="Usage logs are disabled for this endpoint",
         enabled_flag="metrics",
     )
 

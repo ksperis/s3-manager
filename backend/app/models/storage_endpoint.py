@@ -15,6 +15,7 @@ class StorageEndpointFeature(BaseModel):
 
 class StorageEndpointFeatures(BaseModel):
     admin: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
+    account: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     sts: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     usage: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     metrics: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
@@ -112,3 +113,42 @@ class StorageEndpointPublic(BaseModel):
 
 class StorageEndpointMeta(BaseModel):
     managed_by_env: bool = False
+
+
+class StorageEndpointFeatureDetectionRequest(BaseModel):
+    endpoint_id: Optional[int] = None
+    endpoint_url: str
+    admin_endpoint: Optional[str] = None
+    region: Optional[str] = None
+    admin_access_key: Optional[str] = None
+    admin_secret_key: Optional[str] = None
+    supervision_access_key: Optional[str] = None
+    supervision_secret_key: Optional[str] = None
+
+    @field_validator(
+        "endpoint_url",
+        "admin_endpoint",
+        "region",
+        "admin_access_key",
+        "admin_secret_key",
+        "supervision_access_key",
+        "supervision_secret_key",
+        mode="before",
+    )
+    @classmethod
+    def trim_detection_str_fields(cls, value: Optional[str]) -> Optional[str]:
+        if isinstance(value, str):
+            value = value.strip()
+        return value or None
+
+
+class StorageEndpointFeatureDetectionResult(BaseModel):
+    admin: bool = False
+    account: bool = False
+    usage: bool = False
+    metrics: bool = False
+    admin_error: Optional[str] = None
+    account_error: Optional[str] = None
+    metrics_error: Optional[str] = None
+    usage_error: Optional[str] = None
+    warnings: list[str] = Field(default_factory=list)

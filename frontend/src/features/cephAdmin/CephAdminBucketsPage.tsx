@@ -1601,7 +1601,7 @@ const getTagColors = (tag: string) => {
 export default function CephAdminBucketsPage() {
   const location = useLocation();
   const { selectedEndpointId, selectedEndpoint, endpoints } = useCephAdminEndpoint();
-  const usageFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
+  const usageFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
   const [filter, setFilter] = useState("");
   const [filterValue, setFilterValue] = useState("");
   const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
@@ -6321,18 +6321,18 @@ export default function CephAdminBucketsPage() {
                         <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
                           <div className="mb-3 flex items-center justify-between">
                             <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <span>Usage and Quota</span>
+                              <span>Storage Metrics and Quota</span>
                             </p>
                             {!usageFeatureEnabled && (
                               <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200">
-                                Usage disabled on endpoint
+                                Storage metrics disabled on endpoint
                               </span>
                             )}
                           </div>
 
                           {!usageFeatureEnabled ? (
                             <p className="ui-caption text-slate-500 dark:text-slate-400">
-                              This endpoint does not expose usage stats, so range filters are disabled.
+                              This endpoint does not expose storage metrics, so range filters are disabled.
                             </p>
                           ) : (
                             <div className="grid gap-3 lg:grid-cols-2">
@@ -6764,7 +6764,7 @@ export default function CephAdminBucketsPage() {
                     {bulkConfigClipboard ? "Paste copied configs" : "Paste copied configs (nothing copied)"}
                   </option>
                   <option value="set_quota" disabled={!usageFeatureEnabled}>
-                    {usageFeatureEnabled ? "Set bucket quota" : "Set bucket quota (usage disabled)"}
+                    {usageFeatureEnabled ? "Set bucket quota" : "Set bucket quota (storage metrics disabled)"}
                   </option>
                   <option value="add_public_access_block">Add block public access</option>
                   <option value="remove_public_access_block">Remove block public access</option>

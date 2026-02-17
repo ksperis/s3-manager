@@ -50,7 +50,7 @@ export default function ManagerDashboard() {
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
   const iamFeatureEnabled = endpointCaps ? endpointCaps.iam !== false : true;
   // Usage/traffic stats are a platform/RGW feature. We only enable the widgets when the backend says it is allowed.
-  const usageFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.usage !== false : true);
+  const usageFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.metrics !== false : true);
   const { stats, loading, error } = useManagerStats(
     accountIdForApi,
     usageFeatureEnabled && hasContext,

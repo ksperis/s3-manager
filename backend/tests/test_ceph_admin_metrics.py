@@ -99,7 +99,7 @@ def test_ceph_admin_cluster_traffic_aggregates_usage_entries(monkeypatch: pytest
     assert payload["data_points"] >= 1
 
 
-def test_ceph_admin_cluster_storage_requires_usage_feature():
+def test_ceph_admin_cluster_storage_requires_metrics_feature():
     with pytest.raises(HTTPException) as exc:
-        metrics_router.cluster_storage_metrics(endpoint=_build_endpoint(usage_enabled=False, metrics_enabled=True))
+        metrics_router.cluster_storage_metrics(endpoint=_build_endpoint(usage_enabled=True, metrics_enabled=False))
     assert exc.value.status_code == 403

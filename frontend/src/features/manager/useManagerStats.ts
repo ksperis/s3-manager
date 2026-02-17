@@ -38,7 +38,7 @@ export function useManagerStats(
       setError(null);
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 403) {
-        setError("Usage metrics are not available for this credential.");
+        setError("Storage metrics are not available for this credential.");
       } else {
         setError("Unable to load manager stats.");
       }

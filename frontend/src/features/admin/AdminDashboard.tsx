@@ -199,7 +199,7 @@ export default function AdminDashboard() {
             {
               label: "Connections",
               value: summary.total_connections ?? 0,
-              hint: "Credentialed access entries",
+              hint: `Private: ${summary.total_private_connections ?? 0} | Public: ${summary.total_public_connections ?? 0}`,
               to: "/admin/s3-connections",
             },
           ]

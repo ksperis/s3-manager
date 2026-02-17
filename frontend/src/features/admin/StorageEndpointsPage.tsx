@@ -4,6 +4,7 @@
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  detectStorageEndpointFeatures,
   StorageEndpoint,
   StorageEndpointPayload,
   StorageProvider,
@@ -30,10 +31,12 @@ type FormState = {
   supervision_secret_key: string;
   ceph_admin_access_key: string;
   ceph_admin_secret_key: string;
+  has_admin_secret: boolean;
+  has_supervision_secret: boolean;
   features: FeaturesState;
 };
 
-type FeatureKey = "admin" | "sts" | "usage" | "metrics" | "static_website" | "iam" | "sns" | "sse";
+type FeatureKey = "admin" | "account" | "sts" | "usage" | "metrics" | "static_website" | "iam" | "sns" | "sse";
 
 type FeatureState = {
   enabled: boolean;
@@ -42,7 +45,7 @@ type FeatureState = {
 
 type FeaturesState = Record<FeatureKey, FeatureState>;
 
-const FEATURE_KEYS: FeatureKey[] = ["admin", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse"];
+const FEATURE_KEYS: FeatureKey[] = ["admin", "account", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse"];
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-admin" \\',
@@ -65,6 +68,7 @@ const CEPH_ADMIN_COMMAND = [
 function createEmptyFeatures(): FeaturesState {
   return {
     admin: { enabled: false, endpoint: "" },
+    account: { enabled: false, endpoint: "" },
     sts: { enabled: false, endpoint: "" },
     usage: { enabled: false, endpoint: "" },
     metrics: { enabled: false, endpoint: "" },
@@ -80,9 +84,10 @@ function defaultFeaturesForProvider(provider: StorageProvider): FeaturesState {
   if (provider === "ceph") {
     return {
       ...base,
-      admin: { ...base.admin, enabled: true },
+      admin: { ...base.admin, enabled: false },
+      account: { ...base.account, enabled: false },
       usage: { ...base.usage, enabled: false },
-      metrics: { ...base.metrics, enabled: true },
+      metrics: { ...base.metrics, enabled: false },
       sts: { ...base.sts, enabled: false },
       static_website: { ...base.static_website, enabled: false },
       iam: { ...base.iam, enabled: true },
@@ -102,6 +107,7 @@ function defaultFeaturesForProvider(provider: StorageProvider): FeaturesState {
 function applyFeatureConstraints(features: FeaturesState, provider: StorageProvider): FeaturesState {
   const next: FeaturesState = {
     admin: { ...features.admin },
+    account: { ...features.account },
     sts: { ...features.sts },
     usage: { ...features.usage },
     metrics: { ...features.metrics },
@@ -112,12 +118,13 @@ function applyFeatureConstraints(features: FeaturesState, provider: StorageProvi
   };
   if (provider !== "ceph") {
     next.admin.enabled = false;
+    next.account.enabled = false;
     next.usage.enabled = false;
     next.metrics.enabled = false;
     next.sns.enabled = false;
   }
   if (!next.admin.enabled) {
-    next.admin.endpoint = "";
+    next.account.enabled = false;
   }
   if (!next.sts.enabled) {
     next.sts.endpoint = "";
@@ -131,7 +138,7 @@ function buildFeaturesYaml(features: FeaturesState): string {
     const entry = features[key];
     lines.push(`  ${key}:`);
     lines.push(`    enabled: ${entry.enabled ? "true" : "false"}`);
-    if ((key === "admin" || key === "sts") && entry.endpoint.trim()) {
+    if ((key === "admin" || key === "sts") && entry.enabled && entry.endpoint.trim()) {
       lines.push(`    endpoint: ${entry.endpoint.trim()}`);
     }
   });
@@ -151,6 +158,8 @@ function createEmptyForm(): FormState {
     supervision_secret_key: "",
     ceph_admin_access_key: "",
     ceph_admin_secret_key: "",
+    has_admin_secret: false,
+    has_supervision_secret: false,
     features,
   };
 }
@@ -216,6 +225,10 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
           enabled: Boolean(endpoint.features.admin?.enabled),
           endpoint: endpoint.features.admin?.endpoint ?? "",
         },
+        account: {
+          enabled: Boolean(endpoint.features.account?.enabled),
+          endpoint: "",
+        },
         sts: {
           enabled: Boolean(endpoint.features.sts?.enabled),
           endpoint: endpoint.features.sts?.endpoint ?? "",
@@ -250,6 +263,7 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
   }
   const fallback: FeaturesState = {
     admin: { enabled: resolveCapability(endpoint, "admin"), endpoint: endpoint.admin_endpoint ?? "" },
+    account: { enabled: resolveCapability(endpoint, "account"), endpoint: "" },
     sts: { enabled: resolveCapability(endpoint, "sts"), endpoint: "" },
     usage: { enabled: resolveCapability(endpoint, "usage"), endpoint: "" },
     metrics: { enabled: resolveCapability(endpoint, "metrics"), endpoint: "" },
@@ -279,11 +293,17 @@ export default function StorageEndpointsPage() {
   const [deleteTarget, setDeleteTarget] = useState<StorageEndpoint | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [featureDetectBusy, setFeatureDetectBusy] = useState(false);
+  const [featureDetectError, setFeatureDetectError] = useState<string | null>(null);
+  const [featureDetectWarnings, setFeatureDetectWarnings] = useState<string[]>([]);
 
   const resetForm = useCallback(() => {
     setForm(createEmptyForm());
     setShowOpsHelp(false);
     setFormError(null);
+    setFeatureDetectBusy(false);
+    setFeatureDetectError(null);
+    setFeatureDetectWarnings([]);
     setEditingId(null);
   }, []);
 
@@ -309,6 +329,141 @@ export default function StorageEndpointsPage() {
   const cephMode = useMemo(() => form.provider === "ceph", [form.provider]);
   const cephAdminConfigEnabled = Boolean(generalSettings.ceph_admin_enabled);
   const defaultEndpoint = useMemo(() => endpoints.find((ep) => ep.is_default), [endpoints]);
+  useEffect(() => {
+    if (!showForm || !cephMode) {
+      setFeatureDetectBusy(false);
+      setFeatureDetectError(null);
+      setFeatureDetectWarnings([]);
+      return;
+    }
+    const endpointUrl = form.endpoint_url.trim();
+    const adminEndpointOverride = form.features.admin.endpoint.trim();
+    const adminAccessKey = form.admin_access_key.trim();
+    const adminSecretKey = form.admin_secret_key.trim();
+    const supervisionAccessKey = form.supervision_access_key.trim();
+    const supervisionSecretKey = form.supervision_secret_key.trim();
+    const hasAdminCredentials = Boolean(adminAccessKey && (adminSecretKey || form.has_admin_secret));
+    const hasSupervisionCredentials = Boolean(
+      supervisionAccessKey && (supervisionSecretKey || form.has_supervision_secret)
+    );
+
+    if (!endpointUrl || (!hasAdminCredentials && !hasSupervisionCredentials)) {
+      setFeatureDetectBusy(false);
+      setFeatureDetectError(null);
+      setFeatureDetectWarnings([]);
+      setForm((prev) => {
+        if (prev.provider !== "ceph") return prev;
+        const next = applyFeatureConstraints(
+          {
+            ...prev.features,
+            admin: { ...prev.features.admin, enabled: false },
+            account: { ...prev.features.account, enabled: false },
+            usage: { ...prev.features.usage, enabled: false },
+            metrics: { ...prev.features.metrics, enabled: false },
+          },
+          prev.provider
+        );
+        if (
+          next.admin.enabled === prev.features.admin.enabled &&
+          next.account.enabled === prev.features.account.enabled &&
+          next.usage.enabled === prev.features.usage.enabled &&
+          next.metrics.enabled === prev.features.metrics.enabled
+        ) {
+          return prev;
+        }
+        return { ...prev, features: next };
+      });
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setFeatureDetectBusy(true);
+      setFeatureDetectError(null);
+      try {
+        const detection = await detectStorageEndpointFeatures({
+          endpoint_id: editingId,
+          endpoint_url: endpointUrl,
+          admin_endpoint: adminEndpointOverride || null,
+          region: form.region.trim() || null,
+          admin_access_key: adminAccessKey || null,
+          admin_secret_key: adminSecretKey || null,
+          supervision_access_key: supervisionAccessKey || null,
+          supervision_secret_key: supervisionSecretKey || null,
+        });
+        if (cancelled) return;
+        const warnings: string[] = [];
+        if (Array.isArray(detection.warnings)) {
+          warnings.push(...detection.warnings.filter((item) => typeof item === "string" && item.trim()));
+        }
+        setFeatureDetectWarnings(warnings);
+        const errorParts: string[] = [];
+        if (hasAdminCredentials && !detection.admin && detection.admin_error) {
+          errorParts.push(`Admin: ${detection.admin_error}`);
+        }
+        if (hasAdminCredentials && !detection.account && detection.account_error) {
+          errorParts.push(`Account API: ${detection.account_error}`);
+        }
+        if (hasSupervisionCredentials && !detection.metrics && detection.metrics_error) {
+          errorParts.push(`Metrics: ${detection.metrics_error}`);
+        }
+        if (hasSupervisionCredentials && !detection.usage && detection.usage_error) {
+          errorParts.push(`Usage Log: ${detection.usage_error}`);
+        }
+        setFeatureDetectError(errorParts.length > 0 ? errorParts.join(" | ") : null);
+        setForm((prev) => {
+          if (prev.provider !== "ceph") return prev;
+          const next = applyFeatureConstraints(
+            {
+              ...prev.features,
+              admin: { ...prev.features.admin, enabled: Boolean(detection.admin) },
+              account: { ...prev.features.account, enabled: Boolean(detection.account) },
+              usage: { ...prev.features.usage, enabled: Boolean(detection.usage) },
+              metrics: { ...prev.features.metrics, enabled: Boolean(detection.metrics) },
+            },
+            prev.provider
+          );
+          if (
+            next.admin.enabled === prev.features.admin.enabled &&
+            next.account.enabled === prev.features.account.enabled &&
+            next.usage.enabled === prev.features.usage.enabled &&
+            next.metrics.enabled === prev.features.metrics.enabled
+          ) {
+            return prev;
+          }
+          return { ...prev, features: next };
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setFeatureDetectWarnings([]);
+          setFeatureDetectError(extractError(err));
+        }
+      } finally {
+        if (!cancelled) {
+          setFeatureDetectBusy(false);
+        }
+      }
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    cephMode,
+    editingId,
+    form.admin_access_key,
+    form.admin_secret_key,
+    form.endpoint_url,
+    form.features.admin.endpoint,
+    form.has_admin_secret,
+    form.has_supervision_secret,
+    form.region,
+    form.supervision_access_key,
+    form.supervision_secret_key,
+    showForm,
+  ]);
+
   const updateFeatures = useCallback(
     (updater: (current: FeaturesState) => FeaturesState, providerOverride?: StorageProvider) => {
       setForm((prev) => {
@@ -364,6 +519,8 @@ export default function StorageEndpointsPage() {
       supervision_secret_key: "",
       ceph_admin_access_key: endpoint.ceph_admin_access_key ?? "",
       ceph_admin_secret_key: "",
+      has_admin_secret: Boolean(endpoint.has_admin_secret),
+      has_supervision_secret: Boolean(endpoint.has_supervision_secret),
       features,
     });
     setFormError(null);
@@ -446,7 +603,7 @@ export default function StorageEndpointsPage() {
         return null;
       }
       if (usageMetricsEnabled && !trimmedSupervisionAccess) {
-        setFormError("Supervision access key is required when usage or metrics is enabled.");
+        setFormError("Supervision access key is required when usage log or metrics is enabled.");
         return null;
       }
       if (editingId) {
@@ -483,7 +640,7 @@ export default function StorageEndpointsPage() {
           return null;
         }
         if (usageMetricsEnabled && (!payload.supervision_access_key || !payload.supervision_secret_key)) {
-          setFormError("Supervision credentials are required for usage/metrics on a Ceph endpoint.");
+          setFormError("Supervision credentials are required for usage log/metrics on a Ceph endpoint.");
           return null;
         }
       }
@@ -525,6 +682,7 @@ export default function StorageEndpointsPage() {
     const stsEnabled = features.sts.enabled;
     const usageEnabled = features.usage.enabled;
     const metricsEnabled = features.metrics.enabled;
+    const accountEnabled = features.account.enabled;
     const staticWebsiteEnabled = features.static_website.enabled;
     const iamEnabled = features.iam.enabled;
     const snsEnabled = features.sns.enabled;
@@ -677,12 +835,21 @@ export default function StorageEndpointsPage() {
               </span>
               <span
                 className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                  accountEnabled
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                }`}
+              >
+                Account API {accountEnabled ? "on" : "off"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
                   usageEnabled
                     ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100"
                     : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
                 }`}
               >
-                Usage {usageEnabled ? "on" : "off"}
+                Usage Log {usageEnabled ? "on" : "off"}
               </span>
               <span
                 className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
@@ -744,6 +911,14 @@ export default function StorageEndpointsPage() {
       </div>
     );
   };
+
+  const showUsageLogUnavailableWarning =
+    cephMode &&
+    !featureDetectBusy &&
+    !featureDetectError &&
+    Boolean(form.endpoint_url.trim()) &&
+    Boolean(form.supervision_access_key.trim() || form.has_supervision_secret) &&
+    !form.features.usage.enabled;
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
@@ -920,7 +1095,7 @@ export default function StorageEndpointsPage() {
                         via the API).
                       </p>
                       <p className="mt-2">
-                        <span className="font-semibold">Supervision Ops</span> keys are read-only credentials used for usage and metrics
+                        <span className="font-semibold">Supervision Ops</span> keys are read-only credentials used for usage logs and metrics
                         collection.
                       </p>
                       <p className="mt-3 font-semibold text-slate-700 dark:text-slate-100">Ceph (radosgw-admin) examples</p>
@@ -983,90 +1158,115 @@ export default function StorageEndpointsPage() {
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
                 <div className="mt-3 space-y-4">
                   {cephMode && (
-                    <div className="space-y-2">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ceph</p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                        Admin enabled
-                        <input
-                          type="checkbox"
-                          checked={form.features.admin.enabled}
-                          onChange={(e) =>
-                            updateFeatures((current) => ({
-                              ...current,
-                              admin: { ...current.admin, enabled: e.target.checked },
-                            }))
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
-                          disabled={!cephMode}
-                        />
-                      </label>
-                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                        Usage enabled
-                        <input
-                          type="checkbox"
-                          checked={form.features.usage.enabled}
-                          onChange={(e) =>
-                            updateFeatures((current) => ({
-                              ...current,
-                              usage: { ...current.usage, enabled: e.target.checked },
-                            }))
-                          }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
-                      disabled={!cephMode}
-                    />
-                  </label>
-                      <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                        Metrics enabled
-                        <input
-                          type="checkbox"
-                          checked={form.features.metrics.enabled}
-                          onChange={(e) =>
-                            updateFeatures((current) => ({
-                              ...current,
-                              metrics: { ...current.metrics, enabled: e.target.checked },
-                            }))
-                          }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
-                      disabled={!cephMode}
-                    />
-                  </label>
-                  <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                    SNS topics enabled
-                    <input
-                      type="checkbox"
-                      checked={form.features.sns.enabled}
-                      onChange={(e) =>
-                        updateFeatures((current) => ({
-                          ...current,
-                          sns: { ...current.sns, enabled: e.target.checked },
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
-                      disabled={!cephMode}
-                    />
-                  </label>
-                </div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
-                        Ceph admin endpoint override (optional)
-                        <input
-                          type="text"
-                          value={form.features.admin.endpoint}
-                          onChange={(e) =>
-                            updateFeatures((current) => ({
-                              ...current,
-                              admin: { ...current.admin, endpoint: e.target.value },
-                            }))
-                          }
-                          className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                          placeholder="http://rgw-admin.local"
-                        />
-                      </label>
+                    <div className="space-y-3">
+                      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ceph</p>
+                      {(featureDetectBusy ||
+                        featureDetectError ||
+                        featureDetectWarnings.length > 0 ||
+                        showUsageLogUnavailableWarning) && (
+                        <div className="space-y-2">
+                          {featureDetectBusy && (
+                            <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 ui-caption text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-100">
+                              Feature detection in progress from entered credentials.
+                            </p>
+                          )}
+                          {featureDetectError && (
+                            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 ui-caption text-red-900 dark:border-red-900/40 dark:bg-red-950/50 dark:text-red-100">
+                              {featureDetectError}
+                            </p>
+                          )}
+                          {featureDetectWarnings.map((warning, idx) => (
+                            <p
+                              key={`${warning}-${idx}`}
+                              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100"
+                            >
+                              {warning}
+                            </p>
+                          ))}
+                          {showUsageLogUnavailableWarning && (
+                              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
+                                Usage Log does not seem enabled on RGW (`rgw_enable_usage_log`), so activity stats will not be populated.
+                              </p>
+                            )}
+                        </div>
+                      )}
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                          Admin enabled
+                          <input
+                            type="checkbox"
+                            checked={form.features.admin.enabled}
+                            readOnly
+                            className="h-4 w-4 cursor-not-allowed rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            disabled
+                          />
+                        </label>
+                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                          Accounts enabled
+                          <input
+                            type="checkbox"
+                            checked={form.features.account.enabled}
+                            readOnly
+                            className="h-4 w-4 cursor-not-allowed rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            disabled
+                          />
+                        </label>
+                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                          Usage Log enabled
+                          <input
+                            type="checkbox"
+                            checked={form.features.usage.enabled}
+                            readOnly
+                            className="h-4 w-4 cursor-not-allowed rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            disabled
+                          />
+                        </label>
+                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                          Metrics enabled
+                          <input
+                            type="checkbox"
+                            checked={form.features.metrics.enabled}
+                            readOnly
+                            className="h-4 w-4 cursor-not-allowed rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            disabled
+                          />
+                        </label>
+                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                          SNS topics enabled
+                          <input
+                            type="checkbox"
+                            checked={form.features.sns.enabled}
+                            onChange={(e) =>
+                              updateFeatures((current) => ({
+                                ...current,
+                                sns: { ...current.sns, enabled: e.target.checked },
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-50 dark:border-slate-600"
+                            disabled={!cephMode}
+                          />
+                        </label>
                       </div>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Admin, usage, metrics, and SNS topics require a Ceph endpoint. Usage/metrics require supervision credentials.
-                    </p>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
+                          Ceph admin endpoint override (optional)
+                          <input
+                            type="text"
+                            value={form.features.admin.endpoint}
+                            onChange={(e) =>
+                              updateFeatures((current) => ({
+                                ...current,
+                                admin: { ...current.admin, endpoint: e.target.value },
+                              }))
+                            }
+                            className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                            placeholder="http://rgw-admin.local"
+                          />
+                        </label>
+                      </div>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        Admin, account API, usage log, and metrics are auto-detected from credentials. Usage log/metrics require supervision credentials.
+                      </p>
                     </div>
                   )}
                   <div className="space-y-2">

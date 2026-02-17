@@ -47,7 +47,7 @@ export default function StorageUsageCard({
         </h3>
       </header>
 
-      {metricsDisabled && <PageBanner tone="warning">Usage metrics are not available for these credentials.</PageBanner>}
+      {metricsDisabled && <PageBanner tone="warning">Storage metrics are not available for these credentials.</PageBanner>}
 
       {!metricsDisabled && errorMessage && <PageBanner tone="error">{errorMessage}</PageBanner>}
 

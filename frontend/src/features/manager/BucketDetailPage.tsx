@@ -398,9 +398,9 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
   const usageFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
-      return selectedEndpoint?.capabilities?.usage ?? true;
+      return selectedEndpoint?.capabilities?.metrics ?? true;
     }
-    return selectedS3Account?.storage_endpoint_capabilities?.usage ?? true;
+    return selectedS3Account?.storage_endpoint_capabilities?.metrics ?? true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
   const accountId = accountIdForApi ?? null;
   const hasAccountContext = !requiresS3AccountSelection || accountId !== null;

@@ -943,11 +943,11 @@ def list_buckets(
     else:
         simple_filter, advanced_filter = _parse_filter(filter)
     simple_filter = simple_filter.strip() if isinstance(simple_filter, str) and simple_filter.strip() else None
-    usage_enabled = True
+    storage_metrics_enabled = True
     endpoint = getattr(ctx, "endpoint", None)
     if endpoint is not None and hasattr(endpoint, "provider") and hasattr(endpoint, "features_config"):
-        usage_enabled = bool(resolve_feature_flags(endpoint).usage_enabled)
-    if not usage_enabled:
+        storage_metrics_enabled = bool(resolve_feature_flags(endpoint).metrics_enabled)
+    if not storage_metrics_enabled:
         with_stats = False
     elif _filter_requires_stats(advanced_filter):
         with_stats = True
@@ -1265,9 +1265,6 @@ def update_quota(
     payload: BucketQuotaUpdate,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ):
-    endpoint = getattr(ctx, "endpoint", None)
-    if endpoint is not None and hasattr(endpoint, "provider") and hasattr(endpoint, "features_config") and not resolve_feature_flags(endpoint).usage_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are disabled for this endpoint")
     service = BucketsService()
     account = _build_endpoint_account(ctx)
     try:

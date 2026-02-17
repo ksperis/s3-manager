@@ -928,8 +928,8 @@ def get_rgw_account_metrics(
     account_id: str,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> CephAdminEntityMetrics:
-    if not resolve_feature_flags(ctx.endpoint).usage_enabled:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are disabled for this endpoint")
+    if not resolve_feature_flags(ctx.endpoint).metrics_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage metrics are disabled for this endpoint")
     normalized_account_id = account_id.strip()
     if not normalized_account_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account_id is required")

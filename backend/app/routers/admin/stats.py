@@ -22,8 +22,8 @@ def _resolve_endpoint(
     db: Session,
     endpoint_id: Optional[int],
     *,
-    require_usage: bool = False,
-    require_metrics: bool = False,
+    require_storage_metrics: bool = False,
+    require_usage_logs: bool = False,
 ) -> StorageEndpoint:
     if endpoint_id is not None:
         endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
@@ -51,10 +51,10 @@ def _resolve_endpoint(
     if provider != StorageProvider.CEPH:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This endpoint is not a Ceph endpoint.")
     features = normalize_features_config(endpoint.provider, endpoint.features_config)
-    if require_usage and not features["usage"]["enabled"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage metrics are disabled for this endpoint")
-    if require_metrics and not features["metrics"]["enabled"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Traffic metrics are disabled for this endpoint")
+    if require_storage_metrics and not features["metrics"]["enabled"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage metrics are disabled for this endpoint")
+    if require_usage_logs and not features["usage"]["enabled"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage logs are disabled for this endpoint")
     if not endpoint.endpoint_url:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Endpoint URL is missing.")
     if not endpoint.supervision_access_key or not endpoint.supervision_secret_key:
@@ -75,7 +75,7 @@ def _resolve_account_endpoint(db: Session, account: S3Account) -> StorageEndpoin
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Storage endpoint is not configured for this account.",
         )
-    return _resolve_endpoint(db, account.storage_endpoint_id, require_usage=True)
+    return _resolve_endpoint(db, account.storage_endpoint_id, require_storage_metrics=True)
 
 def _resolve_s3_user_endpoint(db: Session, s3_user: S3User) -> StorageEndpoint:
     if s3_user.storage_endpoint_id is None:
@@ -83,7 +83,7 @@ def _resolve_s3_user_endpoint(db: Session, s3_user: S3User) -> StorageEndpoint:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Storage endpoint is not configured for this user.",
         )
-    return _resolve_endpoint(db, s3_user.storage_endpoint_id, require_usage=True)
+    return _resolve_endpoint(db, s3_user.storage_endpoint_id, require_storage_metrics=True)
 
 
 @router.get("/summary")
@@ -112,7 +112,7 @@ def account_stats(
     rgw_admin = _build_rgw_client(endpoint)
     uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
     if not uid:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usage metrics not available for this account")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage metrics not available for this account")
     try:
         payload = rgw_admin.get_all_buckets(uid=uid, with_stats=True)
     except RGWAdminError as exc:
@@ -190,7 +190,7 @@ def s3_user_stats(
     endpoint = _resolve_s3_user_endpoint(db, s3_user)
     rgw_admin = _build_rgw_client(endpoint)
     if not s3_user.rgw_user_uid:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usage metrics not available for this user")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage metrics not available for this user")
     try:
         payload = rgw_admin.get_all_buckets(uid=s3_user.rgw_user_uid, with_stats=True)
     except RGWAdminError as exc:
@@ -263,7 +263,7 @@ def global_stats(
     window: TrafficWindow = Query(TrafficWindow.WEEK),
     endpoint_id: Optional[int] = Query(default=None, alias="endpoint_id"),
 ) -> dict:
-    endpoint = _resolve_endpoint(db, endpoint_id, require_usage=True, require_metrics=True)
+    endpoint = _resolve_endpoint(db, endpoint_id, require_storage_metrics=True, require_usage_logs=True)
     rgw_admin = _build_rgw_client(endpoint)
     service = AdminMetricsService(
         db=db,
@@ -279,7 +279,7 @@ def storage_stats(
     db: Session = Depends(get_db),
     endpoint_id: Optional[int] = Query(default=None, alias="endpoint_id"),
 ) -> dict:
-    endpoint = _resolve_endpoint(db, endpoint_id, require_usage=True)
+    endpoint = _resolve_endpoint(db, endpoint_id, require_storage_metrics=True)
     rgw_admin = _build_rgw_client(endpoint)
     service = AdminMetricsService(
         db=db,
@@ -296,7 +296,7 @@ def traffic_stats(
     db: Session = Depends(get_db),
     endpoint_id: Optional[int] = Query(default=None, alias="endpoint_id"),
 ) -> dict:
-    endpoint = _resolve_endpoint(db, endpoint_id, require_metrics=True)
+    endpoint = _resolve_endpoint(db, endpoint_id, require_usage_logs=True)
     rgw_admin = _build_rgw_client(endpoint)
     service = AdminMetricsService(
         db=db,

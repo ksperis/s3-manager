@@ -31,21 +31,21 @@ def _build_supervision_client(endpoint: StorageEndpoint):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-def _require_usage_enabled(endpoint: StorageEndpoint) -> None:
-    flags = resolve_feature_flags(endpoint)
-    if not flags.usage_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Usage metrics are disabled for this endpoint",
-        )
-
-
-def _require_metrics_enabled(endpoint: StorageEndpoint) -> None:
+def _require_storage_metrics_enabled(endpoint: StorageEndpoint) -> None:
     flags = resolve_feature_flags(endpoint)
     if not flags.metrics_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Traffic metrics are disabled for this endpoint",
+            detail="Storage metrics are disabled for this endpoint",
+        )
+
+
+def _require_usage_logs_enabled(endpoint: StorageEndpoint) -> None:
+    flags = resolve_feature_flags(endpoint)
+    if not flags.usage_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usage logs are disabled for this endpoint",
         )
 
 
@@ -63,7 +63,7 @@ def _normalize_owner(entry: dict[str, Any]) -> str:
 def cluster_storage_metrics(
     endpoint: StorageEndpoint = Depends(get_ceph_admin_workspace_endpoint),
 ) -> dict[str, Any]:
-    _require_usage_enabled(endpoint)
+    _require_storage_metrics_enabled(endpoint)
     rgw_admin = _build_supervision_client(endpoint)
     try:
         payload = rgw_admin.get_all_buckets(with_stats=True)
@@ -151,7 +151,7 @@ def cluster_traffic_metrics(
     window: TrafficWindow = Query(TrafficWindow.WEEK),
     endpoint: StorageEndpoint = Depends(get_ceph_admin_workspace_endpoint),
 ) -> dict[str, Any]:
-    _require_metrics_enabled(endpoint)
+    _require_usage_logs_enabled(endpoint)
     rgw_admin = _build_supervision_client(endpoint)
     reference = datetime.now(timezone.utc).replace(microsecond=0)
     start = window_start(reference, window)

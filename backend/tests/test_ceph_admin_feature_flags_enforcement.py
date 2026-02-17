@@ -32,11 +32,11 @@ def _clear_buckets_caches():
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
 
 
-def _build_endpoint(*, endpoint_id: int = 1, usage_enabled: bool = True):
+def _build_endpoint(*, endpoint_id: int = 1, metrics_enabled: bool = True):
     features_yaml = (
         "features:\n"
-        "  usage:\n"
-        f"    enabled: {'true' if usage_enabled else 'false'}\n"
+        "  metrics:\n"
+        f"    enabled: {'true' if metrics_enabled else 'false'}\n"
     )
     return SimpleNamespace(
         id=endpoint_id,
@@ -45,10 +45,10 @@ def _build_endpoint(*, endpoint_id: int = 1, usage_enabled: bool = True):
     )
 
 
-def _build_ctx(*, usage_enabled: bool) -> tuple[SimpleNamespace, FakeRGWAdmin]:
+def _build_ctx(*, metrics_enabled: bool) -> tuple[SimpleNamespace, FakeRGWAdmin]:
     rgw_admin = FakeRGWAdmin()
     ctx = SimpleNamespace(
-        endpoint=_build_endpoint(usage_enabled=usage_enabled),
+        endpoint=_build_endpoint(metrics_enabled=metrics_enabled),
         rgw_admin=rgw_admin,
         access_key="AKIA_TEST",
         secret_key="SECRET_TEST",
@@ -56,8 +56,8 @@ def _build_ctx(*, usage_enabled: bool) -> tuple[SimpleNamespace, FakeRGWAdmin]:
     return ctx, rgw_admin
 
 
-def test_ceph_admin_bucket_listing_never_requests_stats_when_usage_feature_disabled():
-    ctx, rgw_admin = _build_ctx(usage_enabled=False)
+def test_ceph_admin_bucket_listing_never_requests_stats_when_metrics_feature_disabled():
+    ctx, rgw_admin = _build_ctx(metrics_enabled=False)
 
     buckets_router.list_buckets(
         page=1,
@@ -74,8 +74,8 @@ def test_ceph_admin_bucket_listing_never_requests_stats_when_usage_feature_disab
     assert rgw_admin.with_stats_calls == [False]
 
 
-def test_ceph_admin_account_metrics_requires_usage_feature():
-    ctx, rgw_admin = _build_ctx(usage_enabled=False)
+def test_ceph_admin_account_metrics_requires_metrics_feature():
+    ctx, rgw_admin = _build_ctx(metrics_enabled=False)
 
     with pytest.raises(HTTPException) as exc:
         accounts_router.get_rgw_account_metrics(account_id="RGW0001", ctx=ctx)
@@ -84,8 +84,8 @@ def test_ceph_admin_account_metrics_requires_usage_feature():
     assert rgw_admin.with_stats_calls == []
 
 
-def test_ceph_admin_user_metrics_requires_usage_feature():
-    ctx, rgw_admin = _build_ctx(usage_enabled=False)
+def test_ceph_admin_user_metrics_requires_metrics_feature():
+    ctx, rgw_admin = _build_ctx(metrics_enabled=False)
 
     with pytest.raises(HTTPException) as exc:
         users_router.get_rgw_user_metrics(user_id="user-a", tenant=None, ctx=ctx)

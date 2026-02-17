@@ -555,8 +555,8 @@ class PortalService:
         if not endpoint:
             raise RuntimeError("Endpoint de supervision manquant pour ce compte")
         flags = resolve_feature_flags(endpoint)
-        if not flags.usage_enabled:
-            raise RuntimeError("Usage metrics are disabled for this endpoint")
+        if not flags.metrics_enabled:
+            raise RuntimeError("Storage metrics are disabled for this endpoint")
         try:
             return get_supervision_rgw_client(endpoint)
         except ValueError as exc:

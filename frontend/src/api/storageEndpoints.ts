@@ -13,6 +13,7 @@ export type StorageEndpointFeature = {
 
 export type StorageEndpointFeatures = {
   admin: StorageEndpointFeature;
+  account: StorageEndpointFeature;
   sts: StorageEndpointFeature;
   usage: StorageEndpointFeature;
   metrics: StorageEndpointFeature;
@@ -71,6 +72,29 @@ export type StorageEndpointPayload = {
   features_config?: string | null;
 };
 
+export type StorageEndpointFeatureDetectionPayload = {
+  endpoint_id?: number | null;
+  endpoint_url: string;
+  admin_endpoint?: string | null;
+  region?: string | null;
+  admin_access_key?: string | null;
+  admin_secret_key?: string | null;
+  supervision_access_key?: string | null;
+  supervision_secret_key?: string | null;
+};
+
+export type StorageEndpointFeatureDetectionResult = {
+  admin: boolean;
+  account: boolean;
+  usage: boolean;
+  metrics: boolean;
+  admin_error?: string | null;
+  account_error?: string | null;
+  metrics_error?: string | null;
+  usage_error?: string | null;
+  warnings: string[];
+};
+
 export type ListStorageEndpointsParams = {
   include_admin_ops_permissions?: boolean;
 };
@@ -91,6 +115,13 @@ export async function getStorageEndpoint(id: number, params?: GetStorageEndpoint
 
 export async function fetchStorageEndpointsMeta(): Promise<StorageEndpointMeta> {
   const { data } = await client.get<StorageEndpointMeta>("/admin/storage-endpoints/meta");
+  return data;
+}
+
+export async function detectStorageEndpointFeatures(
+  payload: StorageEndpointFeatureDetectionPayload
+): Promise<StorageEndpointFeatureDetectionResult> {
+  const { data } = await client.post<StorageEndpointFeatureDetectionResult>("/admin/storage-endpoints/detect-features", payload);
   return data;
 }
 

@@ -332,8 +332,8 @@ class TrafficService:
         if not creds or not endpoint:
             raise ValueError("Supervision credentials are not configured for this endpoint")
         flags = resolve_feature_flags(endpoint)
-        if not flags.metrics_enabled:
-            raise ValueError("Traffic metrics are disabled for this endpoint")
+        if not flags.usage_enabled:
+            raise ValueError("Usage logs are disabled for this endpoint")
         access_key, secret_key = creds
         try:
             admin_endpoint = resolve_admin_endpoint(endpoint)

@@ -58,8 +58,8 @@ class BucketsService:
         if not creds or not endpoint:
             raise RuntimeError("Supervision credentials are not configured for this endpoint")
         flags = resolve_feature_flags(endpoint)
-        if not flags.usage_enabled:
-            raise RuntimeError("Usage metrics are disabled for this endpoint")
+        if not flags.metrics_enabled:
+            raise RuntimeError("Storage metrics are disabled for this endpoint")
         access_key, secret_key = creds
         try:
             admin_endpoint = resolve_admin_endpoint(endpoint)
@@ -114,10 +114,10 @@ class BucketsService:
         admin_by_name: dict[str, dict] = {}
         if account_uid and with_stats:
             endpoint = getattr(account, "storage_endpoint", None)
-            usage_enabled = bool(resolve_feature_flags(endpoint).usage_enabled) if endpoint else True
-            if not usage_enabled:
+            storage_metrics_enabled = bool(resolve_feature_flags(endpoint).metrics_enabled) if endpoint else True
+            if not storage_metrics_enabled:
                 logger.debug(
-                    "S3Account %s skipped RGW admin stats enrichment (usage feature disabled)",
+                    "S3Account %s skipped RGW admin stats enrichment (storage metrics feature disabled)",
                     account.rgw_account_id or account.id,
                 )
             else:

@@ -37,7 +37,7 @@ def account_stats(
     _: dict = Depends(require_usage_capable_manager),
 ) -> dict:
     if not account.rgw_account_id and not account.rgw_user_uid:
-        raise HTTPException(status_code=400, detail="Usage metrics not available for this account")
+        raise HTTPException(status_code=400, detail="Storage metrics not available for this account")
     try:
         buckets = bucket_service.list_buckets(account)
         total_buckets = len(buckets)

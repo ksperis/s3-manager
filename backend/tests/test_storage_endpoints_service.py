@@ -3,7 +3,7 @@
 import json
 
 from app.db import StorageEndpoint, StorageProvider
-from app.models.storage_endpoint import StorageEndpointUpdate
+from app.models.storage_endpoint import StorageEndpointFeatureDetectionRequest, StorageEndpointUpdate
 from app.services.rgw_admin import RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
 
@@ -211,3 +211,115 @@ def test_update_endpoint_clearing_access_keys_also_clears_secrets(db_session):
     assert persisted.supervision_secret_key is None
     assert persisted.ceph_admin_access_key is None
     assert persisted.ceph_admin_secret_key is None
+
+
+def test_detect_features_warns_when_usage_log_endpoint_is_unavailable(db_session, monkeypatch):
+    class FakeRGWClient:
+        def __init__(self, access_key: str):
+            self.access_key = access_key
+
+        def get_user_by_access_key(self, access_key: str, allow_not_found: bool = False):
+            assert self.access_key == "AKIA-ADMIN"
+            assert access_key == "AKIA-ADMIN"
+            return {"user_id": "admin-user"}
+
+        def get_all_buckets(self, with_stats: bool = False):
+            assert self.access_key == "AKIA-SUPERVISION"
+            assert with_stats is False
+            return []
+
+        def get_usage(self, show_entries: bool = False, show_summary: bool = False):
+            assert self.access_key == "AKIA-SUPERVISION"
+            assert show_entries is False
+            assert show_summary is False
+            return {"not_found": True}
+
+        def get_account(self, account_id: str, allow_not_found: bool = False):
+            assert self.access_key == "AKIA-ADMIN"
+            assert account_id == "RGW00000000000000000"
+            assert allow_not_found is True
+            return None
+
+    monkeypatch.setattr(
+        "app.services.storage_endpoints_service.get_rgw_admin_client",
+        lambda **kwargs: FakeRGWClient(kwargs["access_key"]),
+    )
+
+    service = StorageEndpointsService(db_session)
+    result = service.detect_features(
+        StorageEndpointFeatureDetectionRequest(
+            endpoint_url="https://ceph.example.test",
+            admin_access_key="AKIA-ADMIN",
+            admin_secret_key="SECRET-ADMIN",
+            supervision_access_key="AKIA-SUPERVISION",
+            supervision_secret_key="SECRET-SUPERVISION",
+        )
+    )
+
+    assert result.admin is True
+    assert result.account is True
+    assert result.metrics is True
+    assert result.usage is False
+    assert result.usage_error == "RGW usage logs endpoint is unavailable."
+    assert len(result.warnings) == 1
+    assert "Usage logs do not appear enabled" in result.warnings[0]
+
+
+def test_detect_features_reuses_stored_secrets_in_edit_mode(db_session, monkeypatch):
+    endpoint = _create_ceph_endpoint_with_full_credentials(db_session, name="ceph-edit-detect")
+
+    class FakeRGWClient:
+        def __init__(self, access_key: str):
+            self.access_key = access_key
+
+        def get_user_by_access_key(self, access_key: str, allow_not_found: bool = False):
+            assert self.access_key == endpoint.admin_access_key
+            assert access_key == endpoint.admin_access_key
+            return {"user_id": "admin-user"}
+
+        def get_all_buckets(self, with_stats: bool = False):
+            assert self.access_key == endpoint.supervision_access_key
+            assert with_stats is False
+            return []
+
+        def get_usage(self, show_entries: bool = False, show_summary: bool = False):
+            assert self.access_key == endpoint.supervision_access_key
+            assert show_entries is False
+            assert show_summary is False
+            return {"entries": [], "summary": []}
+
+        def get_account(self, account_id: str, allow_not_found: bool = False):
+            assert self.access_key == endpoint.admin_access_key
+            assert account_id == "RGW00000000000000000"
+            assert allow_not_found is True
+            return {"id": "RGW00000000000000001"}
+
+    def _fake_get_rgw_admin_client(**kwargs):
+        if kwargs["access_key"] == endpoint.admin_access_key:
+            assert kwargs["secret_key"] == endpoint.admin_secret_key
+        if kwargs["access_key"] == endpoint.supervision_access_key:
+            assert kwargs["secret_key"] == endpoint.supervision_secret_key
+        return FakeRGWClient(kwargs["access_key"])
+
+    monkeypatch.setattr(
+        "app.services.storage_endpoints_service.get_rgw_admin_client",
+        _fake_get_rgw_admin_client,
+    )
+
+    service = StorageEndpointsService(db_session)
+    result = service.detect_features(
+        StorageEndpointFeatureDetectionRequest(
+            endpoint_id=endpoint.id,
+            endpoint_url=endpoint.endpoint_url,
+            admin_access_key=endpoint.admin_access_key,
+            supervision_access_key=endpoint.supervision_access_key,
+        )
+    )
+
+    assert result.admin is True
+    assert result.account is True
+    assert result.metrics is True
+    assert result.usage is True
+    assert result.admin_error is None
+    assert result.metrics_error is None
+    assert result.usage_error is None

@@ -49,10 +49,10 @@ export default function CephAdminMetricsPage() {
 
   const [window, setWindow] = useState<TrafficWindow>("week");
   const metricsCredentialsReady = !selectedEndpointAccessLoading && Boolean(selectedEndpointAccess?.can_metrics);
-  const usageFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
-  const trafficFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
-  const canLoadStorage = selectedEndpointId != null && metricsCredentialsReady && usageFeatureEnabled;
-  const canLoadTraffic = selectedEndpointId != null && metricsCredentialsReady && trafficFeatureEnabled;
+  const storageFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
+  const usageLogFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
+  const canLoadStorage = selectedEndpointId != null && metricsCredentialsReady && storageFeatureEnabled;
+  const canLoadTraffic = selectedEndpointId != null && metricsCredentialsReady && usageLogFeatureEnabled;
 
   useEffect(() => {
     let cancelled = false;
@@ -158,12 +158,12 @@ export default function CephAdminMetricsPage() {
       : null;
   const pageError = endpointRequiredError || metricsUnavailableError || storageError;
   const storageDisabledMessage =
-    selectedEndpointId != null && metricsCredentialsReady && !usageFeatureEnabled
+    selectedEndpointId != null && metricsCredentialsReady && !storageFeatureEnabled
       ? "Storage metrics are disabled for this endpoint."
       : null;
   const trafficDisabledMessage =
-    selectedEndpointId != null && metricsCredentialsReady && !trafficFeatureEnabled
-      ? "Traffic metrics are disabled for this endpoint."
+    selectedEndpointId != null && metricsCredentialsReady && !usageLogFeatureEnabled
+      ? "Usage logs are disabled for this endpoint."
       : null;
   const missingTraffic = canLoadTraffic && !traffic && !trafficLoading && !trafficError;
 

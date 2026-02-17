@@ -227,8 +227,8 @@ class BillingCollector:
                 continue
 
             summary["endpoints"] += 1
-            # Usage billing relies on RGW usage logs (traffic), gated by the metrics feature.
-            usage_enabled = bool(flags.metrics_enabled)
+            # Usage billing relies on RGW usage logs (traffic), gated by the usage feature.
+            usage_enabled = bool(flags.usage_enabled)
             usage_records, usage_errors = (0, [])
             if usage_enabled:
                 usage_records, usage_errors = self._collect_usage_for_endpoint(rgw_admin, endpoint, day)

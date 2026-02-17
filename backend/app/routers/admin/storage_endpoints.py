@@ -9,6 +9,8 @@ from app.core.database import get_db
 from app.models.storage_endpoint import (
     StorageEndpoint,
     StorageEndpointCreate,
+    StorageEndpointFeatureDetectionRequest,
+    StorageEndpointFeatureDetectionResult,
     StorageEndpointMeta,
     StorageEndpointUpdate,
 )
@@ -42,6 +44,18 @@ def get_storage_endpoints_meta(
     _: dict = Depends(get_current_super_admin),
 ) -> StorageEndpointMeta:
     return StorageEndpointMeta(managed_by_env=service.env_endpoints_locked())
+
+
+@router.post("/detect-features", response_model=StorageEndpointFeatureDetectionResult)
+def detect_storage_endpoint_features(
+    payload: StorageEndpointFeatureDetectionRequest,
+    service: StorageEndpointsService = Depends(get_service),
+    _: dict = Depends(get_current_super_admin),
+) -> StorageEndpointFeatureDetectionResult:
+    try:
+        return service.detect_features(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/{endpoint_id}", response_model=StorageEndpoint)

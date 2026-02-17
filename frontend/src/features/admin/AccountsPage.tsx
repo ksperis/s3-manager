@@ -217,8 +217,8 @@ export default function S3AccountsPage() {
     () => storageEndpoints.filter((ep) => ep.provider === "ceph"),
     [storageEndpoints]
   );
-  const adminCephEndpoints = useMemo(
-    () => cephEndpoints.filter((ep) => Boolean(ep.capabilities?.admin)),
+  const accountCephEndpoints = useMemo(
+    () => cephEndpoints.filter((ep) => Boolean(ep.capabilities?.account)),
     [cephEndpoints]
   );
 
@@ -535,21 +535,21 @@ export default function S3AccountsPage() {
   useEffect(() => {
     if (storageEndpoints.length === 0) return;
     const defaultCeph =
-      adminCephEndpoints.find((ep) => ep.is_default) || adminCephEndpoints[0];
+      accountCephEndpoints.find((ep) => ep.is_default) || accountCephEndpoints[0];
     const firstCephId = defaultCeph ? String(defaultCeph.id) : "";
 
     setForm((prev) => ({
       ...prev,
-      storage_endpoint_id: adminCephEndpoints.some(
+      storage_endpoint_id: accountCephEndpoints.some(
         (endpoint) => String(endpoint.id) === prev.storage_endpoint_id
       )
         ? prev.storage_endpoint_id
         : firstCephId,
     }));
     setImportTenantEndpointId((prev) =>
-      adminCephEndpoints.some((endpoint) => String(endpoint.id) === prev) ? prev : firstCephId
+      accountCephEndpoints.some((endpoint) => String(endpoint.id) === prev) ? prev : firstCephId
     );
-  }, [storageEndpoints, adminCephEndpoints]);
+  }, [storageEndpoints, accountCephEndpoints]);
 
   useEffect(() => {
     if (!showCreateModal) return;
@@ -633,7 +633,7 @@ export default function S3AccountsPage() {
       });
       setActionMessage("S3Account created");
       const defaultCeph =
-        adminCephEndpoints.find((ep) => ep.is_default) || adminCephEndpoints[0];
+        accountCephEndpoints.find((ep) => ep.is_default) || accountCephEndpoints[0];
       setForm({
         name: "",
         email: "",
@@ -956,12 +956,12 @@ export default function S3AccountsPage() {
                 value={form.storage_endpoint_id}
                 onChange={(e) => setForm((f) => ({ ...f, storage_endpoint_id: e.target.value }))}
                 required
-                disabled={loadingEndpoints || adminCephEndpoints.length === 0}
+                disabled={loadingEndpoints || accountCephEndpoints.length === 0}
               >
                 <option value="" disabled>
-                  {loadingEndpoints ? "Loading..." : "No Ceph endpoint with admin enabled"}
+                  {loadingEndpoints ? "Loading..." : "No Ceph endpoint with account API enabled"}
                 </option>
-                {adminCephEndpoints.map((ep) => (
+                {accountCephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
                     {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>
@@ -1153,13 +1153,13 @@ export default function S3AccountsPage() {
                 className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 value={importTenantEndpointId}
                 onChange={(e) => setImportTenantEndpointId(e.target.value)}
-                disabled={adminCephEndpoints.length === 0}
+                disabled={accountCephEndpoints.length === 0}
                 required
               >
                 <option value="" disabled>
-                  {adminCephEndpoints.length === 0 ? "No Ceph endpoint with admin enabled" : "Select"}
+                  {accountCephEndpoints.length === 0 ? "No Ceph endpoint with account API enabled" : "Select"}
                 </option>
-                {adminCephEndpoints.map((ep) => (
+                {accountCephEndpoints.map((ep) => (
                   <option key={ep.id} value={ep.id}>
                     {ep.name} {ep.is_default ? "(default)" : ""}
                   </option>

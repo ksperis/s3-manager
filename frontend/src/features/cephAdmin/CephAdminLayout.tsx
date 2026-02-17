@@ -24,8 +24,8 @@ function CephAdminShell() {
   const showSelector = endpoints.length > 1;
   const selectorEnabled = endpoints.length > 0;
   const endpointSelected = selectorEnabled && selectedEndpointId != null;
-  const usageFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
-  const trafficFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
+  const usageFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
+  const trafficFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
   const canAdmin = endpointSelected && !selectedEndpointAccessLoading && Boolean(selectedEndpointAccess?.can_admin);
   const canMetrics =
     endpointSelected &&

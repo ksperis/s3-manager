@@ -157,6 +157,8 @@ export type AdminSummary = {
   total_ceph_endpoints: number;
   total_other_endpoints: number;
   total_connections: number;
+  total_public_connections: number;
+  total_private_connections: number;
 };
 
 export async function fetchAdminSummary(): Promise<AdminSummary> {

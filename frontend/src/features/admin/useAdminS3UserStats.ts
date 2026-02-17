@@ -36,13 +36,13 @@ export function useAdminS3UserStats(
       setStats(data);
       setError(null);
     } catch (err) {
-      let message = "Unable to load usage stats.";
+      let message = "Unable to load storage stats.";
       if (axios.isAxiosError(err)) {
         const detail = err.response?.data?.detail;
         if (typeof detail === "string" && detail.trim()) {
           message = detail;
         } else if (err.response?.status === 403) {
-          message = "Usage metrics are not available for this user.";
+          message = "Storage metrics are not available for this user.";
         }
       }
       setError(message);
@@ -58,4 +58,3 @@ export function useAdminS3UserStats(
 
   return { stats, loading, error, reload: load };
 }
-

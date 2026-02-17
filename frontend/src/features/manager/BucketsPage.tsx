@@ -186,7 +186,7 @@ export default function BucketsPage() {
     [accounts, selectedS3AccountId]
   );
   const endpointCaps = selectedS3Account?.storage_endpoint_capabilities ?? null;
-  const usageFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
+  const usageFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
   const staticWebsiteFeatureEnabled = endpointCaps ? endpointCaps.static_website !== false : true;
   const accountLabel = selectedS3Account
     ? selectedS3Account.display_name
