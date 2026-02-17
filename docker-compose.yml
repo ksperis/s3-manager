@@ -5,6 +5,7 @@ services:
       CORS_ORIGINS: '["http://127.0.0.1:8080", "http://localhost:8080"]'
       DATABASE_URL: sqlite:////data/app.db
       APP_SETTINGS_PATH: /data/app_settings.json
+      INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:-change-me-internal-token}
     volumes:
       - backend-data:/data
     ports:
@@ -15,6 +16,34 @@ services:
       - "8080:80"
     depends_on:
       - backend
+  scheduler:
+    image: alpine:3.20
+    depends_on:
+      - backend
+    environment:
+      BACKEND_API_BASE: ${BACKEND_API_BASE:-http://backend:8000/api}
+      INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:-change-me-internal-token}
+      HEALTHCHECK_CRON_SCHEDULE: ${HEALTHCHECK_CRON_SCHEDULE:-*/5 * * * *}
+      BILLING_CRON_SCHEDULE: ${BILLING_CRON_SCHEDULE:-0 2 * * *}
+      BILLING_DAY_OFFSET: ${BILLING_DAY_OFFSET:-1}
+      CRON_HTTP_TIMEOUT_SECONDS: ${CRON_HTTP_TIMEOUT_SECONDS:-30}
+      SCHEDULER_RUNTIME_ENV_FILE: /tmp/s3-manager-scheduler.env
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./ops/cron:/opt/cron:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        apk add --no-cache curl coreutils tzdata
+        printf 'BACKEND_API_BASE=%s\nINTERNAL_CRON_TOKEN=%s\nBILLING_DAY_OFFSET=%s\nCRON_HTTP_TIMEOUT_SECONDS=%s\n' "$$BACKEND_API_BASE" "$$INTERNAL_CRON_TOKEN" "$$BILLING_DAY_OFFSET" "$$CRON_HTTP_TIMEOUT_SECONDS" > "$$SCHEDULER_RUNTIME_ENV_FILE"
+        {
+          echo 'SHELL=/bin/sh'
+          echo 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+          echo "$$HEALTHCHECK_CRON_SCHEDULE /bin/sh /opt/cron/run-healthcheck.sh >> /proc/1/fd/1 2>&1"
+          echo "$$BILLING_CRON_SCHEDULE /bin/sh /opt/cron/run-billing.sh >> /proc/1/fd/1 2>&1"
+        } > /etc/crontabs/root
+        exec crond -f -l 8
 
 volumes:
   backend-data:
