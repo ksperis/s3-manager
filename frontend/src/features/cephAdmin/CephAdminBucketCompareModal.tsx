@@ -80,6 +80,38 @@ const formatUnknown = (value: unknown) => {
   }
 };
 
+type CompareDiffTone = "added" | "removed";
+
+type CompareDiffLine = {
+  text: string;
+  tone?: CompareDiffTone;
+};
+
+const diffToneClasses = (tone?: CompareDiffTone) => {
+  if (tone === "added") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100";
+  }
+  if (tone === "removed") {
+    return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200";
+};
+
+const renderDiffLines = (lines: CompareDiffLine[]) => (
+  <div className="space-y-2">
+    {lines.map((line, idx) => (
+      <pre
+        key={`${line.text}-${idx}`}
+        className={`whitespace-pre-wrap break-words rounded-md border px-2 py-1 font-mono text-[11px] leading-relaxed ${diffToneClasses(
+          line.tone
+        )}`}
+      >
+        {line.text}
+      </pre>
+    ))}
+  </div>
+);
+
 const triggerDownload = (filename: string, content: string, mimeType: string) => {
   if (typeof window === "undefined") return;
   const blob = new Blob([content], { type: mimeType });
@@ -594,9 +626,77 @@ export default function CephAdminBucketCompareModal({
           <div className="space-y-2">
             {items.map((item) => {
               const content = item.result?.content_diff;
+              const contentHasDifferences = Boolean(
+                content && (content.different_count > 0 || content.only_source_count > 0 || content.only_target_count > 0)
+              );
+              const contentSections = content
+                ? [
+                    {
+                      key: "source_only",
+                      label: `Source only (${content.only_source_count})`,
+                      changed: content.only_source_count > 0,
+                      before:
+                        content.only_source_count > 0
+                          ? content.only_source_sample.length > 0
+                            ? content.only_source_sample.map((key) => ({ text: `- ${key}`, tone: "removed" as const }))
+                            : [{ text: "(sample not available)", tone: "removed" as const }]
+                          : [{ text: "(none)" }],
+                      after: [{ text: "(none)" }],
+                    },
+                    {
+                      key: "target_only",
+                      label: `Target only (${content.only_target_count})`,
+                      changed: content.only_target_count > 0,
+                      before: [{ text: "(none)" }],
+                      after:
+                        content.only_target_count > 0
+                          ? content.only_target_sample.length > 0
+                            ? content.only_target_sample.map((key) => ({ text: `- ${key}`, tone: "added" as const }))
+                            : [{ text: "(sample not available)", tone: "added" as const }]
+                          : [{ text: "(none)" }],
+                    },
+                    {
+                      key: "different",
+                      label: `Different objects (${content.different_count})`,
+                      changed: content.different_count > 0,
+                      before:
+                        content.different_count > 0
+                          ? content.different_sample.length > 0
+                            ? content.different_sample.map((diff) => ({
+                                text: `${diff.key}: ${diff.compare_by} | size=${diff.source_size ?? "-"} | etag=${diff.source_etag ?? "-"}`,
+                                tone: "removed" as const,
+                              }))
+                            : [{ text: "(sample not available)", tone: "removed" as const }]
+                          : [{ text: "(none)" }],
+                      after:
+                        content.different_count > 0
+                          ? content.different_sample.length > 0
+                            ? content.different_sample.map((diff) => ({
+                                text: `${diff.key}: ${diff.compare_by} | size=${diff.target_size ?? "-"} | etag=${diff.target_etag ?? "-"}`,
+                                tone: "added" as const,
+                              }))
+                            : [{ text: "(sample not available)", tone: "added" as const }]
+                          : [{ text: "(none)" }],
+                    },
+                  ]
+                : [];
+              const configSections =
+                item.result?.config_diff?.sections.map((section) => ({
+                  key: section.key,
+                  label: section.label,
+                  changed: section.changed,
+                  before: [{ text: formatUnknown(section.source), tone: section.changed ? ("removed" as const) : undefined }],
+                  after: [{ text: formatUnknown(section.target), tone: section.changed ? ("added" as const) : undefined }],
+                })) ?? [];
+              const configHasDifferences = Boolean(item.result?.config_diff?.changed);
+              const bucketHasDifferences = Boolean(item.result?.has_differences);
               const progressValue = item.status === "running" ? 45 : item.status === "pending" ? 0 : 100;
               return (
-                <details key={`${item.sourceBucket}->${item.targetBucket}`} className="rounded-lg border border-slate-200 dark:border-slate-800">
+                <details
+                  key={`${item.sourceBucket}->${item.targetBucket}:${item.status}:${bucketHasDifferences ? "diff" : "same"}`}
+                  defaultOpen={item.status === "failed" || bucketHasDifferences}
+                  className="rounded-lg border border-slate-200 dark:border-slate-800"
+                >
                   <summary className="cursor-pointer list-none px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-slate-900 dark:text-slate-100">
@@ -629,51 +729,124 @@ export default function CephAdminBucketCompareModal({
                   <div className="space-y-3 border-t border-slate-200 px-3 py-3 dark:border-slate-800">
                     {item.error && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{item.error}</p>}
                     {content && (
-                      <div className="space-y-2">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Content diff ({content.compare_mode === "size_only" ? "size only" : "md5 or size"})
-                        </p>
-                        {content.only_source_sample.length > 0 && (
-                          <pre className="whitespace-pre-wrap break-words rounded-md border border-rose-200 bg-rose-50 px-2 py-1 font-mono text-[11px] text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
-                            {["Source only:", ...content.only_source_sample.map((key) => `- ${key}`)].join("\n")}
-                          </pre>
-                        )}
-                        {content.only_target_sample.length > 0 && (
-                          <pre className="whitespace-pre-wrap break-words rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 font-mono text-[11px] text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
-                            {["Target only:", ...content.only_target_sample.map((key) => `- ${key}`)].join("\n")}
-                          </pre>
-                        )}
-                        {content.different_sample.map((diff) => (
-                          <pre
-                            key={diff.key}
-                            className="whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
-                          >
-                            {diff.key}: {diff.compare_by} | source(size={diff.source_size ?? "-"}, etag={diff.source_etag ?? "-"}) |
-                            target(size={diff.target_size ?? "-"}, etag={diff.target_etag ?? "-"})
-                          </pre>
-                        ))}
-                      </div>
+                      <details
+                        defaultOpen={contentHasDifferences}
+                        className="rounded-md border border-slate-200 dark:border-slate-800"
+                      >
+                        <summary className="cursor-pointer list-none px-2.5 py-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                              Content diff ({content.compare_mode === "size_only" ? "size only" : "md5 or size"})
+                            </span>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                                contentHasDifferences
+                                  ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
+                                  : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200"
+                              }`}
+                            >
+                              {contentHasDifferences ? "Changed" : "Unchanged"}
+                            </span>
+                          </div>
+                        </summary>
+                        <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
+                          {contentSections.map((section) => (
+                            <details
+                              key={`${item.sourceBucket}:${item.targetBucket}:content:${section.key}`}
+                              defaultOpen={section.changed}
+                              className="rounded-md border border-slate-200 dark:border-slate-800"
+                            >
+                              <summary className="cursor-pointer list-none px-2 py-1.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
+                                  <span
+                                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                                      section.changed
+                                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
+                                        : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200"
+                                    }`}
+                                  >
+                                    {section.changed ? "Changed" : "Unchanged"}
+                                  </span>
+                                </div>
+                              </summary>
+                              <div className="grid gap-2 border-t border-slate-200 px-2 py-2 lg:grid-cols-2 dark:border-slate-800">
+                                <div className="space-y-1">
+                                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    Source
+                                  </p>
+                                  {renderDiffLines(section.before)}
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    Target
+                                  </p>
+                                  {renderDiffLines(section.after)}
+                                </div>
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      </details>
                     )}
                     {item.result?.config_diff && (
-                      <div className="space-y-2">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Config diff
-                        </p>
-                        {item.result.config_diff.sections.map((section) => (
-                          <div key={section.key} className="grid gap-2 lg:grid-cols-2">
-                            <p className="ui-caption font-semibold text-slate-600 dark:text-slate-300 lg:col-span-2">
-                              {section.label}
-                              {section.changed ? " (changed)" : " (unchanged)"}
-                            </p>
-                            <pre className="whitespace-pre-wrap break-words rounded-md border border-rose-200 bg-rose-50 px-2 py-1 font-mono text-[11px] text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
-                              {formatUnknown(section.source)}
-                            </pre>
-                            <pre className="whitespace-pre-wrap break-words rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 font-mono text-[11px] text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
-                              {formatUnknown(section.target)}
-                            </pre>
+                      <details
+                        defaultOpen={configHasDifferences}
+                        className="rounded-md border border-slate-200 dark:border-slate-800"
+                      >
+                        <summary className="cursor-pointer list-none px-2.5 py-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Config diff</span>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                                configHasDifferences
+                                  ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
+                                  : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200"
+                              }`}
+                            >
+                              {configHasDifferences ? "Changed" : "Unchanged"}
+                            </span>
                           </div>
-                        ))}
-                      </div>
+                        </summary>
+                        <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
+                          {configSections.map((section) => (
+                            <details
+                              key={`${item.sourceBucket}:${item.targetBucket}:config:${section.key}`}
+                              defaultOpen={section.changed}
+                              className="rounded-md border border-slate-200 dark:border-slate-800"
+                            >
+                              <summary className="cursor-pointer list-none px-2 py-1.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
+                                  <span
+                                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                                      section.changed
+                                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
+                                        : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200"
+                                    }`}
+                                  >
+                                    {section.changed ? "Changed" : "Unchanged"}
+                                  </span>
+                                </div>
+                              </summary>
+                              <div className="grid gap-2 border-t border-slate-200 px-2 py-2 lg:grid-cols-2 dark:border-slate-800">
+                                <div className="space-y-1">
+                                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    Source
+                                  </p>
+                                  {renderDiffLines(section.before)}
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                    Target
+                                  </p>
+                                  {renderDiffLines(section.after)}
+                                </div>
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      </details>
                     )}
                   </div>
                 </details>

@@ -4895,6 +4895,178 @@ export default function CephAdminBucketsPage() {
     </div>
   );
 
+  type BulkPreviewSection = {
+    key: string;
+    label: string;
+    before: BulkPreviewLine[];
+    after: BulkPreviewLine[];
+    changed: boolean;
+    error?: string;
+  };
+
+  const sectionLabelByOperation = (() => {
+    switch (bulkOperation) {
+      case "set_quota":
+        return "Quota";
+      case "add_public_access_block":
+      case "remove_public_access_block":
+        return "Block Public Access";
+      case "enable_versioning":
+      case "disable_versioning":
+        return "Versioning";
+      case "add_lifecycle":
+      case "delete_lifecycle":
+        return "Lifecycle";
+      case "add_cors":
+      case "delete_cors":
+        return "CORS";
+      case "add_policy":
+      case "delete_policy":
+        return "Bucket Policy";
+      case "paste_configs":
+        return "Overview";
+      default:
+        return "Preview";
+    }
+  })();
+
+  const splitPreviewLinesBySection = (lines: BulkPreviewLine[], fallbackLabel: string) => {
+    const sections: { label: string; lines: BulkPreviewLine[] }[] = [];
+    let currentLabel = fallbackLabel;
+    let currentLines: BulkPreviewLine[] = [];
+    const flush = () => {
+      if (currentLines.length === 0) return;
+      sections.push({ label: currentLabel, lines: currentLines });
+      currentLines = [];
+    };
+    lines.forEach((line) => {
+      const marker = line.text.trim().match(/^\[(.+)\]$/);
+      if (marker) {
+        flush();
+        currentLabel = marker[1].trim() || fallbackLabel;
+        return;
+      }
+      currentLines.push(line);
+    });
+    flush();
+    if (sections.length === 0) {
+      sections.push({ label: fallbackLabel, lines: [{ text: "-" }] });
+    }
+    return sections;
+  };
+
+  const serializePreviewLines = (lines: BulkPreviewLine[]) =>
+    lines.map((line) => `${line.tone ?? "none"}|${line.text}`).join("\n");
+
+  const hasChangedPreviewTone = (lines: BulkPreviewLine[]) =>
+    lines.some((line) => line.tone === "added" || line.tone === "removed");
+
+  const buildPreviewSections = (item: BulkPreviewItem): BulkPreviewSection[] => {
+    if (item.error) {
+      return [
+        {
+          key: "error",
+          label: "Error",
+          before: [{ text: item.error, tone: "removed" }],
+          after: [{ text: item.error, tone: "added" }],
+          changed: true,
+          error: item.error,
+        },
+      ];
+    }
+    const beforeSections = splitPreviewLinesBySection(item.before, sectionLabelByOperation);
+    const afterSections = splitPreviewLinesBySection(item.after, sectionLabelByOperation);
+    const labels: string[] = [];
+    const seen = new Set<string>();
+    [...beforeSections, ...afterSections].forEach((section) => {
+      const key = section.label.trim().toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      labels.push(section.label);
+    });
+    return labels.map((label, index) => {
+      const normalized = label.trim().toLowerCase();
+      const before = beforeSections.find((section) => section.label.trim().toLowerCase() === normalized)?.lines ?? [];
+      const after = afterSections.find((section) => section.label.trim().toLowerCase() === normalized)?.lines ?? [];
+      const changed =
+        hasChangedPreviewTone(before) ||
+        hasChangedPreviewTone(after) ||
+        serializePreviewLines(before) !== serializePreviewLines(after);
+      return {
+        key: `${normalized || "section"}-${index}`,
+        label,
+        before: before.length > 0 ? before : [{ text: "-" }],
+        after: after.length > 0 ? after : [{ text: "-" }],
+        changed,
+      };
+    });
+  };
+
+  const bucketPreviewBadgeClasses = (item: BulkPreviewItem) => {
+    if (item.error) {
+      return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100";
+    }
+    if (item.changed) {
+      return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100";
+    }
+    return "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200";
+  };
+
+  const sectionPreviewBadgeClasses = (changed: boolean) =>
+    changed
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
+      : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200";
+
+  const exportBulkPreviewChanges = () => {
+    if (bulkPreview.length === 0) return;
+    const exportedAt = new Date().toISOString();
+    const timestamp = exportedAt.replace(/[:.]/g, "-");
+    const endpointPart = sanitizeExportFilenamePart(
+      selectedEndpoint?.name ?? (selectedEndpointId ? `endpoint-${selectedEndpointId}` : "endpoint")
+    );
+    const operationPart = sanitizeExportFilenamePart(bulkOperation || "operation");
+
+    const itemsWithChanges = bulkPreview.filter((item) => item.changed || Boolean(item.error));
+    const payload = {
+      generated_at: exportedAt,
+      endpoint: {
+        id: selectedEndpointId ?? null,
+        name: selectedEndpoint?.name ?? null,
+      },
+      operation: bulkOperation || null,
+      summary: {
+        total: bulkPreview.length,
+        changed: previewStats.changed,
+        unchanged: previewStats.unchanged,
+        errors: previewStats.errors,
+        exported_items: itemsWithChanges.length,
+      },
+      items: itemsWithChanges.map((item) => {
+        const sections = buildPreviewSections(item);
+        return {
+          bucket: item.bucket,
+          changed: item.changed,
+          error: item.error ?? null,
+          sections: sections
+            .filter((section) => section.changed || Boolean(section.error))
+            .map((section) => ({
+              label: section.label,
+              changed: section.changed,
+              error: section.error ?? null,
+              before: section.before,
+              after: section.after,
+            })),
+        };
+      }),
+    };
+
+    triggerDownload(
+      `ceph-admin-bulk-preview-${endpointPart}-${operationPart}-${timestamp}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json"
+    );
+  };
+
   type ColumnDef = {
     id: string;
     label: string;
@@ -7139,6 +7311,14 @@ export default function CephAdminBucketsPage() {
                   >
                     {bulkPreviewLoading ? "Previewing..." : "Preview"}
                   </button>
+                  <button
+                    type="button"
+                    onClick={exportBulkPreviewChanges}
+                    disabled={bulkPreviewLoading || bulkPreview.length === 0}
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                  >
+                    Export changes
+                  </button>
                   {bulkPreviewReady && (
                     <p className="ui-caption text-slate-500 dark:text-slate-400">
                       Changes: {previewStats.changed} / Unchanged: {previewStats.unchanged} / Errors: {previewStats.errors}
@@ -7148,57 +7328,74 @@ export default function CephAdminBucketsPage() {
               )}
             </div>
             {bulkPreview.length > 0 && (
-              <div className="max-h-[420px] overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
-                <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
-                  <thead className="bg-slate-100 dark:bg-slate-900/60">
-                    <tr>
-                      <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Bucket
-                      </th>
-                      <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Before
-                      </th>
-                      <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        After
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                    {bulkPreview.map((item) => (
-                      <tr key={item.bucket} className="align-top hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <td className="px-3 py-3 font-semibold text-slate-900 dark:text-slate-100">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate">{item.bucket}</span>
-                            {item.error ? (
-                              <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100">
-                                Error
-                              </span>
-                            ) : item.changed ? (
-                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
-                                Change
-                              </span>
-                            ) : (
-                              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200">
-                                No change
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        {item.error ? (
-                          <>
-                            <td className="px-3 py-3 text-sm text-rose-600 dark:text-rose-200">{item.error}</td>
-                            <td className="px-3 py-3 text-sm text-rose-600 dark:text-rose-200">{item.error}</td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="px-3 py-3">{renderPreviewLines(item.before)}</td>
-                            <td className="px-3 py-3">{renderPreviewLines(item.after)}</td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="max-h-[420px] space-y-2 overflow-auto rounded-lg border border-slate-200 p-2 dark:border-slate-800">
+                {bulkPreview.map((item) => {
+                  const sections = buildPreviewSections(item);
+                  const changedSections = sections.filter((section) => section.changed).length;
+                  return (
+                    <details
+                      key={item.bucket}
+                      defaultOpen={Boolean(item.error || item.changed)}
+                      className="rounded-lg border border-slate-200 dark:border-slate-800"
+                    >
+                      <summary className="cursor-pointer list-none px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-slate-900 dark:text-slate-100">{item.bucket}</span>
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${bucketPreviewBadgeClasses(item)}`}
+                          >
+                            {item.error ? "Error" : item.changed ? "Change" : "No change"}
+                          </span>
+                          <span className="ui-caption text-slate-500 dark:text-slate-400">
+                            Changed sections {changedSections}/{sections.length}
+                          </span>
+                        </div>
+                      </summary>
+                      <div className="space-y-2 border-t border-slate-200 px-3 py-3 dark:border-slate-800">
+                        {sections.map((section) => (
+                          <details
+                            key={`${item.bucket}:${section.key}`}
+                            defaultOpen={Boolean(section.error || section.changed)}
+                            className="rounded-md border border-slate-200 dark:border-slate-800"
+                          >
+                            <summary className="cursor-pointer list-none px-2.5 py-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${sectionPreviewBadgeClasses(
+                                    section.changed
+                                  )}`}
+                                >
+                                  {section.changed ? "Changed" : "Unchanged"}
+                                </span>
+                              </div>
+                            </summary>
+                            <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
+                              {section.error ? (
+                                <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{section.error}</p>
+                              ) : (
+                                <div className="grid gap-2 lg:grid-cols-2">
+                                  <div className="space-y-1">
+                                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                      Before
+                                    </p>
+                                    {renderPreviewLines(section.before)}
+                                  </div>
+                                  <div className="space-y-1">
+                                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                      After
+                                    </p>
+                                    {renderPreviewLines(section.after)}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        ))}
+                      </div>
+                    </details>
+                  );
+                })}
               </div>
             )}
             <div className="flex flex-wrap items-center justify-end gap-2">
