@@ -12,7 +12,9 @@ from typing import Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
 from app.db import S3Account
 from app.models.bucket import (
     BucketAcl,
@@ -35,12 +37,14 @@ from app.models.bucket import (
     BucketWebsiteConfiguration,
 )
 from app.models.ceph_admin import (
+    CephAdminBucketCompareRequest,
+    CephAdminBucketCompareResult,
     CephAdminBucketFilterQuery,
     CephAdminBucketFilterRule,
     CephAdminBucketSummary,
     PaginatedCephAdminBucketsResponse,
 )
-from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
+from app.routers.ceph_admin.dependencies import CephAdminContext, _resolve_storage_endpoint, get_ceph_admin_context
 from app.services.buckets_service import BucketsService
 from app.services.rgw_admin import RGWAdminError
 from app.utils.rgw import extract_bucket_list, is_rgw_account_id
@@ -101,6 +105,18 @@ def _build_endpoint_account(ctx: CephAdminContext) -> S3Account:
     )
     account.storage_endpoint = ctx.endpoint  # type: ignore[assignment]
     account.set_session_credentials(ctx.access_key, ctx.secret_key)
+    return account
+
+
+def _build_endpoint_account_from_credentials(endpoint_id: int, endpoint, access_key: str, secret_key: str) -> S3Account:
+    account = S3Account(
+        name=f"ceph-admin:{endpoint_id}",
+        rgw_account_id=None,
+        email=None,
+        rgw_user_uid=None,
+    )
+    account.storage_endpoint = endpoint  # type: ignore[assignment]
+    account.set_session_credentials(access_key, secret_key)
     return account
 
 
@@ -1149,6 +1165,68 @@ def list_buckets(
         page=page,
         page_size=page_size,
         has_next=has_next,
+    )
+
+
+@router.post("/compare", response_model=CephAdminBucketCompareResult)
+def compare_bucket_pair(
+    endpoint_id: int,
+    payload: CephAdminBucketCompareRequest,
+    db: Session = Depends(get_db),
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> CephAdminBucketCompareResult:
+    source_account = _build_endpoint_account(ctx)
+    target_endpoint = _resolve_storage_endpoint(db, payload.target_endpoint_id)
+    target_access_key = getattr(target_endpoint, "ceph_admin_access_key", None)
+    target_secret_key = getattr(target_endpoint, "ceph_admin_secret_key", None)
+    if not target_access_key or not target_secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Target endpoint Ceph Admin credentials are not configured",
+        )
+    target_account = _build_endpoint_account_from_credentials(
+        payload.target_endpoint_id,
+        target_endpoint,
+        target_access_key,
+        target_secret_key,
+    )
+
+    service = BucketsService()
+    try:
+        content_diff = service.compare_bucket_content(
+            payload.source_bucket,
+            source_account,
+            payload.target_bucket,
+            target_account,
+            size_only=payload.size_only,
+            diff_sample_limit=payload.diff_sample_limit,
+        )
+        config_diff = None
+        if payload.include_config:
+            config_diff = service.compare_bucket_configuration(
+                payload.source_bucket,
+                source_account,
+                payload.target_bucket,
+                target_account,
+            )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    has_differences = bool(
+        content_diff.different_count > 0
+        or content_diff.only_source_count > 0
+        or content_diff.only_target_count > 0
+        or (config_diff.changed if config_diff else False)
+    )
+    return CephAdminBucketCompareResult(
+        source_endpoint_id=endpoint_id,
+        target_endpoint_id=payload.target_endpoint_id,
+        source_bucket=payload.source_bucket,
+        target_bucket=payload.target_bucket,
+        compare_mode=content_diff.compare_mode,
+        has_differences=has_differences,
+        content_diff=content_diff,
+        config_diff=config_diff,
     )
 
 

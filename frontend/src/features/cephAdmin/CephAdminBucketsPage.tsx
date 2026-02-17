@@ -41,6 +41,7 @@ import { tableActionMenuItemClasses } from "../../components/tableActionClasses"
 import { parseCorsRules, parseLifecycleRules, parsePolicyStatements, parseRuleIds, stableStringify } from "./bucketJsonParsers";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import { useCephAdminBucketListing } from "./useCephAdminBucketListing";
+import CephAdminBucketCompareModal from "./CephAdminBucketCompareModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
 
 const extractError = (err: unknown): string => {
@@ -1599,7 +1600,7 @@ const getTagColors = (tag: string) => {
 
 export default function CephAdminBucketsPage() {
   const location = useLocation();
-  const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
+  const { selectedEndpointId, selectedEndpoint, endpoints } = useCephAdminEndpoint();
   const usageFeatureEnabled = selectedEndpoint?.capabilities?.usage !== false;
   const [filter, setFilter] = useState("");
   const [filterValue, setFilterValue] = useState("");
@@ -1622,6 +1623,7 @@ export default function CephAdminBucketsPage() {
   const [selectAllLoading, setSelectAllLoading] = useState(false);
   const [orphanedTagBuckets, setOrphanedTagBuckets] = useState<string[]>([]);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
+  const [showCompareModal, setShowCompareModal] = useState(false);
   const [bulkOperation, setBulkOperation] = useState<BulkOperation>("");
   const [bulkConfigClipboard, setBulkConfigClipboard] = useState<BulkConfigClipboard | null>(loadBulkConfigClipboard);
   const [bulkCopyFeatures, setBulkCopyFeatures] = useState<BulkCopyFeatureSelection>(DEFAULT_BULK_COPY_FEATURE_SELECTION);
@@ -6396,6 +6398,13 @@ export default function CephAdminBucketsPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setShowCompareModal(true)}
+                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                  >
+                    Compare buckets
+                  </button>
+                  <button
+                    type="button"
                     onClick={openBulkUpdateModal}
                     className="rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
                   >
@@ -6547,6 +6556,15 @@ export default function CephAdminBucketsPage() {
         >
           <BucketDetailPage mode="ceph-admin" bucketNameOverride={editingBucketName} embedded />
         </Modal>
+      )}
+      {showCompareModal && selectedEndpointId && (
+        <CephAdminBucketCompareModal
+          sourceEndpointId={selectedEndpointId}
+          sourceEndpointName={selectedEndpoint?.name}
+          sourceBuckets={selectedBucketList}
+          endpoints={endpoints}
+          onClose={() => setShowCompareModal(false)}
+        />
       )}
       {showBulkUpdateModal && (
         <Modal title="Bulk update" onClose={closeBulkUpdateModal} maxWidthClass="max-w-6xl">

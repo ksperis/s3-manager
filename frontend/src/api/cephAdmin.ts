@@ -497,6 +497,72 @@ export async function listCephAdminBuckets(
   return data;
 }
 
+export type CephAdminBucketCompareRequest = {
+  target_endpoint_id: number;
+  source_bucket: string;
+  target_bucket: string;
+  include_config?: boolean;
+  size_only?: boolean;
+  diff_sample_limit?: number;
+};
+
+export type CephAdminBucketObjectDiffEntry = {
+  key: string;
+  source_size?: number | null;
+  target_size?: number | null;
+  source_etag?: string | null;
+  target_etag?: string | null;
+  compare_by: "md5" | "size";
+};
+
+export type CephAdminBucketContentDiff = {
+  compare_mode: "size_only" | "md5_or_size";
+  source_count: number;
+  target_count: number;
+  matched_count: number;
+  different_count: number;
+  only_source_count: number;
+  only_target_count: number;
+  only_source_sample: string[];
+  only_target_sample: string[];
+  different_sample: CephAdminBucketObjectDiffEntry[];
+};
+
+export type CephAdminBucketConfigDiffSection = {
+  key: string;
+  label: string;
+  source?: unknown;
+  target?: unknown;
+  changed: boolean;
+};
+
+export type CephAdminBucketConfigDiff = {
+  changed: boolean;
+  sections: CephAdminBucketConfigDiffSection[];
+};
+
+export type CephAdminBucketCompareResult = {
+  source_endpoint_id: number;
+  target_endpoint_id: number;
+  source_bucket: string;
+  target_bucket: string;
+  compare_mode: "size_only" | "md5_or_size";
+  has_differences: boolean;
+  content_diff: CephAdminBucketContentDiff;
+  config_diff?: CephAdminBucketConfigDiff | null;
+};
+
+export async function compareCephAdminBucketPair(
+  sourceEndpointId: number,
+  payload: CephAdminBucketCompareRequest
+): Promise<CephAdminBucketCompareResult> {
+  const { data } = await client.post<CephAdminBucketCompareResult>(
+    `/ceph-admin/endpoints/${sourceEndpointId}/buckets/compare`,
+    payload
+  );
+  return data;
+}
+
 export type BucketLifecycleConfig = { rules: Record<string, unknown>[] };
 export type BucketCors = { rules: Record<string, unknown>[] };
 export type BucketPolicy = { policy: Record<string, unknown> | null };

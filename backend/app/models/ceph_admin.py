@@ -340,6 +340,71 @@ class CephAdminBucketFilterQuery(BaseModel):
     rules: list[CephAdminBucketFilterRule] = Field(default_factory=list)
 
 
+class CephAdminBucketCompareRequest(BaseModel):
+    target_endpoint_id: int = Field(..., ge=1)
+    source_bucket: str
+    target_bucket: str
+    include_config: bool = False
+    size_only: bool = False
+    diff_sample_limit: int = Field(default=200, ge=1, le=2000)
+
+    @model_validator(mode="after")
+    def validate_names(self):
+        self.source_bucket = (self.source_bucket or "").strip()
+        self.target_bucket = (self.target_bucket or "").strip()
+        if not self.source_bucket:
+            raise ValueError("source_bucket is required.")
+        if not self.target_bucket:
+            raise ValueError("target_bucket is required.")
+        return self
+
+
+class CephAdminBucketObjectDiffEntry(BaseModel):
+    key: str
+    source_size: Optional[int] = None
+    target_size: Optional[int] = None
+    source_etag: Optional[str] = None
+    target_etag: Optional[str] = None
+    compare_by: Literal["md5", "size"]
+
+
+class CephAdminBucketContentDiff(BaseModel):
+    compare_mode: Literal["size_only", "md5_or_size"]
+    source_count: int = 0
+    target_count: int = 0
+    matched_count: int = 0
+    different_count: int = 0
+    only_source_count: int = 0
+    only_target_count: int = 0
+    only_source_sample: list[str] = Field(default_factory=list)
+    only_target_sample: list[str] = Field(default_factory=list)
+    different_sample: list[CephAdminBucketObjectDiffEntry] = Field(default_factory=list)
+
+
+class CephAdminBucketConfigDiffSection(BaseModel):
+    key: str
+    label: str
+    source: Any = None
+    target: Any = None
+    changed: bool = False
+
+
+class CephAdminBucketConfigDiff(BaseModel):
+    changed: bool = False
+    sections: list[CephAdminBucketConfigDiffSection] = Field(default_factory=list)
+
+
+class CephAdminBucketCompareResult(BaseModel):
+    source_endpoint_id: int
+    target_endpoint_id: int
+    source_bucket: str
+    target_bucket: str
+    compare_mode: Literal["size_only", "md5_or_size"]
+    has_differences: bool = False
+    content_diff: CephAdminBucketContentDiff
+    config_diff: Optional[CephAdminBucketConfigDiff] = None
+
+
 UserFilterField = Literal[
     "uid",
     "tenant",

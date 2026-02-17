@@ -1,7 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from typing import List, Optional, Set
+from typing import Any, List, Optional, Set
 import logging
+import json
+import re
 
 from app.db import S3Account
 from app.services import s3_client
@@ -25,6 +27,12 @@ from app.models.bucket import (
     BucketWebsiteConfiguration,
     BucketWebsiteRedirectAllRequestsTo,
     LifecycleRule,
+)
+from app.models.ceph_admin import (
+    CephAdminBucketConfigDiff,
+    CephAdminBucketConfigDiffSection,
+    CephAdminBucketContentDiff,
+    CephAdminBucketObjectDiffEntry,
 )
 from app.utils.rgw import (
     extract_bucket_list,
@@ -524,6 +532,200 @@ class BucketsService:
         return s3_client.get_bucket_cors(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
         )
+
+    def _compare_client(self, account: S3Account):
+        access_key, secret_key = self._account_credentials(account)
+        return s3_client.get_s3_client(
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._client_kwargs(account),
+        )
+
+    def _list_bucket_objects_for_compare(self, bucket_name: str, account: S3Account) -> dict[str, dict[str, Any]]:
+        client = self._compare_client(account)
+        continuation_token: Optional[str] = None
+        objects_by_key: dict[str, dict[str, Any]] = {}
+        while True:
+            kwargs: dict[str, Any] = {"Bucket": bucket_name, "MaxKeys": 1000}
+            if continuation_token:
+                kwargs["ContinuationToken"] = continuation_token
+            try:
+                page = client.list_objects_v2(**kwargs)
+            except RuntimeError as exc:
+                raise RuntimeError(f"Unable to list objects in bucket '{bucket_name}': {exc}") from exc
+            for entry in page.get("Contents", []) or []:
+                key = entry.get("Key")
+                if not isinstance(key, str) or not key:
+                    continue
+                etag_raw = entry.get("ETag")
+                etag = etag_raw.strip().strip('"') if isinstance(etag_raw, str) else None
+                objects_by_key[key] = {
+                    "size": int(entry.get("Size") or 0),
+                    "etag": etag or None,
+                }
+            continuation_token = page.get("NextContinuationToken")
+            if not continuation_token:
+                break
+        return objects_by_key
+
+    def _etag_md5(self, etag: Optional[str]) -> Optional[str]:
+        if not etag:
+            return None
+        value = etag.strip().strip('"')
+        if not value:
+            return None
+        if re.fullmatch(r"[0-9a-fA-F]{32}", value):
+            return value.lower()
+        return None
+
+    def _stable_compare_value(self, value: Any) -> str:
+        try:
+            return json.dumps(value, ensure_ascii=True, sort_keys=True, default=str)
+        except TypeError:
+            return str(value)
+
+    def compare_bucket_content(
+        self,
+        source_bucket: str,
+        source_account: S3Account,
+        target_bucket: str,
+        target_account: S3Account,
+        *,
+        size_only: bool = False,
+        diff_sample_limit: int = 200,
+    ) -> CephAdminBucketContentDiff:
+        source_objects = self._list_bucket_objects_for_compare(source_bucket, source_account)
+        target_objects = self._list_bucket_objects_for_compare(target_bucket, target_account)
+
+        source_keys = set(source_objects.keys())
+        target_keys = set(target_objects.keys())
+        only_source = sorted(source_keys - target_keys)
+        only_target = sorted(target_keys - source_keys)
+        common_keys = sorted(source_keys & target_keys)
+
+        matched_count = 0
+        different_sample: list[CephAdminBucketObjectDiffEntry] = []
+        different_count = 0
+        for key in common_keys:
+            source_entry = source_objects[key]
+            target_entry = target_objects[key]
+            source_size = int(source_entry.get("size") or 0)
+            target_size = int(target_entry.get("size") or 0)
+            source_etag = source_entry.get("etag")
+            target_etag = target_entry.get("etag")
+            compare_by: str = "size"
+            equal = False
+
+            if size_only:
+                equal = source_size == target_size
+            else:
+                source_md5 = self._etag_md5(source_etag if isinstance(source_etag, str) else None)
+                target_md5 = self._etag_md5(target_etag if isinstance(target_etag, str) else None)
+                if source_md5 and target_md5:
+                    compare_by = "md5"
+                    equal = source_md5 == target_md5
+                else:
+                    equal = source_size == target_size
+
+            if equal:
+                matched_count += 1
+                continue
+
+            different_count += 1
+            if len(different_sample) >= diff_sample_limit:
+                continue
+            different_sample.append(
+                CephAdminBucketObjectDiffEntry(
+                    key=key,
+                    source_size=source_size,
+                    target_size=target_size,
+                    source_etag=source_etag if isinstance(source_etag, str) else None,
+                    target_etag=target_etag if isinstance(target_etag, str) else None,
+                    compare_by="md5" if compare_by == "md5" else "size",
+                )
+            )
+
+        return CephAdminBucketContentDiff(
+            compare_mode="size_only" if size_only else "md5_or_size",
+            source_count=len(source_keys),
+            target_count=len(target_keys),
+            matched_count=matched_count,
+            different_count=different_count,
+            only_source_count=len(only_source),
+            only_target_count=len(only_target),
+            only_source_sample=only_source[:diff_sample_limit],
+            only_target_sample=only_target[:diff_sample_limit],
+            different_sample=different_sample,
+        )
+
+    def _normalize_tags_for_compare(self, tags: list[BucketTag]) -> list[dict[str, str]]:
+        return sorted(
+            [{"key": (tag.key or "").strip(), "value": tag.value or ""} for tag in tags if (tag.key or "").strip()],
+            key=lambda item: (item["key"], item["value"]),
+        )
+
+    def compare_bucket_configuration(
+        self,
+        source_bucket: str,
+        source_account: S3Account,
+        target_bucket: str,
+        target_account: S3Account,
+    ) -> CephAdminBucketConfigDiff:
+        def to_jsonable(value: Any) -> Any:
+            if value is None:
+                return None
+            if hasattr(value, "model_dump"):
+                return value.model_dump(mode="json")
+            if hasattr(value, "dict"):
+                return value.dict()
+            return value
+
+        source_properties = self.get_bucket_properties(source_bucket, source_account)
+        target_properties = self.get_bucket_properties(target_bucket, target_account)
+        source_policy = self.get_policy(source_bucket, source_account)
+        target_policy = self.get_policy(target_bucket, target_account)
+        source_logging = to_jsonable(self.get_bucket_logging(source_bucket, source_account))
+        target_logging = to_jsonable(self.get_bucket_logging(target_bucket, target_account))
+        source_tags = self._normalize_tags_for_compare(self.get_bucket_tags(source_bucket, source_account))
+        target_tags = self._normalize_tags_for_compare(self.get_bucket_tags(target_bucket, target_account))
+
+        sections_data: list[tuple[str, str, Any, Any]] = [
+            ("versioning_status", "Versioning", source_properties.versioning_status, target_properties.versioning_status),
+            ("object_lock", "Object lock", to_jsonable(source_properties.object_lock), to_jsonable(target_properties.object_lock)),
+            (
+                "public_access_block",
+                "Public access block",
+                to_jsonable(source_properties.public_access_block),
+                to_jsonable(target_properties.public_access_block),
+            ),
+            (
+                "lifecycle_rules",
+                "Lifecycle rules",
+                [to_jsonable(rule) for rule in source_properties.lifecycle_rules],
+                [to_jsonable(rule) for rule in target_properties.lifecycle_rules],
+            ),
+            ("cors_rules", "CORS rules", source_properties.cors_rules or [], target_properties.cors_rules or []),
+            ("bucket_policy", "Bucket policy", source_policy, target_policy),
+            ("access_logging", "Access logging", source_logging, target_logging),
+            ("tags", "Tags", source_tags, target_tags),
+        ]
+
+        changed = False
+        sections: list[CephAdminBucketConfigDiffSection] = []
+        for key, label, source_value, target_value in sections_data:
+            section_changed = self._stable_compare_value(source_value) != self._stable_compare_value(target_value)
+            changed = changed or section_changed
+            sections.append(
+                CephAdminBucketConfigDiffSection(
+                    key=key,
+                    label=label,
+                    source=source_value,
+                    target=target_value,
+                    changed=section_changed,
+                )
+            )
+
+        return CephAdminBucketConfigDiff(changed=changed, sections=sections)
 
     def get_public_access_block(self, name: str, account: S3Account) -> BucketPublicAccessBlock:
         access_key, secret_key = self._account_credentials(account)
