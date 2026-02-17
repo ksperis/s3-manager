@@ -25,6 +25,11 @@ type CompareRunItem = {
   error?: string;
 };
 
+type ParsedRawMappingResult = {
+  mapping: Map<string, string>;
+  invalidLines: string[];
+};
+
 type CephAdminBucketCompareModalProps = {
   sourceEndpointId: number;
   sourceEndpointName?: string | null;
@@ -112,6 +117,32 @@ const renderDiffLines = (lines: CompareDiffLine[]) => (
   </div>
 );
 
+const parseRawMappingText = (value: string): ParsedRawMappingResult => {
+  const mapping = new Map<string, string>();
+  const invalidLines: string[] = [];
+  const separators = ["=>", "->", "="] as const;
+  value
+    .split(/\n/g)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const separator = separators.find((sep) => line.includes(sep));
+      if (!separator) {
+        invalidLines.push(line);
+        return;
+      }
+      const [rawSource, ...rawTargetParts] = line.split(separator);
+      const source = (rawSource ?? "").trim();
+      const target = rawTargetParts.join(separator).trim();
+      if (!source || !target) {
+        invalidLines.push(line);
+        return;
+      }
+      mapping.set(source.toLowerCase(), target);
+    });
+  return { mapping, invalidLines };
+};
+
 const triggerDownload = (filename: string, content: string, mimeType: string) => {
   if (typeof window === "undefined") return;
   const blob = new Blob([content], { type: mimeType });
@@ -147,6 +178,7 @@ export default function CephAdminBucketCompareModal({
   const [targetBucketsError, setTargetBucketsError] = useState<string | null>(null);
   const [mappingMode, setMappingMode] = useState<"by_name" | "manual">("by_name");
   const [manualMapping, setManualMapping] = useState<Record<string, string>>({});
+  const [rawMappingText, setRawMappingText] = useState("");
   const [includeConfig, setIncludeConfig] = useState(false);
   const [sizeOnly, setSizeOnly] = useState(false);
   const [parallelism, setParallelism] = useState(4);
@@ -154,7 +186,11 @@ export default function CephAdminBucketCompareModal({
   const [runError, setRunError] = useState<string | null>(null);
   const [progress, setProgress] = useState({ completed: 0, total: 0, failed: 0 });
   const [items, setItems] = useState<CompareRunItem[]>([]);
+  const [resultSearch, setResultSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | CompareRunItem["status"]>("all");
+  const [diffFilter, setDiffFilter] = useState<"all" | "with_diff" | "no_diff">("all");
   const sameEndpointSelected = targetEndpointId === sourceEndpointId;
+  const parsedRawMapping = useMemo(() => parseRawMappingText(rawMappingText), [rawMappingText]);
 
   useEffect(() => {
     if (targetEndpointOptions.length === 0) {
@@ -263,10 +299,59 @@ export default function CephAdminBucketCompareModal({
     });
   }, [mappingMode, sameEndpointSelected, sortedSourceBuckets, sourceBucketNameSet, targetBucketNames]);
 
+  useEffect(() => {
+    if (mappingMode !== "manual") return;
+    if (parsedRawMapping.mapping.size === 0) return;
+    setManualMapping((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      sortedSourceBuckets.forEach((sourceBucket) => {
+        const mapped = parsedRawMapping.mapping.get(sourceBucket.toLowerCase());
+        if (!mapped) return;
+        if ((next[sourceBucket] ?? "").trim() === mapped) return;
+        next[sourceBucket] = mapped;
+        changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [mappingMode, parsedRawMapping.mapping, sortedSourceBuckets]);
+
   const availableTargetBucketNames = useMemo(() => {
     if (!sameEndpointSelected) return targetBucketNames;
     return targetBucketNames.filter((name) => !sourceBucketNameSet.has(name.toLowerCase()));
   }, [sameEndpointSelected, sourceBucketNameSet, targetBucketNames]);
+
+  const fallbackByNameMapping = useMemo(() => {
+    const mapping = new Map<string, string>();
+    sortedSourceBuckets.forEach((sourceBucket) => {
+      const candidate = availableTargetBucketNames.find((bucketName) => bucketName.toLowerCase() === sourceBucket.toLowerCase());
+      if (!candidate) return;
+      mapping.set(sourceBucket.toLowerCase(), candidate);
+    });
+    return mapping;
+  }, [availableTargetBucketNames, sortedSourceBuckets]);
+
+  const resolvedManualMapping = useMemo(() => {
+    const mapping = new Map<string, string>();
+    sortedSourceBuckets.forEach((sourceBucket) => {
+      const sourceKey = sourceBucket.toLowerCase();
+      const rawMapped = parsedRawMapping.mapping.get(sourceKey);
+      if (rawMapped) {
+        mapping.set(sourceKey, rawMapped);
+        return;
+      }
+      const uiMapped = (manualMapping[sourceBucket] ?? "").trim();
+      if (uiMapped) {
+        mapping.set(sourceKey, uiMapped);
+        return;
+      }
+      const fallbackMapped = fallbackByNameMapping.get(sourceKey);
+      if (fallbackMapped) {
+        mapping.set(sourceKey, fallbackMapped);
+      }
+    });
+    return mapping;
+  }, [fallbackByNameMapping, manualMapping, parsedRawMapping.mapping, sortedSourceBuckets]);
 
   const comparePlan = useMemo(() => {
     if (!targetEndpointId) {
@@ -286,35 +371,32 @@ export default function CephAdminBucketCompareModal({
     }
 
     const mappings: CompareMapping[] = [];
-    const missing: string[] = [];
     const invalidTargets: string[] = [];
     sortedSourceBuckets.forEach((sourceBucket) => {
-      const targetBucket = (manualMapping[sourceBucket] ?? "").trim();
+      const targetBucket = (resolvedManualMapping.get(sourceBucket.toLowerCase()) ?? "").trim();
       if (!targetBucket) {
-        missing.push(sourceBucket);
         return;
       }
-      const normalizedTarget = targetBucket.toLowerCase();
-      if (sameEndpointSelected && sourceBucketNameSet.has(normalizedTarget)) {
+      if (sameEndpointSelected && sourceBucketNameSet.has(targetBucket.toLowerCase())) {
         invalidTargets.push(targetBucket);
         return;
       }
       mappings.push({ sourceBucket, targetBucket });
     });
-    if (missing.length > 0) {
-      return {
-        mappings: [] as CompareMapping[],
-        error: `Complete mapping for all source buckets (${missing.length} missing).`,
-      };
-    }
     if (invalidTargets.length > 0) {
       return {
         mappings: [] as CompareMapping[],
         error: "When source and target endpoint are the same, mapped target buckets must be outside the selected source set.",
       };
     }
+    if (mappings.length === 0) {
+      return {
+        mappings: [] as CompareMapping[],
+        error: "No mapping resolved. Add raw mapping lines, fill manual fields, or rely on 1:1 fallback when available.",
+      };
+    }
     return { mappings, error: null };
-  }, [manualMapping, mappingMode, sameEndpointSelected, sortedSourceBuckets, sourceBucketNameSet, targetEndpointId]);
+  }, [mappingMode, resolvedManualMapping, sameEndpointSelected, sortedSourceBuckets, sourceBucketNameSet, targetEndpointId]);
 
   const targetNameSet = useMemo(
     () => new Set(targetBucketNames.map((name) => name.toLowerCase())),
@@ -407,6 +489,29 @@ export default function CephAdminBucketCompareModal({
     const withDiff = items.filter((item) => item.result?.has_differences).length;
     return { success, failed, withDiff };
   }, [items]);
+
+  const filteredItems = useMemo(() => {
+    const search = resultSearch.trim().toLowerCase();
+    return items.filter((item) => {
+      if (statusFilter !== "all" && item.status !== statusFilter) return false;
+      if (diffFilter === "with_diff" && !item.result?.has_differences) return false;
+      if (diffFilter === "no_diff") {
+        if (item.status !== "success") return false;
+        if (item.result?.has_differences) return false;
+      }
+      if (!search) return true;
+      const source = item.sourceBucket.toLowerCase();
+      const target = item.targetBucket.toLowerCase();
+      const error = (item.error ?? "").toLowerCase();
+      return source.includes(search) || target.includes(search) || error.includes(search);
+    });
+  }, [diffFilter, items, resultSearch, statusFilter]);
+
+  const resetResultFilters = () => {
+    setResultSearch("");
+    setStatusFilter("all");
+    setDiffFilter("all");
+  };
 
   const exportGlobalDiff = () => {
     if (items.length === 0) return;
@@ -539,47 +644,88 @@ export default function CephAdminBucketCompareModal({
           </p>
         )}
         {mappingMode === "manual" && (
-          <div className="max-h-[240px] overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
-            <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
-              <thead className="bg-slate-100 dark:bg-slate-900/60">
-                <tr>
-                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Source
-                  </th>
-                  <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Target
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {sortedSourceBuckets.map((sourceBucket) => (
-                  <tr key={sourceBucket} className="align-top">
-                    <td className="px-3 py-2 font-semibold text-slate-900 dark:text-slate-100">{sourceBucket}</td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        list="bucket-compare-target-options"
-                        value={manualMapping[sourceBucket] ?? ""}
-                        onChange={(event) =>
-                          setManualMapping((prev) => ({
-                            ...prev,
-                            [sourceBucket]: event.target.value,
-                          }))
-                        }
-                        disabled={running}
-                        className="w-full rounded-md border border-slate-200 px-2 py-1 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        placeholder="target bucket"
-                      />
-                    </td>
+          <div className="space-y-3">
+            <details className="rounded-lg border border-slate-200 dark:border-slate-800">
+              <summary className="cursor-pointer list-none px-3 py-2 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Raw mapping (priority)
+              </summary>
+              <div className="space-y-2 border-t border-slate-200 px-3 py-2 dark:border-slate-800">
+                <textarea
+                  value={rawMappingText}
+                  onChange={(event) => setRawMappingText(event.target.value)}
+                  disabled={running}
+                  rows={6}
+                  placeholder={"source-bucket-a => target-bucket-a\nsource-bucket-b -> target-bucket-b"}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    Accepted formats per line: <code>source =&gt; target</code>, <code>source -&gt; target</code>, <code>source = target</code>.
+                  </p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  Parsed entries: {parsedRawMapping.mapping.size}. Invalid lines: {parsedRawMapping.invalidLines.length}.
+                </p>
+                {parsedRawMapping.invalidLines.length > 0 && (
+                  <pre className="whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
+                    {parsedRawMapping.invalidLines.map((line) => `- ${line}`).join("\n")}
+                  </pre>
+                )}
+              </div>
+            </details>
+            <div className="max-h-[240px] overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
+              <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
+                <thead className="bg-slate-100 dark:bg-slate-900/60">
+                  <tr>
+                    <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Source
+                    </th>
+                    <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Target
+                    </th>
                   </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {sortedSourceBuckets.map((sourceBucket) => {
+                    const sourceKey = sourceBucket.toLowerCase();
+                    const rawTarget = parsedRawMapping.mapping.get(sourceKey);
+                    const effectiveTarget = resolvedManualMapping.get(sourceKey) ?? "";
+                    return (
+                      <tr key={sourceBucket} className="align-top">
+                        <td className="px-3 py-2 font-semibold text-slate-900 dark:text-slate-100">{sourceBucket}</td>
+                        <td className="space-y-1 px-3 py-2">
+                          <input
+                            type="text"
+                            list="bucket-compare-target-options"
+                            value={rawTarget ?? (manualMapping[sourceBucket] ?? "")}
+                            onChange={(event) =>
+                              setManualMapping((prev) => ({
+                                ...prev,
+                                [sourceBucket]: event.target.value,
+                              }))
+                            }
+                            disabled={running || Boolean(rawTarget)}
+                            className="w-full rounded-md border border-slate-200 px-2 py-1 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            placeholder="target bucket"
+                          />
+                          {rawTarget && (
+                            <p className="ui-caption text-amber-700 dark:text-amber-200">
+                              Overridden by raw mapping.
+                            </p>
+                          )}
+                          {!rawTarget && !manualMapping[sourceBucket] && effectiveTarget && (
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">Fallback 1:1 applied: {effectiveTarget}</p>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <datalist id="bucket-compare-target-options">
+                {availableTargetBucketNames.map((name) => (
+                  <option key={name} value={name} />
                 ))}
-              </tbody>
-            </table>
-            <datalist id="bucket-compare-target-options">
-              {availableTargetBucketNames.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
+              </datalist>
+            </div>
           </div>
         )}
         {runError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{runError}</p>}
@@ -624,7 +770,46 @@ export default function CephAdminBucketCompareModal({
         </div>
         {items.length > 0 && (
           <div className="space-y-2">
-            {items.map((item) => {
+            <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40 lg:grid-cols-[minmax(0,1fr)_220px_220px_auto]">
+              <input
+                type="text"
+                value={resultSearch}
+                onChange={(event) => setResultSearch(event.target.value)}
+                placeholder="Filter by source/target bucket or error"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as "all" | CompareRunItem["status"])}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              >
+                <option value="all">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="running">Running</option>
+                <option value="success">Success</option>
+                <option value="failed">Failed</option>
+              </select>
+              <select
+                value={diffFilter}
+                onChange={(event) => setDiffFilter(event.target.value as "all" | "with_diff" | "no_diff")}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              >
+                <option value="all">All diff states</option>
+                <option value="with_diff">With differences</option>
+                <option value="no_diff">No differences</option>
+              </select>
+              <button
+                type="button"
+                onClick={resetResultFilters}
+                className="rounded-md border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+              >
+                Reset filters
+              </button>
+            </div>
+            <p className="ui-caption text-slate-600 dark:text-slate-300">
+              Showing {filteredItems.length} / {items.length} result(s).
+            </p>
+            {filteredItems.map((item) => {
               const content = item.result?.content_diff;
               const contentHasDifferences = Boolean(
                 content && (content.different_count > 0 || content.only_source_count > 0 || content.only_target_count > 0)
@@ -852,6 +1037,11 @@ export default function CephAdminBucketCompareModal({
                 </details>
               );
             })}
+            {filteredItems.length === 0 && (
+              <div className="rounded-lg border border-dashed border-slate-300 px-3 py-4 ui-body text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                No result matches the current filters.
+              </div>
+            )}
           </div>
         )}
       </div>
