@@ -8,7 +8,7 @@ from app.db import S3Account, UserS3Account, User, UserRole
 from app.services import session_service as session_module
 
 
-def _mock_external(monkeypatch, *, iam_allowed: bool) -> None:
+def _mock_external(monkeypatch, *, iam_allowed: bool, account_root: bool = False) -> None:
     class FakeS3Client:
         def list_buckets(self):
             return {
@@ -29,7 +29,7 @@ def _mock_external(monkeypatch, *, iam_allowed: bool) -> None:
             return {
                 "account_id": "RGW00000000000000001",
                 "display_name": "iam-user",
-                "account_root": False,
+                "account_root": account_root,
             }
 
     class FakeIAMClient:
@@ -61,6 +61,7 @@ def test_login_s3_grants_iam_capability_when_iam_client_succeeds(monkeypatch, cl
     assert response.status_code == 200
     payload = response.json()
     assert payload["session"]["capabilities"]["can_manage_iam"] is True
+    assert payload["session"]["capabilities"]["can_manage_roles"] is False
     assert payload["session"]["account_id"] == "RGW00000000000000001"
     assert payload["session"]["account_name"] == "tenant-alpha"
     assert db_session.query(S3Account).filter(S3Account.rgw_account_id == "RGW00000000000000001").first() is None
@@ -76,6 +77,21 @@ def test_login_s3_disables_iam_capability_when_iam_client_denied(monkeypatch, cl
     assert response.status_code == 200
     payload = response.json()
     assert payload["session"]["capabilities"]["can_manage_iam"] is False
+    assert payload["session"]["capabilities"]["can_manage_roles"] is False
+    assert db_session.query(S3Account).filter(S3Account.rgw_account_id == "RGW00000000000000001").first() is None
+
+
+def test_login_s3_grants_role_capability_for_account_root(monkeypatch, client, db_session):
+    _mock_external(monkeypatch, iam_allowed=False, account_root=True)
+
+    response = client.post(
+        "/api/auth/login-s3",
+        json={"access_key": "AKIA", "secret_key": "SECRET"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["session"]["capabilities"]["can_manage_iam"] is True
+    assert payload["session"]["capabilities"]["can_manage_roles"] is True
     assert db_session.query(S3Account).filter(S3Account.rgw_account_id == "RGW00000000000000001").first() is None
 
 

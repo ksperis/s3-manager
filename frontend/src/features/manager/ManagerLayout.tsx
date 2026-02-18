@@ -54,6 +54,7 @@ function ManagerShell() {
     setAccessMode,
     canSwitchAccess,
     managerStatsEnabled,
+    canManageRoles,
   } = useS3AccountContext();
   const { generalSettings } = useGeneralSettings();
   const navigate = useNavigate();
@@ -231,7 +232,7 @@ function ManagerShell() {
       links: [
         { to: "/manager/users", label: "Users" },
         { to: "/manager/groups", label: "Groups" },
-        { to: "/manager/roles", label: "Roles" },
+        ...(canManageRoles ? [{ to: "/manager/roles", label: "Roles" }] : []),
         { to: "/manager/iam/policies", label: "Policies" },
       ],
     });

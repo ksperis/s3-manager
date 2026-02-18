@@ -11,6 +11,7 @@ export type ManagerContext = {
   access_mode: ManagerAccessMode;
   iam_identity?: string | null;
   can_switch_access?: boolean;
+  can_manage_roles?: boolean;
   manager_stats_enabled: boolean;
 };
 

@@ -21,6 +21,7 @@ class ManagerContext(BaseModel):
     context_kind: str = "account"
     iam_identity: Optional[str] = None
     can_switch_access: bool = False
+    can_manage_roles: bool = False
     manager_stats_enabled: bool = False
 
 
@@ -100,5 +101,6 @@ def get_manager_context(
         context_kind=("connection" if access_mode == "connection" else "account"),
         iam_identity=iam_identity,
         can_switch_access=can_switch_access,
+        can_manage_roles=bool(caps and getattr(caps, "can_manage_roles", False)),
         manager_stats_enabled=_manager_stats_enabled(account, actor),
     )

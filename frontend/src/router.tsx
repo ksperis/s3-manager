@@ -287,6 +287,20 @@ function RequireManagerIamFeature() {
   return <Outlet />;
 }
 
+function RequireManagerRolesFeature() {
+  const { requiresS3AccountSelection, hasS3AccountContext, canManageRoles } = useS3AccountContext();
+  if (requiresS3AccountSelection && !hasS3AccountContext) {
+    return <Outlet />;
+  }
+  if (canManageRoles === null) {
+    return null;
+  }
+  if (!canManageRoles) {
+    return <FeatureDisabledPage feature="IAM Roles" />;
+  }
+  return <Outlet />;
+}
+
 export default function AppRouter() {
   const router = useMemo(() => {
     const routes = createRoutesFromElements(
@@ -347,8 +361,10 @@ export default function AppRouter() {
                   <Route path="groups" element={<ManagerGroupsPage />} />
                   <Route path="groups/:groupName/policies" element={<ManagerGroupPoliciesPage />} />
                   <Route path="groups/:groupName/users" element={<ManagerGroupUsersPage />} />
-                  <Route path="roles" element={<ManagerRolesPage />} />
-                  <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
+                  <Route element={<RequireManagerRolesFeature />}>
+                    <Route path="roles" element={<ManagerRolesPage />} />
+                    <Route path="roles/:roleName/policies" element={<ManagerRolePoliciesPage />} />
+                  </Route>
                   <Route path="iam/policies" element={<PoliciesPage />} />
                 </Route>
                 <Route path="topics" element={<TopicsPage />} />

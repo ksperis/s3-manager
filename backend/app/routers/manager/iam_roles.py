@@ -11,7 +11,7 @@ from app.models.policy import InlinePolicy, Policy
 from app.routers.dependencies import (
     get_account_context,
     get_audit_logger,
-    require_iam_capable_manager,
+    require_iam_roles_capable_manager,
 )
 from app.services.audit_service import AuditService
 from app.services.rgw_iam import RGWIAMService, get_iam_service
@@ -52,7 +52,7 @@ def get_account_and_service(account: S3Account) -> tuple[S3Account, RGWIAMServic
 def list_roles(
     account: S3Account = Depends(get_account_context),
     db: Session = Depends(get_db),
-    _: dict = Depends(require_iam_capable_manager),
+    _: dict = Depends(require_iam_roles_capable_manager),
 ) -> list[IAMRole]:
     _, service = get_account_and_service(account)
     try:
@@ -65,7 +65,7 @@ def list_roles(
 def create_role(
     payload: IAMRoleCreate,
     account: S3Account = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: User = Depends(require_iam_roles_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> IAMRole:
     _, service = get_account_and_service(account)
@@ -98,7 +98,7 @@ def create_role(
 def get_role(
     role_name: str,
     account: S3Account = Depends(get_account_context),
-    _: dict = Depends(require_iam_capable_manager),
+    _: dict = Depends(require_iam_roles_capable_manager),
 ) -> IAMRole:
     _, service = get_account_and_service(account)
     try:
@@ -114,7 +114,7 @@ def get_role(
 def delete_role(
     role_name: str,
     account: S3Account = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: User = Depends(require_iam_roles_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     _, service = get_account_and_service(account)
@@ -137,7 +137,7 @@ def update_role(
     role_name: str,
     payload: IAMRoleUpdate,
     account: S3Account = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: User = Depends(require_iam_roles_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> IAMRole:
     _, service = get_account_and_service(account)
@@ -185,7 +185,7 @@ def update_role(
 def list_role_inline_policies(
     role_name: str,
     account: S3Account = Depends(get_account_context),
-    _: dict = Depends(require_iam_capable_manager),
+    _: dict = Depends(require_iam_roles_capable_manager),
 ) -> list[InlinePolicy]:
     _, service = get_account_and_service(account)
     try:
@@ -205,7 +205,7 @@ def put_role_inline_policy(
     policy_name: str,
     payload: InlinePolicy,
     account: S3Account = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: User = Depends(require_iam_roles_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> InlinePolicy:
     if payload.name and payload.name != policy_name:
@@ -236,7 +236,7 @@ def delete_role_inline_policy(
     role_name: str,
     policy_name: str,
     account: S3Account = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: User = Depends(require_iam_roles_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     _, service = get_account_and_service(account)
@@ -259,7 +259,7 @@ def delete_role_inline_policy(
 def list_role_policies(
     role_name: str,
     account: S3Account = Depends(get_account_context),
-    _: dict = Depends(require_iam_capable_manager),
+    _: dict = Depends(require_iam_roles_capable_manager),
 ) -> list[Policy]:
     _, service = get_account_and_service(account)
     try:
@@ -273,7 +273,7 @@ def attach_role_policy(
     role_name: str,
     payload: Policy,
     account: S3Account = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: User = Depends(require_iam_roles_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> Policy:
     _, service = get_account_and_service(account)
@@ -301,7 +301,7 @@ def detach_role_policy(
     role_name: str,
     policy_arn: str,
     account: S3Account = Depends(get_account_context),
-    current_user: User = Depends(require_iam_capable_manager),
+    current_user: User = Depends(require_iam_roles_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     _, service = get_account_and_service(account)

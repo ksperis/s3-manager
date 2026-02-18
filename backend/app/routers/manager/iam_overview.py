@@ -34,6 +34,8 @@ def iam_overview(
     _: dict = Depends(require_iam_capable_manager),
 ) -> dict:
     service = _service_for_account(account)
+    caps = getattr(account, "_manager_capabilities", None)
+    can_manage_roles = bool(caps and getattr(caps, "can_manage_roles", False))
     warnings: list[str] = []
 
     def _capture(label: str, func):
@@ -46,7 +48,7 @@ def iam_overview(
 
     users = _capture("users", service.list_users)
     groups = _capture("groups", service.list_groups)
-    roles = _capture("roles", service.list_roles)
+    roles = _capture("roles", service.list_roles) if can_manage_roles else []
     policies = _capture("policies", service.list_policies)
     return {
         "iam_users": len(users),

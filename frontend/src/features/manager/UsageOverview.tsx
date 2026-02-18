@@ -20,6 +20,7 @@ type UsageOverviewProps = {
   iamOverview?: IamOverview | null;
   iamLoading?: boolean;
   iamError?: string | null;
+  canManageRoles?: boolean;
 };
 
 export default function UsageOverview({
@@ -34,6 +35,7 @@ export default function UsageOverview({
   iamOverview,
   iamLoading,
   iamError,
+  canManageRoles,
 }: UsageOverviewProps) {
   const iamTiles = [
     {
@@ -46,11 +48,15 @@ export default function UsageOverview({
       value: iamOverview?.iam_groups ?? stats?.total_iam_groups ?? 0,
       to: "/manager/groups",
     },
-    {
-      label: "Roles",
-      value: iamOverview?.iam_roles ?? stats?.total_iam_roles ?? 0,
-      to: "/manager/roles",
-    },
+    ...(canManageRoles
+      ? [
+          {
+            label: "Roles",
+            value: iamOverview?.iam_roles ?? stats?.total_iam_roles ?? 0,
+            to: "/manager/roles",
+          },
+        ]
+      : []),
     {
       label: "Policies",
       value: iamOverview?.iam_policies ?? stats?.total_iam_policies ?? 0,

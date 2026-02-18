@@ -25,6 +25,7 @@ export type LoginResponse = {
 
 export type SessionCapabilities = {
   can_manage_iam: boolean;
+  can_manage_roles?: boolean;
   can_manage_buckets: boolean;
   can_view_traffic: boolean;
 };

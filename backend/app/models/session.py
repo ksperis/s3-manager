@@ -26,6 +26,7 @@ class S3KeyLogin(BaseModel):
 
 class SessionCapabilities(BaseModel):
     can_manage_iam: bool = False
+    can_manage_roles: bool = False
     can_manage_buckets: bool = True
     can_view_traffic: bool = False
 
