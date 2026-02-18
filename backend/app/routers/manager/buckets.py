@@ -52,7 +52,7 @@ def _require_sse_feature(account: S3Account) -> None:
 @router.get("", response_model=list[Bucket])
 def list_buckets(
     include: list[str] = Query(default=[], description="Optional extra fields to include (e.g. tags, versioning, cors)"),
-    with_stats: bool = Query(True, description="Include usage/quota stats from RGW admin listing"),
+    with_stats: bool = Query(True, description="Include usage/quota stats from admin listing"),
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),

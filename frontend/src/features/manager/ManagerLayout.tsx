@@ -144,7 +144,7 @@ function ManagerShell() {
           )
         ) : (
           <div className={pillClasses} title={identityLabel ?? undefined}>
-            {sessionS3AccountName || "RGW session"}
+            {sessionS3AccountName || "S3 session"}
           </div>
         )}
       </div>

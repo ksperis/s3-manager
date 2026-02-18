@@ -34,7 +34,7 @@ def list_manager_accounts(
                 .first()
             )
             name = account.name if account else (
-                user.account_name or user.account_id or "RGW account"
+                user.account_name or user.account_id or "S3 account"
             )
             account_db_id = account.id if account else None
             endpoint = account.storage_endpoint if account else None

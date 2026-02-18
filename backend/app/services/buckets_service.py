@@ -73,7 +73,7 @@ class BucketsService:
                 region=endpoint.region,
             )
         except RGWAdminError as exc:
-            raise RuntimeError(f"Unable to initialize RGW admin client: {exc}") from exc
+            raise RuntimeError(f"Unable to initialize admin client: {exc}") from exc
 
     def _admin_bucket_list(self, account: S3Account, with_stats: bool = True) -> list[dict]:
         uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
@@ -83,13 +83,13 @@ class BucketsService:
         try:
             payload = rgw_admin.get_all_buckets(uid=uid, with_stats=with_stats)
         except RGWAdminError as exc:
-            raise RuntimeError(f"Unable to list buckets via RGW admin: {exc}") from exc
+            raise RuntimeError(f"Unable to list buckets via admin API: {exc}") from exc
         return extract_bucket_list(payload)
 
     def _account_credentials(self, account: S3Account) -> tuple[str, str]:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
-            raise RuntimeError("S3Account is missing RGW admin credentials")
+            raise RuntimeError("S3Account is missing admin credentials")
         return access_key, secret_key
 
     def _client_kwargs(self, account: S3Account) -> dict:

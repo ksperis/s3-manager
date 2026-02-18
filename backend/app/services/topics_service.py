@@ -34,7 +34,7 @@ class TopicsService:
     def _account_credentials(self, account: S3Account) -> tuple[str, str]:
         access_key, secret_key = account.effective_rgw_credentials()
         if not access_key or not secret_key:
-            raise RuntimeError("S3Account is missing RGW/SNS credentials")
+            raise RuntimeError("S3Account is missing SNS credentials")
         return access_key, secret_key
 
     def _client_kwargs(self, account: S3Account) -> dict:

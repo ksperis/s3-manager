@@ -425,7 +425,7 @@ def get_account_context(
             if not access_key or not secret_key:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="RGW admin credentials are not configured for this account",
+                    detail="Admin credentials are not configured for this account",
                 )
         else:
             portal_service = get_portal_service(db)

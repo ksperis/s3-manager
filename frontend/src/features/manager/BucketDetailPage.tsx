@@ -429,7 +429,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   const hasCephContext = Boolean(endpointId);
   const hasContext = isCephAdmin ? hasCephContext : hasAccountContext;
   const staticWebsiteBlocked = !staticWebsiteEnabled;
-  const exampleS3AccountId = selectedS3Account?.rgw_account_id || "RGW00000000000000001";
+  const exampleS3AccountId = selectedS3Account?.rgw_account_id || "ACCOUNT00000000000000001";
   const notificationExample = `{
   "TopicConfigurations": [
     {
@@ -933,7 +933,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
       } catch (err) {
         setObjects([]);
         setPrefixes([]);
-        setObjectsError("Unable to list objects (check the backend/RGW).");
+        setObjectsError("Unable to list objects (check the backend service).");
       } finally {
         setObjectsLoading(false);
       }
@@ -1545,7 +1545,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
       setUploadFile(null);
       await loadObjects(currentPrefix);
     } catch (err) {
-      setUploadError("Upload failed (check the backend/RGW).");
+      setUploadError("Upload failed (check the backend service).");
     } finally {
       setUploading(false);
     }
@@ -2570,7 +2570,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Versioning</p>
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">Status returned by RGW.</p>
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">Status returned by the storage service.</p>
                           </div>
                           <span
                             className={`rounded-full px-3 py-1 ui-caption font-semibold ${featureStateChipClasses[versioningChipState]}`}
@@ -3894,10 +3894,10 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
               <div className="space-y-4">
                 <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                   <header className="space-y-1">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-primary">RGW Stats</p>
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Usage Stats</p>
                     <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Current Usage and Quota</h3>
                     <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Live usage, quotas, and traffic sourced from RGW logs.
+                      Live usage, quotas, and traffic sourced from backend metrics.
                     </p>
                   </header>
                   <div className="grid gap-3 md:grid-cols-2">

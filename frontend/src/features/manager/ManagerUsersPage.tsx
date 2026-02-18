@@ -37,7 +37,7 @@ export default function ManagerUsersPage() {
       <div className="space-y-4">
         <PageHeader
           title="Users"
-          description="Manage RGW IAM identities for your account."
+          description="Manage IAM identities for your account."
           breadcrumbs={[{ label: "Manager" }, { label: "IAM" }, { label: "Users" }]}
         />
         <PageBanner tone="info">IAM is not available for standalone S3 users. Select an S3 Account (tenant) to continue.</PageBanner>

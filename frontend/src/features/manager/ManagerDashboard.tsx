@@ -50,7 +50,7 @@ export default function ManagerDashboard() {
   const hasContext = hasS3AccountContext;
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
   const iamFeatureEnabled = endpointCaps ? endpointCaps.iam !== false : true;
-  // Usage/traffic stats are a platform/RGW feature. We only enable the widgets when the backend says it is allowed.
+  // Usage/traffic stats are backend-driven. We only enable the widgets when the backend says it is allowed.
   const usageFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.metrics !== false : true);
   const { stats, loading, error } = useManagerStats(
     accountIdForApi,
@@ -64,7 +64,7 @@ export default function ManagerDashboard() {
     hasContext,
     accessMode ?? "default"
   );
-  const accountLabel = selected?.display_name ?? sessionS3AccountName ?? "RGW session";
+  const accountLabel = selected?.display_name ?? sessionS3AccountName ?? "S3 session";
   const iamDisabled = isS3User || isConnection || !iamFeatureEnabled;
 
   return (

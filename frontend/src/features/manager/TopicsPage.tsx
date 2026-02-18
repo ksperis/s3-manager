@@ -122,7 +122,7 @@ export default function TopicsPage() {
       <div className="space-y-4">
         <PageHeader
           title="SNS Topics"
-          description="Manage RGW SNS topics for bucket notifications."
+          description="Manage SNS topics for bucket notifications."
           breadcrumbs={[{ label: "Manager" }, { label: "Events" }, { label: "SNS Topics" }]}
         />
         <PageBanner tone="info">

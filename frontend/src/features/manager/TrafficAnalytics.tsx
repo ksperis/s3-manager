@@ -79,7 +79,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
       } catch (err) {
         if (!cancelled) {
           setTraffic(null);
-          setError("Unable to retrieve RGW logs.");
+          setError("Unable to retrieve traffic logs.");
         }
       } finally {
         if (!cancelled) {
@@ -104,7 +104,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
     <section className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">RGW traffic</p>
+          <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Traffic</p>
           <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Traffic visualization</h3>
           {bucketName && (
             <p className="ui-caption font-semibold text-primary-700 dark:text-primary-200">Bucket: {bucketName}</p>
@@ -141,13 +141,13 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
         <TrafficTotalCard
           label="Egress traffic"
           value={formatBytes(totals?.bytes_out ?? 0)}
-          hint="Bytes sent by RGW"
+          hint="Bytes sent"
           loading={loading}
         />
         <TrafficTotalCard
           label="Ingress traffic"
           value={formatBytes(totals?.bytes_in ?? 0)}
-          hint="Bytes received by RGW"
+          hint="Bytes received"
           loading={loading}
         />
         <TrafficTotalCard

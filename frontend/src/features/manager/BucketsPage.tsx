@@ -223,7 +223,7 @@ export default function BucketsPage() {
     ? selectedS3Account.display_name
     : requiresS3AccountSelection
       ? "Not selected"
-      : sessionS3AccountName || "RGW session";
+      : sessionS3AccountName || "S3 session";
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
 
   const includeParams = useMemo(() => {
@@ -842,7 +842,7 @@ export default function BucketsPage() {
                     className="rounded-md border border-dashed border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     placeholder="ex: default-placement"
                   />
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Ce placement est fixe pour cet environnement RGW.</p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">Ce placement est fixe pour cet environnement.</p>
                 </div>
               </div>
             )}
