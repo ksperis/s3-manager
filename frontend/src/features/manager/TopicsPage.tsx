@@ -17,6 +17,7 @@ import {
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
+import TableEmptyState from "../../components/TableEmptyState";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { useS3AccountContext } from "./S3AccountContext";
@@ -441,38 +442,37 @@ export default function TopicsPage() {
       {!needsS3AccountSelection && (
         <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-            <div className="ui-body font-semibold text-slate-700 dark:text-slate-200">
-              {accountLabel} · Topics
+            <div>
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Topics</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">{accountLabel} · List + subscriptions.</p>
             </div>
           </div>
-          {loading ? (
-            <div className="px-4 py-6 ui-body text-slate-500 dark:text-slate-400">Loading topics…</div>
-          ) : topics.length === 0 ? (
-            <div className="px-4 py-6 ui-body text-slate-500 dark:text-slate-400">No topics found for this account.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="manager-table min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
-                <thead className="bg-slate-50 ui-caption uppercase tracking-wide text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Topic</th>
-                    <th className="px-4 py-2 text-left">Subscriptions</th>
-                    <th className="px-4 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {topics.map((topic) => (
-                    <tr key={topic.arn}>
-                      <td className="manager-table-cell-wide px-4 py-3">
+          <div className="overflow-x-auto">
+            <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <tr>
+                  <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Topic</th>
+                  <th className="px-6 py-3 text-left ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Subscriptions</th>
+                  <th className="px-6 py-3 text-right ui-caption font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                {loading && <TableEmptyState colSpan={3} message="Loading topics..." />}
+                {!loading && topics.length === 0 && <TableEmptyState colSpan={3} message="No topics." />}
+                {!loading &&
+                  topics.map((topic) => (
+                    <tr key={topic.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="manager-table-cell-wide px-6 py-4">
                         <div className="flex flex-col">
                           <span className="ui-body font-semibold text-slate-900 dark:text-slate-100">{topic.name}</span>
                           <span className="ui-caption font-mono text-slate-500 dark:text-slate-400">{topic.arn}</span>
                         </div>
                       </td>
-                      <td className="manager-table-cell px-4 py-3 ui-caption text-slate-600 dark:text-slate-300">
+                      <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">
                         <div>Confirmed: {topic.subscriptions_confirmed ?? 0}</div>
                         <div>Pending: {topic.subscriptions_pending ?? 0}</div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-6 py-4 text-right">
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <button
                             type="button"
@@ -499,10 +499,9 @@ export default function TopicsPage() {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
