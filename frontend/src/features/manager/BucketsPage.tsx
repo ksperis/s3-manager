@@ -28,14 +28,14 @@ import PropertySummaryChip from "../../components/PropertySummaryChip";
 
 type BucketForm = {
   name: string;
-  location: string;
+  locationConstraint: string;
   versioning: boolean;
   encryption: string;
 };
 
 const defaultForm: BucketForm = {
   name: "",
-  location: "",
+  locationConstraint: "",
   versioning: false,
   encryption: "",
 };
@@ -169,6 +169,7 @@ export default function BucketsPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
+  const [useCustomLocationConstraint, setUseCustomLocationConstraint] = useState(false);
   const [bucketForm, setBucketForm] = useState<BucketForm>(buildDefaultForm);
   const [filter, setFilter] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
@@ -429,7 +430,8 @@ export default function BucketsPage() {
 
   const performCreate = async (
     name: string,
-    versioning: boolean
+    versioning: boolean,
+    locationConstraint?: string
   ): Promise<{ created: boolean }> => {
     if (needsS3AccountSelection) {
       setActionError("Select an account before creating a bucket.");
@@ -441,6 +443,7 @@ export default function BucketsPage() {
     try {
       await createBucket(name, accountIdForApi, {
         versioning,
+        locationConstraint,
       });
       setActionMessage("Bucket created");
       await fetchBuckets(accountIdForApi ?? null);
@@ -463,11 +466,13 @@ export default function BucketsPage() {
       setActionError("Bucket name is required.");
       return;
     }
-    const result = await performCreate(bucketForm.name.trim(), bucketForm.versioning);
+    const locationConstraint = useCustomLocationConstraint ? bucketForm.locationConstraint.trim() || undefined : undefined;
+    const result = await performCreate(bucketForm.name.trim(), bucketForm.versioning, locationConstraint);
     if (result.created) {
       setBucketForm(buildDefaultForm());
       setShowWizard(false);
       setWizardStep(0);
+      setUseCustomLocationConstraint(false);
     }
   };
 
@@ -634,6 +639,7 @@ export default function BucketsPage() {
   const openAdvancedModal = () => {
     setBucketForm(buildDefaultForm());
     setWizardStep(0);
+    setUseCustomLocationConstraint(false);
     setShowWizard(true);
   };
 
@@ -833,16 +839,29 @@ export default function BucketsPage() {
                     DNS compatible, lowercase, numbers, and hyphens. The selected account will be used.
                   </p>
                 </div>
-                <div className="flex flex-col gap-2 opacity-60">
-                  <label className="ui-body font-medium text-slate-500 dark:text-slate-400">Location / zone</label>
-                  <input
-                    value={bucketForm.location}
-                    readOnly
-                    disabled
-                    className="rounded-md border border-dashed border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    placeholder="ex: default-placement"
-                  />
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Ce placement est fixe pour cet environnement.</p>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={useCustomLocationConstraint}
+                      onChange={(e) => setUseCustomLocationConstraint(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                    />
+                    <span>Custom LocationConstraint</span>
+                  </label>
+                  {useCustomLocationConstraint && (
+                    <div className="flex flex-col gap-2">
+                      <input
+                        value={bucketForm.locationConstraint}
+                        onChange={(e) => setBucketForm((prev) => ({ ...prev, locationConstraint: e.target.value }))}
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        placeholder="ex: eu-west-1"
+                      />
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        Optional. Empty value uses the endpoint default region/placement.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

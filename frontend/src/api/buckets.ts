@@ -39,14 +39,17 @@ export async function listBuckets(
 
 type CreateBucketOptions = {
   versioning?: boolean;
+  locationConstraint?: string;
 };
 
 export async function createBucket(name: string, accountId: S3AccountSelector, options?: CreateBucketOptions): Promise<void> {
+  const locationConstraint = options?.locationConstraint?.trim();
   await client.post(
     "/manager/buckets",
     {
       name,
       versioning: options?.versioning ?? false,
+      location_constraint: locationConstraint || undefined,
     },
     { params: withS3AccountParam(undefined, accountId) }
   );

@@ -37,6 +37,14 @@ class BucketPublicAccessBlock(BaseModel):
 class BucketCreate(BaseModel):
     name: str
     versioning: Optional[bool] = None
+    location_constraint: Optional[str] = None
+
+    @validator("location_constraint", pre=True)
+    def normalize_location_constraint(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
 
 
 class BucketVersioningUpdate(BaseModel):

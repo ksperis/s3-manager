@@ -729,11 +729,16 @@ def create_bucket(
 ):
     try:
         versioning = payload.versioning if payload.versioning is not None else False
+        location_constraint = payload.location_constraint
         service.create_bucket(
             payload.name,
             account,
             versioning=versioning,
+            location_constraint=location_constraint,
         )
+        audit_metadata = {"versioning": versioning}
+        if location_constraint:
+            audit_metadata["location_constraint"] = location_constraint
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -741,14 +746,13 @@ def create_bucket(
             entity_type="bucket",
             entity_id=payload.name,
             account=account,
-            metadata={
-                "versioning": versioning,
-            },
+            metadata=audit_metadata,
         )
         return {
             "message": f"Bucket '{payload.name}' created",
             "name": payload.name,
             "versioning": versioning,
+            "location_constraint": location_constraint,
         }
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
