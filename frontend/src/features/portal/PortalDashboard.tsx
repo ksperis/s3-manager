@@ -6,6 +6,11 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { Bucket } from "../../api/buckets";
 import { PortalSettings } from "../../api/appSettings";
 import {
+  fetchPortalWorkspaceHealthOverview,
+  HealthCheckStatus,
+  WorkspaceEndpointHealthOverviewResponse,
+} from "../../api/healthchecks";
+import {
   createPortalAccessKey,
   createPortalBucket,
   deletePortalAccessKey,
@@ -22,6 +27,7 @@ import {
   fetchPortalBucketStats,
   fetchPortalUsage,
 } from "../../api/portal";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { usePortalAccountContext } from "./PortalAccountContext";
 import Modal from "../../components/Modal";
 import PortalBucketModal from "./PortalBucketModal";
@@ -100,7 +106,42 @@ function EmptyState({ title, description }: { title: string; description: string
   );
 }
 
+function endpointStatusBadge(status: HealthCheckStatus): { label: string; className: string } {
+  if (status === "up") {
+    return {
+      label: "Up",
+      className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100",
+    };
+  }
+  if (status === "degraded") {
+    return {
+      label: "Degraded",
+      className: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100",
+    };
+  }
+  if (status === "down") {
+    return {
+      label: "Down",
+      className: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-100",
+    };
+  }
+  return {
+    label: "Unknown",
+    className: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+  };
+}
+
+function formatIncidentWindow(minutes?: number | null) {
+  const value = Math.max(1, Number(minutes ?? 720));
+  if (value % 60 === 0) {
+    const hours = value / 60;
+    return `${hours} hour${hours > 1 ? "s" : ""}`;
+  }
+  return `${value} minute${value > 1 ? "s" : ""}`;
+}
+
 export default function PortalDashboard() {
+  const { generalSettings } = useGeneralSettings();
   const { accountIdForApi, selectedAccount, hasAccountContext, loading: accountLoading, error: accountError } = usePortalAccountContext();
   const [state, setState] = useState<PortalState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -133,6 +174,8 @@ export default function PortalDashboard() {
   const [trafficSparkline, setTrafficSparkline] = useState<{ timestamp: number; total: number; ops: number }[]>([]);
   const [trafficOps24h, setTrafficOps24h] = useState(0);
   const [trafficLoading, setTrafficLoading] = useState(false);
+  const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
+  const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const accountUsedBytes = accountUsage?.used_bytes ?? state?.used_bytes ?? null;
   const accountUsedObjects = accountUsage?.used_objects ?? state?.used_objects ?? null;
   const isBucketNameValid = !newBucketName || isValidBucketName(newBucketName);
@@ -203,6 +246,17 @@ export default function PortalDashboard() {
     [trafficSparkline]
   );
   const hasTrafficSparkline = trafficSparkline.length > 0;
+  const endpointHealthEntry = workspaceHealth?.endpoints?.[0] ?? null;
+  const endpointHealthBadge = endpointStatusBadge(endpointHealthEntry?.status ?? "unknown");
+  const orderedIncidents = useMemo(() => {
+    const incidents = workspaceHealth?.incidents ?? [];
+    return [...incidents].sort((left, right) => {
+      if (left.ongoing !== right.ongoing) return left.ongoing ? -1 : 1;
+      const leftStart = new Date(left.start).getTime();
+      const rightStart = new Date(right.start).getTime();
+      return rightStart - leftStart;
+    });
+  }, [workspaceHealth?.incidents]);
 
   const userEmail = useMemo(() => {
     if (typeof window === "undefined") return null;
@@ -730,6 +784,33 @@ export default function PortalDashboard() {
       .catch(() => setPortalSettings(null));
   }, [accountIdForApi]);
 
+  useEffect(() => {
+    if (!generalSettings.endpoint_status_enabled || !hasAccountContext || !accountIdForApi) {
+      setWorkspaceHealth(null);
+      setWorkspaceHealthLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setWorkspaceHealthLoading(true);
+    fetchPortalWorkspaceHealthOverview(accountIdForApi)
+      .then((data) => {
+        if (cancelled) return;
+        setWorkspaceHealth(data);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWorkspaceHealth(null);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setWorkspaceHealthLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, generalSettings.endpoint_status_enabled, hasAccountContext]);
+
   if (accountLoading) {
     return <EmptyState title="Chargement..." description="Récupération des comptes et du contexte portail." />;
   }
@@ -849,7 +930,25 @@ export default function PortalDashboard() {
           <div className="rounded-2xl border border-white/60 bg-white/80 px-4 py-3 ui-body text-slate-800 shadow-sm dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-100">
             <div className="space-y-4">
               <div>
-                <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Endpoint S3</div>
+                <div className="flex items-center gap-2">
+                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Endpoint S3</div>
+                  {generalSettings.endpoint_status_enabled && (
+                    workspaceHealthLoading ? (
+                      <span className="inline-flex h-5 w-12 animate-pulse rounded-full bg-slate-200/80 dark:bg-slate-700/80" aria-hidden />
+                    ) : (
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${endpointHealthBadge.className}`}
+                        title={
+                          endpointHealthEntry?.checked_at
+                            ? `Last check: ${new Date(endpointHealthEntry.checked_at).toLocaleString()}`
+                            : "Last check: unavailable"
+                        }
+                      >
+                        {endpointHealthBadge.label}
+                      </span>
+                    )
+                  )}
+                </div>
                 <div className="mt-1 flex items-center gap-2">
                   <span
                     className="block min-w-0 truncate font-mono ui-caption text-slate-900 dark:text-slate-100"
@@ -899,6 +998,41 @@ export default function PortalDashboard() {
           </div>
         </div>
       </div>
+
+      {generalSettings.endpoint_status_enabled && hasAccountContext && (workspaceHealthLoading || orderedIncidents.length > 0) && (
+        <section className="rounded-2xl border border-amber-200/80 bg-amber-50/60 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-900/15">
+          <p className="ui-body font-semibold text-amber-900 dark:text-amber-100">Ongoing / Recent Incidents</p>
+          <p className="ui-caption text-amber-700 dark:text-amber-200">
+            Ongoing incidents and incidents ended in the last {formatIncidentWindow(workspaceHealth?.incident_highlight_minutes)}.
+          </p>
+          {workspaceHealthLoading ? (
+            <div className="mt-3 h-24 animate-pulse rounded-xl border border-amber-200/80 bg-white/70 dark:border-amber-800/60 dark:bg-amber-950/20" />
+          ) : (
+            <div className="mt-3 space-y-2">
+              {orderedIncidents.slice(0, 5).map((incident, index) => (
+                <div
+                  key={`${incident.endpoint_id}-${incident.start}-${index}`}
+                  className="rounded-lg border border-amber-200/90 bg-white/90 px-3 py-2 dark:border-amber-800/60 dark:bg-amber-950/20"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="ui-caption font-semibold text-slate-900 dark:text-slate-100">{incident.endpoint_name}</p>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${endpointStatusBadge(incident.status).className}`}>
+                      {endpointStatusBadge(incident.status).label}
+                    </span>
+                  </div>
+                  <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">
+                    {incident.ongoing ? "Ongoing since" : "From"} {new Date(incident.start).toLocaleString()}
+                    {incident.end ? ` to ${new Date(incident.end).toLocaleString()}` : ""}
+                  </p>
+                </div>
+              ))}
+              {orderedIncidents.length > 5 && (
+                <p className="ui-caption text-amber-700 dark:text-amber-200">+{orderedIncidents.length - 5} more incident(s).</p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {error && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 ui-body text-rose-700 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100">

@@ -30,6 +30,7 @@ import PoliciesPage from "./features/manager/PoliciesPage";
 import ManagerLayout from "./features/manager/ManagerLayout";
 import StorageEndpointsPage from "./features/admin/StorageEndpointsPage";
 import EndpointStatusPage from "./features/admin/EndpointStatusPage";
+import EndpointStatusDetailPage from "./features/admin/EndpointStatusDetailPage";
 import ManagerUsersPage from "./features/manager/ManagerUsersPage";
 import ManagerUserKeysPage from "./features/manager/ManagerUserKeysPage";
 import BucketDetailPage from "./features/manager/BucketDetailPage";
@@ -197,6 +198,13 @@ function AdminEndpointStatusRoute() {
     : <FeatureDisabledPage feature="Endpoint Status" />;
 }
 
+function AdminEndpointStatusDetailRoute() {
+  const { generalSettings } = useGeneralSettings();
+  return generalSettings.endpoint_status_enabled
+    ? <EndpointStatusDetailPage />
+    : <FeatureDisabledPage feature="Endpoint Status" />;
+}
+
 function RequireRole({ roles }: { roles: string[] }) {
   const user = getStoredUser();
   if (!user || !user.role) return <Navigate to="/login" replace />;
@@ -304,6 +312,7 @@ export default function AppRouter() {
               <Route path="s3-users/:userId/keys" element={<S3UserKeysPage />} />
               <Route path="storage-endpoints" element={<StorageEndpointsPage />} />
               <Route path="endpoint-status" element={<AdminEndpointStatusRoute />} />
+              <Route path="endpoint-status/:endpointId" element={<AdminEndpointStatusDetailRoute />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="metrics" element={<AdminMetricsPage />} />

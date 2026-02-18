@@ -2,7 +2,10 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { fetchManagerWorkspaceHealthOverview, WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
 import { useS3AccountContext } from "./S3AccountContext";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
@@ -28,6 +31,7 @@ function getCapabilities(): SessionCapabilities | null {
 }
 
 export default function ManagerDashboard() {
+  const { generalSettings } = useGeneralSettings();
   const {
     accounts,
     selectedS3AccountId,
@@ -65,6 +69,37 @@ export default function ManagerDashboard() {
   );
   const accountLabel = selected?.display_name ?? sessionS3AccountName ?? "S3 session";
   const iamDisabled = isS3User || isConnection || !iamFeatureEnabled;
+  const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
+  const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
+  const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!generalSettings.endpoint_status_enabled || !hasContext) {
+      setWorkspaceHealth(null);
+      setWorkspaceHealthError(null);
+      setWorkspaceHealthLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setWorkspaceHealthLoading(true);
+    setWorkspaceHealthError(null);
+    fetchManagerWorkspaceHealthOverview(accountIdForApi)
+      .then((data) => {
+        if (cancelled) return;
+        setWorkspaceHealth(data);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWorkspaceHealth(null);
+        setWorkspaceHealthError("Unable to load endpoint health for this account.");
+      })
+      .finally(() => {
+        if (!cancelled) setWorkspaceHealthLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountIdForApi, generalSettings.endpoint_status_enabled, hasContext]);
 
   return (
     <div className="space-y-4">
@@ -106,7 +141,15 @@ export default function ManagerDashboard() {
             iamLoading={iamLoading}
             iamError={iamError}
           />
-
+          {generalSettings.endpoint_status_enabled && (
+            <WorkspaceEndpointHealthCards
+              data={workspaceHealth}
+              loading={workspaceHealthLoading}
+              error={workspaceHealthError}
+              title="Endpoint Health (Account Context)"
+              showStatusCounters={false}
+            />
+          )}
         </>
       )}
     </div>

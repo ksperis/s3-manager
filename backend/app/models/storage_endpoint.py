@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -11,6 +11,12 @@ from app.db import StorageProvider
 class StorageEndpointFeature(BaseModel):
     enabled: bool = False
     endpoint: Optional[str] = None
+
+
+class StorageEndpointHealthcheckFeature(BaseModel):
+    enabled: bool = True
+    mode: Literal["http", "s3"] = "http"
+    url: Optional[str] = None
 
 
 class StorageEndpointFeatures(BaseModel):
@@ -23,6 +29,7 @@ class StorageEndpointFeatures(BaseModel):
     iam: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     sns: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
     sse: StorageEndpointFeature = Field(default_factory=StorageEndpointFeature)
+    healthcheck: StorageEndpointHealthcheckFeature = Field(default_factory=StorageEndpointHealthcheckFeature)
 
 
 class StorageEndpointAdminOpsPermissions(BaseModel):

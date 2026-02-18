@@ -13,7 +13,12 @@ from .s3_user import S3User, UserS3User
 from .s3_connection import S3Connection, UserS3Connection
 from .oidc import OidcLoginState
 from .billing import BillingAssignment, BillingRateCard, BillingStorageDaily, BillingUsageDaily
-from .healthcheck import EndpointHealthCheck, EndpointHealthDaily
+from .healthcheck import (
+    EndpointHealthCheck,
+    EndpointHealthLatest,
+    EndpointHealthRollup,
+    EndpointHealthStatusSegment,
+)
 
 __all__ = [
     "Base",
@@ -40,5 +45,7 @@ __all__ = [
     "BillingStorageDaily",
     "BillingUsageDaily",
     "EndpointHealthCheck",
-    "EndpointHealthDaily",
+    "EndpointHealthLatest",
+    "EndpointHealthStatusSegment",
+    "EndpointHealthRollup",
 ]

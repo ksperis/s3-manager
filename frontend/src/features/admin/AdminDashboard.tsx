@@ -5,13 +5,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getBillingSummary } from "../../api/billing";
-import { fetchHealthSummary } from "../../api/healthchecks";
+import { fetchHealthSummary, fetchHealthWorkspaceOverview, WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
 import { dismissOnboarding, fetchOnboardingStatus, type OnboardingStatus } from "../../api/onboarding";
 import { AdminSummary, fetchAdminSummary } from "../../api/stats";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import StatCards from "../../components/StatCards";
+import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
 
 const ENDPOINT_STATUS_MAX_AGE_HOURS = 24;
 const ENDPOINT_STATUS_MAX_AGE_MS = ENDPOINT_STATUS_MAX_AGE_HOURS * 60 * 60 * 1000;
@@ -44,6 +45,9 @@ export default function AdminDashboard() {
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [billingFreshnessWarning, setBillingFreshnessWarning] = useState<string | null>(null);
   const [endpointFreshnessWarning, setEndpointFreshnessWarning] = useState<string | null>(null);
+  const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
+  const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
+  const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
   const [dismissBusy, setDismissBusy] = useState(false);
   const { generalSettings } = useGeneralSettings();
 
@@ -109,6 +113,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!generalSettings.endpoint_status_enabled) {
       setEndpointFreshnessWarning(null);
+      setWorkspaceHealth(null);
+      setWorkspaceHealthError(null);
+      setWorkspaceHealthLoading(false);
       return;
     }
     let cancelled = false;
@@ -148,6 +155,31 @@ export default function AdminDashboard() {
       }
     };
     verifyEndpointStatusFreshness();
+    return () => {
+      cancelled = true;
+    };
+  }, [generalSettings.endpoint_status_enabled]);
+
+  useEffect(() => {
+    if (!generalSettings.endpoint_status_enabled) return;
+    let cancelled = false;
+    setWorkspaceHealthLoading(true);
+    setWorkspaceHealthError(null);
+    fetchHealthWorkspaceOverview()
+      .then((data) => {
+        if (cancelled) return;
+        setWorkspaceHealth(data);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWorkspaceHealth(null);
+        setWorkspaceHealthError("Unable to load workspace endpoint health.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setWorkspaceHealthLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -408,6 +440,16 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {generalSettings.endpoint_status_enabled && (
+        <WorkspaceEndpointHealthCards
+          data={workspaceHealth}
+          loading={workspaceHealthLoading}
+          error={workspaceHealthError}
+          title="Endpoint Health (Platform)"
+          action={{ to: "/admin/endpoint-status", label: "Open Endpoint Status" }}
+        />
+      )}
 
       <StatCards stats={cards} columns={3} />
     </div>

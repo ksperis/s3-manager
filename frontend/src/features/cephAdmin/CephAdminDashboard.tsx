@@ -2,8 +2,12 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { fetchHealthWorkspaceOverview, WorkspaceEndpointHealthOverviewResponse } from "../../api/healthchecks";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageHeader from "../../components/PageHeader";
+import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 
 type CardLink = {
@@ -20,7 +24,42 @@ const cards: CardLink[] = [
 ];
 
 export default function CephAdminDashboard() {
+  const { generalSettings } = useGeneralSettings();
   const { selectedEndpoint } = useCephAdminEndpoint();
+  const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
+  const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
+  const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!generalSettings.endpoint_status_enabled || !selectedEndpoint?.id) {
+      setWorkspaceHealth(null);
+      setWorkspaceHealthError(null);
+      setWorkspaceHealthLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setWorkspaceHealthLoading(true);
+    setWorkspaceHealthError(null);
+    fetchHealthWorkspaceOverview(selectedEndpoint.id)
+      .then((data) => {
+        if (cancelled) return;
+        setWorkspaceHealth(data);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWorkspaceHealth(null);
+        setWorkspaceHealthError("Unable to load endpoint health for this endpoint.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setWorkspaceHealthLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [generalSettings.endpoint_status_enabled, selectedEndpoint?.id]);
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -28,6 +67,21 @@ export default function CephAdminDashboard() {
         description={`Cluster-level RGW administration. Active endpoint: ${selectedEndpoint?.name ?? "—"}.`}
         breadcrumbs={[{ label: "Ceph Admin" }]}
       />
+      {generalSettings.endpoint_status_enabled && (
+        <WorkspaceEndpointHealthCards
+          data={workspaceHealth}
+          loading={workspaceHealthLoading}
+          error={workspaceHealthError}
+          title="Endpoint Health (Active Endpoint)"
+          showStatusCounters={false}
+          action={
+            selectedEndpoint?.id
+              ? { to: `/admin/endpoint-status/${selectedEndpoint.id}`, label: "View details" }
+              : undefined
+          }
+          className="grid gap-4"
+        />
+      )}
       <div className="grid gap-4 md:grid-cols-3">
         {cards.map((card) => (
           <Link

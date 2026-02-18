@@ -1,17 +1,23 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import logging
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
 from app.db import S3Account
+from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.routers.dependencies import (
     get_account_context,
     require_metrics_capable_manager,
     require_usage_capable_manager,
 )
+from app.services.app_settings_service import load_app_settings
 from app.services.buckets_service import BucketsService, get_buckets_service
+from app.services.healthcheck_service import HealthCheckService
 from app.services.rgw_admin import RGWAdminError
 from app.services.rgw_iam import get_iam_service
 from app.services.traffic_service import TrafficService, TrafficWindow
@@ -127,3 +133,30 @@ def account_traffic(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RGWAdminError as exc:
         raise HTTPException(status_code=502, detail=f"Unable to fetch traffic logs: {exc}") from exc
+
+
+@router.get("/endpoint-health", response_model=WorkspaceEndpointHealthOverviewResponse)
+def endpoint_health_overview(
+    account: S3Account = Depends(get_account_context),
+    db: Session = Depends(get_db),
+) -> WorkspaceEndpointHealthOverviewResponse:
+    app_settings = load_app_settings()
+    if not app_settings.general.endpoint_status_enabled:
+        raise HTTPException(status_code=403, detail="Endpoint Status feature is disabled.")
+    endpoint_id = getattr(account, "storage_endpoint_id", None)
+    if endpoint_id is None:
+        return WorkspaceEndpointHealthOverviewResponse(
+            generated_at=datetime.utcnow().isoformat(),
+            incident_highlight_minutes=max(1, int(app_settings.healthcheck_incident_recent_minutes or 720)),
+            endpoint_count=0,
+            up_count=0,
+            degraded_count=0,
+            down_count=0,
+            unknown_count=0,
+            endpoints=[],
+            incidents=[],
+        )
+    service = HealthCheckService(db)
+    return WorkspaceEndpointHealthOverviewResponse(
+        **service.build_workspace_health_overview(endpoint_id=int(endpoint_id))
+    )

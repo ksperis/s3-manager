@@ -11,6 +11,12 @@ export type StorageEndpointFeature = {
   endpoint?: string | null;
 };
 
+export type StorageEndpointHealthcheckFeature = {
+  enabled: boolean;
+  mode: "http" | "s3";
+  url?: string | null;
+};
+
 export type StorageEndpointFeatures = {
   admin: StorageEndpointFeature;
   account: StorageEndpointFeature;
@@ -21,6 +27,7 @@ export type StorageEndpointFeatures = {
   iam: StorageEndpointFeature;
   sns: StorageEndpointFeature;
   sse: StorageEndpointFeature;
+  healthcheck: StorageEndpointHealthcheckFeature;
 };
 
 export type StorageEndpointAdminOpsPermissions = {

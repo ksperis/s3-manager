@@ -218,6 +218,26 @@ class Settings(BaseSettings):
         True,
         description="Verify TLS certificates for healthchecks (HEALTHCHECK_VERIFY_SSL)",
     )
+    healthcheck_latency_baseline_window_days: int = Field(
+        7,
+        description="Window (days) used to compute latency baseline per endpoint/mode (HEALTHCHECK_LATENCY_BASELINE_WINDOW_DAYS)",
+    )
+    healthcheck_baseline_sample_size: int = Field(
+        80,
+        description="Maximum number of recent UP checks used for latency baseline (HEALTHCHECK_BASELINE_SAMPLE_SIZE)",
+    )
+    healthcheck_relative_degraded_ratio: float = Field(
+        1.8,
+        description="Relative ratio over baseline latency that marks a check degraded (HEALTHCHECK_RELATIVE_DEGRADED_RATIO)",
+    )
+    healthcheck_relative_degraded_min_delta_ms: int = Field(
+        200,
+        description="Minimum absolute latency delta over baseline to mark degraded (HEALTHCHECK_RELATIVE_DEGRADED_MIN_DELTA_MS)",
+    )
+    healthcheck_incident_recent_minutes: int = Field(
+        720,
+        description="Minutes window to highlight recently ended incidents (HEALTHCHECK_INCIDENT_RECENT_MINUTES)",
+    )
 
     @field_validator("jwt_keys", "credential_keys", mode="before")
     @classmethod

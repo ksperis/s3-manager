@@ -36,16 +36,18 @@ type FormState = {
   features: FeaturesState;
 };
 
-type FeatureKey = "admin" | "account" | "sts" | "usage" | "metrics" | "static_website" | "iam" | "sns" | "sse";
+type HealthcheckMode = "http" | "s3";
+type FeatureKey = "admin" | "account" | "sts" | "usage" | "metrics" | "static_website" | "iam" | "sns" | "sse" | "healthcheck";
 
 type FeatureState = {
   enabled: boolean;
   endpoint: string;
+  mode?: HealthcheckMode;
 };
 
 type FeaturesState = Record<FeatureKey, FeatureState>;
 
-const FEATURE_KEYS: FeatureKey[] = ["admin", "account", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse"];
+const FEATURE_KEYS: FeatureKey[] = ["admin", "account", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse", "healthcheck"];
 const ADMIN_OPS_COMMAND = [
   "radosgw-admin user create \\",
   '  --uid="s3m-admin" \\',
@@ -76,6 +78,7 @@ function createEmptyFeatures(): FeaturesState {
     iam: { enabled: false, endpoint: "" },
     sns: { enabled: false, endpoint: "" },
     sse: { enabled: false, endpoint: "" },
+    healthcheck: { enabled: true, endpoint: "", mode: "http" },
   };
 }
 
@@ -115,6 +118,7 @@ function applyFeatureConstraints(features: FeaturesState, provider: StorageProvi
     iam: { ...features.iam },
     sns: { ...features.sns },
     sse: { ...features.sse },
+    healthcheck: { ...features.healthcheck, mode: features.healthcheck.mode === "s3" ? "s3" : "http" },
   };
   if (provider !== "ceph") {
     next.admin.enabled = false;
@@ -122,12 +126,16 @@ function applyFeatureConstraints(features: FeaturesState, provider: StorageProvi
     next.usage.enabled = false;
     next.metrics.enabled = false;
     next.sns.enabled = false;
+    next.healthcheck.mode = "http";
   }
   if (!next.admin.enabled) {
     next.account.enabled = false;
   }
   if (!next.sts.enabled) {
     next.sts.endpoint = "";
+  }
+  if (next.healthcheck.mode !== "s3") {
+    next.healthcheck.mode = "http";
   }
   return next;
 }
@@ -140,6 +148,12 @@ function buildFeaturesYaml(features: FeaturesState): string {
     lines.push(`    enabled: ${entry.enabled ? "true" : "false"}`);
     if ((key === "admin" || key === "sts") && entry.enabled && entry.endpoint.trim()) {
       lines.push(`    endpoint: ${entry.endpoint.trim()}`);
+    }
+    if (key === "healthcheck") {
+      lines.push(`    mode: ${entry.mode === "s3" ? "s3" : "http"}`);
+      if (entry.endpoint.trim()) {
+        lines.push(`    healthcheck_url: ${entry.endpoint.trim()}`);
+      }
     }
   });
   return lines.join("\n");
@@ -257,6 +271,11 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
           enabled: Boolean(endpoint.features.sse?.enabled),
           endpoint: "",
         },
+        healthcheck: {
+          enabled: endpoint.features.healthcheck?.enabled !== false,
+          endpoint: endpoint.features.healthcheck?.url ?? "",
+          mode: endpoint.features.healthcheck?.mode === "s3" ? "s3" : "http",
+        },
       },
       provider
     );
@@ -271,6 +290,7 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
     iam: { enabled: resolveCapability(endpoint, "iam"), endpoint: "" },
     sns: { enabled: resolveCapability(endpoint, "sns"), endpoint: "" },
     sse: { enabled: resolveCapability(endpoint, "sse"), endpoint: "" },
+    healthcheck: { enabled: true, endpoint: "", mode: "http" },
   };
   return applyFeatureConstraints(fallback, provider);
 }
@@ -687,6 +707,8 @@ export default function StorageEndpointsPage() {
     const iamEnabled = features.iam.enabled;
     const snsEnabled = features.sns.enabled;
     const sseEnabled = features.sse.enabled;
+    const healthcheckMode = features.healthcheck.mode === "s3" ? "s3" : "http";
+    const healthcheckUrl = features.healthcheck.endpoint.trim();
     const settingDefault = defaultBusyId === endpoint.id;
     const adminEndpointOverride = features.admin.endpoint.trim();
     const stsEndpointOverride = features.sts.endpoint.trim();
@@ -736,6 +758,17 @@ export default function StorageEndpointsPage() {
                 </code>
               </div>
             )}
+            <div className="flex flex-wrap items-center gap-2 ui-body text-slate-600 dark:text-slate-300">
+              <span className="font-semibold text-slate-700 dark:text-slate-100">Healthcheck:</span>
+              <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                {healthcheckMode.toUpperCase()}
+              </code>
+              {healthcheckUrl && (
+                <code className="rounded bg-slate-100 px-2 py-1 ui-caption text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                  {healthcheckUrl}
+                </code>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {!endpoint.is_default && (
@@ -904,6 +937,9 @@ export default function StorageEndpointsPage() {
                 }`}
               >
                 SSE {sseEnabled ? "on" : "off"}
+              </span>
+              <span className="rounded-full bg-sky-100 px-2 py-0.5 ui-caption font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-100">
+                Check mode {healthcheckMode.toUpperCase()}
               </span>
             </div>
           </div>
@@ -1359,6 +1395,44 @@ export default function StorageEndpointsPage() {
                       placeholder="https://sts.example.com"
                       disabled={!form.features.sts.enabled}
                     />
+                  </label>
+                  <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
+                    Healthcheck mode
+                    <select
+                      value={form.features.healthcheck.mode ?? "http"}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          healthcheck: {
+                            ...current.healthcheck,
+                            mode: e.target.value === "s3" ? "s3" : "http",
+                          },
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      disabled={!cephMode}
+                    >
+                      <option value="http">HTTP probe</option>
+                      <option value="s3">S3 signed probe</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100 sm:col-span-2">
+                    Healthcheck URL override (optional)
+                    <input
+                      type="text"
+                      value={form.features.healthcheck.endpoint}
+                      onChange={(e) =>
+                        updateFeatures((current) => ({
+                          ...current,
+                          healthcheck: { ...current.healthcheck, endpoint: e.target.value },
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      placeholder="https://rgw.example.com/healthz"
+                    />
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Empty value uses the endpoint URL. S3 mode signs a lightweight request with endpoint credentials.
+                    </p>
                   </label>
                 </div>
               </div>

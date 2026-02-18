@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import logging
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,6 +21,7 @@ from app.models.portal import (
     PortalUsage,
     PortalUserCard,
 )
+from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.models.s3_account import S3Account as S3AccountSchema
 from app.routers.dependencies import (
     AccountAccess,
@@ -34,6 +36,7 @@ from app.services.audit_service import AuditService
 from app.services.portal_service import PortalService, get_portal_service
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_client import BucketNotEmptyError
+from app.services.healthcheck_service import HealthCheckService
 from app.utils.storage_endpoint_features import (
     features_to_capabilities,
     normalize_features_config,
@@ -159,6 +162,33 @@ def portal_usage(
         return service.get_usage(actor, access)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/endpoint-health", response_model=WorkspaceEndpointHealthOverviewResponse)
+def portal_endpoint_health(
+    account: S3Account = Depends(get_portal_account_context),
+    db: Session = Depends(get_db),
+) -> WorkspaceEndpointHealthOverviewResponse:
+    app_settings = load_app_settings()
+    if not app_settings.general.endpoint_status_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Endpoint Status feature is disabled.")
+    endpoint_id = getattr(account, "storage_endpoint_id", None)
+    if endpoint_id is None:
+        return WorkspaceEndpointHealthOverviewResponse(
+            generated_at=datetime.utcnow().isoformat(),
+            incident_highlight_minutes=max(1, int(app_settings.healthcheck_incident_recent_minutes or 720)),
+            endpoint_count=0,
+            up_count=0,
+            degraded_count=0,
+            down_count=0,
+            unknown_count=0,
+            endpoints=[],
+            incidents=[],
+        )
+    service = HealthCheckService(db)
+    return WorkspaceEndpointHealthOverviewResponse(
+        **service.build_workspace_health_overview(endpoint_id=int(endpoint_id))
+    )
 
 
 @router.get("/billing/me", response_model=BillingSubjectDetail)

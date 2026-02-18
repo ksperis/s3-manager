@@ -11,7 +11,18 @@ from app.db import StorageEndpoint, StorageProvider
 from app.utils.normalize import normalize_storage_provider
 
 
-FEATURE_KEYS: tuple[str, ...] = ("admin", "account", "sts", "usage", "metrics", "static_website", "iam", "sns", "sse")
+FEATURE_KEYS: tuple[str, ...] = (
+    "admin",
+    "account",
+    "sts",
+    "usage",
+    "metrics",
+    "static_website",
+    "iam",
+    "sns",
+    "sse",
+    "healthcheck",
+)
 
 DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
     StorageProvider.CEPH: {
@@ -24,6 +35,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "iam": {"enabled": False, "endpoint": None},
         "sns": {"enabled": False, "endpoint": None},
         "sse": {"enabled": False, "endpoint": None},
+        "healthcheck": {"enabled": True, "mode": "http", "url": None},
     },
     StorageProvider.OTHER: {
         "admin": {"enabled": False, "endpoint": None},
@@ -35,6 +47,7 @@ DEFAULT_FEATURES: dict[StorageProvider, dict[str, dict[str, Any]]] = {
         "iam": {"enabled": False, "endpoint": None},
         "sns": {"enabled": False, "endpoint": None},
         "sse": {"enabled": False, "endpoint": None},
+        "healthcheck": {"enabled": True, "mode": "http", "url": None},
     },
 }
 
@@ -52,6 +65,9 @@ class EndpointFeatureFlags:
     iam_enabled: bool
     sns_enabled: bool
     sse_enabled: bool
+    healthcheck_enabled: bool
+    healthcheck_mode: str
+    healthcheck_url: Optional[str]
 
 
 def _normalize_url(value: Optional[str]) -> Optional[str]:
@@ -105,6 +121,26 @@ def normalize_features_config(
             if endpoint is not None and not isinstance(endpoint, str):
                 raise ValueError(f"Feature '{key}.endpoint' must be a string.")
             features[key]["endpoint"] = _normalize_url(endpoint)
+        if key == "healthcheck":
+            if "mode" in value:
+                mode = value.get("mode")
+                if not isinstance(mode, str):
+                    raise ValueError("Feature 'healthcheck.mode' must be a string.")
+                normalized_mode = mode.strip().lower()
+                if normalized_mode not in {"http", "s3"}:
+                    raise ValueError("Feature 'healthcheck.mode' must be 'http' or 's3'.")
+                features[key]["mode"] = normalized_mode
+            if "url" in value or "healthcheck_url" in value:
+                url = value.get("url") if "url" in value else value.get("healthcheck_url")
+                if url is not None and not isinstance(url, str):
+                    raise ValueError("Feature 'healthcheck.url' must be a string.")
+                features[key]["url"] = _normalize_url(url)
+            # Backward compatibility with older key naming.
+            if "endpoint" in value and "url" not in value and "healthcheck_url" not in value:
+                endpoint = value.get("endpoint")
+                if endpoint is not None and not isinstance(endpoint, str):
+                    raise ValueError("Feature 'healthcheck.endpoint' must be a string.")
+                features[key]["url"] = _normalize_url(endpoint)
 
     if normalized_provider == StorageProvider.CEPH and "account" not in raw_features:
         # Backward compatibility for endpoints saved before the "account" feature existed.
@@ -127,6 +163,12 @@ def dump_features_config(features: dict[str, dict[str, Any]]) -> str:
         endpoint = features.get(key, {}).get("endpoint")
         if key in {"admin", "sts"} and endpoint:
             entry["endpoint"] = endpoint
+        if key == "healthcheck":
+            mode = str(features.get(key, {}).get("mode") or "http").strip().lower()
+            entry["mode"] = "s3" if mode == "s3" else "http"
+            url = features.get(key, {}).get("url")
+            if url:
+                entry["healthcheck_url"] = url
         payload["features"][key] = entry
     dumped = yaml.safe_dump(payload, sort_keys=False, default_flow_style=False)
     return dumped.strip()
@@ -146,6 +188,9 @@ def resolve_feature_flags(endpoint: StorageEndpoint) -> EndpointFeatureFlags:
         iam_enabled=bool(features.get("iam", {}).get("enabled")),
         sns_enabled=bool(features.get("sns", {}).get("enabled")),
         sse_enabled=bool(features.get("sse", {}).get("enabled")),
+        healthcheck_enabled=bool(features.get("healthcheck", {}).get("enabled", True)),
+        healthcheck_mode=str(features.get("healthcheck", {}).get("mode") or "http").strip().lower(),
+        healthcheck_url=features.get("healthcheck", {}).get("url"),
     )
 
 
