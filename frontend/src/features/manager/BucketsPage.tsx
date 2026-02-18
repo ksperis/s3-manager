@@ -30,14 +30,12 @@ type BucketForm = {
   name: string;
   locationConstraint: string;
   versioning: boolean;
-  encryption: string;
 };
 
 const defaultForm: BucketForm = {
   name: "",
   locationConstraint: "",
   versioning: false,
-  encryption: "",
 };
 
 const buildDefaultForm = (): BucketForm => ({
@@ -868,21 +866,6 @@ export default function BucketsPage() {
 
             {wizardStep === 1 && (
               <div className="space-y-4">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-500 opacity-60 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
-                  <div className="flex items-center justify-between">
-                    <span>
-                      Server-side encryption
-                      <span className="block ui-caption text-slate-500 dark:text-slate-400">AES256, aws:kms, KMS key...</span>
-                    </span>
-                    <input
-                      value={bucketForm.encryption}
-                      readOnly
-                      disabled
-                      className="ml-3 w-40 rounded-md border border-dashed border-slate-300 px-2 py-1 ui-caption dark:border-slate-600 dark:bg-slate-900"
-                      placeholder="ex: AES256"
-                    />
-                  </div>
-                </div>
                 <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 ui-body text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-100">
                   <span>
                     Versioning
