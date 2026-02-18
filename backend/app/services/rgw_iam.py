@@ -485,7 +485,7 @@ class RGWIAMService:
             err = exc.response.get("Error", {}) if hasattr(exc, "response") else {}
             status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") if hasattr(exc, "response") else None
             if status == 405 or err.get("Code") in {"NotImplemented", "MethodNotAllowed"}:
-                raise ValueError("IAM CreatePolicy is not supported by this RGW endpoint") from exc
+                raise ValueError("IAM CreatePolicy is not supported by this endpoint") from exc
             raise RuntimeError(f"Unable to create IAM policy: {exc}") from exc
         except BotoCoreError as exc:
             raise RuntimeError(f"Unable to create IAM policy: {exc}") from exc
