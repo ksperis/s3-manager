@@ -16,7 +16,7 @@ import { confirmAction } from "../../utils/confirm";
 
 export default function ManagerGroupUsersPage() {
   const { groupName } = useParams<{ groupName: string }>();
-  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection } = useS3AccountContext();
+  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
@@ -86,7 +86,7 @@ export default function ManagerGroupUsersPage() {
     if (groupName) {
       load(accountIdForApi, groupName);
     }
-  }, [accountIdForApi, needsS3AccountSelection, groupName]);
+  }, [accountIdForApi, needsS3AccountSelection, groupName, accessMode]);
 
   const availableUsers = useMemo(
     () => allUsers.filter((u) => !users.some((member) => member.name === u.name)),

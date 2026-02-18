@@ -179,10 +179,10 @@ function ManagerShell() {
             title={
               accessMode === "admin"
                 ? canToggleAccess
-                  ? "Admin mode active"
+                  ? "Admin mode active. Click to switch to portal mode (account-scoped permissions)."
                   : "Admin mode active"
                 : canToggleAccess
-                  ? "Portal mode active"
+                  ? "Portal mode active. Click to switch to admin mode (full account administration)."
                   : "Portal mode active"
             }
           >

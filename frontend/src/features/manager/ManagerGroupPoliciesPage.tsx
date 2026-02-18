@@ -24,7 +24,7 @@ import InlinePolicyEditor from "./InlinePolicyEditor";
 
 export default function ManagerGroupPoliciesPage() {
   const { groupName } = useParams<{ groupName: string }>();
-  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection } = useS3AccountContext();
+  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
@@ -97,7 +97,7 @@ export default function ManagerGroupPoliciesPage() {
     if (groupName) {
       load(accountIdForApi, groupName);
     }
-  }, [accountIdForApi, needsS3AccountSelection, groupName]);
+  }, [accountIdForApi, needsS3AccountSelection, groupName, accessMode]);
 
   const handleRefresh = () => {
     if (needsS3AccountSelection) return;

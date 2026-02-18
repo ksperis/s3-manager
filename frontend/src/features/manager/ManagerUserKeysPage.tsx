@@ -41,7 +41,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 
 export default function ManagerUserKeysPage() {
   const { userName } = useParams<{ userName: string }>();
-  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection } = useS3AccountContext();
+  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
@@ -111,7 +111,7 @@ export default function ManagerUserKeysPage() {
     if (userName) {
       load(accountIdForApi, userName);
     }
-  }, [accountIdForApi, needsS3AccountSelection, userName]);
+  }, [accountIdForApi, needsS3AccountSelection, userName, accessMode]);
 
   const handleCreateKey = async () => {
     if (needsS3AccountSelection || !userName) return;

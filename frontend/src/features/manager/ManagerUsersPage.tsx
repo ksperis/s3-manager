@@ -29,7 +29,7 @@ import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 export default function ManagerUsersPage() {
   type SortField = keyof IAMUser;
 
-  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection } = useS3AccountContext();
+  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
@@ -139,7 +139,7 @@ export default function ManagerUsersPage() {
     setInlineDrafts([]);
     setInlineDraftName("");
     setInlinePolicyText("");
-  }, [accountIdForApi, needsS3AccountSelection]);
+  }, [accountIdForApi, needsS3AccountSelection, accessMode]);
 
   useEffect(() => {
     setSelectedPolicies((prev) => prev.filter((arn) => policies.some((p) => p.arn === arn)));

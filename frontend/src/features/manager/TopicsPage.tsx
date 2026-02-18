@@ -79,6 +79,7 @@ export default function TopicsPage() {
     accountIdForApi,
     requiresS3AccountSelection,
     sessionS3AccountName,
+    accessMode,
   } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const selectedS3Account = useMemo(() => {
@@ -176,7 +177,7 @@ export default function TopicsPage() {
       return;
     }
     fetchTopics(accountIdForApi);
-  }, [accountIdForApi, needsS3AccountSelection]);
+  }, [accountIdForApi, needsS3AccountSelection, accessMode]);
 
   const openCreateModal = () => {
     setShowCreateModal(true);

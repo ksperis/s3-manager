@@ -253,7 +253,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   const params = useParams<{ bucketName: string }>();
   const bucketName = bucketNameOverride ?? params.bucketName;
   const isCephAdmin = mode === "ceph-admin";
-  const { accounts, selectedS3AccountId, accountIdForApi, requiresS3AccountSelection } = useS3AccountContext();
+  const { accounts, selectedS3AccountId, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
   const { selectedEndpointId, selectedEndpoint } = useCephAdminEndpoint();
   const [bucket, setBucket] = useState<Bucket | null>(null);
   const [loadingBucket, setLoadingBucket] = useState(false);
@@ -1035,6 +1035,11 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     loadWebsite,
     refreshBucketMeta,
   ]);
+
+  useEffect(() => {
+    if (isCephAdmin || !hasContext) return;
+    refreshActiveTab();
+  }, [accessMode, hasContext, isCephAdmin, refreshActiveTab]);
 
   const activeTabLoading = useMemo(() => {
     if (activeTab === "overview") {

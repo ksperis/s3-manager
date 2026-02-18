@@ -159,7 +159,7 @@ const persistVisibleColumns = (value: ColumnId[]) => {
 };
 
 export default function BucketsPage() {
-  const { accounts, selectedS3AccountId, requiresS3AccountSelection, sessionS3AccountName, accountIdForApi } = useS3AccountContext();
+  const { accounts, selectedS3AccountId, requiresS3AccountSelection, sessionS3AccountName, accountIdForApi, accessMode } = useS3AccountContext();
   const [buckets, setBuckets] = useState<BucketListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -356,7 +356,7 @@ export default function BucketsPage() {
       return;
     }
     fetchBuckets(accountIdForApi ?? null);
-  }, [accountIdForApi, needsS3AccountSelection, includeParams.join(","), requiresStats]);
+  }, [accountIdForApi, needsS3AccountSelection, includeParams.join(","), requiresStats, accessMode]);
 
   useEffect(() => {
     persistVisibleColumns(visibleColumns);

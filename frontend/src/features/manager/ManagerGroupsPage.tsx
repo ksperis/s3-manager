@@ -18,7 +18,7 @@ import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 
 export default function ManagerGroupsPage() {
-  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, selectedS3AccountId } = useS3AccountContext();
+  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, selectedS3AccountId, accessMode } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
@@ -93,7 +93,7 @@ export default function ManagerGroupsPage() {
     setInlineDrafts([]);
     setInlineDraftName("");
     setInlinePolicyText("");
-  }, [accountIdForApi, needsS3AccountSelection]);
+  }, [accountIdForApi, needsS3AccountSelection, accessMode]);
 
   useEffect(() => {
     if (selectedPolicies.length > 0) {
