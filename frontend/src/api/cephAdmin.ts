@@ -27,6 +27,7 @@ export type CephAdminEndpoint = {
 export type CephAdminEndpointAccess = {
   endpoint_id: number;
   can_admin: boolean;
+  can_accounts: boolean;
   can_metrics: boolean;
   admin_warning?: string | null;
 };

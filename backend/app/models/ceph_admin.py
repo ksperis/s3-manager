@@ -21,6 +21,7 @@ class CephAdminEndpoint(BaseModel):
 class CephAdminEndpointAccess(BaseModel):
     endpoint_id: int
     can_admin: bool = False
+    can_accounts: bool = False
     can_metrics: bool = False
     admin_warning: Optional[str] = None
 

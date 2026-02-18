@@ -84,6 +84,7 @@ def test_get_ceph_admin_endpoint_access_reports_warning_and_metrics_capability(m
 
     assert payload.endpoint_id == endpoint.id
     assert payload.can_admin is False
+    assert payload.can_accounts is False
     assert payload.can_metrics is True
     assert payload.admin_warning == "Ceph Admin workspace is unavailable for this endpoint"
 
@@ -91,9 +92,32 @@ def test_get_ceph_admin_endpoint_access_reports_warning_and_metrics_capability(m
 def test_get_ceph_admin_endpoint_access_disables_metrics_without_supervision_credentials(monkeypatch):
     endpoint = _build_endpoint(12, usage_enabled=True, metrics_enabled=True, has_supervision_credentials=False)
     monkeypatch.setattr(endpoints_router, "validate_ceph_admin_service_identity", lambda _endpoint: None)
+    monkeypatch.setattr(
+        endpoints_router,
+        "get_rgw_admin_client",
+        lambda **kwargs: SimpleNamespace(get_account=lambda account_id, allow_not_found=True: None),
+    )
 
     payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint)
 
     assert payload.can_admin is True
+    assert payload.can_accounts is True
     assert payload.can_metrics is False
     assert payload.admin_warning is None
+
+
+def test_get_ceph_admin_endpoint_access_disables_accounts_when_account_api_unavailable(monkeypatch):
+    endpoint = _build_endpoint(13, usage_enabled=True, metrics_enabled=True, has_supervision_credentials=True)
+    monkeypatch.setattr(endpoints_router, "validate_ceph_admin_service_identity", lambda _endpoint: None)
+
+    class _FailingClient:
+        def get_account(self, account_id, allow_not_found=True):
+            raise endpoints_router.RGWAdminError("RGW admin error 403: AccessDenied")
+
+    monkeypatch.setattr(endpoints_router, "get_rgw_admin_client", lambda **kwargs: _FailingClient())
+
+    payload = endpoints_router.get_ceph_admin_endpoint_access(endpoint=endpoint)
+
+    assert payload.can_admin is True
+    assert payload.can_accounts is False
+    assert payload.can_metrics is True

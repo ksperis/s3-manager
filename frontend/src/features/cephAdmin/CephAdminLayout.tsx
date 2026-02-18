@@ -32,6 +32,11 @@ function CephAdminShell() {
     !selectedEndpointAccessLoading &&
     Boolean(selectedEndpointAccess?.can_metrics) &&
     (usageFeatureEnabled || trafficFeatureEnabled);
+  const canAccounts =
+    endpointSelected &&
+    !selectedEndpointAccessLoading &&
+    canAdmin &&
+    Boolean(selectedEndpointAccess?.can_accounts);
   const adminWarning = endpointSelected && !selectedEndpointAccessLoading ? selectedEndpointAccess?.admin_warning ?? null : null;
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -52,7 +57,7 @@ function CephAdminShell() {
     {
       label: "Ceph S3",
       links: [
-        { to: "/ceph-admin/accounts", label: "RGW Accounts", disabled: !canAdmin },
+        { to: "/ceph-admin/accounts", label: "RGW Accounts", disabled: !canAccounts },
         { to: "/ceph-admin/users", label: "RGW Users", disabled: !canAdmin },
         { to: "/ceph-admin/buckets", label: "Buckets", disabled: !canAdmin },
       ],

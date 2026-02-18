@@ -21,7 +21,8 @@ from app.routers.ceph_admin.dependencies import (
     validate_ceph_admin_service_identity,
 )
 from app.routers.dependencies import get_current_ceph_admin
-from app.services.rgw_admin import RGWAdminError
+from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
+from app.utils.storage_endpoint_features import resolve_admin_endpoint
 
 router = APIRouter(prefix="/ceph-admin/endpoints", tags=["ceph-admin-endpoints"])
 
@@ -184,9 +185,26 @@ def get_ceph_admin_endpoint_access(
 ) -> CephAdminEndpointAccess:
     has_supervision_credentials = bool(endpoint.supervision_access_key and endpoint.supervision_secret_key)
     admin_warning = validate_ceph_admin_service_identity(endpoint)
+    can_accounts = False
+    if admin_warning is None:
+        admin_endpoint = resolve_admin_endpoint(endpoint)
+        if admin_endpoint and endpoint.ceph_admin_access_key and endpoint.ceph_admin_secret_key:
+            try:
+                admin_client = get_rgw_admin_client(
+                    access_key=endpoint.ceph_admin_access_key,
+                    secret_key=endpoint.ceph_admin_secret_key,
+                    endpoint=admin_endpoint,
+                    region=endpoint.region,
+                )
+                # Probe /admin/account directly; not_found still means the API is reachable.
+                admin_client.get_account("RGW00000000000000000", allow_not_found=True)
+                can_accounts = True
+            except RGWAdminError:
+                can_accounts = False
     return CephAdminEndpointAccess(
         endpoint_id=endpoint.id,
         can_admin=admin_warning is None,
+        can_accounts=can_accounts,
         can_metrics=has_supervision_credentials,
         admin_warning=admin_warning,
     )
