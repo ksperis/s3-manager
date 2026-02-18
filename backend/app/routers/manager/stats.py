@@ -63,8 +63,7 @@ def account_stats(
         )
         users = _safe_list("users", iam.list_users)
         groups = _safe_list("groups", iam.list_groups)
-        if not caps or caps.can_manage_roles:
-            roles = _safe_list("roles", iam.list_roles)
+        roles = _safe_list("roles", iam.list_roles)
         policies = _safe_list("policies", iam.list_policies)
 
     total_bytes = sum((bucket.used_bytes or 0) for bucket in buckets if bucket.used_bytes is not None)

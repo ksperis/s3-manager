@@ -37,7 +37,6 @@ class AccountCapabilities:
     can_manage_buckets: bool = False
     can_manage_portal_users: bool = False
     can_manage_iam: bool = False
-    can_manage_roles: bool = False
     can_view_root_key: bool = False
     using_root_key: bool = False
 
@@ -217,7 +216,6 @@ def _resolve_connection_context(db: Session, user: User, connection_id: int, *, 
         can_manage_buckets=True,
         can_manage_portal_users=False,
         can_manage_iam=False,
-        can_manage_roles=False,
         can_view_root_key=False,
         using_root_key=False,
     )
@@ -308,7 +306,6 @@ def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int) -> S3Acco
         can_manage_buckets=True,
         can_manage_portal_users=False,
         can_manage_iam=False,
-        can_manage_roles=False,
         can_view_root_key=False,
         using_root_key=False,
     )
@@ -329,7 +326,6 @@ def _manager_membership_capabilities(
     else:
         using_root = bool(is_account_admin)
     can_manage_iam = bool(using_root or account_role == AccountRole.PORTAL_MANAGER.value)
-    can_manage_roles = bool(using_root)
     can_manage_buckets = bool(
         using_root or account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}
     )
@@ -338,7 +334,6 @@ def _manager_membership_capabilities(
         can_manage_buckets=can_manage_buckets,
         can_manage_portal_users=can_manage_portal_users,
         can_manage_iam=can_manage_iam,
-        can_manage_roles=can_manage_roles,
         can_view_root_key=using_root,
         using_root_key=using_root,
     )
@@ -445,7 +440,6 @@ def get_account_context(
         can_manage_buckets=actor.capabilities.can_manage_buckets,
         can_manage_portal_users=False,
         can_manage_iam=actor.capabilities.can_manage_iam,
-        can_manage_roles=actor.capabilities.can_manage_roles,
         can_view_root_key=False,
         using_root_key=False,
     )
@@ -497,13 +491,11 @@ def _membership_capabilities(link: Optional[UserS3Account], actor: ManagerActor)
         can_manage_portal_users = role == AccountRole.PORTAL_MANAGER.value
         can_manage_buckets = role == AccountRole.PORTAL_MANAGER.value
         can_manage_iam = bool(role == AccountRole.PORTAL_MANAGER.value or link.can_manage_iam or is_account_admin)
-        can_manage_roles = bool(is_account_admin)
         can_view_root_key = bool(link.can_view_root_key or is_account_admin)
         return role, AccountCapabilities(
             can_manage_buckets=can_manage_buckets,
             can_manage_portal_users=can_manage_portal_users,
             can_manage_iam=can_manage_iam,
-            can_manage_roles=can_manage_roles,
             can_view_root_key=can_view_root_key,
             using_root_key=is_account_admin,
         )
@@ -513,7 +505,6 @@ def _membership_capabilities(link: Optional[UserS3Account], actor: ManagerActor)
             can_manage_buckets=actor.capabilities.can_manage_buckets,
             can_manage_portal_users=False,
             can_manage_iam=actor.capabilities.can_manage_iam,
-            can_manage_roles=actor.capabilities.can_manage_roles,
             can_view_root_key=False,
             using_root_key=False,
         )
@@ -531,7 +522,6 @@ def _portal_membership_capabilities(link: Optional[UserS3Account]) -> tuple[str,
             can_manage_buckets=can_manage_buckets,
             can_manage_portal_users=can_manage_portal_users,
             can_manage_iam=False,
-            can_manage_roles=False,
             can_view_root_key=False,
             using_root_key=False,
         )
@@ -573,21 +563,12 @@ def require_portal_buckets(access: AccountAccess = Depends(get_portal_account_ac
     return access
 
 
-def _ensure_manager_capabilities(
-    account: S3Account,
-    require_iam: bool = False,
-    require_usage: bool = False,
-    require_roles: bool = False,
-) -> None:
+def _ensure_manager_capabilities(account: S3Account, require_iam: bool = False, require_usage: bool = False) -> None:
     caps: Optional[AccountCapabilities] = getattr(account, "_manager_capabilities", None)  # type: ignore[attr-defined]
     if not caps:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account context unavailable")
-    if require_roles:
-        require_iam = True
     if require_iam and not caps.can_manage_iam:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IAM management not allowed for this account")
-    if require_roles and not caps.can_manage_roles:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IAM role management not allowed for this account")
     if require_iam:
         endpoint = getattr(account, "storage_endpoint", None)
         if endpoint and not resolve_feature_flags(endpoint).iam_enabled:
@@ -628,14 +609,6 @@ def require_iam_capable_manager(
     actor: ManagerActor = Depends(get_current_actor),
 ) -> ManagerActor:
     _ensure_manager_capabilities(account, require_iam=True)
-    return actor
-
-
-def require_iam_roles_capable_manager(
-    account: S3Account = Depends(get_account_context),
-    actor: ManagerActor = Depends(get_current_actor),
-) -> ManagerActor:
-    _ensure_manager_capabilities(account, require_roles=True)
     return actor
 
 

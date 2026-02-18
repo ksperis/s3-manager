@@ -129,12 +129,10 @@ class SessionService:
 
     def _derive_capabilities(self, actor_type: str, user_info: Optional[dict], iam_full_access: bool) -> SessionCapabilities:
         can_manage_iam = actor_type == "account_root" or iam_full_access
-        can_manage_roles = actor_type == "account_root"
         can_view_traffic = actor_type == "account_root"
         can_manage_buckets = True
         return SessionCapabilities(
             can_manage_iam=can_manage_iam,
-            can_manage_roles=can_manage_roles,
             can_manage_buckets=can_manage_buckets,
             can_view_traffic=can_view_traffic,
         )
@@ -163,7 +161,6 @@ class SessionService:
         if not raw:
             return SessionCapabilities(
                 can_manage_iam=session.can_manage_iam,
-                can_manage_roles=(session.actor_type == "account_root"),
                 can_manage_buckets=session.can_manage_buckets,
                 can_view_traffic=session.can_view_traffic,
             )
@@ -173,7 +170,6 @@ class SessionService:
         except (TypeError, ValueError):
             return SessionCapabilities(
                 can_manage_iam=session.can_manage_iam,
-                can_manage_roles=(session.actor_type == "account_root"),
                 can_manage_buckets=session.can_manage_buckets,
                 can_view_traffic=session.can_view_traffic,
             )

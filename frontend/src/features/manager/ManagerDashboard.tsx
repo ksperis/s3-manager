@@ -38,7 +38,6 @@ export default function ManagerDashboard() {
     accountIdForApi,
     accessMode,
     managerStatsEnabled,
-    canManageRoles,
   } = useS3AccountContext();
   const capabilities = getCapabilities();
   const isS3User = selectedS3AccountType === "s3_user";
@@ -106,7 +105,6 @@ export default function ManagerDashboard() {
             iamOverview={iamOverview}
             iamLoading={iamLoading}
             iamError={iamError}
-            canManageRoles={Boolean(canManageRoles)}
           />
 
         </>
