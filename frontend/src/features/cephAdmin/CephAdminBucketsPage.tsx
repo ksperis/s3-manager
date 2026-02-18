@@ -1393,21 +1393,6 @@ const toBucketTagTarget = (bucketName: string, tenant?: string | null): BucketTa
   };
 };
 
-const parseBucketNamesInput = (value: string): string[] => {
-  const seen = new Set<string>();
-  const names: string[] = [];
-  value
-    .split(/[\n,]/g)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .forEach((name) => {
-      if (seen.has(name)) return;
-      seen.add(name);
-      names.push(name);
-    });
-  return names;
-};
-
 const formatBucketNamesPreview = (names: string[], max: number = 8) => {
   if (names.length <= max) return names.join(", ");
   return `${names.slice(0, max).join(", ")} (+${names.length - max} more)`;
@@ -1733,13 +1718,8 @@ export default function CephAdminBucketsPage() {
   const [bulkApplyError, setBulkApplyError] = useState<string | null>(null);
   const [bulkApplySummary, setBulkApplySummary] = useState<string | null>(null);
   const [bulkApplyProgress, setBulkApplyProgress] = useState<BulkApplyProgress | null>(null);
-  const [showTagEditor, setShowTagEditor] = useState(false);
-  const [tagTargets, setTagTargets] = useState<BucketTagTarget[]>([]);
-  const [tagInput, setTagInput] = useState("");
-  const [tagRemoveInput, setTagRemoveInput] = useState("");
-  const [tagBucketListInput, setTagBucketListInput] = useState("");
-  const [tagEditorError, setTagEditorError] = useState<string | null>(null);
-  const [tagEditorLoading, setTagEditorLoading] = useState(false);
+  const [selectionTagActionLoading, setSelectionTagActionLoading] = useState<"add" | "remove" | null>(null);
+  const [selectionTagAddInput, setSelectionTagAddInput] = useState("");
   const [tagSuggestionBucket, setTagSuggestionBucket] = useState<string | null>(null);
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
   const [activeOwnerTooltipKey, setActiveOwnerTooltipKey] = useState<string | null>(null);
@@ -1773,7 +1753,6 @@ export default function CephAdminBucketsPage() {
         .join("|"),
     [taggedBucketTargets]
   );
-  const parsedTagBucketListNames = useMemo(() => parseBucketNamesInput(tagBucketListInput), [tagBucketListInput]);
   const ownerQueryFilter = useMemo(() => ownerFilterFromSearch(location.search), [location.search]);
 
   useEffect(() => {
@@ -1830,13 +1809,8 @@ export default function CephAdminBucketsPage() {
   useEffect(() => {
     setUiTags(loadUiTags(selectedEndpointId));
     setEditingBucketName(null);
-    setShowTagEditor(false);
-    setTagTargets([]);
-    setTagInput("");
-    setTagRemoveInput("");
-    setTagBucketListInput("");
-    setTagEditorError(null);
-    setTagEditorLoading(false);
+    setSelectionTagActionLoading(null);
+    setSelectionTagAddInput("");
     setTagSuggestionBucket(null);
     setTagDrafts({});
     setActiveOwnerTooltipKey(null);
@@ -2263,6 +2237,8 @@ export default function CephAdminBucketsPage() {
     setBulkPreviewReady(false);
     setBulkApplyError(null);
     setBulkApplySummary(null);
+    setSelectionTagActionLoading(null);
+    setSelectionTagAddInput("");
   };
 
   const updateTagDraft = (bucketKey: string, value: string) => {
@@ -2374,73 +2350,17 @@ export default function CephAdminBucketsPage() {
     return { targets, missingNames };
   };
 
-  const closeTagEditor = () => {
-    setShowTagEditor(false);
-    setTagTargets([]);
-    setTagInput("");
-    setTagRemoveInput("");
-    setTagBucketListInput("");
-    setTagEditorError(null);
-    setTagEditorLoading(false);
-  };
-
-  const openTagEditor = (targets: BucketTagTarget[]) => {
-    const dedupedTargets = Array.from(new Map(targets.map((target) => [target.key, target])).values());
-    setTagTargets(dedupedTargets);
-    setTagEditorError(null);
-    setTagBucketListInput("");
-    if (dedupedTargets.length === 1) {
-      const existing = uiTags[dedupedTargets[0].key] ?? [];
-      setTagInput(existing.join(", "));
-      setTagRemoveInput("");
-    } else {
-      setTagInput("");
-      setTagRemoveInput("");
-    }
-    setShowTagEditor(true);
-  };
-
-  const openTagEditorForSelection = async () => {
-    if (!selectedEndpointId || selectedBucketList.length === 0 || tagEditorLoading) return;
-    setTagEditorLoading(true);
-    try {
-      const { targets, missingNames } = await resolveBucketTargetsByNames(selectedBucketList);
-      if (targets.length === 0) {
-        setError("Unable to resolve selected buckets for UI tag editing.");
-        return;
-      }
-      if (missingNames.length > 0) {
-        setError(`Some selected buckets no longer exist: ${formatBucketNamesPreview(missingNames)}.`);
-      }
-      openTagEditor(targets);
-    } catch (err) {
-      setError(extractError(err));
-    } finally {
-      setTagEditorLoading(false);
-    }
-  };
-
   const applyUiTagsToTargets = (
     targets: BucketTagTarget[],
     parsedAdd: string[],
-    parsedRemove: string[],
-    replaceWhenSingle: boolean
+    parsedRemove: string[]
   ) => {
     if (targets.length === 0) return;
     const removeSet = new Set(parsedRemove.map((tag) => tag.toLowerCase()));
     setUiTags((prev) => {
       const next = { ...prev };
       targets.forEach((target) => {
-        const existing = prev[target.key] ?? [];
-        if (replaceWhenSingle && targets.length === 1) {
-          if (parsedAdd.length === 0) {
-            delete next[target.key];
-          } else {
-            next[target.key] = parsedAdd;
-          }
-          return;
-        }
-        let updated = existing;
+        let updated = prev[target.key] ?? [];
         if (parsedAdd.length > 0) {
           updated = mergeUiTags(updated, parsedAdd);
         }
@@ -2457,50 +2377,49 @@ export default function CephAdminBucketsPage() {
     });
   };
 
-  const applyTagsToTargets = () => {
-    if (tagTargets.length === 0) return;
-    const parsedAdd = parseUiTags(tagInput);
-    const parsedRemove = parseUiTags(tagRemoveInput);
-    applyUiTagsToTargets(tagTargets, parsedAdd, parsedRemove, true);
-    closeTagEditor();
-  };
-
-  const applyTagsFromBucketList = async () => {
-    if (!selectedEndpointId || tagEditorLoading) return;
-    const parsedAdd = parseUiTags(tagInput);
-    if (parsedTagBucketListNames.length === 0) {
-      setTagEditorError("Provide at least one exact bucket name.");
-      return;
-    }
-    if (parsedAdd.length === 0) {
-      setTagEditorError("Provide at least one UI tag to add.");
-      return;
-    }
-    setTagEditorLoading(true);
-    setTagEditorError(null);
-    try {
-      const { targets, missingNames } = await resolveBucketTargetsByNames(parsedTagBucketListNames);
-      if (missingNames.length > 0) {
-        setTagEditorError(`Unknown bucket(s): ${formatBucketNamesPreview(missingNames)}.`);
-        return;
-      }
-      if (targets.length === 0) {
-        setTagEditorError("No matching buckets found.");
-        return;
-      }
-      applyUiTagsToTargets(targets, parsedAdd, [], false);
-      closeTagEditor();
-    } catch (err) {
-      setTagEditorError(extractError(err));
-    } finally {
-      setTagEditorLoading(false);
-    }
-  };
-
   const selectedBucketList = useMemo(
     () => Array.from(selectedBuckets.values()).sort((a, b) => a.localeCompare(b)),
     [selectedBuckets]
   );
+  const selectedUiTagSuggestions = useMemo(() => {
+    if (selectedBucketList.length === 0) return [];
+    const selectedNames = new Set(selectedBucketList.map(normalizeBucketName));
+    const tags: string[] = [];
+    Object.entries(uiTags).forEach(([storageKey, bucketTags]) => {
+      const parsed = parseBucketUiTagKey(storageKey);
+      if (!parsed) return;
+      if (!selectedNames.has(normalizeBucketName(parsed.name))) return;
+      tags.push(...normalizeUiTagValues(bucketTags));
+    });
+    return normalizeUiTagValues(tags).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }, [selectedBucketList, uiTags]);
+  const parsedSelectionTagAddInput = useMemo(() => parseUiTags(selectionTagAddInput), [selectionTagAddInput]);
+
+  const applyUiTagToSelection = async (rawTag: string, action: "add" | "remove") => {
+    if (!selectedEndpointId || selectedBucketList.length === 0 || selectionTagActionLoading) return;
+    const parsedTagValues = parseUiTags(rawTag);
+    if (parsedTagValues.length === 0) return;
+    setSelectionTagActionLoading(action);
+    try {
+      const { targets, missingNames } = await resolveBucketTargetsByNames(selectedBucketList);
+      if (targets.length === 0) {
+        setError("Unable to resolve selected buckets for UI tag update.");
+        return;
+      }
+      if (missingNames.length > 0) {
+        setError(`Some selected buckets no longer exist: ${formatBucketNamesPreview(missingNames)}.`);
+      }
+      if (action === "add") {
+        applyUiTagsToTargets(targets, parsedTagValues, []);
+      } else {
+        applyUiTagsToTargets(targets, [], parsedTagValues);
+      }
+    } catch (err) {
+      setError(extractError(err));
+    } finally {
+      setSelectionTagActionLoading(null);
+    }
+  };
 
   const bulkClipboardSourceBuckets = useMemo(
     () => (bulkConfigClipboard ? bulkConfigClipboard.buckets.map((bucket) => bucket.name) : []),
@@ -5833,18 +5752,6 @@ export default function CephAdminBucketsPage() {
               >
                 Configure
               </button>
-              <button
-                type="button"
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  openTagEditor([toBucketTagTarget(bucket.name, bucket.tenant)]);
-                  const parent = event.currentTarget.closest("details");
-                  if (parent) parent.removeAttribute("open");
-                }}
-              >
-                Edit UI tags
-              </button>
             </div>
           </details>
         </div>
@@ -6077,20 +5984,6 @@ export default function CephAdminBucketsPage() {
                         <option value="any">OR</option>
                         <option value="all">AND</option>
                       </select>
-                      <button
-                        type="button"
-                        onClick={() => openTagEditor([])}
-                        disabled={!selectedEndpointId}
-                        className={`inline-flex h-6 w-6 items-center justify-center rounded-md border text-xs font-semibold transition ${
-                          selectedEndpointId
-                            ? "border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                            : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
-                        }`}
-                        title="Tag bucket list"
-                        aria-label="Tag bucket list"
-                      >
-                        +
-                      </button>
                     </div>
                   </div>
                 )}
@@ -6612,6 +6505,94 @@ export default function CephAdminBucketsPage() {
                   >
                     Clear selection
                   </button>
+                  <details className="relative">
+                    <summary className="list-none rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600 [&::-webkit-details-marker]:hidden">
+                      + Tag selection
+                    </summary>
+                    <div className="absolute left-0 z-30 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      {availableUiTags.length === 0 ? (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">No existing UI tags yet.</p>
+                      ) : (
+                        <>
+                          <p className="px-1 pb-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Suggestions
+                          </p>
+                          <div className="max-h-40 space-y-1 overflow-auto">
+                            {availableUiTags.map((tag) => (
+                              <button
+                                key={`selection-add:${tag}`}
+                                type="button"
+                                className="flex w-full items-center rounded-md px-2 py-1 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  void applyUiTagToSelection(tag, "add");
+                                  const parent = event.currentTarget.closest("details");
+                                  if (parent) parent.removeAttribute("open");
+                                }}
+                              >
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
+                        <p className="px-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Custom</p>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={selectionTagAddInput}
+                            onChange={(event) => setSelectionTagAddInput(event.target.value)}
+                            placeholder="new-tag"
+                            className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          />
+                          <button
+                            type="button"
+                            className="rounded-md bg-primary px-2 py-1 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={parsedSelectionTagAddInput.length === 0 || selectionTagActionLoading !== null}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              const customTag = selectionTagAddInput;
+                              setSelectionTagAddInput("");
+                              void applyUiTagToSelection(customTag, "add");
+                              const parent = event.currentTarget.closest("details");
+                              if (parent) parent.removeAttribute("open");
+                            }}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </details>
+                  <details className="relative">
+                    <summary className="list-none rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600 [&::-webkit-details-marker]:hidden">
+                      - Tag selection
+                    </summary>
+                    <div className="absolute left-0 z-30 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      {selectedUiTagSuggestions.length === 0 ? (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">No UI tags found on this selection.</p>
+                      ) : (
+                        <div className="max-h-48 space-y-1 overflow-auto">
+                          {selectedUiTagSuggestions.map((tag) => (
+                            <button
+                              key={`selection-remove:${tag}`}
+                              type="button"
+                              className="flex w-full items-center rounded-md px-2 py-1 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                void applyUiTagToSelection(tag, "remove");
+                                const parent = event.currentTarget.closest("details");
+                                if (parent) parent.removeAttribute("open");
+                              }}
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </details>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -6627,16 +6608,6 @@ export default function CephAdminBucketsPage() {
                     className="rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
                   >
                     Bulk update
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void openTagEditorForSelection();
-                    }}
-                    disabled={tagEditorLoading}
-                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-                  >
-                    {tagEditorLoading ? "Resolving..." : "Edit UI tags"}
                   </button>
                   <button
                     type="button"
@@ -6760,11 +6731,6 @@ export default function CephAdminBucketsPage() {
           disabled={loading || !selectedEndpointId}
         />
       </div>
-      <datalist id="ui-tag-options">
-        {availableUiTags.map((tag) => (
-          <option key={tag} value={tag} />
-        ))}
-      </datalist>
       {editingBucketName && (
         <Modal
           title={`Configure bucket · ${editingBucketName}`}
@@ -7464,216 +7430,6 @@ export default function CephAdminBucketsPage() {
               )}
             </div>
           </div>
-        </Modal>
-      )}
-      {showTagEditor && (
-        <Modal title="UI tags" onClose={closeTagEditor} maxWidthClass="max-w-lg">
-          {tagTargets.length === 0 ? (
-            <div className="space-y-4">
-              <p className="ui-body text-slate-700 dark:text-slate-200">
-                Add UI tags to buckets provided below. Bucket names must match exactly.
-              </p>
-              <div className="space-y-2">
-                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Bucket names (exact, comma/newline separated)
-                </label>
-                <textarea
-                  value={tagBucketListInput}
-                  onChange={(e) => setTagBucketListInput(e.target.value)}
-                  rows={6}
-                  placeholder={"bucket-a\nbucket-b, bucket-c"}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  {parsedTagBucketListNames.length} unique bucket name{parsedTagBucketListNames.length > 1 ? "s" : ""} parsed.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Tags to add (comma separated)
-                </label>
-                <input
-                  type="text"
-                  value={tagInput}
-                  list="ui-tag-options"
-                  onChange={(e) => setTagInput(e.target.value)}
-                  placeholder="team-a, analytics, archived"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </div>
-              {availableUiTags.length > 0 && (
-                <div className="space-y-2">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Existing tags
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {availableUiTags.map((tag) => (
-                      <button
-                        type="button"
-                        key={tag}
-                        onClick={() => setTagInput((prev) => (prev ? `${prev}, ${tag}` : tag))}
-                        className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 ui-caption font-semibold text-amber-700 hover:border-amber-300 dark:border-amber-700/60 dark:bg-amber-900/40 dark:text-amber-100"
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {tagEditorError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{tagEditorError}</p>}
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-full border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
-                  onClick={closeTagEditor}
-                  disabled={tagEditorLoading}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => {
-                    void applyTagsFromBucketList();
-                  }}
-                  disabled={tagEditorLoading}
-                >
-                  {tagEditorLoading ? "Validating..." : "Validate & apply"}
-                </button>
-              </div>
-            </div>
-          ) : tagTargets.length > 1 ? (
-            <div className="space-y-4">
-              <p className="ui-body text-slate-700 dark:text-slate-200">
-                Add or remove UI tags for{" "}
-                <span className="font-semibold">
-                  {tagTargets.length} bucket{tagTargets.length > 1 ? "s" : ""}
-                </span>
-                . Existing tags are preserved.
-              </p>
-              <div className="space-y-2">
-                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Add tags (comma separated)
-                </label>
-                <input
-                  type="text"
-                  value={tagInput}
-                  list="ui-tag-options"
-                  onChange={(e) => setTagInput(e.target.value)}
-                  placeholder="team-a, analytics, archived"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Remove tags (comma separated)
-                </label>
-                <input
-                  type="text"
-                  value={tagRemoveInput}
-                  list="ui-tag-options"
-                  onChange={(e) => setTagRemoveInput(e.target.value)}
-                  placeholder="archived, deprecated"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </div>
-              {availableUiTags.length > 0 && (
-                <div className="space-y-2">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Existing tags
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {availableUiTags.map((tag) => (
-                      <button
-                        type="button"
-                        key={tag}
-                        onClick={() => setTagInput((prev) => (prev ? `${prev}, ${tag}` : tag))}
-                        className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 ui-caption font-semibold text-amber-700 hover:border-amber-300 dark:border-amber-700/60 dark:bg-amber-900/40 dark:text-amber-100"
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {tagEditorError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{tagEditorError}</p>}
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-full border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
-                  onClick={closeTagEditor}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
-                  onClick={applyTagsToTargets}
-                >
-                  Save tags
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="ui-body text-slate-700 dark:text-slate-200">
-                Apply UI tags to{" "}
-                <span className="font-semibold">
-                  {tagTargets[0].tenant ? `${tagTargets[0].tenant}/${tagTargets[0].name}` : tagTargets[0].name}
-                </span>
-                .
-              </p>
-              <div className="space-y-2">
-                <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Tags (comma separated)
-                </label>
-                <input
-                  type="text"
-                  value={tagInput}
-                  list="ui-tag-options"
-                  onChange={(e) => setTagInput(e.target.value)}
-                  placeholder="team-a, analytics, archived"
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </div>
-              {availableUiTags.length > 0 && (
-                <div className="space-y-2">
-                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Existing tags
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {availableUiTags.map((tag) => (
-                      <button
-                        type="button"
-                        key={tag}
-                        onClick={() => setTagInput((prev) => (prev ? `${prev}, ${tag}` : tag))}
-                        className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 ui-caption font-semibold text-amber-700 hover:border-amber-300 dark:border-amber-700/60 dark:bg-amber-900/40 dark:text-amber-100"
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {tagEditorError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">{tagEditorError}</p>}
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-full border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
-                  onClick={closeTagEditor}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
-                  onClick={applyTagsToTargets}
-                >
-                  Save tags
-                </button>
-              </div>
-            </div>
-          )}
         </Modal>
       )}
     </div>
