@@ -1720,6 +1720,7 @@ export default function CephAdminBucketsPage() {
   const [bulkApplyProgress, setBulkApplyProgress] = useState<BulkApplyProgress | null>(null);
   const [selectionTagActionLoading, setSelectionTagActionLoading] = useState<"add" | "remove" | null>(null);
   const [selectionTagAddInput, setSelectionTagAddInput] = useState("");
+  const [selectionExportLoading, setSelectionExportLoading] = useState<"text" | "csv" | "json" | null>(null);
   const [tagSuggestionBucket, setTagSuggestionBucket] = useState<string | null>(null);
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
   const [activeOwnerTooltipKey, setActiveOwnerTooltipKey] = useState<string | null>(null);
@@ -1811,6 +1812,7 @@ export default function CephAdminBucketsPage() {
     setEditingBucketName(null);
     setSelectionTagActionLoading(null);
     setSelectionTagAddInput("");
+    setSelectionExportLoading(null);
     setTagSuggestionBucket(null);
     setTagDrafts({});
     setActiveOwnerTooltipKey(null);
@@ -1963,6 +1965,28 @@ export default function CephAdminBucketsPage() {
     () => featureStateOptions.filter((option) => option.supported).map((option) => ({ ...option, key: option.id })),
     [featureStateOptions]
   );
+  const allExportColumnIds = useMemo<ColumnId[]>(
+    () => [
+      "tenant",
+      "owner",
+      "owner_name",
+      "used_bytes",
+      "quota_max_size_bytes",
+      "object_count",
+      "quota_max_objects",
+      "quota_usage_percent",
+      "quota_status",
+      "tags",
+      "ui_tags",
+      ...featureColumnOptions.map((column) => column.id),
+    ],
+    [featureColumnOptions]
+  );
+  const exportIncludeParams = useMemo(() => {
+    const include = new Set<string>(["owner_name", "tags"]);
+    featureColumnOptions.forEach((column) => include.add(column.id));
+    return Array.from(include.values());
+  }, [featureColumnOptions]);
 
   const includeParams = useMemo(() => {
     const include: string[] = [];
@@ -2239,6 +2263,7 @@ export default function CephAdminBucketsPage() {
     setBulkApplySummary(null);
     setSelectionTagActionLoading(null);
     setSelectionTagAddInput("");
+    setSelectionExportLoading(null);
   };
 
   const updateTagDraft = (bucketKey: string, value: string) => {
@@ -2598,178 +2623,221 @@ export default function CephAdminBucketsPage() {
     });
   }, [bulkConfigClipboard, bulkClipboardSameEndpoint, bulkOperation, selectedBucketList, showBulkUpdateModal]);
 
-  const exportSelectedBuckets = async () => {
-    if (selectedBucketList.length === 0) return;
-    try {
-      const bucketsByName = new Map<string, CephAdminBucket>();
-      items.forEach((bucket) => {
-        if (selectedBuckets.has(bucket.name)) {
-          bucketsByName.set(bucket.name, bucket);
-        }
-      });
-
-      const missingNames = selectedBucketList.filter((name) => !bucketsByName.has(name));
-      if (selectedEndpointId && missingNames.length > 0) {
-        const chunkSize = 50;
-        for (let start = 0; start < missingNames.length; start += chunkSize) {
-          const chunk = missingNames.slice(start, start + chunkSize);
-          const advancedFilter = JSON.stringify({
-            match: "any",
-            rules: [{ field: "name", op: "in", value: chunk }],
-          });
-          let nextPage = 1;
-          while (true) {
-            const response = await listCephAdminBuckets(selectedEndpointId, {
-              page: nextPage,
-              page_size: 200,
-              advanced_filter: advancedFilter,
-              include: includeParams,
-              with_stats: usageFeatureEnabled && requiresStats,
-            });
-            (response.items ?? []).forEach((bucket) => {
-              if (selectedBuckets.has(bucket.name) && !bucketsByName.has(bucket.name)) {
-                bucketsByName.set(bucket.name, bucket);
-              }
-            });
-            if (!response.has_next) break;
-            nextPage += 1;
-          }
-        }
+  const loadSelectedBucketsForExport = async () => {
+    const bucketsByName = new Map<string, CephAdminBucket>();
+    items.forEach((bucket) => {
+      if (selectedBuckets.has(bucket.name)) {
+        bucketsByName.set(bucket.name, bucket);
       }
+    });
+    if (!selectedEndpointId || selectedBucketList.length === 0) {
+      return bucketsByName;
+    }
 
-      const featureColumnById = new Map(featureColumnOptions.map((col) => [col.id, col]));
-      const visibleFeatureColumns = featureColumnOptions.filter((col) => visibleColumns.includes(col.id));
-
-      const exportColumns: Array<{ id: string; label: string; getValue: (bucket: CephAdminBucket) => string }> = [
-        { id: "name", label: "Name", getValue: (bucket) => bucket.name ?? "-" },
-      ];
-
-      visibleColumns.forEach((col) => {
-        if (col === "tenant") {
-          exportColumns.push({ id: col, label: "Tenant", getValue: (bucket) => bucket.tenant ?? "-" });
-          return;
-        }
-        if (col === "owner") {
-          exportColumns.push({ id: col, label: "Owner", getValue: (bucket) => bucket.owner ?? "-" });
-          return;
-        }
-        if (col === "owner_name") {
-          exportColumns.push({ id: col, label: "Owner name", getValue: (bucket) => bucket.owner_name ?? "-" });
-          return;
-        }
-        if (col === "used_bytes") {
-          exportColumns.push({ id: col, label: "Used", getValue: (bucket) => formatBytes(bucket.used_bytes) });
-          return;
-        }
-        if (col === "quota_max_size_bytes") {
-          exportColumns.push({
-            id: col,
-            label: "Quota",
-            getValue: (bucket) => {
-              const quota = normalizeQuotaLimit(bucket.quota_max_size_bytes);
-              return quota !== null ? formatBytes(quota) : "-";
-            },
-          });
-          return;
-        }
-        if (col === "object_count") {
-          exportColumns.push({ id: col, label: "Objects", getValue: (bucket) => formatNumber(bucket.object_count) });
-          return;
-        }
-        if (col === "quota_max_objects") {
-          exportColumns.push({
-            id: col,
-            label: "Object quota",
-            getValue: (bucket) => {
-              const quota = normalizeQuotaLimit(bucket.quota_max_objects);
-              return quota !== null ? formatNumber(quota) : "-";
-            },
-          });
-          return;
-        }
-        if (col === "quota_usage_percent") {
-          exportColumns.push({
-            id: col,
-            label: "Quota usage %",
-            getValue: (bucket) => {
-              const sizePercent = computeQuotaUsagePercent(bucket.used_bytes, bucket.quota_max_size_bytes);
-              const objectPercent = computeQuotaUsagePercent(bucket.object_count, bucket.quota_max_objects);
-              if (sizePercent === null && objectPercent === null) return "-";
-              const parts: string[] = [];
-              if (sizePercent !== null) parts.push(`Size: ${formatQuotaPercent(sizePercent)}`);
-              if (objectPercent !== null) parts.push(`Obj: ${formatQuotaPercent(objectPercent)}`);
-              return parts.join("; ");
-            },
-          });
-          return;
-        }
-        if (col === "tags") {
-          exportColumns.push({
-            id: col,
-            label: "Tags",
-            getValue: (bucket) => {
-              const tags = Array.isArray(bucket.tags) ? bucket.tags : [];
-              if (tags.length === 0) return "-";
-              return tags
-                .filter((tag) => (tag.key ?? "").trim())
-                .map((tag) => `${tag.key}=${tag.value}`)
-                .join(", ");
-            },
-          });
-          return;
-        }
-        if (col === "ui_tags") {
-          exportColumns.push({
-            id: col,
-            label: "UI tags",
-            getValue: (bucket) => {
-              const key = toBucketTagTarget(bucket.name, bucket.tenant).key;
-              const tags = uiTags[key] ?? [];
-              return tags.length > 0 ? tags.join(", ") : "-";
-            },
-          });
-          return;
-        }
-        if (col === "quota_status") {
-          exportColumns.push({
-            id: col,
-            label: "Quota status",
-            getValue: (bucket) => (quotaConfigured(bucket) ? "Configured" : "Not set"),
-          });
-          return;
-        }
-        const featureColumn = featureColumnById.get(col);
-        if (featureColumn && visibleFeatureColumns.some((item) => item.id === col)) {
-          exportColumns.push({
-            id: col,
-            label: featureColumn.label,
-            getValue: (bucket) => bucket.features?.[featureColumn.key]?.state ?? "-",
-          });
-        }
+    const chunkSize = 50;
+    for (let start = 0; start < selectedBucketList.length; start += chunkSize) {
+      const chunk = selectedBucketList.slice(start, start + chunkSize);
+      const advancedFilter = JSON.stringify({
+        match: "any",
+        rules: [{ field: "name", op: "in", value: chunk }],
       });
+      let nextPage = 1;
+      while (true) {
+        const response = await listCephAdminBuckets(selectedEndpointId, {
+          page: nextPage,
+          page_size: 200,
+          advanced_filter: advancedFilter,
+          include: exportIncludeParams,
+          with_stats: usageFeatureEnabled,
+        });
+        (response.items ?? []).forEach((bucket) => {
+          if (selectedBuckets.has(bucket.name)) {
+            bucketsByName.set(bucket.name, bucket);
+          }
+        });
+        if (!response.has_next) break;
+        nextPage += 1;
+      }
+    }
 
-      const lines = [
-        exportColumns.map((column) => csvEscape(column.label)).join(","),
-        ...selectedBucketList.map((bucketName) => {
-          const bucket = bucketsByName.get(bucketName);
-          const values = exportColumns.map((column) => (bucket ? column.getValue(bucket) : "-"));
-          return values.map((value) => csvEscape(String(value ?? "-"))).join(",");
-        }),
-      ];
+    return bucketsByName;
+  };
 
+  const buildExportColumns = (columnIds: ColumnId[]) => {
+    const featureColumnById = new Map(featureColumnOptions.map((column) => [column.id, column]));
+    const exportColumns: Array<{ id: string; label: string; getValue: (bucket: CephAdminBucket) => string }> = [
+      { id: "name", label: "Name", getValue: (bucket) => bucket.name ?? "-" },
+    ];
+
+    columnIds.forEach((col) => {
+      if (col === "tenant") {
+        exportColumns.push({ id: col, label: "Tenant", getValue: (bucket) => bucket.tenant ?? "-" });
+        return;
+      }
+      if (col === "owner") {
+        exportColumns.push({ id: col, label: "Owner", getValue: (bucket) => bucket.owner ?? "-" });
+        return;
+      }
+      if (col === "owner_name") {
+        exportColumns.push({ id: col, label: "Owner name", getValue: (bucket) => bucket.owner_name ?? "-" });
+        return;
+      }
+      if (col === "used_bytes") {
+        exportColumns.push({ id: col, label: "Used", getValue: (bucket) => formatBytes(bucket.used_bytes) });
+        return;
+      }
+      if (col === "quota_max_size_bytes") {
+        exportColumns.push({
+          id: col,
+          label: "Quota",
+          getValue: (bucket) => {
+            const quota = normalizeQuotaLimit(bucket.quota_max_size_bytes);
+            return quota !== null ? formatBytes(quota) : "-";
+          },
+        });
+        return;
+      }
+      if (col === "object_count") {
+        exportColumns.push({ id: col, label: "Objects", getValue: (bucket) => formatNumber(bucket.object_count) });
+        return;
+      }
+      if (col === "quota_max_objects") {
+        exportColumns.push({
+          id: col,
+          label: "Object quota",
+          getValue: (bucket) => {
+            const quota = normalizeQuotaLimit(bucket.quota_max_objects);
+            return quota !== null ? formatNumber(quota) : "-";
+          },
+        });
+        return;
+      }
+      if (col === "quota_usage_percent") {
+        exportColumns.push({
+          id: col,
+          label: "Quota usage %",
+          getValue: (bucket) => {
+            const sizePercent = computeQuotaUsagePercent(bucket.used_bytes, bucket.quota_max_size_bytes);
+            const objectPercent = computeQuotaUsagePercent(bucket.object_count, bucket.quota_max_objects);
+            if (sizePercent === null && objectPercent === null) return "-";
+            const parts: string[] = [];
+            if (sizePercent !== null) parts.push(`Size: ${formatQuotaPercent(sizePercent)}`);
+            if (objectPercent !== null) parts.push(`Obj: ${formatQuotaPercent(objectPercent)}`);
+            return parts.join("; ");
+          },
+        });
+        return;
+      }
+      if (col === "tags") {
+        exportColumns.push({
+          id: col,
+          label: "Tags",
+          getValue: (bucket) => {
+            const tags = Array.isArray(bucket.tags) ? bucket.tags : [];
+            if (tags.length === 0) return "-";
+            return tags
+              .filter((tag) => (tag.key ?? "").trim())
+              .map((tag) => `${tag.key}=${tag.value}`)
+              .join(", ");
+          },
+        });
+        return;
+      }
+      if (col === "ui_tags") {
+        exportColumns.push({
+          id: col,
+          label: "UI tags",
+          getValue: (bucket) => {
+            const key = toBucketTagTarget(bucket.name, bucket.tenant).key;
+            const tags = uiTags[key] ?? [];
+            return tags.length > 0 ? tags.join(", ") : "-";
+          },
+        });
+        return;
+      }
+      if (col === "quota_status") {
+        exportColumns.push({
+          id: col,
+          label: "Quota status",
+          getValue: (bucket) => (quotaConfigured(bucket) ? "Configured" : "Not set"),
+        });
+        return;
+      }
+      const featureColumn = featureColumnById.get(col);
+      if (featureColumn) {
+        exportColumns.push({
+          id: col,
+          label: featureColumn.label,
+          getValue: (bucket) => bucket.features?.[featureColumn.key]?.state ?? "-",
+        });
+      }
+    });
+
+    return exportColumns;
+  };
+
+  const exportSelectedBuckets = async (format: "text" | "csv" | "json") => {
+    if (selectedBucketList.length === 0 || selectionExportLoading) return;
+    setSelectionExportLoading(format);
+    try {
       const exportedAt = new Date().toISOString();
       const timestamp = exportedAt.replace(/[:.]/g, "-");
       const endpointPart = sanitizeExportFilenamePart(
         selectedEndpoint?.name ?? (selectedEndpointId ? `endpoint-${selectedEndpointId}` : "endpoint")
       );
-      const csv = lines.join("\n");
+
+      if (format === "text") {
+        triggerDownload(
+          `ceph-admin-buckets-${endpointPart}-${timestamp}.txt`,
+          selectedBucketList.join("\n"),
+          "text/plain;charset=utf-8"
+        );
+        return;
+      }
+
+      const bucketsByName = await loadSelectedBucketsForExport();
+      const exportColumns = buildExportColumns(allExportColumnIds);
+      if (format === "csv") {
+        const lines = [
+          exportColumns.map((column) => csvEscape(column.label)).join(","),
+          ...selectedBucketList.map((bucketName) => {
+            const bucket = bucketsByName.get(bucketName);
+            const values = exportColumns.map((column) => (bucket ? column.getValue(bucket) : "-"));
+            return values.map((value) => csvEscape(String(value ?? "-"))).join(",");
+          }),
+        ];
+        triggerDownload(
+          `ceph-admin-buckets-${endpointPart}-${timestamp}.csv`,
+          lines.join("\n"),
+          "text/csv;charset=utf-8"
+        );
+        return;
+      }
+
+      const jsonPayload = {
+        generated_at: exportedAt,
+        endpoint: {
+          id: selectedEndpointId ?? null,
+          name: selectedEndpoint?.name ?? null,
+        },
+        items: selectedBucketList.map((bucketName) => {
+          const bucket = bucketsByName.get(bucketName);
+          const row: Record<string, string> = {};
+          exportColumns.forEach((column) => {
+            row[column.id] = bucket ? column.getValue(bucket) : "-";
+          });
+          return row;
+        }),
+      };
       triggerDownload(
-        `ceph-admin-buckets-${endpointPart}-${timestamp}.csv`,
-        csv,
-        "text/csv;charset=utf-8"
+        `ceph-admin-buckets-${endpointPart}-${timestamp}.json`,
+        JSON.stringify(jsonPayload, null, 2),
+        "application/json"
       );
     } catch (err) {
       setError(extractError(err));
+    } finally {
+      setSelectionExportLoading(null);
     }
   };
 
@@ -6501,7 +6569,7 @@ export default function CephAdminBucketsPage() {
                   <button
                     type="button"
                     onClick={clearSelection}
-                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
+                    className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 ui-caption font-semibold text-rose-700 hover:border-rose-300 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100"
                   >
                     Clear selection
                   </button>
@@ -6595,6 +6663,52 @@ export default function CephAdminBucketsPage() {
                   </details>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <details className="relative">
+                    <summary className="list-none rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600 [&::-webkit-details-marker]:hidden">
+                      {selectionExportLoading ? "Exporting..." : "Export list"}
+                    </summary>
+                    <div className="absolute left-0 z-30 mt-1 w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800"
+                        disabled={selectionExportLoading !== null}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void exportSelectedBuckets("text");
+                          const parent = event.currentTarget.closest("details");
+                          if (parent) parent.removeAttribute("open");
+                        }}
+                      >
+                        Text (bucket names only)
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800"
+                        disabled={selectionExportLoading !== null}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void exportSelectedBuckets("csv");
+                          const parent = event.currentTarget.closest("details");
+                          if (parent) parent.removeAttribute("open");
+                        }}
+                      >
+                        CSV (all columns)
+                      </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800"
+                        disabled={selectionExportLoading !== null}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void exportSelectedBuckets("json");
+                          const parent = event.currentTarget.closest("details");
+                          if (parent) parent.removeAttribute("open");
+                        }}
+                      >
+                        JSON (all columns)
+                      </button>
+                    </div>
+                  </details>
                   <button
                     type="button"
                     onClick={() => setShowCompareModal(true)}
@@ -6608,15 +6722,6 @@ export default function CephAdminBucketsPage() {
                     className="rounded-md bg-primary px-2.5 py-1.5 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
                   >
                     Bulk update
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void exportSelectedBuckets();
-                    }}
-                    className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-                  >
-                    Export list
                   </button>
                 </div>
               </div>
