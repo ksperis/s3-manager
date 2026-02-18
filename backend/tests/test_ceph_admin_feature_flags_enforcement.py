@@ -32,11 +32,13 @@ def _clear_buckets_caches():
         buckets_router._RGW_BUCKET_PAYLOAD_CACHE.clear()
 
 
-def _build_endpoint(*, endpoint_id: int = 1, metrics_enabled: bool = True):
+def _build_endpoint(*, endpoint_id: int = 1, metrics_enabled: bool = True, sse_enabled: bool = False):
     features_yaml = (
         "features:\n"
         "  metrics:\n"
         f"    enabled: {'true' if metrics_enabled else 'false'}\n"
+        "  sse:\n"
+        f"    enabled: {'true' if sse_enabled else 'false'}\n"
     )
     return SimpleNamespace(
         id=endpoint_id,
@@ -45,10 +47,10 @@ def _build_endpoint(*, endpoint_id: int = 1, metrics_enabled: bool = True):
     )
 
 
-def _build_ctx(*, metrics_enabled: bool) -> tuple[SimpleNamespace, FakeRGWAdmin]:
+def _build_ctx(*, metrics_enabled: bool, sse_enabled: bool = False) -> tuple[SimpleNamespace, FakeRGWAdmin]:
     rgw_admin = FakeRGWAdmin()
     ctx = SimpleNamespace(
-        endpoint=_build_endpoint(metrics_enabled=metrics_enabled),
+        endpoint=_build_endpoint(metrics_enabled=metrics_enabled, sse_enabled=sse_enabled),
         rgw_admin=rgw_admin,
         access_key="AKIA_TEST",
         secret_key="SECRET_TEST",
@@ -92,3 +94,37 @@ def test_ceph_admin_user_metrics_requires_metrics_feature():
 
     assert exc.value.status_code == 403
     assert rgw_admin.with_stats_calls == []
+
+
+def test_ceph_admin_bucket_encryption_requires_sse_feature(monkeypatch):
+    ctx, _ = _build_ctx(metrics_enabled=True, sse_enabled=False)
+    calls = {"get": 0}
+
+    class _FakeBucketsService:
+        def get_bucket_encryption(self, bucket_name, account):
+            calls["get"] += 1
+            return buckets_router.BucketEncryptionConfiguration(rules=[])
+
+    monkeypatch.setattr(buckets_router, "BucketsService", lambda: _FakeBucketsService())
+
+    with pytest.raises(HTTPException) as exc:
+        buckets_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
+
+    assert exc.value.status_code == 403
+    assert calls["get"] == 0
+
+
+def test_ceph_admin_bucket_encryption_allows_when_sse_feature_enabled(monkeypatch):
+    ctx, _ = _build_ctx(metrics_enabled=True, sse_enabled=True)
+
+    class _FakeBucketsService:
+        def get_bucket_encryption(self, bucket_name, account):
+            return buckets_router.BucketEncryptionConfiguration(
+                rules=[{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
+            )
+
+    monkeypatch.setattr(buckets_router, "BucketsService", lambda: _FakeBucketsService())
+
+    payload = buckets_router.get_bucket_encryption(bucket_name="bucket-a", ctx=ctx)
+
+    assert payload.rules == [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]

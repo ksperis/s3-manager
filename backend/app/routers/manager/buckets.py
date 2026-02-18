@@ -9,6 +9,7 @@ from app.models.bucket import (
     BucketAclUpdate,
     BucketCreate,
     BucketCorsUpdate,
+    BucketEncryptionConfiguration,
     BucketLifecycleConfig,
     BucketLoggingConfiguration,
     BucketNotificationConfiguration,
@@ -26,6 +27,7 @@ from app.models.bucket import (
 from app.services.audit_service import AuditService
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.s3_client import BucketNotEmptyError
+from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.routers.dependencies import (
     get_account_context,
     get_audit_logger,
@@ -34,6 +36,17 @@ from app.routers.dependencies import (
 )
 
 router = APIRouter(prefix="/manager/buckets", tags=["manager-buckets"])
+
+
+def _require_sse_feature(account: S3Account) -> None:
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint is None:
+        return
+    if not resolve_feature_flags(endpoint).sse_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Server-side encryption is disabled for this endpoint",
+        )
 
 
 @router.get("", response_model=list[Bucket])
@@ -132,6 +145,69 @@ def put_object_lock(
         return result
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
+def get_bucket_encryption(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: dict = Depends(get_current_account_admin),
+) -> BucketEncryptionConfiguration:
+    _require_sse_feature(account)
+    try:
+        return service.get_bucket_encryption(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
+def put_bucket_encryption(
+    bucket_name: str,
+    payload: BucketEncryptionConfiguration,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketEncryptionConfiguration:
+    _require_sse_feature(account)
+    try:
+        result = service.set_bucket_encryption(bucket_name, account, payload.rules)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="update_bucket_encryption",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"rules_count": len(payload.rules or [])},
+        )
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/{bucket_name}/encryption", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bucket_encryption(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    _require_sse_feature(account)
+    try:
+        service.delete_bucket_encryption(bucket_name, account)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="delete_bucket_encryption",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

@@ -20,6 +20,7 @@ from app.models.bucket import (
     BucketAcl,
     BucketAclUpdate,
     BucketCorsUpdate,
+    BucketEncryptionConfiguration,
     BucketLifecycleConfig,
     BucketLoggingConfiguration,
     BucketNotificationConfiguration,
@@ -925,6 +926,14 @@ def _invalidate_bucket_listing_cache(endpoint_id: int) -> None:
             _RGW_BUCKET_PAYLOAD_CACHE.pop(key, None)
 
 
+def _require_sse_feature(ctx: CephAdminContext) -> None:
+    if not resolve_feature_flags(ctx.endpoint).sse_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Server-side encryption is disabled for this endpoint",
+        )
+
+
 @router.get("", response_model=PaginatedCephAdminBucketsResponse)
 def list_buckets(
     page: int = Query(1, ge=1),
@@ -1694,5 +1703,52 @@ def put_object_lock(
         return response
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
+def get_bucket_encryption(
+    bucket_name: str,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> BucketEncryptionConfiguration:
+    _require_sse_feature(ctx)
+    service = BucketsService()
+    account = _build_endpoint_account(ctx)
+    try:
+        return service.get_bucket_encryption(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
+def put_bucket_encryption(
+    bucket_name: str,
+    payload: BucketEncryptionConfiguration,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> BucketEncryptionConfiguration:
+    _require_sse_feature(ctx)
+    service = BucketsService()
+    account = _build_endpoint_account(ctx)
+    try:
+        response = service.set_bucket_encryption(bucket_name, account, payload.rules)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return response
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/{bucket_name}/encryption", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+def delete_bucket_encryption(
+    bucket_name: str,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> Response:
+    _require_sse_feature(ctx)
+    service = BucketsService()
+    account = _build_endpoint_account(ctx)
+    try:
+        service.delete_bucket_encryption(bucket_name, account)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc

@@ -958,6 +958,17 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   access_logging: "Access logging",
 };
 
+const FEATURE_STATE_OPTIONS: Array<{ id: FeatureKey; label: string }> = [
+  { id: "versioning", label: "Versioning" },
+  { id: "object_lock", label: "Object Lock" },
+  { id: "block_public_access", label: "Block public access" },
+  { id: "lifecycle_rules", label: "Lifecycle rules" },
+  { id: "static_website", label: "Static website" },
+  { id: "bucket_policy", label: "Bucket policy" },
+  { id: "cors", label: "CORS" },
+  { id: "access_logging", label: "Access logging" },
+];
+
 const formatFeatureFilterStateLabel = (state: FeatureFilterState) => {
   if (state === "disabled_or_suspended") return "Disabled or Suspended";
   return state.charAt(0).toUpperCase() + state.slice(1);
@@ -1087,7 +1098,8 @@ const buildAdvancedFilterPayload = (
   basicFilterMode: TextMatchMode,
   advanced: AdvancedFilterState | null,
   taggedBuckets: string[] | null,
-  allowStatsFilters: boolean = true
+  allowStatsFilters: boolean = true,
+  featureSupport: Partial<Record<FeatureKey, boolean>> = {}
 ) => {
   const parsedBasicFilter = parseExactListInput(basicFilter);
   const trimmedFilter = parsedBasicFilter.values[0] ?? "";
@@ -1142,6 +1154,7 @@ const buildAdvancedFilterPayload = (
     }
 
     (Object.keys(advanced.features) as FeatureKey[]).forEach((key) => {
+      if (featureSupport[key] === false) return;
       const state = advanced.features[key];
       if (state === "any") return;
       rules.push({ feature: key, state });
@@ -1158,7 +1171,11 @@ const buildAdvancedFilterPayload = (
   return JSON.stringify({ match: "all", rules });
 };
 
-const hasAdvancedFilters = (advanced: AdvancedFilterState | null, allowStatsFilters: boolean = true) => {
+const hasAdvancedFilters = (
+  advanced: AdvancedFilterState | null,
+  allowStatsFilters: boolean = true,
+  featureSupport: Partial<Record<FeatureKey, boolean>> = {}
+) => {
   if (!advanced) return false;
   if (
     advanced.tenant.trim() ||
@@ -1184,7 +1201,9 @@ const hasAdvancedFilters = (advanced: AdvancedFilterState | null, allowStatsFilt
   ) {
     return true;
   }
-  return Object.values(advanced.features).some((value) => value !== "any");
+  return (Object.keys(advanced.features) as FeatureKey[]).some(
+    (feature) => featureSupport[feature] !== false && advanced.features[feature] !== "any"
+  );
 };
 
 const COLUMNS_STORAGE_KEY = "ceph-admin.bucket_list.columns.v1";
@@ -1504,6 +1523,22 @@ const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
   };
 };
 
+const stripUnsupportedAdvancedFeatureFilters = (
+  value: AdvancedFilterState,
+  featureSupport: Partial<Record<FeatureKey, boolean>>
+): AdvancedFilterState => {
+  let changed = false;
+  const nextFeatures: Record<FeatureKey, FeatureFilterState> = { ...value.features };
+  (Object.keys(nextFeatures) as FeatureKey[]).forEach((feature) => {
+    if (featureSupport[feature] !== false) return;
+    if (nextFeatures[feature] === "any") return;
+    nextFeatures[feature] = "any";
+    changed = true;
+  });
+  if (!changed) return value;
+  return { ...value, features: nextFeatures };
+};
+
 const sanitizeSort = (value: unknown): { field: SortField; direction: "asc" | "desc" } => {
   if (!value || typeof value !== "object") return DEFAULT_SORT;
   const data = value as { field?: unknown; direction?: unknown };
@@ -1602,6 +1637,24 @@ export default function CephAdminBucketsPage() {
   const location = useLocation();
   const { selectedEndpointId, selectedEndpoint, endpoints } = useCephAdminEndpoint();
   const usageFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
+  const staticWebsiteFeatureEnabled = selectedEndpoint?.capabilities?.static_website === true;
+  const featureSupport = useMemo<Record<FeatureKey, boolean>>(
+    () => ({
+      versioning: true,
+      object_lock: true,
+      block_public_access: true,
+      lifecycle_rules: true,
+      static_website: staticWebsiteFeatureEnabled,
+      bucket_policy: true,
+      cors: true,
+      access_logging: true,
+    }),
+    [staticWebsiteFeatureEnabled]
+  );
+  const featureStateOptions = useMemo(
+    () => FEATURE_STATE_OPTIONS.map((option) => ({ ...option, supported: featureSupport[option.id] !== false })),
+    [featureSupport]
+  );
   const [filter, setFilter] = useState("");
   const [filterValue, setFilterValue] = useState("");
   const [quickFilterMode, setQuickFilterMode] = useState<TextMatchMode>("contains");
@@ -1741,6 +1794,18 @@ export default function CephAdminBucketsPage() {
   useEffect(() => {
     persistVisibleColumns(visibleColumns);
   }, [visibleColumns]);
+
+  useEffect(() => {
+    setAdvancedDraft((prev) => stripUnsupportedAdvancedFeatureFilters(prev, featureSupport));
+    setAdvancedApplied((prev) => (prev ? stripUnsupportedAdvancedFeatureFilters(prev, featureSupport) : prev));
+  }, [featureSupport]);
+
+  useEffect(() => {
+    setVisibleColumns((prev) => {
+      const next = prev.filter((column) => (column === "static_website" ? staticWebsiteFeatureEnabled : true));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [staticWebsiteFeatureEnabled]);
 
   useEffect(() => {
     if (!showAdvancedFilter) return;
@@ -1920,25 +1985,20 @@ export default function CephAdminBucketsPage() {
     return () => window.removeEventListener("mousedown", handler);
   }, [showColumnPicker]);
 
+  const featureColumnOptions = useMemo(
+    () => featureStateOptions.filter((option) => option.supported).map((option) => ({ ...option, key: option.id })),
+    [featureStateOptions]
+  );
+
   const includeParams = useMemo(() => {
     const include: string[] = [];
     if (visibleColumns.includes("owner_name")) include.push("owner_name");
     if (visibleColumns.includes("tags")) include.push("tags");
-    const featureKeys: ColumnId[] = [
-      "versioning",
-      "object_lock",
-      "block_public_access",
-      "lifecycle_rules",
-      "static_website",
-      "bucket_policy",
-      "cors",
-      "access_logging",
-    ];
-    featureKeys.forEach((key) => {
-      if (visibleColumns.includes(key)) include.push(key);
+    featureColumnOptions.forEach(({ id }) => {
+      if (visibleColumns.includes(id)) include.push(id);
     });
     return include;
-  }, [visibleColumns]);
+  }, [featureColumnOptions, visibleColumns]);
 
   const advancedStatsRequired = useMemo(() => {
     if (!usageFeatureEnabled || !advancedApplied) return false;
@@ -2019,9 +2079,10 @@ export default function CephAdminBucketsPage() {
         effectiveQuickFilterMode,
         advancedApplied,
         taggedBuckets,
-        usageFeatureEnabled
+        usageFeatureEnabled,
+        featureSupport
       ),
-    [advancedApplied, filterValue, effectiveQuickFilterMode, taggedBuckets, usageFeatureEnabled]
+    [advancedApplied, filterValue, effectiveQuickFilterMode, taggedBuckets, usageFeatureEnabled, featureSupport]
   );
 
   const {
@@ -2657,18 +2718,8 @@ export default function CephAdminBucketsPage() {
         }
       }
 
-      const featureColumns: Array<{ id: ColumnId; label: string; key: FeatureKey }> = [
-        { id: "versioning", label: "Versioning", key: "versioning" },
-        { id: "object_lock", label: "Object Lock", key: "object_lock" },
-        { id: "block_public_access", label: "Block public access", key: "block_public_access" },
-        { id: "lifecycle_rules", label: "Lifecycle rules", key: "lifecycle_rules" },
-        { id: "static_website", label: "Static website", key: "static_website" },
-        { id: "bucket_policy", label: "Bucket policy", key: "bucket_policy" },
-        { id: "cors", label: "CORS", key: "cors" },
-        { id: "access_logging", label: "Access logging", key: "access_logging" },
-      ];
-      const featureColumnById = new Map(featureColumns.map((col) => [col.id, col]));
-      const visibleFeatureColumns = featureColumns.filter((col) => visibleColumns.includes(col.id));
+      const featureColumnById = new Map(featureColumnOptions.map((col) => [col.id, col]));
+      const visibleFeatureColumns = featureColumnOptions.filter((col) => visibleColumns.includes(col.id));
 
       const exportColumns: Array<{ id: string; label: string; getValue: (bucket: CephAdminBucket) => string }> = [
         { id: "name", label: "Name", getValue: (bucket) => bucket.name ?? "-" },
@@ -4342,14 +4393,14 @@ export default function CephAdminBucketsPage() {
     setPage(1);
   };
 
-  const advancedFiltersApplied = hasAdvancedFilters(advancedApplied, usageFeatureEnabled);
+  const advancedFiltersApplied = hasAdvancedFilters(advancedApplied, usageFeatureEnabled, featureSupport);
   const advancedAppliedPayload = useMemo(
-    () => buildAdvancedFilterPayload("", "contains", advancedApplied, null, usageFeatureEnabled),
-    [advancedApplied, usageFeatureEnabled]
+    () => buildAdvancedFilterPayload("", "contains", advancedApplied, null, usageFeatureEnabled, featureSupport),
+    [advancedApplied, usageFeatureEnabled, featureSupport]
   );
   const advancedDraftPayload = useMemo(
-    () => buildAdvancedFilterPayload("", "contains", advancedDraft, null, usageFeatureEnabled),
-    [advancedDraft, usageFeatureEnabled]
+    () => buildAdvancedFilterPayload("", "contains", advancedDraft, null, usageFeatureEnabled, featureSupport),
+    [advancedDraft, usageFeatureEnabled, featureSupport]
   );
   const hasPendingAdvancedChanges = advancedDraftPayload !== advancedAppliedPayload;
   const hasAnyAdvancedToClear = advancedDraftPayload !== undefined || advancedAppliedPayload !== undefined;
@@ -4502,8 +4553,11 @@ export default function CephAdminBucketsPage() {
     ].filter((value) => value.trim().length > 0).length;
   }, [advancedDraft, usageFeatureEnabled]);
   const advancedDraftFeatureCount = useMemo(
-    () => (Object.keys(advancedDraft.features) as FeatureKey[]).filter((key) => advancedDraft.features[key] !== "any").length,
-    [advancedDraft]
+    () =>
+      (Object.keys(advancedDraft.features) as FeatureKey[]).filter(
+        (key) => featureSupport[key] !== false && advancedDraft.features[key] !== "any"
+      ).length,
+    [advancedDraft, featureSupport]
   );
   const advancedDraftTagCount = s3TagsDraftExpressions.length;
   const advancedDraftActiveCount = advancedDraftIdentityCount + advancedDraftRangeCount + advancedDraftFeatureCount + advancedDraftTagCount;
@@ -4649,7 +4703,7 @@ export default function CephAdminBucketsPage() {
       });
     }
 
-    if (advancedApplied && hasAdvancedFilters(advancedApplied, usageFeatureEnabled)) {
+    if (advancedApplied && hasAdvancedFilters(advancedApplied, usageFeatureEnabled, featureSupport)) {
       const tenant = advancedApplied.tenant.trim();
       if (tenant) {
         const label = formatTextFilterSummary("Tenant", advancedApplied.tenant, tenantAppliedEffectiveMatchMode);
@@ -4726,6 +4780,7 @@ export default function CephAdminBucketsPage() {
       });
 
       (Object.keys(advancedApplied.features) as FeatureKey[]).forEach((feature) => {
+        if (featureSupport[feature] === false) return;
         const state = advancedApplied.features[feature];
         if (state === "any") return;
         items.push({
@@ -4745,6 +4800,7 @@ export default function CephAdminBucketsPage() {
     tagFilterMode,
     advancedApplied,
     usageFeatureEnabled,
+    featureSupport,
     tenantAppliedEffectiveMatchMode,
     ownerAppliedEffectiveMatchMode,
     ownerNameAppliedEffectiveMatchMode,
@@ -4807,7 +4863,8 @@ export default function CephAdminBucketsPage() {
       });
     }
 
-    (Object.keys(advancedDraft.features) as FeatureKey[]).forEach((feature) => {
+  (Object.keys(advancedDraft.features) as FeatureKey[]).forEach((feature) => {
+      if (featureSupport[feature] === false) return;
       const state = advancedDraft.features[feature];
       if (state === "any") return;
       items.push({
@@ -4820,6 +4877,7 @@ export default function CephAdminBucketsPage() {
   }, [
     advancedDraft,
     usageFeatureEnabled,
+    featureSupport,
     tenantDraftEffectiveMatchMode,
     ownerDraftEffectiveMatchMode,
     ownerNameDraftEffectiveMatchMode,
@@ -5716,18 +5774,7 @@ export default function CephAdminBucketsPage() {
       });
     }
 
-    const featureColumns: { id: ColumnId; label: string; key: FeatureKey }[] = [
-      { id: "versioning", label: "Versioning", key: "versioning" },
-      { id: "object_lock", label: "Object Lock", key: "object_lock" },
-      { id: "block_public_access", label: "Block public access", key: "block_public_access" },
-      { id: "lifecycle_rules", label: "Lifecycle rules", key: "lifecycle_rules" },
-      { id: "static_website", label: "Static website", key: "static_website" },
-      { id: "bucket_policy", label: "Bucket policy", key: "bucket_policy" },
-      { id: "cors", label: "CORS", key: "cors" },
-      { id: "access_logging", label: "Access logging", key: "access_logging" },
-    ];
-
-    featureColumns.forEach((c) => {
+    featureColumnOptions.forEach((c) => {
       if (!visible.has(c.id)) return;
       cols.push({
         id: c.id,
@@ -5899,16 +5946,7 @@ export default function CephAdminBucketsPage() {
 
                         <div className="space-y-2">
                           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
-                          {[
-                            { id: "versioning" as const, label: "Versioning" },
-                            { id: "object_lock" as const, label: "Object Lock" },
-                            { id: "block_public_access" as const, label: "Block public access" },
-                            { id: "lifecycle_rules" as const, label: "Lifecycle rules" },
-                            { id: "static_website" as const, label: "Static website" },
-                            { id: "bucket_policy" as const, label: "Bucket policy" },
-                            { id: "cors" as const, label: "CORS" },
-                            { id: "access_logging" as const, label: "Access logging" },
-                          ].map((opt) => (
+                          {featureColumnOptions.map((opt) => (
                             <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
                               <span>{opt.label}</span>
                               <input
@@ -6415,22 +6453,24 @@ export default function CephAdminBucketsPage() {
                               {advancedDraftFeatureCount} active
                             </span>
                           </div>
+                          {!staticWebsiteFeatureEnabled && (
+                            <p className="mb-3 ui-caption text-slate-500 dark:text-slate-400">
+                              Some features are disabled on this endpoint and cannot be filtered.
+                            </p>
+                          )}
                           <div className="grid gap-2 sm:grid-cols-2">
-                            {[
-                              { id: "versioning" as const, label: "Versioning" },
-                              { id: "object_lock" as const, label: "Object Lock" },
-                              { id: "block_public_access" as const, label: "Block public access" },
-                              { id: "lifecycle_rules" as const, label: "Lifecycle rules" },
-                              { id: "static_website" as const, label: "Static website" },
-                              { id: "bucket_policy" as const, label: "Bucket policy" },
-                              { id: "cors" as const, label: "CORS" },
-                              { id: "access_logging" as const, label: "Access logging" },
-                            ].map((feature) => {
+                            {featureStateOptions.map((feature) => {
+                              const disabled = !feature.supported;
                               const appliedValue = advancedApplied?.features[feature.id] ?? "any";
                               const draftValue = advancedDraft.features[feature.id];
-                              const state = fieldHighlight(appliedValue !== "any", draftValue !== appliedValue);
+                              const state = disabled
+                                ? { labelClass: "", fieldClass: "" }
+                                : fieldHighlight(appliedValue !== "any", draftValue !== appliedValue);
                               return (
-                                <div key={feature.id} className="rounded-lg border border-slate-200 p-2.5 dark:border-slate-700">
+                                <div
+                                  key={feature.id}
+                                  className={`rounded-lg border border-slate-200 p-2.5 dark:border-slate-700 ${disabled ? "opacity-60" : ""}`}
+                                >
                                   <label className={`ui-caption font-medium text-slate-700 dark:text-slate-200 ${state.labelClass}`}>
                                     <span className="inline-flex items-center gap-1">
                                       <span>{feature.label}</span>
@@ -6441,6 +6481,7 @@ export default function CephAdminBucketsPage() {
                                     value={advancedDraft.features[feature.id]}
                                     onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
                                     className={`mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption font-normal text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${state.fieldClass}`}
+                                    disabled={disabled}
                                   >
                                     {feature.id === "versioning" ? (
                                       <>
@@ -6458,6 +6499,11 @@ export default function CephAdminBucketsPage() {
                                       </>
                                     )}
                                   </select>
+                                  {disabled && (
+                                    <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                      {feature.label} is disabled on this endpoint.
+                                    </p>
+                                  )}
                                 </div>
                               );
                             })}

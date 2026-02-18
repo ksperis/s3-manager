@@ -136,6 +136,10 @@ class BucketCorsUpdate(BaseModel):
     rules: list[dict]
 
 
+class BucketEncryptionConfiguration(BaseModel):
+    rules: list[dict] = Field(default_factory=list)
+
+
 class BucketNotificationConfiguration(BaseModel):
     configuration: dict = Field(default_factory=dict)
 

@@ -232,6 +232,7 @@ export async function deleteBucketLifecycle(accountId: S3AccountSelector, bucket
 }
 
 export type BucketCors = { rules: Record<string, unknown>[] };
+export type BucketEncryptionConfiguration = { rules: Record<string, unknown>[] };
 
 export async function getBucketCors(accountId: S3AccountSelector, bucketName: string): Promise<BucketCors> {
   const { data } = await client.get<BucketCors>(`/manager/buckets/${encodeURIComponent(bucketName)}/cors`, {
@@ -251,6 +252,36 @@ export async function putBucketCors(accountId: S3AccountSelector, bucketName: st
 
 export async function deleteBucketCors(accountId: S3AccountSelector, bucketName: string): Promise<void> {
   await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/cors`, { params: withS3AccountParam(undefined, accountId) });
+}
+
+export async function getBucketEncryption(
+  accountId: S3AccountSelector,
+  bucketName: string
+): Promise<BucketEncryptionConfiguration> {
+  const { data } = await client.get<BucketEncryptionConfiguration>(
+    `/manager/buckets/${encodeURIComponent(bucketName)}/encryption`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function putBucketEncryption(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  rules: Record<string, unknown>[]
+): Promise<BucketEncryptionConfiguration> {
+  const { data } = await client.put<BucketEncryptionConfiguration>(
+    `/manager/buckets/${encodeURIComponent(bucketName)}/encryption`,
+    { rules },
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function deleteBucketEncryption(accountId: S3AccountSelector, bucketName: string): Promise<void> {
+  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/encryption`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
 }
 
 export async function getBucketTags(accountId: S3AccountSelector, bucketName: string): Promise<{ tags: BucketTag[] }> {

@@ -187,7 +187,38 @@ export default function BucketsPage() {
   );
   const endpointCaps = selectedS3Account?.storage_endpoint_capabilities ?? null;
   const usageFeatureEnabled = endpointCaps ? endpointCaps.metrics !== false : true;
-  const staticWebsiteFeatureEnabled = endpointCaps ? endpointCaps.static_website !== false : true;
+  const staticWebsiteFeatureEnabled = endpointCaps?.static_website === true;
+  const quotaFeatureEnabled = selectedS3Account?.endpoint_provider === "ceph";
+  const metricColumnOptions = useMemo(
+    () => [
+      { id: "used_bytes" as const, label: "Used" },
+      { id: "object_count" as const, label: "Objects" },
+      ...(quotaFeatureEnabled
+        ? ([
+            { id: "quota_max_size_bytes" as const, label: "Quota" },
+            { id: "quota_max_objects" as const, label: "Object quota" },
+            { id: "quota_status" as const, label: "Quota status" },
+          ] as const)
+        : []),
+      { id: "creation_date" as const, label: "Created on" },
+      { id: "tags" as const, label: "Tags" },
+    ],
+    [quotaFeatureEnabled]
+  );
+  const featureColumnOptions = useMemo(
+    () =>
+      [
+        { id: "versioning" as const, label: "Versioning", key: "versioning" },
+        { id: "object_lock" as const, label: "Object Lock", key: "object_lock" },
+        { id: "block_public_access" as const, label: "Block public access", key: "block_public_access" },
+        { id: "lifecycle_rules" as const, label: "Lifecycle rules", key: "lifecycle_rules" },
+        { id: "static_website" as const, label: "Static website", key: "static_website" },
+        { id: "bucket_policy" as const, label: "Bucket policy", key: "bucket_policy" },
+        { id: "cors" as const, label: "CORS", key: "cors" },
+        { id: "access_logging" as const, label: "Access logging", key: "access_logging" },
+      ].filter((option) => option.id !== "static_website" || staticWebsiteFeatureEnabled),
+    [staticWebsiteFeatureEnabled]
+  );
   const accountLabel = selectedS3Account
     ? selectedS3Account.display_name
     : requiresS3AccountSelection
@@ -198,32 +229,22 @@ export default function BucketsPage() {
   const includeParams = useMemo(() => {
     const include: string[] = [];
     if (visibleColumns.includes("tags")) include.push("tags");
-    const featureKeys: ColumnId[] = [
-      "versioning",
-      "object_lock",
-      "block_public_access",
-      "lifecycle_rules",
-      "static_website",
-      "bucket_policy",
-      "cors",
-      "access_logging",
-    ];
-    featureKeys.forEach((key) => {
-      if (key === "static_website" && !staticWebsiteFeatureEnabled) return;
-      if (visibleColumns.includes(key)) include.push(key);
+    featureColumnOptions.forEach(({ id }) => {
+      if (visibleColumns.includes(id)) include.push(id);
     });
     return include;
-  }, [staticWebsiteFeatureEnabled, visibleColumns]);
+  }, [featureColumnOptions, visibleColumns]);
 
   const requiresStats = useMemo(
     () =>
       usageFeatureEnabled &&
       (visibleColumns.includes("used_bytes") ||
         visibleColumns.includes("object_count") ||
-        visibleColumns.includes("quota_max_size_bytes") ||
-        visibleColumns.includes("quota_max_objects") ||
-        visibleColumns.includes("quota_status")),
-    [usageFeatureEnabled, visibleColumns]
+        (quotaFeatureEnabled &&
+          (visibleColumns.includes("quota_max_size_bytes") ||
+            visibleColumns.includes("quota_max_objects") ||
+            visibleColumns.includes("quota_status")))),
+    [usageFeatureEnabled, visibleColumns, quotaFeatureEnabled]
   );
 
   type ColumnDef = {
@@ -340,6 +361,22 @@ export default function BucketsPage() {
   useEffect(() => {
     persistVisibleColumns(visibleColumns);
   }, [visibleColumns]);
+
+  useEffect(() => {
+    setVisibleColumns((prev) => {
+      const next = prev.filter((column) => {
+        if (column === "static_website" && !staticWebsiteFeatureEnabled) return false;
+        if (
+          (column === "quota_max_size_bytes" || column === "quota_max_objects" || column === "quota_status") &&
+          !quotaFeatureEnabled
+        ) {
+          return false;
+        }
+        return true;
+      });
+      return next.length === prev.length ? prev : next;
+    });
+  }, [quotaFeatureEnabled, staticWebsiteFeatureEnabled]);
 
   useEffect(() => {
     if (!showColumnPicker) return;
@@ -505,7 +542,7 @@ export default function BucketsPage() {
         render: (bucket) => formatBytes(bucket.used_bytes),
       });
     }
-    if (visible.has("quota_max_size_bytes")) {
+    if (quotaFeatureEnabled && visible.has("quota_max_size_bytes")) {
       cols.push({
         id: "quota_max_size_bytes",
         label: "Quota",
@@ -521,7 +558,7 @@ export default function BucketsPage() {
         render: (bucket) => formatNumber(bucket.object_count),
       });
     }
-    if (visible.has("quota_max_objects")) {
+    if (quotaFeatureEnabled && visible.has("quota_max_objects")) {
       cols.push({
         id: "quota_max_objects",
         label: "Object quota",
@@ -546,18 +583,7 @@ export default function BucketsPage() {
       });
     }
 
-    const featureColumns: { id: ColumnId; label: string; key: string }[] = [
-      { id: "versioning", label: "Versioning", key: "versioning" },
-      { id: "object_lock", label: "Object Lock", key: "object_lock" },
-      { id: "block_public_access", label: "Block public access", key: "block_public_access" },
-      { id: "lifecycle_rules", label: "Lifecycle rules", key: "lifecycle_rules" },
-      { id: "static_website", label: "Static website", key: "static_website" },
-      { id: "bucket_policy", label: "Bucket policy", key: "bucket_policy" },
-      { id: "cors", label: "CORS", key: "cors" },
-      { id: "access_logging", label: "Access logging", key: "access_logging" },
-    ];
-
-    featureColumns.forEach((c) => {
+    featureColumnOptions.forEach((c) => {
       if (!visible.has(c.id)) return;
       cols.push({
         id: c.id,
@@ -567,7 +593,7 @@ export default function BucketsPage() {
       });
     });
 
-    if (visible.has("quota_status")) {
+    if (quotaFeatureEnabled && visible.has("quota_status")) {
       cols.push({
         id: "quota_status",
         label: "Quota status",
@@ -680,15 +706,7 @@ export default function BucketsPage() {
                     <div className="mt-3 space-y-3">
                       <div className="space-y-2">
                         <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Metrics</p>
-                        {[
-                          { id: "used_bytes" as const, label: "Used" },
-                          { id: "object_count" as const, label: "Objects" },
-                          { id: "quota_max_size_bytes" as const, label: "Quota" },
-                          { id: "quota_max_objects" as const, label: "Object quota" },
-                          { id: "creation_date" as const, label: "Created on" },
-                          { id: "quota_status" as const, label: "Quota status" },
-                          { id: "tags" as const, label: "Tags" },
-                        ].map((opt) => (
+                        {metricColumnOptions.map((opt) => (
                           <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
                             <span>{opt.label}</span>
                             <input
@@ -703,16 +721,7 @@ export default function BucketsPage() {
 
                       <div className="space-y-2">
                         <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
-                        {[
-                          { id: "versioning" as const, label: "Versioning" },
-                          { id: "object_lock" as const, label: "Object Lock" },
-                          { id: "block_public_access" as const, label: "Block public access" },
-                          { id: "lifecycle_rules" as const, label: "Lifecycle rules" },
-                          { id: "static_website" as const, label: "Static website" },
-                          { id: "bucket_policy" as const, label: "Bucket policy" },
-                          { id: "cors" as const, label: "CORS" },
-                          { id: "access_logging" as const, label: "Access logging" },
-                        ].map((opt) => (
+                        {featureColumnOptions.map((opt) => (
                           <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
                             <span>{opt.label}</span>
                             <input

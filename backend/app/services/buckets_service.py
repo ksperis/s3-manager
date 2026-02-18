@@ -14,6 +14,7 @@ from app.models.bucket import (
     BucketAclGrant,
     BucketAclGrantee,
     BucketAclUpdate,
+    BucketEncryptionConfiguration,
     BucketFeatureStatus,
     BucketLifecycleConfig,
     BucketLoggingConfiguration,
@@ -531,6 +532,49 @@ class BucketsService:
         access_key, secret_key = self._account_credentials(account)
         return s3_client.get_bucket_cors(
             name, access_key=access_key, secret_key=secret_key, **self._client_kwargs(account)
+        )
+
+    def get_bucket_encryption(self, name: str, account: S3Account) -> BucketEncryptionConfiguration:
+        access_key, secret_key = self._account_credentials(account)
+        rules = s3_client.get_bucket_encryption(
+            name,
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._client_kwargs(account),
+        )
+        return BucketEncryptionConfiguration(rules=rules)
+
+    def set_bucket_encryption(
+        self,
+        name: str,
+        account: S3Account,
+        rules: list[dict],
+    ) -> BucketEncryptionConfiguration:
+        access_key, secret_key = self._account_credentials(account)
+        if not rules:
+            s3_client.delete_bucket_encryption(
+                name,
+                access_key=access_key,
+                secret_key=secret_key,
+                **self._client_kwargs(account),
+            )
+            return BucketEncryptionConfiguration(rules=[])
+        s3_client.put_bucket_encryption(
+            name,
+            rules=rules,
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._client_kwargs(account),
+        )
+        return self.get_bucket_encryption(name, account)
+
+    def delete_bucket_encryption(self, name: str, account: S3Account) -> None:
+        access_key, secret_key = self._account_credentials(account)
+        s3_client.delete_bucket_encryption(
+            name,
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._client_kwargs(account),
         )
 
     def _compare_client(self, account: S3Account):

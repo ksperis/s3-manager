@@ -1191,7 +1191,10 @@ export default function StorageEndpointsPage() {
                         </div>
                       )}
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <label
+                          title="Cette option est détectée automatiquement à partir des credentials et n'est pas modifiable manuellement."
+                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        >
                           Admin enabled
                           <input
                             type="checkbox"
@@ -1201,7 +1204,10 @@ export default function StorageEndpointsPage() {
                             disabled
                           />
                         </label>
-                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <label
+                          title="Cette option est détectée automatiquement à partir des credentials et n'est pas modifiable manuellement."
+                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        >
                           Accounts enabled
                           <input
                             type="checkbox"
@@ -1211,7 +1217,10 @@ export default function StorageEndpointsPage() {
                             disabled
                           />
                         </label>
-                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <label
+                          title="Cette option est détectée automatiquement à partir des credentials et n'est pas modifiable manuellement."
+                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        >
                           Usage Log enabled
                           <input
                             type="checkbox"
@@ -1221,7 +1230,10 @@ export default function StorageEndpointsPage() {
                             disabled
                           />
                         </label>
-                        <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <label
+                          title="Cette option est détectée automatiquement à partir des credentials et n'est pas modifiable manuellement."
+                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        >
                           Metrics enabled
                           <input
                             type="checkbox"

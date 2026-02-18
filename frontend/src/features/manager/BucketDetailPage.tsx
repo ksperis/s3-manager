@@ -9,6 +9,7 @@ import {
   Bucket,
   BucketAcl,
   BucketCors,
+  BucketEncryptionConfiguration,
   BucketLifecycleConfig,
   BucketLoggingConfiguration,
   BucketNotificationConfiguration,
@@ -19,6 +20,7 @@ import {
   BucketTag,
   BucketWebsiteConfiguration,
   deleteBucketCors,
+  deleteBucketEncryption,
   deleteBucketLogging,
   deleteBucketNotifications,
   deleteBucketPolicyApi,
@@ -26,6 +28,7 @@ import {
   deleteBucketWebsite,
   deleteBucketLifecycle,
   getBucketCors,
+  getBucketEncryption,
   getBucketTags,
   getBucketLogging,
   getBucketNotifications,
@@ -37,6 +40,7 @@ import {
   getBucketPublicAccessBlock,
   listBuckets,
   putBucketCors,
+  putBucketEncryption,
   putBucketTags,
   putBucketLogging,
   putBucketNotifications,
@@ -51,6 +55,7 @@ import {
 } from "../../api/buckets";
 import {
   deleteCephAdminBucketCors,
+  deleteCephAdminBucketEncryption,
   deleteCephAdminBucketLifecycle,
   deleteCephAdminBucketLogging,
   deleteCephAdminBucketNotifications,
@@ -59,6 +64,7 @@ import {
   deleteCephAdminBucketWebsite,
   getCephAdminBucketAcl,
   getCephAdminBucketCors,
+  getCephAdminBucketEncryption,
   getCephAdminBucketLifecycle,
   getCephAdminBucketLogging,
   getCephAdminBucketNotifications,
@@ -69,6 +75,7 @@ import {
   getCephAdminBucketWebsite,
   listCephAdminBuckets,
   putCephAdminBucketCors,
+  putCephAdminBucketEncryption,
   putCephAdminBucketLifecycle,
   putCephAdminBucketLogging,
   putCephAdminBucketNotifications,
@@ -272,6 +279,13 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   const [corsLoading, setCorsLoading] = useState(false);
   const [savingCors, setSavingCors] = useState(false);
   const [deletingCors, setDeletingCors] = useState(false);
+  const [encryption, setEncryption] = useState<BucketEncryptionConfiguration | null>(null);
+  const [encryptionText, setEncryptionText] = useState("[]");
+  const [encryptionError, setEncryptionError] = useState<string | null>(null);
+  const [encryptionStatus, setEncryptionStatus] = useState<string | null>(null);
+  const [encryptionLoading, setEncryptionLoading] = useState(false);
+  const [savingEncryption, setSavingEncryption] = useState(false);
+  const [deletingEncryption, setDeletingEncryption] = useState(false);
   const [notificationText, setNotificationText] = useState(defaultNotificationTemplate);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [notificationsStatus, setNotificationsStatus] = useState<string | null>(null);
@@ -392,10 +406,17 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   }, [activeTab, availableTabs]);
   const staticWebsiteEnabled = useMemo(() => {
     if (isCephAdmin) {
-      return selectedEndpoint?.capabilities?.static_website ?? true;
+      return selectedEndpoint?.capabilities?.static_website === true;
     }
-    return selectedS3Account?.storage_endpoint_capabilities?.static_website ?? false;
+    return selectedS3Account?.storage_endpoint_capabilities?.static_website === true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
+  const sseFeatureEnabled = useMemo(() => {
+    if (isCephAdmin) {
+      return selectedEndpoint?.capabilities?.sse === true;
+    }
+    return selectedS3Account?.storage_endpoint_capabilities?.sse === true;
+  }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
+  const quotaFeatureEnabled = isCephEndpoint;
   const usageFeatureEnabled = useMemo(() => {
     if (isCephAdmin) {
       return selectedEndpoint?.capabilities?.metrics ?? true;
@@ -427,7 +448,8 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
 }`;
   const userRole = getUserRole();
   const isAdmin = userRole === "ui_admin" || userRole === "super_admin";
-  const canEditQuota = isCephAdmin && isAdmin && hasCephContext;
+  const canEditQuota = quotaFeatureEnabled && isCephAdmin && isAdmin && hasCephContext;
+  const quotaSectionRestricted = quotaFeatureEnabled && !canEditQuota;
   const objectLockPersistentlyEnabled =
     (objectLockConfig?.enabled ?? null) === true || (properties?.object_lock_enabled ?? null) === true;
   const objectLockActive = (objectLockEnabled ?? null) === true || objectLockPersistentlyEnabled;
@@ -444,10 +466,12 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   const objectLockChipState: FeatureState = objectLockPersistentlyEnabled ? "enabled" : "disabled";
 
   useEffect(() => {
-    if (!bucket) {
+    if (!bucket || !quotaFeatureEnabled) {
       setQuotaSizeGb("");
       setQuotaSizeUnit("GiB");
       setQuotaObjects("");
+      setQuotaStatus(null);
+      setQuotaError(null);
       return;
     }
     const toGbString = (bytes?: number | null) => {
@@ -459,7 +483,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     setQuotaSizeUnit("GiB");
     const objects = bucket.quota_max_objects;
     setQuotaObjects(objects != null && objects > 0 ? String(objects) : "");
-  }, [bucket]);
+  }, [bucket, quotaFeatureEnabled]);
 
   const applyObjectLockState = useCallback((config?: BucketObjectLockConfiguration | null) => {
     if (!config) {
@@ -698,6 +722,35 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     }
   }, [accountId, bucketName, endpointId, hasContext, isCephAdmin]);
 
+  const loadEncryption = useCallback(async () => {
+    if (!bucketName || !hasContext || !sseFeatureEnabled) {
+      setEncryption(null);
+      setEncryptionText("[]");
+      setEncryptionError(null);
+      setEncryptionStatus(null);
+      return;
+    }
+    setEncryptionLoading(true);
+    setEncryptionError(null);
+    setEncryptionStatus(null);
+    try {
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketEncryption(endpointId, bucketName)
+          : { rules: [] }
+        : await getBucketEncryption(accountId, bucketName);
+      const rules = data.rules ?? [];
+      setEncryption({ rules });
+      setEncryptionText(rules.length > 0 ? JSON.stringify(rules, null, 2) : "[]");
+    } catch (err) {
+      setEncryption(null);
+      setEncryptionText("[]");
+      setEncryptionError("Unable to load bucket encryption settings.");
+    } finally {
+      setEncryptionLoading(false);
+    }
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, sseFeatureEnabled]);
+
   const loadPublicAccessBlock = useCallback(async () => {
     if (!bucketName || !hasContext) {
       setPublicAccessBlock({ ...defaultPublicAccessBlock });
@@ -919,6 +972,10 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   }, [loadLifecycle]);
 
   useEffect(() => {
+    loadEncryption();
+  }, [loadEncryption]);
+
+  useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
 
@@ -932,7 +989,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
 
   const refreshActiveTab = useCallback(async () => {
     if (activeTab === "overview") {
-      await Promise.all([refreshBucketMeta(), loadProperties(), loadLifecycle(), loadPolicy(), loadBucketAcl(), loadCors()]);
+      await Promise.all([refreshBucketMeta(), loadProperties(), loadLifecycle(), loadPolicy(), loadBucketAcl(), loadCors(), loadEncryption()]);
       return;
     }
     if (activeTab === "metrics") {
@@ -946,7 +1003,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
       return;
     }
     if (activeTab === "properties") {
-      await Promise.all([loadProperties(), loadLifecycle(), loadBucketTags()]);
+      await Promise.all([loadProperties(), loadLifecycle(), loadBucketTags(), loadEncryption()]);
       return;
     }
     if (activeTab === "permissions") {
@@ -968,6 +1025,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     loadBucketAcl,
     loadBucketTags,
     loadCors,
+    loadEncryption,
     loadLifecycle,
     loadNotifications,
     loadObjects,
@@ -980,7 +1038,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
 
   const activeTabLoading = useMemo(() => {
     if (activeTab === "overview") {
-      return loadingBucket || propsLoading || lifecycleLoading || policyLoading || bucketAclLoading || corsLoading;
+      return loadingBucket || propsLoading || lifecycleLoading || policyLoading || bucketAclLoading || corsLoading || encryptionLoading;
     }
     if (activeTab === "metrics") {
       return loadingBucket;
@@ -989,7 +1047,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
       return objectsLoading;
     }
     if (activeTab === "properties") {
-      return propsLoading || lifecycleLoading || bucketTagsLoading;
+      return propsLoading || lifecycleLoading || bucketTagsLoading || encryptionLoading;
     }
     if (activeTab === "permissions") {
       return publicAccessLoading || bucketAclLoading || policyLoading;
@@ -1007,6 +1065,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     bucketAclLoading,
     bucketTagsLoading,
     corsLoading,
+    encryptionLoading,
     lifecycleLoading,
     loadingBucket,
     notificationsLoading,
@@ -1211,6 +1270,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   );
   const policyConfigured = Boolean(policy?.policy && Object.keys(policy.policy).length > 0);
   const corsConfigured = Boolean(cors?.rules && cors.rules.length > 0);
+  const encryptionConfigured = Boolean(encryption?.rules && encryption.rules.length > 0);
   const accessLoggingConfigured = Boolean(
     accessLoggingConfig?.enabled && (accessLoggingConfig.target_bucket ?? "").trim().length > 0
   );
@@ -1289,6 +1349,23 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
           : "Not set";
     const corsTone: PropertySummary["tone"] = corsLoading || corsError ? "unknown" : corsConfigured ? "active" : "inactive";
 
+    const encryptionState = !sseFeatureEnabled
+      ? "Unavailable"
+      : encryptionLoading
+        ? "Loading..."
+        : encryptionError
+          ? "Unavailable"
+          : encryptionConfigured
+            ? "Enabled"
+            : "Disabled";
+    const encryptionTone: PropertySummary["tone"] = !sseFeatureEnabled
+      ? "unknown"
+      : encryptionLoading || encryptionError
+        ? "unknown"
+        : encryptionConfigured
+          ? "active"
+          : "inactive";
+
     const accessLoggingState = accessLoggingLoading
       ? "Loading..."
       : accessLoggingError
@@ -1333,12 +1410,18 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
       { label: "Object Lock", state: objectLockState, tone: objectLockTone },
       { label: "Block public access", state: publicAccessState, tone: publicAccessTone },
       { label: "Lifecycle rules", state: lifecycleState, tone: lifecycleTone },
-      { label: "Bucket policy", state: policyState, tone: policyTone },
-      { label: "CORS", state: corsState, tone: corsTone },
     ];
-
-    summary.splice(4, 0, { label: "Static website", state: websiteState, tone: websiteTone });
-    summary.splice(5, 0, { label: "Quota", state: quotaState, tone: quotaTone });
+    if (staticWebsiteEnabled) {
+      summary.push({ label: "Static website", state: websiteState, tone: websiteTone });
+    }
+    if (quotaFeatureEnabled) {
+      summary.push({ label: "Quota", state: quotaState, tone: quotaTone });
+    }
+    summary.push({ label: "Bucket policy", state: policyState, tone: policyTone });
+    summary.push({ label: "CORS", state: corsState, tone: corsTone });
+    if (sseFeatureEnabled) {
+      summary.push({ label: "Server-side encryption", state: encryptionState, tone: encryptionTone });
+    }
     summary.push({ label: "Access logging", state: accessLoggingState, tone: accessLoggingTone });
 
     return summary;
@@ -1347,6 +1430,9 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     accessLoggingConfigured,
     accessLoggingError,
     accessLoggingLoading,
+    encryptionConfigured,
+    encryptionError,
+    encryptionLoading,
     hasLifecycleRules,
     corsConfigured,
     corsError,
@@ -1361,8 +1447,10 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     propsError,
     propsLoading,
     quotaConfigured,
+    quotaFeatureEnabled,
     publicAccessBlockEnabled,
     publicAccessBlockPartial,
+    sseFeatureEnabled,
     versioningIsEnabled,
     staticWebsiteEnabled,
     websiteConfigured,
@@ -1582,6 +1670,56 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
       setCorsError("Unable to delete the CORS configuration.");
     } finally {
       setDeletingCors(false);
+    }
+  };
+
+  const saveEncryption = async () => {
+    if (!bucketName || !hasContext || !sseFeatureEnabled) return;
+    setSavingEncryption(true);
+    setEncryptionError(null);
+    setEncryptionStatus(null);
+    try {
+      const parsed = encryptionText.trim() ? JSON.parse(encryptionText) : [];
+      if (!Array.isArray(parsed)) {
+        throw new Error("Encryption configuration must be an array of rules.");
+      }
+      const saved = isCephAdmin
+        ? endpointId
+          ? await putCephAdminBucketEncryption(endpointId, bucketName, parsed as Record<string, unknown>[])
+          : { rules: parsed as Record<string, unknown>[] }
+        : await putBucketEncryption(accountId, bucketName, parsed as Record<string, unknown>[]);
+      const rules = saved.rules ?? parsed;
+      setEncryption({ rules: rules as Record<string, unknown>[] });
+      setEncryptionText(rules.length > 0 ? JSON.stringify(rules, null, 2) : "[]");
+      setEncryptionStatus(rules.length > 0 ? "Bucket encryption updated." : "Bucket encryption disabled.");
+    } catch (err) {
+      setEncryptionError("Invalid or unsaved bucket encryption configuration (JSON array required).");
+    } finally {
+      setSavingEncryption(false);
+    }
+  };
+
+  const clearEncryption = async () => {
+    if (!bucketName || !hasContext || !sseFeatureEnabled) return;
+    const confirmDelete = window.confirm("Disable bucket encryption?");
+    if (!confirmDelete) return;
+    setDeletingEncryption(true);
+    setEncryptionError(null);
+    setEncryptionStatus(null);
+    try {
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await deleteCephAdminBucketEncryption(endpointId, bucketName);
+      } else {
+        await deleteBucketEncryption(accountId, bucketName);
+      }
+      setEncryption({ rules: [] });
+      setEncryptionText("[]");
+      setEncryptionStatus("Bucket encryption disabled.");
+    } catch (err) {
+      setEncryptionError("Unable to disable bucket encryption.");
+    } finally {
+      setDeletingEncryption(false);
     }
   };
 
@@ -2466,6 +2604,83 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                           </p>
                         )}
                       </div>
+                      <div
+                        className={`${bucketCardClass} md:col-start-1 md:row-start-2 space-y-3 ${
+                          sseFeatureEnabled ? "" : "opacity-60"
+                        }`}
+                      >
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Server-side encryption</p>
+                              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                Bucket default encryption rules (S3 API <code>Rules</code> array).
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={clearEncryption}
+                                disabled={!sseFeatureEnabled || deletingEncryption}
+                                className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                              >
+                                {deletingEncryption ? "Disabling..." : "Disable"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={saveEncryption}
+                                disabled={!sseFeatureEnabled || savingEncryption || encryptionLoading}
+                                className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                              >
+                                {savingEncryption ? "Saving..." : "Save"}
+                              </button>
+                            </div>
+                          </div>
+                          {!sseFeatureEnabled && <EndpointFeatureDisabledNotice featureLabel="Server-side encryption" />}
+                          {encryptionError && (
+                            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                              {encryptionError}
+                            </div>
+                          )}
+                          {encryptionStatus && (
+                            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                              {encryptionStatus}
+                            </div>
+                          )}
+                          <textarea
+                            value={encryptionText}
+                            onChange={(e) => {
+                              setEncryptionText(e.target.value);
+                              if (encryptionStatus) {
+                                setEncryptionStatus(null);
+                              }
+                            }}
+                            className="h-40 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            placeholder='[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]'
+                            spellCheck={false}
+                            disabled={!sseFeatureEnabled || encryptionLoading || savingEncryption || deletingEncryption}
+                          />
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEncryptionText(
+                                  JSON.stringify(
+                                    [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } }],
+                                    null,
+                                    2
+                                  )
+                                )
+                              }
+                              className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                              disabled={!sseFeatureEnabled}
+                            >
+                              Use AES256 default
+                            </button>
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">
+                              Leave <code>Rules</code> empty to disable default encryption.
+                            </p>
+                          </div>
+                      </div>
                       <div className={`${bucketCardClass} md:col-start-2 md:row-start-1 md:row-span-2`}>
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
@@ -2910,7 +3125,9 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                         </>
                       )}
                     </div>
-                    <div className={`${bucketCardClass} space-y-3 order-3 md:order-none md:col-start-1 md:row-start-2`}>
+                    <div
+                      className={`${bucketCardClass} space-y-3 order-3 md:order-none md:col-start-1 md:row-start-4`}
+                    >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Bucket tags</p>
@@ -3277,11 +3494,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                       </button>
                     </div>
                   </div>
-                  {staticWebsiteBlocked && (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
-                      Static website is disabled for this endpoint. Enable it in the Ceph endpoint configuration.
-                    </div>
-                  )}
+                  {staticWebsiteBlocked && <EndpointFeatureDisabledNotice featureLabel="Static website" />}
                   {websiteError && (
                     <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {websiteError}
@@ -3726,17 +3939,18 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                   label: "Ceph Admin",
                   content: (
                     <div className="space-y-3">
-                      <div className={`${bucketCardClass} ${!canEditQuota ? "opacity-50 pointer-events-none" : ""}`}>
+                      <div className={`${bucketCardClass} ${!quotaFeatureEnabled || quotaSectionRestricted ? "opacity-50" : ""}`}>
                   <div className="flex items-center justify-between">
                     <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Quota</p>
-                    {!canEditQuota && (
+                    {quotaSectionRestricted && (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                         Restricted
                       </span>
                     )}
                   </div>
                   <p className="ui-caption text-slate-500 dark:text-slate-400">Allowed bucket size and object count.</p>
-                  <form className={`mt-2 space-y-2 ${!canEditQuota ? "pointer-events-none" : ""}`} onSubmit={handleUpdateQuota}>
+                  {!quotaFeatureEnabled && <EndpointFeatureDisabledNotice featureLabel="Quota" />}
+                  <form className={`mt-2 space-y-2 ${quotaSectionRestricted ? "pointer-events-none" : ""}`} onSubmit={handleUpdateQuota}>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                         Size
@@ -3792,14 +4006,16 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                         type="submit"
                         disabled={updatingQuota || !canEditQuota}
                         className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                        title={!canEditQuota ? "Admins only" : undefined}
+                        title={!quotaFeatureEnabled ? "Unavailable on this endpoint" : !canEditQuota ? "Admins only" : undefined}
                       >
                         {updatingQuota ? "Saving..." : "Save"}
                       </button>
                     </div>
                   </form>
                   <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                    Leave empty to remove the quota. {canEditQuota ? "" : "(Read-only for this role.)"}
+                    {quotaFeatureEnabled
+                      ? `Leave empty to remove the quota. ${canEditQuota ? "" : "(Read-only for this role.)"}`
+                      : "Quota management is unavailable on this endpoint."}
                   </p>
                       </div>
                       <InfoCard
@@ -3856,6 +4072,14 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
           </form>
         </Modal>
       )}
+    </div>
+  );
+}
+
+function EndpointFeatureDisabledNotice({ featureLabel }: { featureLabel: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+      {featureLabel} is disabled on this endpoint.
     </div>
   );
 }

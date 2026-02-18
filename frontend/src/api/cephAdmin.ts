@@ -568,6 +568,7 @@ export async function compareCephAdminBucketPair(
 
 export type BucketLifecycleConfig = { rules: Record<string, unknown>[] };
 export type BucketCors = { rules: Record<string, unknown>[] };
+export type BucketEncryptionConfiguration = { rules: Record<string, unknown>[] };
 export type BucketPolicy = { policy: Record<string, unknown> | null };
 export type BucketTag = { key: string; value: string };
 
@@ -645,6 +646,32 @@ export async function putCephAdminBucketCors(endpointId: number, bucketName: str
 
 export async function deleteCephAdminBucketCors(endpointId: number, bucketName: string): Promise<void> {
   await client.delete(`/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/cors`);
+}
+
+export async function getCephAdminBucketEncryption(
+  endpointId: number,
+  bucketName: string
+): Promise<BucketEncryptionConfiguration> {
+  const { data } = await client.get<BucketEncryptionConfiguration>(
+    `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/encryption`
+  );
+  return data;
+}
+
+export async function putCephAdminBucketEncryption(
+  endpointId: number,
+  bucketName: string,
+  rules: Record<string, unknown>[]
+): Promise<BucketEncryptionConfiguration> {
+  const { data } = await client.put<BucketEncryptionConfiguration>(
+    `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/encryption`,
+    { rules }
+  );
+  return data;
+}
+
+export async function deleteCephAdminBucketEncryption(endpointId: number, bucketName: string): Promise<void> {
+  await client.delete(`/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/encryption`);
 }
 
 export async function getCephAdminBucketPolicy(endpointId: number, bucketName: string): Promise<BucketPolicy> {

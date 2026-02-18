@@ -733,6 +733,99 @@ def delete_bucket_lifecycle(
     logger.debug("Deleted lifecycle for bucket %s", bucket_name)
 
 
+def get_bucket_encryption(
+    bucket_name: str,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    session_token: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
+) -> list[dict]:
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        session_token=session_token,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
+    try:
+        resp = client.get_bucket_encryption(Bucket=bucket_name)
+        config = resp.get("ServerSideEncryptionConfiguration") or {}
+        return config.get("Rules", []) or []
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
+        if code.lower() in {"serversideencryptionconfigurationnotfounderror", "nosuchbucket"}:
+            return []
+        raise RuntimeError(f"Unable to fetch bucket encryption for '{bucket_name}': {exc}") from exc
+    except BotoCoreError as exc:
+        raise RuntimeError(f"Unable to fetch bucket encryption for '{bucket_name}': {exc}") from exc
+
+
+def put_bucket_encryption(
+    bucket_name: str,
+    rules: list[dict],
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    session_token: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
+) -> None:
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        session_token=session_token,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
+    try:
+        client.put_bucket_encryption(
+            Bucket=bucket_name,
+            ServerSideEncryptionConfiguration={"Rules": rules},
+        )
+    except (BotoCoreError, ClientError) as exc:
+        raise RuntimeError(f"Unable to set bucket encryption for '{bucket_name}': {exc}") from exc
+    logger.debug("Updated bucket encryption for bucket %s", bucket_name)
+
+
+def delete_bucket_encryption(
+    bucket_name: str,
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    session_token: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    region: Optional[str] = None,
+    force_path_style: bool = False,
+    verify_tls: bool = True,
+) -> None:
+    client = get_s3_client(
+        access_key,
+        secret_key,
+        endpoint=endpoint,
+        session_token=session_token,
+        region=region,
+        force_path_style=force_path_style,
+        verify_tls=verify_tls,
+    )
+    try:
+        client.delete_bucket_encryption(Bucket=bucket_name)
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
+        if code.lower() in {"serversideencryptionconfigurationnotfounderror", "nosuchbucket"}:
+            return
+        raise RuntimeError(f"Unable to delete bucket encryption for '{bucket_name}': {exc}") from exc
+    except BotoCoreError as exc:
+        raise RuntimeError(f"Unable to delete bucket encryption for '{bucket_name}': {exc}") from exc
+    logger.debug("Deleted bucket encryption for bucket %s", bucket_name)
+
+
 def get_bucket_cors(
     bucket_name: str,
     access_key: Optional[str] = None,
