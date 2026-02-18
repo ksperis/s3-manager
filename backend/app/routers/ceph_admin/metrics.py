@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -149,6 +149,7 @@ def cluster_storage_metrics(
 @router.get("/traffic")
 def cluster_traffic_metrics(
     window: TrafficWindow = Query(TrafficWindow.WEEK),
+    bucket: Optional[str] = Query(None),
     endpoint: StorageEndpoint = Depends(get_ceph_admin_workspace_endpoint),
 ) -> dict[str, Any]:
     _require_usage_logs_enabled(endpoint)
@@ -168,14 +169,17 @@ def cluster_traffic_metrics(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     entries = flatten_usage_entries(payload)
-    aggregation = aggregate_usage(entries, start=start, end=reference, window=window)
+    bucket_filter = bucket.strip() if isinstance(bucket, str) else None
+    if bucket_filter == "":
+        bucket_filter = None
+    aggregation = aggregate_usage(entries, start=start, end=reference, window=window, bucket_filter=bucket_filter)
     aggregation.update(
         {
             "window": window.value if isinstance(window, TrafficWindow) else str(window),
             "start": start.isoformat(),
             "end": reference.isoformat(),
             "resolution": WINDOW_RESOLUTION_LABELS.get(window, "per-entry"),
-            "bucket_filter": None,
+            "bucket_filter": bucket_filter,
         }
     )
     aggregation["data_points"] = len(aggregation.get("series") or [])

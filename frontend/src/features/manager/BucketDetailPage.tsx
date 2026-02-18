@@ -3927,7 +3927,15 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
                     />
                   </div>
                 </section>
-                {hasAccountContext && bucketName ? (
+                {isCephAdmin ? (
+                  endpointId && bucketName ? (
+                    <TrafficAnalytics scope="ceph-admin" endpointId={endpointId} bucketName={bucketName} enabled={hasCephContext} />
+                  ) : (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                      Select an endpoint and a bucket to view detailed metrics.
+                    </div>
+                  )
+                ) : hasAccountContext && bucketName ? (
                   <TrafficAnalytics accountId={accountIdForApi} bucketName={bucketName} enabled={hasAccountContext} />
                 ) : (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">

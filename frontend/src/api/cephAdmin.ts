@@ -236,10 +236,11 @@ export async function fetchCephAdminClusterStorage(endpointId: number): Promise<
 
 export async function fetchCephAdminClusterTraffic(
   endpointId: number,
-  window: TrafficWindow = "week"
+  window: TrafficWindow = "week",
+  bucket?: string
 ): Promise<CephAdminClusterTrafficMetrics> {
   const { data } = await client.get<CephAdminClusterTrafficMetrics>(`/ceph-admin/endpoints/${endpointId}/metrics/traffic`, {
-    params: { window },
+    params: { window, bucket: bucket || undefined },
   });
   return data;
 }

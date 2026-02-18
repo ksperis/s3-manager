@@ -13,6 +13,7 @@ import {
   fetchManagerTraffic,
 } from "../../api/stats";
 import { fetchPortalTraffic } from "../../api/portal";
+import { fetchCephAdminClusterTraffic } from "../../api/cephAdmin";
 import TrafficBytesChart from "../../components/TrafficBytesChart";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import {
@@ -45,13 +46,14 @@ const REQUEST_COLORS: Record<string, string> = {
 
 const CATEGORY_COLORS = ["#4F46E5", "#14B8A6", "#F97316", "#0EA5E9", "#F59E0B", "#EC4899"];
 type TrafficAnalyticsProps = {
-  accountId: S3AccountSelector;
+  accountId?: S3AccountSelector;
+  endpointId?: number | null;
   bucketName?: string;
-  scope?: "manager" | "portal";
+  scope?: "manager" | "portal" | "ceph-admin";
   enabled?: boolean;
 };
 
-export default function TrafficAnalytics({ accountId, bucketName, scope = "manager", enabled = true }: TrafficAnalyticsProps) {
+export default function TrafficAnalytics({ accountId, endpointId, bucketName, scope = "manager", enabled = true }: TrafficAnalyticsProps) {
   const [window, setWindow] = useState<TrafficWindow>("week");
   const [traffic, setTraffic] = useState<ManagerTrafficStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -69,10 +71,20 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
       setLoading(true);
       setError(null);
       try {
-        const data =
-          scope === "portal"
-            ? await fetchPortalTraffic(accountId, window, bucketName)
-            : await fetchManagerTraffic(accountId, window, bucketName);
+        let data: ManagerTrafficStats;
+        if (scope === "ceph-admin") {
+          if (!endpointId) {
+            if (!cancelled) {
+              setTraffic(null);
+            }
+            return;
+          }
+          data = await fetchCephAdminClusterTraffic(endpointId, window, bucketName);
+        } else if (scope === "portal") {
+          data = await fetchPortalTraffic(accountId ?? null, window, bucketName);
+        } else {
+          data = await fetchManagerTraffic(accountId ?? null, window, bucketName);
+        }
         if (!cancelled) {
           setTraffic(data);
         }
@@ -91,7 +103,7 @@ export default function TrafficAnalytics({ accountId, bucketName, scope = "manag
     return () => {
       cancelled = true;
     };
-  }, [accountId, window, bucketName, scope, enabled]);
+  }, [accountId, endpointId, window, bucketName, scope, enabled]);
 
   const totals = traffic?.totals;
   const hasSeries = (traffic?.series ?? []).length > 0;
