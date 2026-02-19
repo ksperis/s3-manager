@@ -72,10 +72,10 @@ function ManagerShell() {
   const modeVisual = getContextAccessModeVisual(accessMode);
   const identityLabel = iamIdentity
     ? accessMode === "connection"
-      ? `Identité S3: ${iamIdentity}`
-      : `Identité IAM: ${iamIdentity}`
+      ? `S3 Identity: ${iamIdentity}`
+      : `IAM Identity: ${iamIdentity}`
     : selectedS3AccountType === "s3_user" && sessionS3AccountName
-      ? `Compte utilisateur S3: ${sessionS3AccountName}`
+      ? `S3 user account: ${sessionS3AccountName}`
       : null;
 
   const pillClasses =

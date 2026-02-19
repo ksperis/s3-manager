@@ -1228,7 +1228,7 @@ export default function StorageEndpointsPage() {
                       )}
                       <div className="grid gap-3 sm:grid-cols-2">
                         <label
-                          title="Cette option est détectée automatiquement à partir des credentials et n'est pas modifiable manuellement."
+                          title="This option is automatically detected from credentials and cannot be manually changed."
                           className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         >
                           Admin enabled
@@ -1241,7 +1241,7 @@ export default function StorageEndpointsPage() {
                           />
                         </label>
                         <label
-                          title="Cette option est détectée automatiquement à partir des credentials et n'est pas modifiable manuellement."
+                          title="This option is automatically detected from credentials and cannot be manually changed."
                           className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         >
                           Accounts enabled
@@ -1254,7 +1254,7 @@ export default function StorageEndpointsPage() {
                           />
                         </label>
                         <label
-                          title="Cette option est détectée automatiquement à partir des credentials et n'est pas modifiable manuellement."
+                          title="This option is automatically detected from credentials and cannot be manually changed."
                           className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         >
                           Usage Log enabled
@@ -1267,7 +1267,7 @@ export default function StorageEndpointsPage() {
                           />
                         </label>
                         <label
-                          title="Cette option est détectée automatiquement à partir des credentials et n'est pas modifiable manuellement."
+                          title="This option is automatically detected from credentials and cannot be manually changed."
                           className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         >
                           Metrics enabled

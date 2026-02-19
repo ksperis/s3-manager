@@ -261,7 +261,7 @@ export default function AppRouter() {
       <>
         <Route element={<RequireAuth />}>
           <Route index element={<RoleRedirect />} />
-          <Route path="/profile" element={<Layout headerTitle="Profil" headerSubtitle="Compte" hideSidebar />}>
+          <Route path="/profile" element={<Layout headerTitle="Profile" headerSubtitle="Account" hideSidebar />}>
             <Route index element={<ProfilePage />} />
           </Route>
 

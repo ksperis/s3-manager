@@ -28,8 +28,8 @@ function BrowserShell() {
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const identityLabel = iamIdentity
     ? identityAccessMode === "connection"
-      ? `Identité S3: ${iamIdentity}`
-      : `Identité IAM: ${iamIdentity}`
+      ? `S3 Identity: ${iamIdentity}`
+      : `IAM Identity: ${iamIdentity}`
     : null;
   const baseControlClasses =
     "h-9 w-60 rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
@@ -70,7 +70,7 @@ function BrowserShell() {
   const inlineAction = (
     <div className="flex items-center gap-4">
       <div className="flex items-center gap-3">
-        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Contexte</span>
+        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Context</span>
         {showSelector ? (
           <TopbarContextAccountSelector
             contexts={visibleContexts}
@@ -108,7 +108,7 @@ function BrowserShell() {
       <>
         {accessError && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 shadow-sm dark:border-amber-900/40 dark:bg-amber-900/30 dark:text-amber-100">
-            Accès refusé pour /browser. Vérifiez vos droits sur le compte ou contactez un administrateur.
+            Access denied for /browser. Check your account permissions or contact an administrator.
           </div>
         )}
         <Outlet key={`${selectedContextId ?? "none"}`} />

@@ -5619,7 +5619,7 @@ export default function BrowserPage({
     activeOperations.length + uploadQueue.length + queuedDownloadCount + queuedDeleteCount + queuedCopyCount;
   const hasPendingOperations = totalOperationsCount > 0;
   const leaveMessage =
-    "Des opérations sont en cours (upload, download, copie, suppression). Quitter maintenant peut les interrompre. Continuer ?";
+    "Operations are in progress (upload, download, copy, delete). Leaving now may interrupt them. Continue?";
   unstable_usePrompt({
     when: hasPendingOperations,
     message: leaveMessage,

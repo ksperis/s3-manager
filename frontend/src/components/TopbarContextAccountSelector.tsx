@@ -15,28 +15,28 @@ export function getContextAccessModeVisual(mode: ContextAccessMode): {
 } {
   if (mode === "admin") {
     return {
-      label: "Mode admin",
+      label: "Admin mode",
       shortLabel: "Admin",
       classes: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100",
     };
   }
   if (mode === "portal") {
     return {
-      label: "Mode portal",
+      label: "Portal mode",
       shortLabel: "Portal",
       classes: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100",
     };
   }
   if (mode === "connection") {
     return {
-      label: "Mode connection",
+      label: "Connection mode",
       shortLabel: "Connection",
       classes: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-100",
     };
   }
   if (mode === "s3_user") {
     return {
-      label: "Mode S3 user",
+      label: "S3 user mode",
       shortLabel: "S3 user",
       classes: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-100",
     };
@@ -89,10 +89,10 @@ export default function TopbarContextAccountSelector({
         const label = formatAccountLabel(context, defaultEndpointId, defaultEndpointName);
         const description =
           context.kind === "connection"
-            ? "Connexion privee"
+            ? "Private connection"
             : context.kind === "legacy_user"
-              ? "Identite legacy S3 user"
-              : "Compte RGW";
+              ? "Legacy S3 user identity"
+              : "RGW account";
         const haystack = [label, context.display_name, context.endpoint_name, context.endpoint_url, description]
           .filter(Boolean)
           .join(" ")
@@ -167,14 +167,14 @@ export default function TopbarContextAccountSelector({
       {menuOpen && (
         <div className="absolute left-0 top-[calc(100%+8px)] z-50 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
           <div className="rounded-lg border border-slate-200/70 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/70">
-            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Identite IAM actuelle</p>
+            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Current IAM identity</p>
             <p className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">
-              {identityLabel ?? "Non disponible pour ce contexte"}
+              {identityLabel ?? "Not available for this context"}
             </p>
             {canShowToggle && (
               <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-slate-200/70 bg-white px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900/70">
                 <div className="min-w-0">
-                  <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Mode admin</p>
+                  <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Admin mode</p>
                   <p className="truncate ui-caption text-slate-500 dark:text-slate-400">{modeVisual.label}</p>
                 </div>
                 <button
@@ -191,11 +191,11 @@ export default function TopbarContextAccountSelector({
                   aria-label={
                     accessMode === "admin"
                       ? canToggleAccess
-                        ? "Mode admin actif, basculer en mode portal"
-                        : "Mode admin actif"
+                        ? "Admin mode actif, basculer en mode portal"
+                        : "Admin mode actif"
                       : canToggleAccess
-                        ? "Mode portal actif, basculer en mode admin"
-                        : "Mode portal actif"
+                        ? "Portal mode actif, basculer en mode admin"
+                        : "Portal mode actif"
                   }
                 >
                   <span
@@ -215,7 +215,7 @@ export default function TopbarContextAccountSelector({
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Rechercher un compte..."
+                placeholder="Search account..."
                 className="h-9 w-full rounded-lg border border-slate-200/80 bg-white pl-8 pr-3 ui-caption text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               />
             </div>
@@ -224,7 +224,7 @@ export default function TopbarContextAccountSelector({
           <div className="mt-2 max-h-72 overflow-y-auto">
             {filteredItems.length === 0 ? (
               <div className="rounded-lg px-3 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                Aucun compte ne correspond a votre recherche.
+                No account matches your search.
               </div>
             ) : (
               filteredItems.map((item) => {

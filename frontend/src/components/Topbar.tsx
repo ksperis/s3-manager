@@ -139,7 +139,7 @@ export default function Topbar({
                   {accountInitial}
                 </span>
                 <span className="hidden min-w-0 sm:flex sm:max-w-48 sm:flex-col sm:items-start">
-                  <span className="ui-caption uppercase tracking-wide text-slate-400 dark:text-slate-500">Compte</span>
+                  <span className="ui-caption uppercase tracking-wide text-slate-400 dark:text-slate-500">Account</span>
                   <span className="w-full truncate ui-caption font-semibold text-slate-700 dark:text-slate-100">
                     {accountDisplay}
                   </span>
@@ -154,7 +154,7 @@ export default function Topbar({
               {accountMenuOpen && (
                 <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
                   <div className="mb-1 rounded-lg border border-slate-200/70 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/70">
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">Connecte en tant que</p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">Signed in as</p>
                     <p className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">{accountDisplay}</p>
                   </div>
 
@@ -167,10 +167,10 @@ export default function Topbar({
                     <UserIcon className="mt-0.5 h-4 w-4 text-slate-500 dark:text-slate-300" />
                     <span>
                       <span className="block ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                        Profil utilisateur
+                        User profile
                       </span>
                       <span className="block ui-caption text-slate-500 dark:text-slate-400">
-                        Identite, mot de passe, preferences
+                        Identity, password, preferences
                       </span>
                     </span>
                   </button>
@@ -185,10 +185,10 @@ export default function Topbar({
                       <LinkIcon className="mt-0.5 h-4 w-4 text-slate-500 dark:text-slate-300" />
                       <span>
                         <span className="block ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                          Connexions S3 privees
+                          Private S3 connections
                         </span>
                         <span className="block ui-caption text-slate-500 dark:text-slate-400">
-                          Gerer vos endpoints et credentials
+                          Manage your endpoints and credentials
                         </span>
                       </span>
                     </button>
@@ -202,7 +202,7 @@ export default function Topbar({
                     className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left ui-caption font-semibold text-primary-700 transition hover:bg-primary-50 dark:text-primary-200 dark:hover:bg-primary-900/40"
                   >
                     <LogoutIcon className="h-4 w-4" />
-                    <span>Deconnexion</span>
+                    <span>Sign out</span>
                   </button>
                 </div>
               )}
@@ -213,7 +213,7 @@ export default function Topbar({
 
       {showProfileModal && (
         <Modal
-          title="Profil utilisateur"
+          title="User profile"
           onClose={() => setShowProfileModal(false)}
           maxWidthClass="max-w-6xl"
           maxBodyHeightClass="max-h-[85vh]"
@@ -225,7 +225,7 @@ export default function Topbar({
 
       {showConnectionsModal && (
         <Modal
-          title="Connexions S3 privees"
+          title="Private S3 connections"
           onClose={() => setShowConnectionsModal(false)}
           maxWidthClass="max-w-7xl"
           maxBodyHeightClass="max-h-[85vh]"

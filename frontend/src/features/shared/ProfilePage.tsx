@@ -242,7 +242,7 @@ export default function ProfilePage({
       })
       .catch((error) => {
         console.error(error);
-        setProfileError(getErrorMessage(error, "Impossible de charger le profil utilisateur."));
+        setProfileError(getErrorMessage(error, "Unable to load user profile."));
       })
       .finally(() => {
         setProfileLoading(false);
@@ -289,7 +289,7 @@ export default function ProfilePage({
         setConnections([]);
         setConnectionDrafts({});
         setConnectionCredentialDrafts({});
-        setConnectionsError(getErrorMessage(error, "Impossible de charger les connexions S3 privees."));
+        setConnectionsError(getErrorMessage(error, "Unable to load private S3 connections."));
       })
       .finally(() => {
         if (!cancelled) {
@@ -343,7 +343,7 @@ export default function ProfilePage({
       );
     } catch (error) {
       console.error(error);
-      setConnectionsError(getErrorMessage(error, "Impossible de rafraichir les connexions S3 privees."));
+      setConnectionsError(getErrorMessage(error, "Unable to refresh private S3 connections."));
     } finally {
       setConnectionsLoading(false);
     }
@@ -387,10 +387,10 @@ export default function ProfilePage({
       const updatedName = updated.full_name ?? null;
       setFullName(updatedName ?? "");
       persistUserProfile(updatedName);
-      setProfileMessage("Profil mis a jour.");
+      setProfileMessage("Profile updated.");
     } catch (error) {
       console.error(error);
-      setProfileError(getErrorMessage(error, "Impossible de sauvegarder le profil."));
+      setProfileError(getErrorMessage(error, "Unable to save profile."));
     } finally {
       setProfileSaving(false);
     }
@@ -402,11 +402,11 @@ export default function ProfilePage({
     setPasswordError(null);
     setPasswordMessage(null);
     if (!currentPassword || !newPassword) {
-      setPasswordError("Renseignez le mot de passe actuel et le nouveau mot de passe.");
+      setPasswordError("Enter the current password and the new password.");
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPasswordError("La confirmation du mot de passe ne correspond pas.");
+      setPasswordError("Password confirmation does not match.");
       return;
     }
     setPasswordSaving(true);
@@ -418,10 +418,10 @@ export default function ProfilePage({
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setPasswordMessage("Mot de passe modifie.");
+      setPasswordMessage("Password modifie.");
     } catch (error) {
       console.error(error);
-      setPasswordError(getErrorMessage(error, "Impossible de changer le mot de passe."));
+      setPasswordError(getErrorMessage(error, "Unable to change password."));
     } finally {
       setPasswordSaving(false);
     }
@@ -436,7 +436,7 @@ export default function ProfilePage({
     } else {
       localStorage.removeItem(WORKSPACE_STORAGE_KEY);
     }
-    setPreferencesMessage("Preferences enregistrees.");
+    setPreferencesMessage("Preferences saved.");
   };
 
   const handleCreatePrivateConnection = async (event: FormEvent) => {
@@ -445,15 +445,15 @@ export default function ProfilePage({
     setConnectionsError(null);
     setConnectionsMessage(null);
     if (!createConnectionForm.name.trim()) {
-      setConnectionsError("Le nom de la connexion est requis.");
+      setConnectionsError("Connection name is required.");
       return;
     }
     if (!createConnectionForm.endpoint_url.trim()) {
-      setConnectionsError("L'URL de l'endpoint est requise.");
+      setConnectionsError("Endpoint URL is required.");
       return;
     }
     if (!createConnectionForm.access_key_id.trim() || !createConnectionForm.secret_access_key.trim()) {
-      setConnectionsError("Les credentials S3 sont requis.");
+      setConnectionsError("S3 credentials are required.");
       return;
     }
     setCreatingConnection(true);
@@ -472,11 +472,11 @@ export default function ProfilePage({
       setCreateConnectionForm(defaultCreateConnectionForm);
       setShowCreateConnectionModal(false);
       setConnectionsPage(1);
-      setConnectionsMessage("Connexion S3 privee creee.");
+      setConnectionsMessage("Private S3 connection created.");
       await refreshConnections();
     } catch (error) {
       console.error(error);
-      setConnectionsError(getErrorMessage(error, "Impossible de creer la connexion S3 privee."));
+      setConnectionsError(getErrorMessage(error, "Unable to create private S3 connection."));
     } finally {
       setCreatingConnection(false);
     }
@@ -513,11 +513,11 @@ export default function ProfilePage({
     setConnectionsError(null);
     setConnectionsMessage(null);
     if (!draft.name.trim()) {
-      setConnectionsError("Le nom de la connexion est requis.");
+      setConnectionsError("Connection name is required.");
       return false;
     }
     if (!draft.storage_endpoint_id && !draft.endpoint_url.trim()) {
-      setConnectionsError("L'URL de l'endpoint est requise.");
+      setConnectionsError("Endpoint URL is required.");
       return false;
     }
     setSavingConnectionBusyId(connectionId);
@@ -530,12 +530,12 @@ export default function ProfilePage({
         force_path_style: draft.force_path_style,
         verify_tls: draft.verify_tls,
       });
-      setConnectionsMessage("Connexion S3 privee mise a jour.");
+      setConnectionsMessage("Private S3 connection updated.");
       await refreshConnections();
       return true;
     } catch (error) {
       console.error(error);
-      setConnectionsError(getErrorMessage(error, "Impossible de mettre a jour la connexion S3 privee."));
+      setConnectionsError(getErrorMessage(error, "Unable to update private S3 connection."));
       return false;
     } finally {
       setSavingConnectionBusyId(null);
@@ -549,7 +549,7 @@ export default function ProfilePage({
     setConnectionsError(null);
     setConnectionsMessage(null);
     if (!draft.access_key_id.trim() || !draft.secret_access_key.trim()) {
-      setConnectionsError("Renseignez la nouvelle Access Key et la Secret Key.");
+      setConnectionsError("Enter the new Access Key and Secret Key.");
       return false;
     }
     setRotatingConnectionBusyId(connectionId);
@@ -563,7 +563,7 @@ export default function ProfilePage({
       return true;
     } catch (error) {
       console.error(error);
-      setConnectionsError(getErrorMessage(error, "Impossible de modifier les credentials S3."));
+      setConnectionsError(getErrorMessage(error, "Unable to update S3 credentials."));
       return false;
     } finally {
       setRotatingConnectionBusyId(null);
@@ -572,17 +572,17 @@ export default function ProfilePage({
 
   const handleDeletePrivateConnection = async (connectionId: number) => {
     if (!canManagePrivateConnections) return;
-    if (!window.confirm("Supprimer cette connexion S3 privee ?")) return;
+    if (!window.confirm("Delete this private S3 connection?")) return;
     setConnectionsError(null);
     setConnectionsMessage(null);
     setDeletingConnectionBusyId(connectionId);
     try {
       await deleteConnection(connectionId);
-      setConnectionsMessage("Connexion S3 privee supprimee.");
+      setConnectionsMessage("Private S3 connection deleted.");
       await refreshConnections();
     } catch (error) {
       console.error(error);
-      setConnectionsError(getErrorMessage(error, "Impossible de supprimer la connexion S3 privee."));
+      setConnectionsError(getErrorMessage(error, "Unable to delete private S3 connection."));
     } finally {
       setDeletingConnectionBusyId(null);
     }
@@ -607,20 +607,20 @@ export default function ProfilePage({
     <div className="space-y-4">
       {showPageHeader && (
         <PageHeader
-          title="Profil utilisateur"
-          description="Configuration de votre compte et de vos preferences."
-          breadcrumbs={[{ label: "Profil" }]}
+          title="User profile"
+          description="Configure your account and preferences."
+          breadcrumbs={[{ label: "Profile" }]}
         />
       )}
 
-      {showSettingsCards && profileLoading && <PageBanner tone="info">Chargement du profil...</PageBanner>}
+      {showSettingsCards && profileLoading && <PageBanner tone="info">Loading profile...</PageBanner>}
       {showSettingsCards && profileError && <PageBanner tone="error">{profileError}</PageBanner>}
 
       {showSettingsCards && <div className="grid gap-4 lg:grid-cols-2">
         <form onSubmit={handleProfileSave} className={cardClasses}>
           <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-            <h2 className={sectionHeadingClasses}>Identite</h2>
-            <p className={sectionDescriptionClasses}>Modifiez le nom affiche pour votre compte.</p>
+            <h2 className={sectionHeadingClasses}>Identity</h2>
+            <p className={sectionDescriptionClasses}>Update the display name for your account.</p>
           </div>
           <div className="space-y-4 px-5 py-5">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -637,7 +637,7 @@ export default function ProfilePage({
               </label>
               <label className="block">
                 <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Nom
+                  Name
                 </span>
                 <input
                   type="text"
@@ -645,13 +645,13 @@ export default function ProfilePage({
                   onChange={(event) => setFullName(event.target.value)}
                   disabled={isRgwSession}
                   className={`${inputClasses} ${isRgwSession ? "cursor-not-allowed opacity-70" : ""}`}
-                  placeholder="Votre nom"
+                  placeholder="Your name"
                 />
               </label>
             </div>
             {isRgwSession && (
               <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Session S3 temporaire: le profil utilisateur n&apos;est pas editable.
+                Temporary S3 session: user profile is not editable.
               </p>
             )}
             {profileMessage && (
@@ -659,7 +659,7 @@ export default function ProfilePage({
             )}
             <div>
               <button type="submit" disabled={profileSaving || isRgwSession} className={primaryButtonClasses}>
-                {profileSaving ? "Enregistrement..." : "Enregistrer le profil"}
+                {profileSaving ? "Saving..." : "Save profile"}
               </button>
             </div>
           </div>
@@ -667,19 +667,19 @@ export default function ProfilePage({
 
         <form onSubmit={handlePasswordSave} className={cardClasses}>
           <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-            <h2 className={sectionHeadingClasses}>Mot de passe</h2>
-            <p className={sectionDescriptionClasses}>Mettez a jour votre mot de passe de connexion.</p>
+            <h2 className={sectionHeadingClasses}>Password</h2>
+            <p className={sectionDescriptionClasses}>Update your sign-in password.</p>
           </div>
           <div className="space-y-4 px-5 py-5">
             {!canChangePassword ? (
               <PageBanner tone="info">
-                Le changement de mot de passe n&apos;est pas disponible pour ce mode d&apos;authentification.
+                Password change is not available for this authentication mode.
               </PageBanner>
             ) : (
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block">
                   <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Actuel
+                    Current
                   </span>
                   <input
                     type="password"
@@ -691,7 +691,7 @@ export default function ProfilePage({
                 </label>
                 <label className="block">
                   <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Nouveau
+                    New
                   </span>
                   <input
                     type="password"
@@ -703,7 +703,7 @@ export default function ProfilePage({
                 </label>
                 <label className="block">
                   <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Confirmation
+                    Confirm
                   </span>
                   <input
                     type="password"
@@ -721,7 +721,7 @@ export default function ProfilePage({
             )}
             <div>
               <button type="submit" disabled={passwordSaving || !canChangePassword} className={primaryButtonClasses}>
-                {passwordSaving ? "Modification..." : "Changer le mot de passe"}
+                {passwordSaving ? "Updating..." : "Change password"}
               </button>
             </div>
           </div>
@@ -730,20 +730,20 @@ export default function ProfilePage({
         <form onSubmit={handlePreferencesSave} className={cardClasses}>
           <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
             <h2 className={sectionHeadingClasses}>Preferences</h2>
-            <p className={sectionDescriptionClasses}>Langue, theme et workspace par defaut apres connexion.</p>
+            <p className={sectionDescriptionClasses}>Language, theme, and default workspace after sign-in.</p>
           </div>
           <div className="space-y-4 px-5 py-5">
             <div className="grid gap-3 md:grid-cols-3">
               <label className="block">
                 <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Langue
+                  Language
                 </span>
                 <select
                   value={preferencesLanguage}
                   onChange={(event) => setPreferencesLanguage(event.target.value as "fr" | "en")}
                   className={inputClasses}
                 >
-                  <option value="fr">Francais</option>
+                  <option value="fr">French</option>
                   <option value="en">English</option>
                 </select>
               </label>
@@ -756,13 +756,13 @@ export default function ProfilePage({
                   onChange={(event) => setPreferencesTheme(event.target.value as "light" | "dark")}
                   className={inputClasses}
                 >
-                  <option value="light">Clair</option>
-                  <option value="dark">Sombre</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
                 </select>
               </label>
               <label className="block">
                 <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Workspace par defaut
+                  Default workspace
                 </span>
                 <select
                   value={preferredWorkspace ?? ""}
@@ -770,7 +770,7 @@ export default function ProfilePage({
                   className={inputClasses}
                   disabled={availableWorkspaces.length === 0}
                 >
-                  {availableWorkspaces.length === 0 && <option value="">Aucun workspace disponible</option>}
+                  {availableWorkspaces.length === 0 && <option value="">No workspace available</option>}
                   {availableWorkspaces.map((workspace) => (
                     <option key={workspace.id} value={workspace.id}>
                       {workspace.label}
@@ -784,7 +784,7 @@ export default function ProfilePage({
             )}
             <div>
               <button type="submit" className={primaryButtonClasses}>
-                Enregistrer les preferences
+                Save preferences
               </button>
             </div>
           </div>
@@ -794,12 +794,12 @@ export default function ProfilePage({
       {showConnectionsSection && <section className={cardClasses}>
         <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className={sectionHeadingClasses}>Connexions S3 privees</h2>
-            <p className={sectionDescriptionClasses}>Liste de vos connexions et gestion des credentials.</p>
+            <h2 className={sectionHeadingClasses}>Private S3 connections</h2>
+            <p className={sectionDescriptionClasses}>List your connections and manage credentials.</p>
           </div>
           {canManagePrivateConnections && (
             <button type="button" className={primaryButtonClasses} onClick={openCreateConnectionModal}>
-              Ajouter une connexion
+              Add connection
             </button>
           )}
         </div>
@@ -808,8 +808,8 @@ export default function ProfilePage({
           {!canManagePrivateConnections ? (
             <PageBanner tone="info">
               {storedUser?.role === "ui_user"
-                ? "La gestion des connexions S3 privees est desactivee pour les UI User sur cette instance."
-                : "Cette session ne peut pas gerer de connexions S3 privees."}
+                ? "Private S3 connection management is disabled for UI users on this instance."
+                : "This session cannot manage private S3 connections."}
             </PageBanner>
           ) : (
             <>
@@ -818,18 +818,18 @@ export default function ProfilePage({
               <div className="rounded-xl border border-slate-200/80 dark:border-slate-800">
                 <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    {filteredConnections.length} connexion{filteredConnections.length > 1 ? "s" : ""} affichee
-                    {filteredConnections.length !== connections.length ? `s sur ${connections.length}` : "s"}
+                    {filteredConnections.length} connections shown
+                    {filteredConnections.length !== connections.length ? ` of ${connections.length}` : ""}
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Recherche
+                      Search
                     </span>
                     <input
                       type="text"
                       value={connectionsFilter}
                       onChange={(event) => handleConnectionsFilterChange(event.target.value)}
-                      placeholder="Nom, endpoint, provider..."
+                      placeholder="Name, endpoint, provider..."
                       className={`${toolbarCompactInputClasses} w-full sm:w-72`}
                     />
                   </div>
@@ -838,7 +838,7 @@ export default function ProfilePage({
                   <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
-                        {["Connexion", "Endpoint", "Provider", "Derniere maj", "Derniere utilisation", "Actions"].map(
+                        {["Connection", "Endpoint", "Provider", "Last update", "Last used", "Actions"].map(
                           (label) => (
                             <th
                               key={label}
@@ -854,21 +854,21 @@ export default function ProfilePage({
                       {connectionsLoading && (
                         <tr>
                           <td colSpan={6} className="px-4 py-4 ui-body text-slate-500 dark:text-slate-400">
-                            Chargement des connexions...
+                            Loading connections...
                           </td>
                         </tr>
                       )}
                       {!connectionsLoading && pagedConnections.length === 0 && (
                         <tr>
                           <td colSpan={6} className="px-4 py-4 ui-body text-slate-500 dark:text-slate-400">
-                            Aucune connexion S3 privee configuree.
+                            No private S3 connection configured.
                           </td>
                         </tr>
                       )}
                       {!connectionsLoading &&
                         pagedConnections.map((connection) => {
                           const endpointLabel = connection.storage_endpoint_id
-                            ? `Endpoint gere #${connection.storage_endpoint_id}`
+                            ? `Managed endpoint #${connection.storage_endpoint_id}`
                             : connection.endpoint_url || "-";
                           return (
                             <tr key={connection.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -903,7 +903,7 @@ export default function ProfilePage({
                                     className={tableActionButtonClasses}
                                     onClick={() => openEditConnectionModal(connection)}
                                   >
-                                    Editer
+                                    Edit
                                   </button>
                                   <button
                                     type="button"
@@ -918,7 +918,7 @@ export default function ProfilePage({
                                     disabled={deletingConnectionBusyId === connection.id}
                                     onClick={() => void handleDeletePrivateConnection(connection.id)}
                                   >
-                                    {deletingConnectionBusyId === connection.id ? "Suppression..." : "Supprimer"}
+                                    {deletingConnectionBusyId === connection.id ? "Deleting..." : "Delete"}
                                   </button>
                                 </div>
                               </td>
@@ -949,7 +949,7 @@ export default function ProfilePage({
 
       {showConnectionsSection && showCreateConnectionModal && (
         <Modal
-          title="Ajouter une connexion S3 privee"
+          title="Add private S3 connection"
           onClose={() => (!creatingConnection ? setShowCreateConnectionModal(false) : null)}
           maxWidthClass="max-w-3xl"
         >
@@ -962,7 +962,7 @@ export default function ProfilePage({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Nom
+                  Name
                 </span>
                 <input
                   type="text"
@@ -1072,10 +1072,10 @@ export default function ProfilePage({
                 onClick={() => setShowCreateConnectionModal(false)}
                 disabled={creatingConnection}
               >
-                Annuler
+                Cancel
               </button>
               <button type="submit" className={primaryButtonClasses} disabled={creatingConnection}>
-                {creatingConnection ? "Creation..." : "Creer la connexion"}
+                {creatingConnection ? "Creating..." : "Create connection"}
               </button>
             </div>
           </form>
@@ -1084,7 +1084,7 @@ export default function ProfilePage({
 
       {showConnectionsSection && editingConnection && (
         <Modal
-          title={`Modifier la connexion - ${editingConnection.name}`}
+          title={`Edit connection - ${editingConnection.name}`}
           onClose={() => (savingConnectionBusyId === editingConnection.id ? null : setEditingConnectionId(null))}
           maxWidthClass="max-w-3xl"
         >
@@ -1109,7 +1109,7 @@ export default function ProfilePage({
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block">
                       <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Nom
+                        Name
                       </span>
                       <input
                         type="text"
@@ -1162,7 +1162,7 @@ export default function ProfilePage({
                   </div>
                   {isManagedEndpoint && (
                     <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Cette connexion utilise un endpoint gere par la plateforme.
+                      This connection uses a platform-managed endpoint.
                     </p>
                   )}
                   <div className="flex flex-wrap items-center gap-4">
@@ -1201,7 +1201,7 @@ export default function ProfilePage({
                 onClick={() => setEditingConnectionId(null)}
                 disabled={savingConnectionBusyId === editingConnection.id}
               >
-                Annuler
+                Cancel
               </button>
               <button
                 type="submit"
@@ -1237,7 +1237,7 @@ export default function ProfilePage({
             }}
           >
             <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Access Key actuelle: <span className="ui-mono">{rotatingConnection.access_key_id || "-"}</span>
+              Current Access Key: <span className="ui-mono">{rotatingConnection.access_key_id || "-"}</span>
             </p>
             {(() => {
               const credentialDraft = connectionCredentialDrafts[rotatingConnection.id] ?? {
@@ -1248,7 +1248,7 @@ export default function ProfilePage({
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block">
                     <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Nouvelle Access Key
+                      New Access Key
                     </span>
                     <input
                       type="text"
@@ -1261,7 +1261,7 @@ export default function ProfilePage({
                   </label>
                   <label className="block">
                     <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      Nouvelle Secret Key
+                      New Secret Key
                     </span>
                     <input
                       type="password"
@@ -1286,14 +1286,14 @@ export default function ProfilePage({
                 onClick={() => setRotatingCredentialsConnectionId(null)}
                 disabled={rotatingConnectionBusyId === rotatingConnection.id}
               >
-                Annuler
+                Cancel
               </button>
               <button
                 type="submit"
                 className={primaryButtonClasses}
                 disabled={rotatingConnectionBusyId === rotatingConnection.id}
               >
-                {rotatingConnectionBusyId === rotatingConnection.id ? "Rotation..." : "Mettre a jour les credentials"}
+                {rotatingConnectionBusyId === rotatingConnection.id ? "Rotation..." : "Update credentials"}
               </button>
             </div>
           </form>
