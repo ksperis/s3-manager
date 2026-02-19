@@ -2,107 +2,32 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ChangeEvent, useEffect } from "react";
+import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { GeneralSettings } from "../api/appSettings";
 import { useGeneralSettings } from "./GeneralSettingsContext";
-
-const ADMIN_ROLE = "ui_admin";
-const USER_ROLE = "ui_user";
-const WORKSPACE_STORAGE_KEY = "selectedWorkspace";
-
-type StoredUser = {
-  role?: string | null;
-  can_access_ceph_admin?: boolean | null;
-  authType?: string | null;
-  account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
-  capabilities?: {
-    can_manage_buckets?: boolean;
-  };
-};
-
-type EnvironmentOption = {
-  id: "admin" | "ceph-admin" | "manager" | "browser" | "portal";
-  label: string;
-  path: string;
-};
-
-const ALL_ENVIRONMENTS: EnvironmentOption[] = [
-  { id: "admin", label: "Admin (plateforme)", path: "/admin" },
-  { id: "ceph-admin", label: "Ceph Admin (RGW)", path: "/ceph-admin" },
-  { id: "manager", label: "Manager (admin tenant)", path: "/manager" },
-  { id: "browser", label: "Browser (objets)", path: "/browser" },
-  { id: "portal", label: "Portail (self-service)", path: "/portal" },
-];
-
-function getStoredUser(): StoredUser | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as StoredUser;
-  } catch {
-    return null;
-  }
-}
-
-function getStoredWorkspaceId(): EnvironmentOption["id"] | null {
-  if (typeof window === "undefined") return null;
-  const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY);
-  if (!stored) return null;
-  if (stored === "admin" || stored === "ceph-admin" || stored === "manager" || stored === "browser" || stored === "portal")
-    return stored;
-  return null;
-}
-
-function resolveAvailableEnvironments(user: StoredUser | null): EnvironmentOption[] {
-  if (!user || !user.role) return [];
-  if (user.role === ADMIN_ROLE) {
-    return ALL_ENVIRONMENTS.filter((env) => env.id !== "ceph-admin" || Boolean(user.can_access_ceph_admin));
-  }
-  if (user.role !== USER_ROLE) return [];
-  if (user.authType === "rgw_session") {
-    return ALL_ENVIRONMENTS.filter((env) => env.id === "manager" || env.id === "browser");
-  }
-  const links = user.account_links ?? [];
-  const hasPortalAccess = links.some(
-    (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
-  );
-  const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
-  const portalOnly = hasPortalAccess && !hasAccountAdmin;
-  const canManageBuckets = user.capabilities?.can_manage_buckets !== false;
-
-  if (portalOnly) {
-    return ALL_ENVIRONMENTS.filter((env) => env.id === "portal");
-  }
-
-  return ALL_ENVIRONMENTS.filter((env) => {
-    if (env.id === "portal") return hasPortalAccess;
-    if (env.id === "manager") return true;
-    if (env.id === "browser") return canManageBuckets;
-    return false;
-  });
-}
-
-function resolveEnvironmentId(pathname: string, options: EnvironmentOption[]): EnvironmentOption | null {
-  const segment = pathname.split("/")[1] || "";
-  const active = options.find((option) => option.id === segment);
-  return active ?? options[0] ?? null;
-}
+import TopbarDropdownSelect, { TopbarDropdownOption } from "./TopbarDropdownSelect";
+import {
+  WORKSPACE_STORAGE_KEY,
+  type WorkspaceId,
+  readStoredUser,
+  readStoredWorkspaceId,
+  resolveAvailableWorkspacesWithFlags,
+  resolveWorkspaceFromPath,
+} from "../utils/workspaces";
 
 export default function EnvironmentSwitcher() {
   const navigate = useNavigate();
   const location = useLocation();
-  const user = getStoredUser();
+  const user = readStoredUser();
   const { generalSettings } = useGeneralSettings();
-  const environments = resolveAvailableEnvironmentsWithFlags(user, generalSettings);
-  const current = resolveEnvironmentId(location.pathname, environments);
+  const environments = resolveAvailableWorkspacesWithFlags(user, generalSettings);
+  const current = resolveWorkspaceFromPath(location.pathname, environments);
 
   useEffect(() => {
     if (!current) {
       return;
     }
-    const stored = getStoredWorkspaceId();
+    const stored = readStoredWorkspaceId();
     if (stored !== current.id) {
       localStorage.setItem(WORKSPACE_STORAGE_KEY, current.id);
     }
@@ -110,8 +35,14 @@ export default function EnvironmentSwitcher() {
 
   if (environments.length <= 1 || !current) return null;
 
-  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const next = environments.find((env) => env.id === event.target.value);
+  const options: TopbarDropdownOption[] = environments.map((env) => ({
+    value: env.id,
+    label: env.label,
+    icon: workspaceIconById(env.id),
+  }));
+
+  const handleChange = (nextWorkspaceId: string) => {
+    const next = environments.find((env) => env.id === nextWorkspaceId);
     if (!next) return;
     if (location.pathname.startsWith(next.path)) return;
     localStorage.setItem(WORKSPACE_STORAGE_KEY, next.id);
@@ -119,34 +50,82 @@ export default function EnvironmentSwitcher() {
   };
 
   return (
-    <div className="relative">
-      <select
-        className="appearance-none rounded-full border border-slate-200 bg-white px-2.5 py-1 pr-6 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900"
-        value={current.id}
-        onChange={handleChange}
-        aria-label="Changer de workspace"
-        title="Changer de workspace"
-      >
-        {environments.map((env) => (
-          <option key={env.id} value={env.id}>
-            {env.label}
-          </option>
-        ))}
-      </select>
-      <div className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center ui-caption text-slate-500 dark:text-slate-300">
-        ▼
-      </div>
-    </div>
+    <TopbarDropdownSelect
+      value={current.id}
+      options={options}
+      onChange={handleChange}
+      ariaLabel="Changer de workspace"
+      title="Changer de workspace"
+      widthClassName="w-56"
+      icon={<WorkspaceIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
+    />
   );
 }
 
-function resolveAvailableEnvironmentsWithFlags(user: StoredUser | null, generalSettings: GeneralSettings): EnvironmentOption[] {
-  const filtered = resolveAvailableEnvironments(user);
-  return filtered.filter((env) => {
-    if (env.id === "ceph-admin") return generalSettings.ceph_admin_enabled;
-    if (env.id === "manager") return generalSettings.manager_enabled;
-    if (env.id === "browser") return generalSettings.browser_enabled && generalSettings.browser_root_enabled;
-    if (env.id === "portal") return generalSettings.portal_enabled;
-    return true;
-  });
+function WorkspaceIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" strokeWidth={1.5} />
+      <path strokeLinecap="round" strokeWidth={1.5} d="M3 10h18" />
+    </svg>
+  );
+}
+
+function workspaceIconById(id: WorkspaceId): React.ReactNode {
+  if (id === "admin") return <AdminIcon className="h-4 w-4" />;
+  if (id === "ceph-admin") return <CephIcon className="h-4 w-4" />;
+  if (id === "manager") return <ManagerIcon className="h-4 w-4" />;
+  if (id === "browser") return <BrowserIcon className="h-4 w-4" />;
+  return <PortalIcon className="h-4 w-4" />;
+}
+
+function AdminIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M12 3.5 4 7v5c0 4.5 3.2 7.8 8 8.8 4.8-1 8-4.3 8-8.8V7l-8-3.5Z" />
+      <path strokeLinecap="round" strokeWidth={1.6} d="M9.2 12.2 11 14l3.8-3.8" />
+    </svg>
+  );
+}
+
+function CephIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <ellipse cx="12" cy="6.5" rx="6.5" ry="2.7" strokeWidth={1.6} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.5 6.5v5.5c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V6.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.5 12v5.5c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V12" />
+    </svg>
+  );
+}
+
+function ManagerIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <rect x="3" y="4" width="8" height="7" rx="1.5" strokeWidth={1.6} />
+      <rect x="13" y="4" width="8" height="7" rx="1.5" strokeWidth={1.6} />
+      <rect x="3" y="13" width="8" height="7" rx="1.5" strokeWidth={1.6} />
+      <rect x="13" y="13" width="8" height="7" rx="1.5" strokeWidth={1.6} />
+    </svg>
+  );
+}
+
+function BrowserIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" strokeWidth={1.6} />
+      <path strokeLinecap="round" strokeWidth={1.6} d="M3 9h18" />
+      <circle cx="7" cy="6.8" r="0.9" />
+      <circle cx="10.5" cy="6.8" r="0.9" />
+      <circle cx="14" cy="6.8" r="0.9" />
+    </svg>
+  );
+}
+
+function PortalIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M12 3.5 4.5 8v8l7.5 4.5L19.5 16V8L12 3.5Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="m12 12 7.5-4M12 12l-7.5-4M12 12v8.5" />
+    </svg>
+  );
 }

@@ -14,6 +14,9 @@ export type AccountMembership = {
 export type User = {
   id: number;
   email: string;
+  full_name?: string | null;
+  display_name?: string | null;
+  picture_url?: string | null;
   role?: string | null;
   can_access_ceph_admin?: boolean;
   accounts?: number[];
@@ -24,6 +27,7 @@ export type User = {
   s3_connection_details?: { id: number; name: string }[];
   is_active?: boolean;
   is_root?: boolean;
+  auth_provider?: string | null;
   last_login_at?: string | null;
 };
 
@@ -47,6 +51,12 @@ export type UpdateUserPayload = {
   is_active?: boolean;
   s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;
+};
+
+export type UpdateCurrentUserPayload = {
+  full_name?: string | null;
+  current_password?: string;
+  new_password?: string;
 };
 
 export type PaginatedUsersResponse = PaginatedResponse<User>;
@@ -81,6 +91,16 @@ export async function updateUser(userId: number, payload: UpdateUserPayload): Pr
 
 export async function deleteUser(userId: number): Promise<void> {
   await client.delete(`/admin/users/${userId}`);
+}
+
+export async function fetchCurrentUser(): Promise<User> {
+  const { data } = await client.get<User>("/users/me");
+  return data;
+}
+
+export async function updateCurrentUser(payload: UpdateCurrentUserPayload): Promise<User> {
+  const { data } = await client.put<User>("/users/me", payload);
+  return data;
 }
 
 export async function assignUserToS3Account(

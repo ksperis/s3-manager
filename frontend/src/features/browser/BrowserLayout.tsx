@@ -2,11 +2,14 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ChangeEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import Layout from "../../components/Layout";
+import TopbarContextAccountSelector, {
+  type ContextAccessMode,
+} from "../../components/TopbarContextAccountSelector";
 import { BrowserContextProvider, useBrowserContext } from "./BrowserContext";
-import { fetchManagerContext, type ManagerAccessMode } from "../../api/managerContext";
+import { fetchManagerContext } from "../../api/managerContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 
 function BrowserShell() {
@@ -18,7 +21,7 @@ function BrowserShell() {
     accessError,
   } = useBrowserContext();
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
-  const [identityAccessMode, setIdentityAccessMode] = useState<ManagerAccessMode | null>(null);
+  const [identityAccessMode, setIdentityAccessMode] = useState<ContextAccessMode>(null);
   const visibleContexts = contexts.filter((ctx) => !ctx.hidden || ctx.id === selectedContextId);
   const selected = contexts.find((a) => a.id === selectedContextId);
   const showSelector = visibleContexts.length > 1;
@@ -29,9 +32,11 @@ function BrowserShell() {
       : `Identité IAM: ${iamIdentity}`
     : null;
   const baseControlClasses =
-    "w-64 rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
-  const selectClasses = `appearance-none pr-8 ${baseControlClasses}`;
-  const pillClasses = `${baseControlClasses} ${selected ? "" : "text-slate-500 dark:text-slate-400"}`;
+    "h-9 w-60 rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
+  const pillClasses = `inline-flex items-center ${baseControlClasses} ${selected ? "" : "text-slate-500 dark:text-slate-400"}`;
+  const selectedLabel = selected
+    ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
+    : "No account selected";
 
   useEffect(() => {
     if (!selectedContextId) {
@@ -56,42 +61,30 @@ function BrowserShell() {
     };
   }, [selectedContextId]);
 
-  const handleS3AccountChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const value = event.target.value || null;
+  const handleS3AccountChange = (selectedValue: string) => {
+    const value = selectedValue || null;
     if (value === selectedContextId) return;
     setSelectedContextId(value);
   };
 
   const inlineAction = (
-    <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:gap-4">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+    <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Contexte</span>
         {showSelector ? (
-          <div className="relative">
-            <select
-              className={selectClasses}
-              value={selectedContextId ?? ""}
-              onChange={handleS3AccountChange}
-              title={identityLabel ?? undefined}
-            >
-              {!selected && (
-                <option value="">
-                  No account selected
-                </option>
-              )}
-              {visibleContexts.map((ctx) => (
-                <option key={ctx.id} value={ctx.id} title={ctx.endpoint_url || undefined}>
-                  {formatAccountLabel(ctx, defaultEndpointId, defaultEndpointName)}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center ui-caption text-slate-500 dark:text-slate-300">
-              ▼
-            </div>
-          </div>
+          <TopbarContextAccountSelector
+            contexts={visibleContexts}
+            selectedContextId={selectedContextId}
+            onContextChange={handleS3AccountChange}
+            selectedLabel={selectedLabel}
+            identityLabel={identityLabel}
+            accessMode={identityAccessMode ?? "session"}
+            defaultEndpointId={defaultEndpointId}
+            defaultEndpointName={defaultEndpointName}
+          />
         ) : (
           <div className={pillClasses} title={identityLabel ?? undefined}>
-            {selected ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName) : "No context selected"}
+            {selectedLabel}
           </div>
         )}
         {selectedKind === "legacy_user" && (

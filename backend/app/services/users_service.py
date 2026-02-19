@@ -100,6 +100,36 @@ class UsersService:
         logger.debug("Updated user id=%s email=%s", user.id, user.email)
         return user
 
+    def update_current_user(
+        self,
+        user: User,
+        *,
+        full_name: Optional[str] = None,
+        current_password: Optional[str] = None,
+        new_password: Optional[str] = None,
+    ) -> User:
+        normalized_name = full_name.strip() if full_name is not None else None
+        if full_name is not None:
+            user.full_name = normalized_name or None
+            user.display_name = normalized_name or None
+
+        if current_password is not None or new_password is not None:
+            if not current_password or not new_password:
+                raise ValueError("Both current_password and new_password are required")
+            if not user.hashed_password:
+                raise ValueError("Password change is unavailable for this account")
+            if not verify_password(current_password, user.hashed_password):
+                raise ValueError("Current password is incorrect")
+            if not new_password.strip():
+                raise ValueError("New password cannot be empty")
+            user.hashed_password = get_password_hash(new_password)
+
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        logger.debug("Updated profile for user id=%s", user.id)
+        return user
+
     def delete_user(self, user_id: int) -> None:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:

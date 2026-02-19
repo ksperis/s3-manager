@@ -2,10 +2,10 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ChangeEvent } from "react";
 import { Outlet } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { SidebarSection } from "../../components/Sidebar";
+import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
@@ -36,10 +36,16 @@ function resolvePortalRole(user: StoredUser | null, accountId: string | null): s
 function AccountSelector() {
   const { accounts, selectedAccountId, setSelectedAccountId, selectedAccount, loading, error } = usePortalAccountContext();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
-  const selectClasses =
-    "appearance-none w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
+  const options: TopbarDropdownOption[] = [
+    ...(!selectedAccount ? [{ value: "", label: "Sélectionnez un compte" }] : []),
+    ...accounts.map((acc) => ({
+      value: acc.id,
+      label: formatAccountLabel(acc, defaultEndpointId, defaultEndpointName, false),
+      title: acc.storage_endpoint_url || undefined,
+    })),
+  ];
   const pillClasses =
-    "w-48 rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
+    "inline-flex h-9 w-56 items-center rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
 
   if (loading) {
     return <div className={pillClasses}>Chargement…</div>;
@@ -59,23 +65,19 @@ function AccountSelector() {
     );
   }
 
-  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const value = event.target.value || null;
+  const handleChange = (selectedValue: string) => {
+    const value = selectedValue || null;
     setSelectedAccountId(value);
   };
 
   return (
-    <div className="relative">
-      <select className={selectClasses} value={selectedAccountId ?? ""} onChange={handleChange}>
-        {!selectedAccount && <option value="">Sélectionnez un compte</option>}
-        {accounts.map((acc) => (
-          <option key={acc.id} value={acc.id} title={acc.storage_endpoint_url || undefined}>
-            {formatAccountLabel(acc, defaultEndpointId, defaultEndpointName, false)}
-          </option>
-        ))}
-      </select>
-      <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center ui-caption text-slate-500 dark:text-slate-300">▼</div>
-    </div>
+    <TopbarDropdownSelect
+      value={selectedAccountId ?? ""}
+      options={options}
+      onChange={handleChange}
+      ariaLabel="Sélectionner un compte portail"
+      widthClassName="w-56"
+    />
   );
 }
 
@@ -109,7 +111,7 @@ function PortalShell() {
       hideSidebar={hideSidebar}
       hideHeader
       topbarContent={
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex items-center gap-3">
           <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Account</span>
           <AccountSelector />
         </div>

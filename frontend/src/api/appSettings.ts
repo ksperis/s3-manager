@@ -28,6 +28,7 @@ export type GeneralSettings = {
   allow_login_access_keys: boolean;
   allow_login_endpoint_list: boolean;
   allow_login_custom_endpoint: boolean;
+  allow_user_private_connections: boolean;
 };
 
 export type GeneralFeatureLock = {

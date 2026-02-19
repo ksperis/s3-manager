@@ -43,6 +43,20 @@ class S3ConnectionsService:
         )
         return [self._to_model(r) for r in rows]
 
+    def list_owned_private(self, user_id: int) -> list[S3Connection]:
+        """List private connections managed by the authenticated owner."""
+        rows = (
+            self.db.query(DBS3Connection)
+            .filter(
+                DBS3Connection.owner_user_id == user_id,
+                DBS3Connection.is_public.is_(False),
+                DBS3Connection.is_temporary.is_(False),
+            )
+            .order_by(DBS3Connection.name.asc())
+            .all()
+        )
+        return [self._to_model(r) for r in rows]
+
     def touch_last_used(self, user_id: int, connection_id: int) -> None:
         """Update last_used_at for UX/audit purposes.
 

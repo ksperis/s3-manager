@@ -5,12 +5,13 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchOidcProviders, login, loginWithKeys, startOidcLogin, type OidcProviderInfo } from "../../api/auth";
-import { fetchLoginSettings, type LoginSettings } from "../../api/appSettings";
-import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { fetchGeneralSettings, fetchLoginSettings, type GeneralSettings, type LoginSettings } from "../../api/appSettings";
+import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { refresh: refreshGeneralSettings } = useGeneralSettings();
+  const { setGeneralSettings } = useGeneralSettings();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [seedPrefillApplied, setSeedPrefillApplied] = useState(false);
@@ -27,21 +28,15 @@ export default function LoginPage() {
   const [endpointLoading, setEndpointLoading] = useState(false);
   const [selectedEndpoint, setSelectedEndpoint] = useState("");
   const [customEndpoint, setCustomEndpoint] = useState("");
-  const resolveDestination = (
-    role?: string | null,
-    accountLinks?: { account_role?: string | null; account_admin?: boolean | null }[] | null
-  ) => {
-    if (role === "ui_admin") return "/admin";
-    if (role === "ui_user") {
-      const links = accountLinks ?? [];
-      const hasPortalAccess = links.some(
-        (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
-      );
-      const hasAccountAdmin = links.some((link) => link.account_admin);
-      if (hasPortalAccess && !hasAccountAdmin) return "/portal";
-      return "/manager";
+  const loadGeneralSettings = async (): Promise<GeneralSettings> => {
+    try {
+      const settings = await fetchGeneralSettings();
+      setGeneralSettings(settings);
+      return settings;
+    } catch (err) {
+      console.error(err);
+      return DEFAULT_GENERAL_SETTINGS;
     }
-    return "/unauthorized";
   };
 
   useEffect(() => {
@@ -112,10 +107,11 @@ export default function LoginPage() {
     try {
       const res = await login(email, password);
       localStorage.setItem("token", res.access_token);
-      localStorage.setItem("user", JSON.stringify({ ...res.user, authType: "password" }));
+      const sessionUser: SessionUser = { ...res.user, authType: "password" };
+      localStorage.setItem("user", JSON.stringify(sessionUser));
       localStorage.removeItem("s3SessionEndpoint");
-      refreshGeneralSettings();
-      const destination = resolveDestination(res.user.role, res.user.account_links ?? null);
+      const settings = await loadGeneralSettings();
+      const destination = resolvePostLoginPath(sessionUser, settings);
       navigate(destination, { replace: true });
     } catch (err) {
       console.error(err);
@@ -155,8 +151,9 @@ export default function LoginPage() {
         capabilities: res.session.capabilities,
       };
       localStorage.setItem("user", JSON.stringify(userPayload));
-      refreshGeneralSettings();
-      navigate("/manager", { replace: true });
+      const settings = await loadGeneralSettings();
+      const destination = resolvePostLoginPath(userPayload, settings);
+      navigate(destination, { replace: true });
     } catch (err) {
       console.error(err);
       setError("Unable to authenticate with these access keys");

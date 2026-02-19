@@ -8,15 +8,18 @@ import AppRouter from "./router";
 import "./index.css";
 import { ThemeProvider } from "./components/theme";
 import { GeneralSettingsProvider } from "./components/GeneralSettingsContext";
+import { LanguageProvider } from "./components/language";
 
 const root = document.getElementById("root");
 
 ReactDOM.createRoot(root as HTMLElement).render(
   <React.StrictMode>
     <ThemeProvider>
-      <GeneralSettingsProvider>
-        <AppRouter />
-      </GeneralSettingsProvider>
+      <LanguageProvider>
+        <GeneralSettingsProvider>
+          <AppRouter />
+        </GeneralSettingsProvider>
+      </LanguageProvider>
     </ThemeProvider>
   </React.StrictMode>
 );

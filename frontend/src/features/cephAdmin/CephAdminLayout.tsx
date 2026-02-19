@@ -2,9 +2,9 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ChangeEvent } from "react";
 import { Outlet } from "react-router-dom";
 import Layout from "../../components/Layout";
+import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import { SidebarSection } from "../../components/Sidebar";
 import PageBanner from "../../components/PageBanner";
 import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndpointContext";
@@ -39,8 +39,8 @@ function CephAdminShell() {
     Boolean(selectedEndpointAccess?.can_accounts);
   const adminWarning = endpointSelected && !selectedEndpointAccessLoading ? selectedEndpointAccess?.admin_warning ?? null : null;
 
-  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const next = Number(event.target.value);
+  const handleChange = (selectedValue: string) => {
+    const next = Number(selectedValue);
     if (!Number.isFinite(next) || next <= 0) return;
     if (next === selectedEndpointId) return;
     setSelectedEndpointId(next);
@@ -64,30 +64,34 @@ function CephAdminShell() {
     },
   ];
 
-  const selectClasses =
-    "appearance-none rounded-full border border-slate-200 bg-white px-3 py-1.5 pr-8 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
+  const endpointOptions: TopbarDropdownOption[] = endpoints.map((endpoint) => ({
+    value: String(endpoint.id),
+    label: `${endpoint.name}${endpoint.is_default ? " · Default" : ""}`,
+    description: endpoint.endpoint_url,
+    title: endpoint.endpoint_url,
+    icon: <EndpointItemIcon className="h-4 w-4" />,
+  }));
+  const pillClasses =
+    "inline-flex h-9 items-center rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
 
   const topbarContent = (
     <div className="flex items-center gap-3">
       <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Endpoint</span>
       {showSelector ? (
-        <div className="relative">
-          <select className={selectClasses} value={selectedEndpointId ?? ""} onChange={handleChange} disabled={!selectorEnabled || loading}>
-            {!selectedEndpoint && <option value="">No endpoint selected</option>}
-            {endpoints.map((endpoint) => (
-              <option key={endpoint.id} value={endpoint.id} title={endpoint.endpoint_url}>
-                {endpoint.name}
-                {endpoint.is_default ? " · Default" : ""}
-              </option>
-            ))}
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center ui-caption text-slate-500 dark:text-slate-300">
-            ▼
-          </div>
-        </div>
+        <TopbarDropdownSelect
+          value={selectedEndpointId ? String(selectedEndpointId) : ""}
+          options={endpointOptions}
+          onChange={handleChange}
+          ariaLabel="Select Ceph endpoint"
+          title={selectedEndpoint?.endpoint_url ?? undefined}
+          widthClassName="w-80"
+          icon={<EndpointIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
+          disabled={!selectorEnabled || loading}
+        />
       ) : (
-        <div className="rounded-full border border-slate-200 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
-          {selectedEndpoint ? selectedEndpoint.name : loading ? "Loading..." : "No endpoint selected"}
+        <div className={`${pillClasses} gap-2`}>
+          <EndpointIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
+          <span>{selectedEndpoint ? selectedEndpoint.name : loading ? "Loading..." : "No endpoint selected"}</span>
         </div>
       )}
     </div>
@@ -114,5 +118,23 @@ export default function CephAdminLayout() {
     <CephAdminEndpointProvider>
       <CephAdminShell />
     </CephAdminEndpointProvider>
+  );
+}
+
+function EndpointIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <ellipse cx="12" cy="6.5" rx="6.5" ry="2.7" strokeWidth={1.6} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.5 6.5v5.5c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V6.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5.5 12v5.5c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V12" />
+    </svg>
+  );
+}
+
+function EndpointItemIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
   );
 }

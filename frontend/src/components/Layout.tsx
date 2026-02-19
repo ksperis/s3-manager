@@ -2,8 +2,8 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { ReactNode } from "react";
-import { Outlet } from "react-router-dom";
+import { ReactNode, useEffect, useState } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 import { logout as logoutRequest } from "../api/auth";
 import Header from "./Header";
 import Sidebar, { SidebarLink, SidebarSection } from "./Sidebar";
@@ -60,6 +60,9 @@ export default function Layout({
   disableMainScroll = false,
   fullHeight = false,
 }: LayoutProps) {
+  const location = useLocation();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const shouldShowSidebar = !hideSidebar;
   const userEmail = getUserEmail();
   const logout = () => {
     void logoutRequest().catch((err) => {
@@ -76,6 +79,40 @@ export default function Layout({
     mainClassName ? ` ${mainClassName}` : ""
   }`;
   const rootHeightClass = fullHeight ? "h-screen" : "min-h-screen";
+  const drawerTopClass = hideTopbar ? "top-0" : "top-14";
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname, location.search, location.hash]);
+
+  useEffect(() => {
+    if (!shouldShowSidebar) {
+      setMobileSidebarOpen(false);
+    }
+  }, [shouldShowSidebar]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileSidebarOpen(false);
+      }
+    };
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setMobileSidebarOpen(false);
+      }
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [mobileSidebarOpen]);
 
   return (
     <div className={`flex ${rootHeightClass} flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50`}>
@@ -87,10 +124,44 @@ export default function Layout({
           userEmail={userEmail}
           onLogout={logout}
           contextAction={topbarAction}
+          showMobileMenuButton={shouldShowSidebar}
+          mobileMenuOpen={mobileSidebarOpen}
+          onMobileMenuToggle={() => setMobileSidebarOpen((open) => !open)}
         />
       )}
+      {shouldShowSidebar && (
+        <div
+          className={`fixed inset-x-0 bottom-0 ${drawerTopClass} z-[44] md:hidden ${
+            mobileSidebarOpen ? "pointer-events-auto" : "pointer-events-none"
+          }`}
+          aria-hidden={!mobileSidebarOpen}
+        >
+          <button
+            type="button"
+            tabIndex={mobileSidebarOpen ? 0 : -1}
+            aria-label="Fermer la navigation mobile"
+            onClick={() => setMobileSidebarOpen(false)}
+            className={`absolute inset-0 bg-slate-950/45 transition-opacity duration-200 ${
+              mobileSidebarOpen ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          <div id="mobile-navigation-panel" className="absolute left-0 top-0 h-full w-[18.5rem] max-w-[86vw]">
+            <Sidebar
+              variant="mobile"
+              className={`shadow-2xl transition-transform duration-200 ${
+                mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+              }`}
+              title={sidebarTitle}
+              sections={navSections}
+              links={navLinks}
+              headerAction={sidebarAction}
+              onNavigate={() => setMobileSidebarOpen(false)}
+            />
+          </div>
+        </div>
+      )}
       <div className={`flex min-h-0 flex-1 ${hideTopbar ? "pt-0" : "pt-14"}`}>
-        {!hideSidebar && (
+        {shouldShowSidebar && (
           <Sidebar title={sidebarTitle} sections={navSections} links={navLinks} headerAction={sidebarAction} />
         )}
         <main className={mainClasses}>

@@ -5,31 +5,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { completeOidcLogin } from "../../api/auth";
-import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { fetchGeneralSettings } from "../../api/appSettings";
+import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
 
 export default function OidcCallbackPage() {
   const { provider } = useParams<{ provider: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { refresh: refreshGeneralSettings } = useGeneralSettings();
+  const { setGeneralSettings } = useGeneralSettings();
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(true);
-  const resolveDestination = (
-    role?: string | null,
-    accountLinks?: { account_role?: string | null; account_admin?: boolean | null }[] | null
-  ) => {
-    if (role === "ui_admin") return "/admin";
-    if (role === "ui_user") {
-      const links = accountLinks ?? [];
-      const hasPortalAccess = links.some(
-        (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
-      );
-      const hasAccountAdmin = links.some((link) => link.account_admin);
-      if (hasPortalAccess && !hasAccountAdmin) return "/portal";
-      return "/manager";
-    }
-    return "/unauthorized";
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -52,9 +38,16 @@ export default function OidcCallbackPage() {
         const res = await completeOidcLogin(provider, code, state);
         if (cancelled) return;
         localStorage.setItem("token", res.access_token);
-        localStorage.setItem("user", JSON.stringify({ ...res.user, authType: "oidc", authProvider: provider }));
-        refreshGeneralSettings();
-        const baseDestination = resolveDestination(res.user.role, res.user.account_links ?? null);
+        const sessionUser: SessionUser = { ...res.user, authType: "oidc" };
+        localStorage.setItem("user", JSON.stringify({ ...sessionUser, authProvider: provider }));
+        let settings = DEFAULT_GENERAL_SETTINGS;
+        try {
+          settings = await fetchGeneralSettings();
+          setGeneralSettings(settings);
+        } catch (loadError) {
+          console.error(loadError);
+        }
+        const baseDestination = resolvePostLoginPath(sessionUser, settings);
         const destination = baseDestination === "/unauthorized" ? baseDestination : res.redirect_path || baseDestination;
         navigate(destination, { replace: true });
       } catch (err) {
@@ -70,7 +63,7 @@ export default function OidcCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, provider, searchParams]);
+  }, [navigate, provider, searchParams, setGeneralSettings]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900">

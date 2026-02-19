@@ -10,6 +10,7 @@ type ModalProps = {
   children: ReactNode;
   maxWidthClass?: string;
   maxBodyHeightClass?: string;
+  zIndexClass?: string;
 };
 
 export default function Modal({
@@ -18,9 +19,10 @@ export default function Modal({
   children,
   maxWidthClass = "max-w-2xl",
   maxBodyHeightClass = "max-h-[70vh]",
+  zIndexClass = "z-50",
 }: ModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm">
+    <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm`}>
       <div className={`w-full ${maxWidthClass} rounded-2xl border border-slate-200/80 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900`}>
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
           <h3 className="ui-subtitle font-semibold text-slate-800 dark:text-slate-50">{title}</h3>

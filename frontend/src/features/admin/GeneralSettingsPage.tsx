@@ -39,7 +39,8 @@ type ToggleField =
   | FeatureField
   | "allow_login_access_keys"
   | "allow_login_endpoint_list"
-  | "allow_login_custom_endpoint";
+  | "allow_login_custom_endpoint"
+  | "allow_user_private_connections";
 
 function isFeatureField(field: ToggleField): field is FeatureField {
   return FEATURE_FIELDS.includes(field as FeatureField);
@@ -339,6 +340,17 @@ export default function GeneralSettingsPage() {
                       checked={Boolean(settings.general.allow_login_custom_endpoint)}
                       onChange={(value) => handleToggle("allow_login_custom_endpoint", value)}
                       ariaLabel="Custom login endpoint"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Private S3 connections for UI users"
+                  description="Allow standard UI users to create and manage their own private S3 connections."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.allow_user_private_connections)}
+                      onChange={(value) => handleToggle("allow_user_private_connections", value)}
+                      ariaLabel="Private S3 connections for UI users"
                     />
                   }
                 />

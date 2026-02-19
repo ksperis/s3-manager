@@ -61,27 +61,11 @@ import CephAdminUsersPage from "./features/cephAdmin/CephAdminUsersPage";
 import CephAdminBucketsPage from "./features/cephAdmin/CephAdminBucketsPage";
 import CephAdminBucketDetailPage from "./features/cephAdmin/CephAdminBucketDetailPage";
 import CephAdminMetricsPage from "./features/cephAdmin/CephAdminMetricsPage";
+import ProfilePage from "./features/shared/ProfilePage";
+import { readStoredUser, resolvePostLoginPath, type SessionUser } from "./utils/workspaces";
 
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
-const UNASSIGNED_ROLE = "ui_none";
-
-type StoredUser = {
-  role?: string | null;
-  can_access_ceph_admin?: boolean | null;
-  email?: string | null;
-  accounts?: number[] | null;
-  account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
-  authType?: "password" | "rgw_session" | "oidc";
-  authProvider?: string | null;
-  actorType?: string | null;
-  accountId?: string | null;
-  capabilities?: {
-    can_manage_iam?: boolean;
-    can_manage_buckets?: boolean;
-    can_view_traffic?: boolean;
-  };
-};
 
 const buildAdminNav = (
   portalEnabled: boolean,
@@ -141,14 +125,8 @@ const buildAdminNav = (
   ];
 };
 
-function getStoredUser(): StoredUser | null {
-  const raw = typeof window !== "undefined" ? localStorage.getItem("user") : null;
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as StoredUser;
-  } catch {
-    return null;
-  }
+function getStoredUser(): SessionUser | null {
+  return readStoredUser();
 }
 
 function RequireAuth() {
@@ -215,26 +193,8 @@ function RequireRole({ roles }: { roles: string[] }) {
 function RoleRedirect() {
   const user = getStoredUser();
   const { generalSettings } = useGeneralSettings();
-  if (!user || !user.role) return <Navigate to="/login" replace />;
-  if (user.role === ADMIN_ROLE) return <Navigate to="/admin" replace />;
-  if (user.role === USER_ROLE) {
-    const links = user.account_links ?? [];
-    const hasPortalAccess = links.some(
-      (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
-    );
-    const hasAccountAdmin = links.some((link) => link.account_admin);
-    const portalOnly = hasPortalAccess && !hasAccountAdmin;
-    const canManageBuckets = user.capabilities?.can_manage_buckets !== false;
-    if (portalOnly && generalSettings.portal_enabled) return <Navigate to="/portal" replace />;
-    if (generalSettings.manager_enabled) return <Navigate to="/manager" replace />;
-    if (hasPortalAccess && generalSettings.portal_enabled) return <Navigate to="/portal" replace />;
-    if (isBrowserSurfaceEnabled(generalSettings, "root") && canManageBuckets) {
-      return <Navigate to="/browser" replace />;
-    }
-    return <Navigate to="/unauthorized" replace />;
-  }
-  if (user.role === UNASSIGNED_ROLE) return <Navigate to="/unauthorized" replace />;
-  return <Navigate to="/unauthorized" replace />;
+  const destination = resolvePostLoginPath(user, generalSettings);
+  return <Navigate to={destination} replace />;
 }
 
 function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal" }) {
@@ -301,6 +261,9 @@ export default function AppRouter() {
       <>
         <Route element={<RequireAuth />}>
           <Route index element={<RoleRedirect />} />
+          <Route path="/profile" element={<Layout headerTitle="Profil" headerSubtitle="Compte" hideSidebar />}>
+            <Route index element={<ProfilePage />} />
+          </Route>
 
           <Route element={<RequireRole roles={[ADMIN_ROLE]} />}>
             <Route path="/admin" element={<AdminLayoutShell />}>

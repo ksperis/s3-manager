@@ -5,38 +5,54 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.db import User, UserRole
 from app.models.s3_connection import (
     S3Connection,
     S3ConnectionCreate,
     S3ConnectionCredentialsUpdate,
     S3ConnectionUpdate,
 )
-from app.routers.dependencies import get_current_user
+from app.routers.dependencies import get_current_account_user
+from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services.s3_connections_service import S3ConnectionsService
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
 
-@router.get("", response_model=list[S3Connection])
+def _ensure_private_connections_allowed(user: User) -> None:
+    if user.role == UserRole.UI_ADMIN.value:
+        return
+    if user.role == UserRole.UI_USER.value and load_app_settings().general.allow_user_private_connections:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Private S3 connections are not allowed for this user",
+    )
 
+
+@router.get("", response_model=list[S3Connection])
 def list_connections(
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_account_user),
 ):
+    _ensure_private_connections_allowed(user)
     service = S3ConnectionsService(db)
-    return service.list_for_user(user.id)
+    return service.list_owned_private(user.id)
 
 
 @router.post("", response_model=S3Connection, status_code=status.HTTP_201_CREATED)
-
 def create_connection(
     payload: S3ConnectionCreate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_account_user),
 ):
+    _ensure_private_connections_allowed(user)
     if payload.is_public:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Public connections must be created by an admin")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Public connections must be managed from the admin workspace",
+        )
     if payload.storage_endpoint_id is None and not (payload.endpoint_url or "").strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Endpoint URL is required for manual connections")
     service = S3ConnectionsService(db)
@@ -66,13 +82,13 @@ def create_connection(
 
 
 @router.put("/{connection_id}", response_model=S3Connection)
-
 def update_connection(
     connection_id: int,
     payload: S3ConnectionUpdate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_account_user),
 ):
+    _ensure_private_connections_allowed(user)
     if payload.is_public is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Public connections can only be managed by an admin")
     service = S3ConnectionsService(db)
@@ -104,13 +120,13 @@ def update_connection(
 
 
 @router.put("/{connection_id}/credentials", response_model=S3Connection)
-
 def rotate_connection_credentials(
     connection_id: int,
     payload: S3ConnectionCredentialsUpdate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_account_user),
 ):
+    _ensure_private_connections_allowed(user)
     service = S3ConnectionsService(db)
     audit = AuditService(db)
     try:
@@ -139,12 +155,12 @@ def rotate_connection_credentials(
 
 
 @router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
-
 def delete_connection(
     connection_id: int,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_account_user),
 ):
+    _ensure_private_connections_allowed(user)
     service = S3ConnectionsService(db)
     audit = AuditService(db)
     try:
@@ -173,12 +189,12 @@ def delete_connection(
 
 
 @router.get("/{connection_id}/capabilities", response_model=dict)
-
 def get_connection_capabilities(
     connection_id: int,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_account_user),
 ):
+    _ensure_private_connections_allowed(user)
     service = S3ConnectionsService(db)
     try:
         return service.get_capabilities(user.id, connection_id)

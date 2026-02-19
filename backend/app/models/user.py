@@ -64,6 +64,12 @@ class UserUpdate(BaseModel):
     s3_connection_ids: Optional[list[int]] = None
 
 
+class UserSelfUpdate(BaseModel):
+    full_name: Optional[str] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
+
+
 class UserAssignS3Account(BaseModel):
     account_id: int
     account_root: Optional[bool] = None
