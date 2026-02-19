@@ -138,7 +138,7 @@ const parseRawMappingText = (value: string): ParsedRawMappingResult => {
         invalidLines.push(line);
         return;
       }
-      mapping.set(source.toLowerCase(), target);
+      mapping.set(source, target);
     });
   return { mapping, invalidLines };
 };
@@ -309,7 +309,7 @@ export default function CephAdminBucketCompareModal({
       const next = { ...prev };
       let changed = false;
       sortedSourceBuckets.forEach((sourceBucket) => {
-        const mapped = parsedRawMapping.mapping.get(sourceBucket.toLowerCase());
+        const mapped = parsedRawMapping.mapping.get(sourceBucket);
         if (!mapped) return;
         if ((next[sourceBucket] ?? "").trim() === mapped) return;
         next[sourceBucket] = mapped;
@@ -338,7 +338,7 @@ export default function CephAdminBucketCompareModal({
     const mapping = new Map<string, string>();
     sortedSourceBuckets.forEach((sourceBucket) => {
       const sourceKey = sourceBucket.toLowerCase();
-      const rawMapped = parsedRawMapping.mapping.get(sourceKey);
+      const rawMapped = parsedRawMapping.mapping.get(sourceBucket);
       if (rawMapped) {
         mapping.set(sourceKey, rawMapped);
         return;
@@ -760,7 +760,7 @@ export default function CephAdminBucketCompareModal({
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {sortedSourceBuckets.map((sourceBucket) => {
                     const sourceKey = sourceBucket.toLowerCase();
-                    const rawTarget = parsedRawMapping.mapping.get(sourceKey);
+                    const rawTarget = parsedRawMapping.mapping.get(sourceBucket);
                     const effectiveTarget = resolvedManualMapping.get(sourceKey) ?? "";
                     return (
                       <tr key={sourceBucket} className="align-top">
