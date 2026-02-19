@@ -907,7 +907,7 @@ export default function CephAdminBucketCompareModal({
                       before:
                         content.only_source_count > 0
                           ? content.only_source_sample.length > 0
-                            ? content.only_source_sample.map((key) => ({ text: `- ${key}`, tone: "removed" as const }))
+                            ? content.only_source_sample.map((key) => ({ text: key, tone: "removed" as const }))
                             : [{ text: "(sample not available)", tone: "removed" as const }]
                           : [{ text: "(none)" }],
                       after: [{ text: "(none)" }],
@@ -920,7 +920,7 @@ export default function CephAdminBucketCompareModal({
                       after:
                         content.only_target_count > 0
                           ? content.only_target_sample.length > 0
-                            ? content.only_target_sample.map((key) => ({ text: `- ${key}`, tone: "added" as const }))
+                            ? content.only_target_sample.map((key) => ({ text: key, tone: "added" as const }))
                             : [{ text: "(sample not available)", tone: "added" as const }]
                           : [{ text: "(none)" }],
                     },
