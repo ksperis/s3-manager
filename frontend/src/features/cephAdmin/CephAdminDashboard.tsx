@@ -72,7 +72,7 @@ export default function CephAdminDashboard() {
           data={workspaceHealth}
           loading={workspaceHealthLoading}
           error={workspaceHealthError}
-          title="Endpoint Health (Active Endpoint)"
+          title="Endpoint Health"
           showStatusCounters={false}
           action={
             selectedEndpoint?.id

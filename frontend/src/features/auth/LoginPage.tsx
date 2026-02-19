@@ -181,16 +181,22 @@ export default function LoginPage() {
   };
 
   const tabClasses = (value: "password" | "keys") =>
-    `rounded-full px-4 py-2 ui-body font-semibold transition ${
+    `rounded-lg px-3 py-2 ui-body font-semibold transition ${
       mode === value
-        ? "bg-white text-slate-900 shadow-sm"
-        : "text-slate-500 hover:text-slate-800"
+        ? "bg-white text-slate-900 shadow-sm ring-1 ring-primary-200"
+        : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
     }`;
 
   const allowAccessKeys = loginSettings?.allow_login_access_keys ?? false;
   const allowEndpointList = Boolean(loginSettings?.allow_login_endpoint_list);
   const allowCustomEndpoint = Boolean(loginSettings?.allow_login_custom_endpoint);
   const endpointOptions = loginSettings?.endpoints ?? [];
+  const inputClasses =
+    "mt-1 w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2.5 ui-body text-slate-800 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
+  const buttonClasses =
+    "w-full rounded-xl bg-primary px-4 py-2.5 ui-body font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60";
+  const providerButtonClasses =
+    "flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 ui-body font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50";
 
   useEffect(() => {
     if (!allowAccessKeys && mode === "keys") {
@@ -199,158 +205,219 @@ export default function LoginPage() {
   }, [allowAccessKeys, mode]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900">
-      <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-xl">
-        <h1 className="mb-4 ui-title font-semibold text-slate-800">Sign in</h1>
-        <p className="mb-6 ui-body text-slate-500">s3-manager admin portal</p>
-        {allowAccessKeys && (
-          <div className="mb-6 flex rounded-full bg-slate-100 p-1 ui-body font-semibold text-slate-600">
-            <button type="button" className={tabClasses("password")} onClick={() => handleModeChange("password")}>
-              Email & password
-            </button>
-            <button type="button" className={tabClasses("keys")} onClick={() => handleModeChange("keys")}>
-              S3 access keys
-            </button>
-          </div>
-        )}
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-24 top-[-7rem] h-80 w-80 rounded-full bg-primary-500/20 blur-3xl" />
+        <div className="absolute -right-24 bottom-[-7rem] h-96 w-96 rounded-full bg-cyan-500/20 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.18),_transparent_40%)]" />
+      </div>
 
-        {mode === "password" || !allowAccessKeys ? (
-          <form onSubmit={handlePasswordLogin} className="space-y-4">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-10 sm:px-6">
+        <div className="grid w-full items-stretch gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <section className="hidden rounded-3xl border border-slate-700/50 bg-slate-900/55 p-8 shadow-2xl backdrop-blur lg:flex lg:flex-col lg:justify-between">
             <div>
-              <label className="ui-body font-medium text-slate-700">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                placeholder="admin@example.com"
-                required
-              />
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-700/80 bg-slate-800/70 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-300">
+                <CubeIcon className="h-3.5 w-3.5 text-primary-300" />
+                S3 Manager
+              </div>
+              <h1 className="mt-6 text-3xl font-semibold leading-tight text-white">
+                S3 Management
+                <br />
+                Console
+              </h1>
+              <p className="mt-3 max-w-md ui-body text-slate-300">
+                Sign in to continue.
+              </p>
             </div>
-            <div>
-              <label className="ui-body font-medium text-slate-700">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                placeholder="••••••••"
-                required
-              />
+            <div className="grid gap-3">
+              <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Authentication</p>
+                <p className="mt-1 ui-body text-slate-200">Password, access keys, or OIDC.</p>
+              </div>
+              <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Access</p>
+                <p className="mt-1 ui-body text-slate-200">Workspace and account context.</p>
+              </div>
             </div>
-            {error && <p className="ui-body text-rose-600">{error}</p>}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-md bg-primary px-4 py-2 text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-50"
-            >
-              {loading ? "Signing in..." : "Sign in"}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleKeyLogin} className="space-y-4">
-            <div>
-              <label className="ui-body font-medium text-slate-700">Access key</label>
-              <input
-                type="text"
-                value={accessKey}
-                onChange={(e) => setAccessKey(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                placeholder="ACCESS_KEY"
-                required
-              />
+          </section>
+
+          <section className="rounded-3xl border border-white/70 bg-white/95 p-6 shadow-2xl sm:p-8">
+            <div className="mb-6">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 lg:hidden">
+                <CubeIcon className="h-3.5 w-3.5 text-primary-600" />
+                S3 Manager
+              </div>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-900">Sign in</h2>
+              <p className="mt-1 ui-body text-slate-500">Use your account credentials.</p>
             </div>
-            <div>
-              <label className="ui-body font-medium text-slate-700">Secret key</label>
-              <input
-                type="password"
-                value={secretKey}
-                onChange={(e) => setSecretKey(e.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-            {(allowEndpointList || allowCustomEndpoint) && (
-              <div className="space-y-3">
-                {allowEndpointList && (
-                  <div>
-                    <label className="ui-body font-medium text-slate-700">Endpoint</label>
-                    <select
-                      value={selectedEndpoint}
-                      onChange={(e) => setSelectedEndpoint(e.target.value)}
-                      disabled={endpointLoading}
-                      className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
-                    >
-                      {endpointLoading && <option value="">Loading endpoints...</option>}
-                      {!endpointLoading && <option value="">Select endpoint</option>}
-                      {!endpointLoading &&
-                        endpointOptions.map((endpoint) => (
-                          <option key={endpoint.id} value={endpoint.endpoint_url} title={endpoint.endpoint_url}>
-                            {endpoint.is_default ? `${endpoint.name} (default)` : endpoint.name}
-                          </option>
-                        ))}
-                    </select>
-                    {!endpointLoading && endpointOptions.length === 0 && (
-                      <p className="mt-1 ui-caption text-slate-500">
-                        {allowCustomEndpoint
-                          ? "No endpoint configured. Use a custom endpoint URL."
-                          : "No endpoint configured. Ask an admin to add one."}
+
+            {allowAccessKeys && (
+              <div className="mb-6 grid grid-cols-2 gap-1.5 rounded-xl border border-slate-200 bg-slate-100/80 p-1.5 ui-body font-semibold text-slate-600">
+                <button type="button" className={tabClasses("password")} onClick={() => handleModeChange("password")}>
+                  Email & password
+                </button>
+                <button type="button" className={tabClasses("keys")} onClick={() => handleModeChange("keys")}>
+                  S3 access keys
+                </button>
+              </div>
+            )}
+
+            {mode === "password" || !allowAccessKeys ? (
+              <form onSubmit={handlePasswordLogin} className="space-y-4">
+                <div>
+                  <label className="ui-body font-medium text-slate-700">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={inputClasses}
+                    placeholder="admin@example.com"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="ui-body font-medium text-slate-700">Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={inputClasses}
+                    placeholder="••••••••"
+                    required
+                  />
+                </div>
+                {error && (
+                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700">
+                    {error}
+                  </p>
+                )}
+                <button type="submit" disabled={loading} className={buttonClasses}>
+                  {loading ? "Signing in..." : "Sign in"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleKeyLogin} className="space-y-4">
+                <div>
+                  <label className="ui-body font-medium text-slate-700">Access key</label>
+                  <input
+                    type="text"
+                    value={accessKey}
+                    onChange={(e) => setAccessKey(e.target.value)}
+                    className={inputClasses}
+                    placeholder="ACCESS_KEY"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="ui-body font-medium text-slate-700">Secret key</label>
+                  <input
+                    type="password"
+                    value={secretKey}
+                    onChange={(e) => setSecretKey(e.target.value)}
+                    className={inputClasses}
+                    placeholder="••••••••"
+                    required
+                  />
+                </div>
+                {(allowEndpointList || allowCustomEndpoint) && (
+                  <div className="space-y-3">
+                    {allowEndpointList && (
+                      <div>
+                        <label className="ui-body font-medium text-slate-700">Endpoint</label>
+                        <select
+                          value={selectedEndpoint}
+                          onChange={(e) => setSelectedEndpoint(e.target.value)}
+                          disabled={endpointLoading}
+                          className={`${inputClasses} disabled:opacity-60`}
+                        >
+                          {endpointLoading && <option value="">Loading endpoints...</option>}
+                          {!endpointLoading && <option value="">Select endpoint</option>}
+                          {!endpointLoading &&
+                            endpointOptions.map((endpoint) => (
+                              <option key={endpoint.id} value={endpoint.endpoint_url} title={endpoint.endpoint_url}>
+                                {endpoint.is_default ? `${endpoint.name} (default)` : endpoint.name}
+                              </option>
+                            ))}
+                        </select>
+                        {!endpointLoading && endpointOptions.length === 0 && (
+                          <p className="mt-1 ui-caption text-slate-500">
+                            {allowCustomEndpoint
+                              ? "No endpoint configured. Use a custom endpoint URL."
+                              : "No endpoint configured. Ask an admin to add one."}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {allowCustomEndpoint && (
+                      <div>
+                        <label className="ui-body font-medium text-slate-700">Custom endpoint URL (optional)</label>
+                        <input
+                          type="url"
+                          value={customEndpoint}
+                          onChange={(e) => setCustomEndpoint(e.target.value)}
+                          className={inputClasses}
+                          placeholder="https://s3.example.com"
+                        />
+                        {allowEndpointList && (
+                          <p className="mt-1 ui-caption text-slate-500">Custom endpoint overrides the selection above.</p>
+                        )}
+                      </div>
+                    )}
+                    {endpointError && (
+                      <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-caption text-rose-700">
+                        {endpointError}
                       </p>
                     )}
                   </div>
                 )}
-                {allowCustomEndpoint && (
-                  <div>
-                    <label className="ui-body font-medium text-slate-700">Custom endpoint URL (optional)</label>
-                    <input
-                      type="url"
-                      value={customEndpoint}
-                      onChange={(e) => setCustomEndpoint(e.target.value)}
-                      className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      placeholder="https://s3.example.com"
-                    />
-                    {allowEndpointList && (
-                      <p className="mt-1 ui-caption text-slate-500">Custom endpoint overrides the selection above.</p>
-                    )}
-                  </div>
+                {error && (
+                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700">
+                    {error}
+                  </p>
                 )}
-                {endpointError && <p className="ui-caption text-rose-600">{endpointError}</p>}
+                <button type="submit" disabled={loading} className={buttonClasses}>
+                  {loading ? "Connecting..." : "Connect with keys"}
+                </button>
+              </form>
+            )}
+
+            {oidcProviders.length > 0 && (
+              <div className="mt-6 space-y-2">
+                <div className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-400">
+                  <div className="h-px flex-1 bg-slate-200" />
+                  <span>Or</span>
+                  <div className="h-px flex-1 bg-slate-200" />
+                </div>
+                {oidcProviders.map((provider) => (
+                  <button
+                    key={provider.id}
+                    type="button"
+                    onClick={() => startOidcFlow(provider.id)}
+                    disabled={Boolean(oidcLoading)}
+                    className={providerButtonClasses}
+                  >
+                    {oidcLoading === provider.id ? "Redirecting..." : `Continue with ${provider.display_name}`}
+                  </button>
+                ))}
+                {oidcError && (
+                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700">
+                    {oidcError}
+                  </p>
+                )}
               </div>
             )}
-            {error && <p className="ui-body text-rose-600">{error}</p>}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-md bg-primary px-4 py-2 text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-50"
-            >
-              {loading ? "Connecting..." : "Connect with keys"}
-            </button>
-          </form>
-        )}
-
-        {oidcProviders.length > 0 && (
-          <div className="mt-6 space-y-2">
-            <div className="flex items-center gap-2 ui-caption font-semibold uppercase tracking-wide text-slate-400">
-              <div className="h-px flex-1 bg-slate-200" />
-              <span>Ou</span>
-              <div className="h-px flex-1 bg-slate-200" />
-            </div>
-            {oidcProviders.map((provider) => (
-              <button
-                key={provider.id}
-                type="button"
-                onClick={() => startOidcFlow(provider.id)}
-                disabled={Boolean(oidcLoading)}
-                className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 ui-body font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:opacity-50"
-              >
-                {oidcLoading === provider.id ? "Redirection..." : `Continuer avec ${provider.display_name}`}
-              </button>
-            ))}
-            {oidcError && <p className="ui-body text-rose-600">{oidcError}</p>}
-          </div>
-        )}
+          </section>
+        </div>
       </div>
     </div>
+  );
+}
+
+function CubeIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="m12 12 8-4.5M12 12 4 7.5M12 12v9" />
+    </svg>
   );
 }

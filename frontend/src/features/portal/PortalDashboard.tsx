@@ -131,6 +131,19 @@ function endpointStatusBadge(status: HealthCheckStatus): { label: string; classN
   };
 }
 
+function incidentStateBadge(ongoing: boolean): { label: string; className: string } {
+  if (ongoing) {
+    return {
+      label: "In progress",
+      className: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100",
+    };
+  }
+  return {
+    label: "Resolved",
+    className: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+  };
+}
+
 function formatIncidentWindow(minutes?: number | null) {
   const value = Math.max(1, Number(minutes ?? 720));
   if (value % 60 === 0) {
@@ -1000,25 +1013,34 @@ export default function PortalDashboard() {
       </div>
 
       {generalSettings.endpoint_status_enabled && hasAccountContext && (workspaceHealthLoading || orderedIncidents.length > 0) && (
-        <section className="rounded-2xl border border-amber-200/80 bg-amber-50/60 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-900/15">
-          <p className="ui-body font-semibold text-amber-900 dark:text-amber-100">Ongoing / Recent Incidents</p>
-          <p className="ui-caption text-amber-700 dark:text-amber-200">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Ongoing / Recent Incidents</p>
+          <p className="ui-caption text-slate-500 dark:text-slate-400">
             Ongoing incidents and incidents ended in the last {formatIncidentWindow(workspaceHealth?.incident_highlight_minutes)}.
           </p>
           {workspaceHealthLoading ? (
-            <div className="mt-3 h-24 animate-pulse rounded-xl border border-amber-200/80 bg-white/70 dark:border-amber-800/60 dark:bg-amber-950/20" />
+            <div className="mt-3 h-24 animate-pulse rounded-xl border border-slate-200/80 bg-slate-100/80 dark:border-slate-700 dark:bg-slate-800/70" />
           ) : (
             <div className="mt-3 space-y-2">
               {orderedIncidents.slice(0, 5).map((incident, index) => (
                 <div
                   key={`${incident.endpoint_id}-${incident.start}-${index}`}
-                  className="rounded-lg border border-amber-200/90 bg-white/90 px-3 py-2 dark:border-amber-800/60 dark:bg-amber-950/20"
+                  className={`rounded-lg border px-3 py-2 ${
+                    incident.ongoing
+                      ? "border-amber-200/90 bg-amber-50/80 dark:border-amber-800/60 dark:bg-amber-900/20"
+                      : "border-slate-200/90 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-800/40"
+                  }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="ui-caption font-semibold text-slate-900 dark:text-slate-100">{incident.endpoint_name}</p>
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${endpointStatusBadge(incident.status).className}`}>
-                      {endpointStatusBadge(incident.status).label}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${incidentStateBadge(incident.ongoing).className}`}>
+                        {incidentStateBadge(incident.ongoing).label}
+                      </span>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${endpointStatusBadge(incident.status).className}`}>
+                        {endpointStatusBadge(incident.status).label}
+                      </span>
+                    </div>
                   </div>
                   <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">
                     {incident.ongoing ? "Ongoing since" : "From"} {new Date(incident.start).toLocaleString()}
@@ -1027,7 +1049,7 @@ export default function PortalDashboard() {
                 </div>
               ))}
               {orderedIncidents.length > 5 && (
-                <p className="ui-caption text-amber-700 dark:text-amber-200">+{orderedIncidents.length - 5} more incident(s).</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">+{orderedIncidents.length - 5} more incident(s).</p>
               )}
             </div>
           )}

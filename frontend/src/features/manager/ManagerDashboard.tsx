@@ -146,7 +146,7 @@ export default function ManagerDashboard() {
               data={workspaceHealth}
               loading={workspaceHealthLoading}
               error={workspaceHealthError}
-              title="Endpoint Health (Account Context)"
+              title="Endpoint Health"
               showStatusCounters={false}
             />
           )}

@@ -446,7 +446,7 @@ export default function AdminDashboard() {
           data={workspaceHealth}
           loading={workspaceHealthLoading}
           error={workspaceHealthError}
-          title="Endpoint Health (Platform)"
+          title="Endpoint Health"
           action={{ to: "/admin/endpoint-status", label: "Open Endpoint Status" }}
         />
       )}
