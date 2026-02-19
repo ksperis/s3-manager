@@ -164,7 +164,7 @@ export default function CephAdminBucketCompareModal({
   onClose,
 }: CephAdminBucketCompareModalProps) {
   const sortedSourceBuckets = useMemo(() => [...sourceBuckets].sort((a, b) => a.localeCompare(b)), [sourceBuckets]);
-  const sourceBucketNameSet = useMemo(() => new Set(sortedSourceBuckets.map((name) => name.toLowerCase())), [sortedSourceBuckets]);
+  const sourceBucketNameSet = useMemo(() => new Set(sortedSourceBuckets), [sortedSourceBuckets]);
   const targetEndpointOptions = useMemo(() => endpoints, [endpoints]);
   const [targetEndpointId, setTargetEndpointId] = useState<number | null>(
     (() => {
@@ -252,7 +252,7 @@ export default function CephAdminBucketCompareModal({
         setManualMapping((prev) => {
           const next: Record<string, string> = {};
           Object.entries(prev).forEach(([sourceBucket, targetBucket]) => {
-            const normalized = (targetBucket ?? "").trim().toLowerCase();
+            const normalized = (targetBucket ?? "").trim();
             if (!normalized) return;
             if (targetEndpointId === sourceEndpointId && sourceBucketNameSet.has(normalized)) {
               return;
@@ -280,7 +280,7 @@ export default function CephAdminBucketCompareModal({
 
   useEffect(() => {
     if (mappingMode !== "manual") return;
-    const knownTargets = new Set(targetBucketNames.map((name) => name.toLowerCase()));
+    const knownTargets = new Set(targetBucketNames);
     setManualMapping((prev) => {
       const next: Record<string, string> = {};
       sortedSourceBuckets.forEach((sourceBucket) => {
@@ -289,12 +289,12 @@ export default function CephAdminBucketCompareModal({
           next[sourceBucket] = prevTarget;
           return;
         }
-        const byName = targetBucketNames.find((candidate) => candidate.toLowerCase() === sourceBucket.toLowerCase());
-        if (byName && !(sameEndpointSelected && sourceBucketNameSet.has(byName.toLowerCase()))) {
+        const byName = targetBucketNames.find((candidate) => candidate === sourceBucket);
+        if (byName && !(sameEndpointSelected && sourceBucketNameSet.has(byName))) {
           next[sourceBucket] = byName;
           return;
         }
-        if (knownTargets.has(sourceBucket.toLowerCase()) && !(sameEndpointSelected && sourceBucketNameSet.has(sourceBucket.toLowerCase()))) {
+        if (knownTargets.has(sourceBucket) && !(sameEndpointSelected && sourceBucketNameSet.has(sourceBucket))) {
           next[sourceBucket] = sourceBucket;
         }
       });
@@ -321,15 +321,15 @@ export default function CephAdminBucketCompareModal({
 
   const availableTargetBucketNames = useMemo(() => {
     if (!sameEndpointSelected) return targetBucketNames;
-    return targetBucketNames.filter((name) => !sourceBucketNameSet.has(name.toLowerCase()));
+    return targetBucketNames.filter((name) => !sourceBucketNameSet.has(name));
   }, [sameEndpointSelected, sourceBucketNameSet, targetBucketNames]);
 
   const fallbackByNameMapping = useMemo(() => {
     const mapping = new Map<string, string>();
     sortedSourceBuckets.forEach((sourceBucket) => {
-      const candidate = availableTargetBucketNames.find((bucketName) => bucketName.toLowerCase() === sourceBucket.toLowerCase());
+      const candidate = availableTargetBucketNames.find((bucketName) => bucketName === sourceBucket);
       if (!candidate) return;
-      mapping.set(sourceBucket.toLowerCase(), candidate);
+      mapping.set(sourceBucket, candidate);
     });
     return mapping;
   }, [availableTargetBucketNames, sortedSourceBuckets]);
@@ -337,20 +337,19 @@ export default function CephAdminBucketCompareModal({
   const resolvedManualMapping = useMemo(() => {
     const mapping = new Map<string, string>();
     sortedSourceBuckets.forEach((sourceBucket) => {
-      const sourceKey = sourceBucket.toLowerCase();
       const rawMapped = parsedRawMapping.mapping.get(sourceBucket);
       if (rawMapped) {
-        mapping.set(sourceKey, rawMapped);
+        mapping.set(sourceBucket, rawMapped);
         return;
       }
       const uiMapped = (manualMapping[sourceBucket] ?? "").trim();
       if (uiMapped) {
-        mapping.set(sourceKey, uiMapped);
+        mapping.set(sourceBucket, uiMapped);
         return;
       }
-      const fallbackMapped = fallbackByNameMapping.get(sourceKey);
+      const fallbackMapped = fallbackByNameMapping.get(sourceBucket);
       if (fallbackMapped) {
-        mapping.set(sourceKey, fallbackMapped);
+        mapping.set(sourceBucket, fallbackMapped);
       }
     });
     return mapping;
@@ -376,11 +375,11 @@ export default function CephAdminBucketCompareModal({
     const mappings: CompareMapping[] = [];
     const invalidTargets: string[] = [];
     sortedSourceBuckets.forEach((sourceBucket) => {
-      const targetBucket = (resolvedManualMapping.get(sourceBucket.toLowerCase()) ?? "").trim();
+      const targetBucket = (resolvedManualMapping.get(sourceBucket) ?? "").trim();
       if (!targetBucket) {
         return;
       }
-      if (sameEndpointSelected && sourceBucketNameSet.has(targetBucket.toLowerCase())) {
+      if (sameEndpointSelected && sourceBucketNameSet.has(targetBucket)) {
         invalidTargets.push(targetBucket);
         return;
       }
@@ -401,13 +400,10 @@ export default function CephAdminBucketCompareModal({
     return { mappings, error: null };
   }, [mappingMode, resolvedManualMapping, sameEndpointSelected, sortedSourceBuckets, sourceBucketNameSet, targetEndpointId]);
 
-  const targetNameSet = useMemo(
-    () => new Set(targetBucketNames.map((name) => name.toLowerCase())),
-    [targetBucketNames]
-  );
+  const targetNameSet = useMemo(() => new Set(targetBucketNames), [targetBucketNames]);
   const missingByName = useMemo(() => {
     if (mappingMode !== "by_name") return [];
-    return sortedSourceBuckets.filter((name) => !targetNameSet.has(name.toLowerCase()));
+    return sortedSourceBuckets.filter((name) => !targetNameSet.has(name));
   }, [mappingMode, sortedSourceBuckets, targetNameSet]);
   const progressPercent = useMemo(() => {
     if (progress.total <= 0) return 0;
@@ -759,9 +755,8 @@ export default function CephAdminBucketCompareModal({
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {sortedSourceBuckets.map((sourceBucket) => {
-                    const sourceKey = sourceBucket.toLowerCase();
                     const rawTarget = parsedRawMapping.mapping.get(sourceBucket);
-                    const effectiveTarget = resolvedManualMapping.get(sourceKey) ?? "";
+                    const effectiveTarget = resolvedManualMapping.get(sourceBucket) ?? "";
                     return (
                       <tr key={sourceBucket} className="align-top">
                         <td className="px-3 py-2 font-semibold text-slate-900 dark:text-slate-100">{sourceBucket}</td>
