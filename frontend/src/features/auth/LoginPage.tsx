@@ -225,12 +225,16 @@ export default function LoginPage() {
             </div>
             <div className="grid gap-3">
               <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Authentication</p>
-                <p className="mt-1 ui-body text-slate-200">Password, access keys, or OIDC.</p>
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Need help?</p>
+                <p className="mt-1 ui-body text-slate-200">
+                  Contact your platform admin if you can&apos;t sign in.
+                </p>
               </div>
               <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Access</p>
-                <p className="mt-1 ui-body text-slate-200">Workspace and account context.</p>
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Security note</p>
+                <p className="mt-1 ui-body text-slate-200">
+                  Never share your password, secret key, or session token.
+                </p>
               </div>
             </div>
           </section>
