@@ -5,6 +5,7 @@
 import { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 import { S3AccountSelector } from "../../api/accountParams";
 import { S3Account } from "../../api/accounts";
+import { useI18n } from "../../i18n";
 import { listPortalAccounts } from "../../api/portal";
 
 type PortalAccountContextType = {
@@ -30,6 +31,7 @@ const PortalAccountContext = createContext<PortalAccountContextType>({
 });
 
 export function PortalAccountProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   const [accounts, setAccounts] = useState<S3Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -60,7 +62,13 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error(err);
         if (!cancelled) {
-          setError("Impossible de charger les comptes S3.");
+          setError(
+            t({
+              en: "Unable to load S3 accounts.",
+              fr: "Impossible de charger les comptes S3.",
+              de: "S3-Konten konnen nicht geladen werden.",
+            })
+          );
           setAccounts([]);
           setSelectedAccountId(null);
         }
@@ -74,7 +82,7 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const updateSelected = (id: string | null) => {
     setSelectedAccountId(id);

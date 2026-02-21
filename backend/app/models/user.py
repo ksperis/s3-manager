@@ -1,10 +1,12 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr
 from app.models.pagination import PaginatedResponse
+
+UiLanguage = Literal["en", "fr", "de"]
 
 
 class LinkedS3User(BaseModel):
@@ -40,6 +42,7 @@ class User(BaseModel):
     is_admin: bool = False
     is_root: bool = False
     can_access_ceph_admin: bool = False
+    ui_language: Optional[UiLanguage] = None
     auth_provider: Optional[str] = None
     last_login_at: Optional[datetime] = None
 
@@ -66,6 +69,7 @@ class UserUpdate(BaseModel):
 
 class UserSelfUpdate(BaseModel):
     full_name: Optional[str] = None
+    ui_language: Optional[UiLanguage] = None
     current_password: Optional[str] = None
     new_password: Optional[str] = None
 
@@ -88,6 +92,7 @@ class UserOut(BaseModel):
     role: Optional[str] = None
     is_root: bool = False
     can_access_ceph_admin: bool = False
+    ui_language: Optional[UiLanguage] = None
     accounts: list[int] = []
     account_links: list[AccountMembership] = []
     s3_users: list[int] = []

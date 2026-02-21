@@ -30,6 +30,7 @@ class User(Base):
     auth_provider_subject = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
+    ui_language = Column(String, nullable=True)
 
     accounts = relationship(
         "S3Account",

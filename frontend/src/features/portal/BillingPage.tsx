@@ -17,6 +17,7 @@ import {
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import StatCards from "../../components/StatCards";
+import { useI18n } from "../../i18n";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { BillingSubjectDetail, getPortalBillingMe } from "../../api/billing";
 import { usePortalAccountContext } from "./PortalAccountContext";
@@ -34,6 +35,7 @@ function formatCurrency(value?: number | null, currency?: string | null): string
 }
 
 export default function PortalBillingPage() {
+  const { t } = useI18n();
   const { accountIdForApi, selectedAccount, hasAccountContext, loading: accountLoading, error: accountError } = usePortalAccountContext();
   const [month, setMonth] = useState<string>(currentMonth());
   const [detail, setDetail] = useState<BillingSubjectDetail | null>(null);
@@ -57,7 +59,7 @@ export default function PortalBillingPage() {
       } catch {
         if (!cancelled) {
           setDetail(null);
-          setError("Unable to load billing data.");
+          setError(t({ en: "Unable to load billing data.", fr: "Impossible de charger les donnees de facturation.", de: "Abrechnungsdaten konnen nicht geladen werden." }));
         }
       } finally {
         if (!cancelled) {
@@ -74,32 +76,34 @@ export default function PortalBillingPage() {
   const stats = useMemo(() => {
     return [
       {
-        label: "Avg storage",
+        label: t({ en: "Avg storage", fr: "Stockage moyen", de: "Durchschn. Speicher" }),
         value: formatBytes(detail?.storage.avg_bytes ?? null),
-        hint: "Average daily storage",
+        hint: t({ en: "Average daily storage", fr: "Moyenne quotidienne de stockage", de: "Taglicher Durchschnittsspeicher" }),
       },
       {
-        label: "Egress",
+        label: t({ en: "Egress", fr: "Egress", de: "Ausgehend" }),
         value: formatBytes(detail?.usage.bytes_out ?? null),
-        hint: "Outgoing bytes",
+        hint: t({ en: "Outgoing bytes", fr: "Octets sortants", de: "Ausgehende Bytes" }),
       },
       {
-        label: "Ingress",
+        label: t({ en: "Ingress", fr: "Ingress", de: "Eingehend" }),
         value: formatBytes(detail?.usage.bytes_in ?? null),
-        hint: "Incoming bytes",
+        hint: t({ en: "Incoming bytes", fr: "Octets entrants", de: "Eingehende Bytes" }),
       },
       {
-        label: "Requests",
+        label: t({ en: "Requests", fr: "Requetes", de: "Anfragen" }),
         value: formatCompactNumber(detail?.usage.ops_total ?? null),
-        hint: "Total API calls",
+        hint: t({ en: "Total API calls", fr: "Total des appels API", de: "Gesamte API-Aufrufe" }),
       },
       {
-        label: "Estimated cost",
+        label: t({ en: "Estimated cost", fr: "Cout estime", de: "Geschaftzte Kosten" }),
         value: detail?.cost?.total_cost != null ? formatCurrency(detail.cost.total_cost, detail.cost.currency) : "-",
-        hint: detail?.cost?.rate_card_name ? `Rate card: ${detail.cost.rate_card_name}` : "No rate card",
+        hint: detail?.cost?.rate_card_name
+          ? `${t({ en: "Rate card", fr: "Grille tarifaire", de: "Tarifkarte" })}: ${detail.cost.rate_card_name}`
+          : t({ en: "No rate card", fr: "Aucune grille tarifaire", de: "Keine Tarifkarte" }),
       },
     ];
-  }, [detail]);
+  }, [detail, t]);
 
   const dailySeries = useMemo(() => {
     return (detail?.daily ?? []).map((point) => ({
@@ -111,10 +115,13 @@ export default function PortalBillingPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Billing" description="Monthly usage and cost overview." />
+      <PageHeader
+        title={t({ en: "Billing", fr: "Facturation", de: "Abrechnung" })}
+        description={t({ en: "Monthly usage and cost overview.", fr: "Vue mensuelle de l'utilisation et des couts.", de: "Monatliche Ubersicht uber Nutzung und Kosten." })}
+      />
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
-          Month
+          {t({ en: "Month", fr: "Mois", de: "Monat" })}
           <input
             type="month"
             value={month}
@@ -123,19 +130,19 @@ export default function PortalBillingPage() {
           />
         </label>
       </div>
-      {accountLoading && <PageBanner tone="info">Loading account context...</PageBanner>}
+      {accountLoading && <PageBanner tone="info">{t({ en: "Loading account context...", fr: "Chargement du contexte de compte...", de: "Kontokontext wird geladen..." })}</PageBanner>}
       {accountError && <PageBanner tone="warning">{accountError}</PageBanner>}
       {!accountLoading && !accountError && !hasAccountContext && (
-        <PageBanner tone="warning">Select an account to view billing data.</PageBanner>
+        <PageBanner tone="warning">{t({ en: "Select an account to view billing data.", fr: "Selectionnez un compte pour voir la facturation.", de: "Wahlen Sie ein Konto, um Abrechnungsdaten anzuzeigen." })}</PageBanner>
       )}
-      {loading && <PageBanner tone="info">Loading billing data...</PageBanner>}
+      {loading && <PageBanner tone="info">{t({ en: "Loading billing data...", fr: "Chargement des donnees de facturation...", de: "Abrechnungsdaten werden geladen..." })}</PageBanner>}
       {error && <PageBanner tone="warning">{error}</PageBanner>}
       {!loading && !error && <StatCards stats={stats} columns={3} />}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">Storage (daily)</h4>
+            <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t({ en: "Storage (daily)", fr: "Stockage (quotidien)", de: "Speicher (taglich)" })}</h4>
             <div className="mt-3 h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={dailySeries}>
@@ -159,7 +166,7 @@ export default function PortalBillingPage() {
             </div>
           </div>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">Traffic (daily)</h4>
+            <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t({ en: "Traffic (daily)", fr: "Trafic (quotidien)", de: "Verkehr (taglich)" })}</h4>
             <div className="mt-3 h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dailySeries}>
@@ -173,7 +180,7 @@ export default function PortalBillingPage() {
             </div>
           </div>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">Requests (daily)</h4>
+            <h4 className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t({ en: "Requests (daily)", fr: "Requetes (quotidien)", de: "Anfragen (taglich)" })}</h4>
             <div className="mt-3 h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dailySeries}>

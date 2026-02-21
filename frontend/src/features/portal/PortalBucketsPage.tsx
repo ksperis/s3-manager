@@ -25,6 +25,7 @@ import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
+import { useI18n } from "../../i18n";
 import { usePortalAccountContext } from "./PortalAccountContext";
 
 const MAX_BUCKET_NAME_LENGTH = 63;
@@ -33,14 +34,6 @@ type SortState = {
   field: keyof Bucket;
   direction: "asc" | "desc";
 };
-
-const bucketTableColumns: { label: string; field?: keyof Bucket | null; align?: "left" | "right" }[] = [
-  { label: "Name", field: "name" },
-  { label: "Used", field: "used_bytes" },
-  { label: "Objects", field: "object_count" },
-  { label: "Created on", field: null },
-  { label: "Actions", field: null, align: "right" },
-];
 
 function normalizeBucketName(value: string): string {
   const lower = value.trim().toLowerCase();
@@ -90,6 +83,7 @@ const formatNumber = (value?: number | null) => {
 };
 
 export default function PortalBucketsPage() {
+  const { t } = useI18n();
   const { accountIdForApi, selectedAccount, hasAccountContext, loading: accountLoading, error: accountError } =
     usePortalAccountContext();
   const [portalState, setPortalState] = useState<PortalState | null>(null);
@@ -116,16 +110,27 @@ export default function PortalBucketsPage() {
   const bucketsRef = useRef<Bucket[]>([]);
   const bucketStatsLoadedRef = useRef<Set<string>>(new Set());
   const [bucketStatsLoading, setBucketStatsLoading] = useState<Record<string, boolean>>({});
-  const accountName = selectedAccount?.name ?? "compte sélectionné";
+  const accountName = selectedAccount?.name ?? t({ en: "selected account", fr: "compte selectionne", de: "ausgewahltes Konto" });
+  const bucketTableColumns: { label: string; field?: keyof Bucket | null; align?: "left" | "right" }[] = [
+    { label: t({ en: "Name", fr: "Nom", de: "Name" }), field: "name" },
+    { label: t({ en: "Used", fr: "Utilise", de: "Verwendet" }), field: "used_bytes" },
+    { label: t({ en: "Objects", fr: "Objets", de: "Objekte" }), field: "object_count" },
+    { label: t({ en: "Created on", fr: "Cree le", de: "Erstellt am" }), field: null },
+    { label: t({ en: "Actions", fr: "Actions", de: "Aktionen" }), field: null, align: "right" },
+  ];
 
   const canManageBuckets =
     Boolean(portalState?.can_manage_buckets) || portalState?.account_role === "portal_manager";
 
   const extractError = (err: unknown): string => {
     if (axios.isAxiosError(err)) {
-      return ((err.response?.data as { detail?: string })?.detail || err.message || "Unexpected error");
+      return (
+        (err.response?.data as { detail?: string })?.detail ||
+        err.message ||
+        t({ en: "Unexpected error", fr: "Erreur inattendue", de: "Unerwarteter Fehler" })
+      );
     }
-    return err instanceof Error ? err.message : "Unexpected error";
+    return err instanceof Error ? err.message : t({ en: "Unexpected error", fr: "Erreur inattendue", de: "Unerwarteter Fehler" });
   };
 
   const fetchBuckets = useCallback(async () => {
@@ -143,11 +148,11 @@ export default function PortalBucketsPage() {
       setBuckets(data);
     } catch (err) {
       console.error(err);
-      setError("Impossible de charger les buckets du portail.");
+      setError(t({ en: "Unable to load portal buckets.", fr: "Impossible de charger les buckets du portail.", de: "Portal-Buckets konnen nicht geladen werden." }));
     } finally {
       setLoading(false);
     }
-  }, [accountIdForApi, canManageBuckets, filter]);
+  }, [accountIdForApi, canManageBuckets, filter, t]);
 
   const loadBucketStats = useCallback(
     async (bucketName: string) => {
@@ -200,10 +205,10 @@ export default function PortalBucketsPage() {
       .catch((err) => {
         console.error(err);
         setPortalState(null);
-        setStateError("Impossible de charger le contexte portail.");
+        setStateError(t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." }));
       })
       .finally(() => setStateLoading(false));
-  }, [accountIdForApi]);
+  }, [accountIdForApi, t]);
 
   useEffect(() => {
     setActionError(null);
@@ -377,11 +382,11 @@ export default function PortalBucketsPage() {
     if (!accountIdForApi || !canManageBuckets) return;
     const normalized = normalizeBucketName(newBucketName);
     if (!normalized) {
-      setActionError("Le nom du bucket est requis.");
+      setActionError(t({ en: "Bucket name is required.", fr: "Le nom du bucket est requis.", de: "Bucket-Name ist erforderlich." }));
       return;
     }
     if (!isValidBucketName(normalized)) {
-      setActionError("Nom invalide. 3-63 caractères, minuscules, chiffres, points ou tirets.");
+      setActionError(t({ en: "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.", fr: "Nom invalide. 3-63 caracteres, minuscules, chiffres, points ou tirets.", de: "Ungueltiger Name. 3-63 Zeichen, Kleinbuchstaben, Zahlen, Punkte oder Bindestriche." }));
       return;
     }
     setCreating(true);
@@ -389,7 +394,7 @@ export default function PortalBucketsPage() {
     setActionMessage(null);
     try {
       await createPortalBucket(accountIdForApi, normalized);
-      setActionMessage("Bucket créé.");
+      setActionMessage(t({ en: "Bucket created.", fr: "Bucket cree.", de: "Bucket erstellt." }));
       setNewBucketName("");
       await fetchBuckets();
     } catch (err) {
@@ -401,14 +406,20 @@ export default function PortalBucketsPage() {
 
   const handleDeleteBucket = async (bucketName: string) => {
     if (!accountIdForApi || !canManageBuckets) return;
-    const confirmed = confirmAction(`Supprimer le bucket '${bucketName}' et tous ses objets ?`);
+    const confirmed = confirmAction(
+      t({
+        en: `Delete bucket '${bucketName}' and all its objects?`,
+        fr: `Supprimer le bucket '${bucketName}' et tous ses objets ?`,
+        de: `Bucket '${bucketName}' und alle Objekte loschen?`,
+      })
+    );
     if (!confirmed) return;
     setDeletingBucket(bucketName);
     setActionError(null);
     setActionMessage(null);
     try {
       await deletePortalBucket(accountIdForApi, bucketName, true);
-      setActionMessage("Bucket supprimé.");
+      setActionMessage(t({ en: "Bucket deleted.", fr: "Bucket supprime.", de: "Bucket geloescht." }));
       await fetchBuckets();
     } catch (err) {
       setActionError(extractError(err));
@@ -424,9 +435,12 @@ export default function PortalBucketsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Buckets"
-        description={`Inventaire des buckets pour ${accountName}.`}
-        breadcrumbs={[{ label: "Portal" }, { label: "Buckets" }]}
+        title={t({ en: "Buckets", fr: "Buckets", de: "Buckets" })}
+        description={t({ en: `Bucket inventory for ${accountName}.`, fr: `Inventaire des buckets pour ${accountName}.`, de: `Bucket-Inventar fur ${accountName}.` })}
+        breadcrumbs={[
+          { label: t({ en: "Portal", fr: "Portail", de: "Portal" }) },
+          { label: t({ en: "Buckets", fr: "Buckets", de: "Buckets" }) },
+        ]}
       />
 
       {stateError && <PageBanner tone="error">{stateError}</PageBanner>}
@@ -435,11 +449,11 @@ export default function PortalBucketsPage() {
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
       {!hasAccountContext && (
-        <PageBanner tone="warning">Sélectionnez un compte avant d'afficher les buckets.</PageBanner>
+        <PageBanner tone="warning">{t({ en: "Select an account before displaying buckets.", fr: "Selectionnez un compte avant d'afficher les buckets.", de: "Wahlen Sie ein Konto, bevor Sie Buckets anzeigen." })}</PageBanner>
       )}
 
       {userBlocked && (
-        <PageBanner tone="warning">Cette page est réservée aux portal managers.</PageBanner>
+        <PageBanner tone="warning">{t({ en: "This page is reserved for portal managers.", fr: "Cette page est reservee aux portal managers.", de: "Diese Seite ist nur fur Portal-Manager vorgesehen." })}</PageBanner>
       )}
 
       {showTable ? (
@@ -447,18 +461,24 @@ export default function PortalBucketsPage() {
         <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Buckets</p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">Liste filtrable (portal manager).</p>
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">{t({ en: "Buckets", fr: "Buckets", de: "Buckets" })}</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">{t({ en: "Filterable list (portal manager).", fr: "Liste filtrable (portal manager).", de: "Filterbare Liste (Portal-Manager)." })}</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <span className="ui-caption text-slate-500 dark:text-slate-400">{buckets.length} bucket(s)</span>
+              <span className="ui-caption text-slate-500 dark:text-slate-400">
+                {t({
+                  en: `${buckets.length} bucket(s)`,
+                  fr: `${buckets.length} bucket(s)`,
+                  de: `${buckets.length} Bucket(s)`,
+                })}
+              </span>
               <div className="flex items-center gap-2 sm:justify-end">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filtre</span>
+                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{t({ en: "Filter", fr: "Filtre", de: "Filter" })}</span>
                 <input
                   type="search"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Rechercher..."
+                  placeholder={t({ en: "Search...", fr: "Rechercher...", de: "Suchen..." })}
                   className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
                   disabled={!canManageBuckets}
                 />
@@ -473,21 +493,23 @@ export default function PortalBucketsPage() {
                     title={
                       isBucketNameValid
                         ? undefined
-                        : "Nom invalide. 3-63 caractères, minuscules, chiffres, points ou tirets."
+                        : t({ en: "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.", fr: "Nom invalide. 3-63 caracteres, minuscules, chiffres, points ou tirets.", de: "Ungueltiger Name. 3-63 Zeichen, Kleinbuchstaben, Zahlen, Punkte oder Bindestriche." })
                     }
                     className={`w-full rounded-md border px-3 py-2 ui-body focus:outline-none focus:ring-2 sm:w-56 md:w-64 ${
                       isBucketNameValid
                         ? "border-slate-200 focus:border-primary focus:ring-primary/30 dark:border-slate-700"
                         : "border-rose-400 text-rose-700 focus:border-rose-500 focus:ring-rose-200 dark:border-rose-500 dark:text-rose-200 dark:focus:ring-rose-900/50"
                     } dark:bg-slate-900 dark:text-slate-100`}
-                    placeholder="nouveau-bucket"
+                    placeholder={t({ en: "new-bucket", fr: "nouveau-bucket", de: "neuer-bucket" })}
                   />
                   <button
                     type="submit"
                     disabled={creating || !newBucketName.trim() || !isBucketNameValid}
                     className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
                   >
-                    {creating ? "Création..." : "Créer"}
+                    {creating
+                      ? t({ en: "Creating...", fr: "Creation...", de: "Erstellung..." })
+                      : t({ en: "Create", fr: "Creer", de: "Erstellen" })}
                   </button>
                 </form>
               ) : null}
@@ -505,19 +527,30 @@ export default function PortalBucketsPage() {
                     field={col.field}
                     activeField={sort.field}
                     direction={sort.direction}
-                    align={col.align ?? (col.label === "Actions" ? "right" : "left")}
+                    align={col.align ?? (col.label === t({ en: "Actions", fr: "Actions", de: "Aktionen" }) ? "right" : "left")}
                     onSort={col.field ? (field) => toggleSort(field as keyof Bucket) : undefined}
                   />
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {loading && <TableEmptyState colSpan={bucketTableColumns.length} message="Chargement des buckets..." />}
+              {loading && (
+                <TableEmptyState
+                  colSpan={bucketTableColumns.length}
+                  message={t({ en: "Loading buckets...", fr: "Chargement des buckets...", de: "Buckets werden geladen..." })}
+                />
+              )}
               {error && !loading && buckets.length === 0 && (
-                <TableEmptyState colSpan={bucketTableColumns.length} message="Impossible de charger les buckets." />
+                <TableEmptyState
+                  colSpan={bucketTableColumns.length}
+                  message={t({ en: "Unable to load buckets.", fr: "Impossible de charger les buckets.", de: "Buckets konnen nicht geladen werden." })}
+                />
               )}
               {!loading && !error && buckets.length === 0 && (
-                <TableEmptyState colSpan={bucketTableColumns.length} message="Aucun bucket trouvé." />
+                <TableEmptyState
+                  colSpan={bucketTableColumns.length}
+                  message={t({ en: "No bucket found.", fr: "Aucun bucket trouve.", de: "Kein Bucket gefunden." })}
+                />
               )}
               {!loading &&
                 !error &&
@@ -550,7 +583,7 @@ export default function PortalBucketsPage() {
                           disabled={!canManageBuckets}
                           className={tableActionButtonClasses}
                         >
-                          Gestion
+                          {t({ en: "Manage", fr: "Gestion", de: "Verwalten" })}
                         </button>
                         <button
                           type="button"
@@ -558,7 +591,9 @@ export default function PortalBucketsPage() {
                           disabled={!canManageBuckets || deletingBucket === bucket.name}
                           className={tableDeleteActionClasses}
                         >
-                          {deletingBucket === bucket.name ? "Suppression..." : "Supprimer"}
+                          {deletingBucket === bucket.name
+                            ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird geloscht..." })
+                            : t({ en: "Delete", fr: "Supprimer", de: "Loschen" })}
                         </button>
                       </div>
                     </td>
@@ -572,7 +607,11 @@ export default function PortalBucketsPage() {
 
       {showAccessModal && accessBucket && (
         <Modal
-          title={`Gestion des accès - ${accessBucket.name}`}
+          title={t({
+            en: `Access management - ${accessBucket.name}`,
+            fr: `Gestion des acces - ${accessBucket.name}`,
+            de: `Zugriffsverwaltung - ${accessBucket.name}`,
+          })}
           onClose={() => {
             setShowAccessModal(false);
             setAccessBucket(null);
@@ -582,18 +621,24 @@ export default function PortalBucketsPage() {
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Utilisateurs du portail</p>
+                <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">
+                  {t({ en: "Portal users", fr: "Utilisateurs du portail", de: "Portal-Benutzer" })}
+                </p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  {accessAssignments.size} autorise(s)
+                  {t({
+                    en: `${accessAssignments.size} authorized`,
+                    fr: `${accessAssignments.size} autorise(s)`,
+                    de: `${accessAssignments.size} autorisiert`,
+                  })}
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filtre</span>
+                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{t({ en: "Filter", fr: "Filtre", de: "Filter" })}</span>
                 <input
                   type="search"
                   value={accessFilter}
                   onChange={(e) => setAccessFilter(e.target.value)}
-                  placeholder="Rechercher..."
+                  placeholder={t({ en: "Search...", fr: "Rechercher...", de: "Suchen..." })}
                   className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64"
                 />
               </div>
@@ -602,18 +647,24 @@ export default function PortalBucketsPage() {
               <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                 <thead className="bg-slate-50 dark:bg-slate-900/50">
                   <tr>
-                    <th className="px-3 py-2 text-left ui-caption font-semibold text-slate-600 dark:text-slate-300">Email</th>
-                    <th className="px-3 py-2 text-left ui-caption font-semibold text-slate-600 dark:text-slate-300">IAM user</th>
-                    <th className="px-3 py-2 text-left ui-caption font-semibold text-slate-600 dark:text-slate-300">Role</th>
-                    <th className="px-3 py-2 text-right ui-caption font-semibold text-slate-600 dark:text-slate-300">Action</th>
+                    <th className="px-3 py-2 text-left ui-caption font-semibold text-slate-600 dark:text-slate-300">{t({ en: "Email", fr: "Email", de: "E-Mail" })}</th>
+                    <th className="px-3 py-2 text-left ui-caption font-semibold text-slate-600 dark:text-slate-300">{t({ en: "IAM user", fr: "Utilisateur IAM", de: "IAM-Benutzer" })}</th>
+                    <th className="px-3 py-2 text-left ui-caption font-semibold text-slate-600 dark:text-slate-300">{t({ en: "Role", fr: "Role", de: "Rolle" })}</th>
+                    <th className="px-3 py-2 text-right ui-caption font-semibold text-slate-600 dark:text-slate-300">{t({ en: "Action", fr: "Action", de: "Aktion" })}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {accessUsersLoading && (
-                    <TableEmptyState colSpan={4} message="Chargement des utilisateurs..." />
+                    <TableEmptyState
+                      colSpan={4}
+                      message={t({ en: "Loading users...", fr: "Chargement des utilisateurs...", de: "Benutzer werden geladen..." })}
+                    />
                   )}
                   {!accessUsersLoading && filteredAccessUsers.length === 0 && (
-                    <TableEmptyState colSpan={4} message="Aucun utilisateur disponible." />
+                    <TableEmptyState
+                      colSpan={4}
+                      message={t({ en: "No user available.", fr: "Aucun utilisateur disponible.", de: "Kein Benutzer verfugbar." })}
+                    />
                   )}
                   {!accessUsersLoading &&
                     filteredAccessUsers.map((user) => {
@@ -629,7 +680,9 @@ export default function PortalBucketsPage() {
                             <span className="font-mono">{user.iam_username || "-"}</span>
                           </td>
                           <td className="px-3 py-2 ui-body text-slate-600 dark:text-slate-300">
-                            {user.role === "portal_manager" ? "Portal manager" : "Portal user"}
+                            {user.role === "portal_manager"
+                              ? t({ en: "Portal manager", fr: "Portal manager", de: "Portal-Manager" })
+                              : t({ en: "Portal user", fr: "Portal user", de: "Portal-Benutzer" })}
                           </td>
                           <td className="px-3 py-2 text-right">
                             {hasAccess ? (
@@ -639,7 +692,9 @@ export default function PortalBucketsPage() {
                                 className={tableDeleteActionClasses}
                                 disabled={busy}
                               >
-                                {busy ? "Retrait..." : "Retirer"}
+                                {busy
+                                  ? t({ en: "Removing...", fr: "Retrait...", de: "Wird entfernt..." })
+                                  : t({ en: "Remove", fr: "Retirer", de: "Entfernen" })}
                               </button>
                             ) : (
                               <button
@@ -648,7 +703,9 @@ export default function PortalBucketsPage() {
                                 className={tableActionButtonClasses}
                                 disabled={busy}
                               >
-                                {busy ? "Ajout..." : "Ajouter"}
+                                {busy
+                                  ? t({ en: "Adding...", fr: "Ajout...", de: "Wird hinzugefugt..." })
+                                  : t({ en: "Add", fr: "Ajouter", de: "Hinzufugen" })}
                               </button>
                             )}
                           </td>

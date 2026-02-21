@@ -105,6 +105,8 @@ class UsersService:
         user: User,
         *,
         full_name: Optional[str] = None,
+        ui_language: Optional[str] = None,
+        update_ui_language: bool = False,
         current_password: Optional[str] = None,
         new_password: Optional[str] = None,
     ) -> User:
@@ -112,6 +114,8 @@ class UsersService:
         if full_name is not None:
             user.full_name = normalized_name or None
             user.display_name = normalized_name or None
+        if update_ui_language:
+            user.ui_language = ui_language or None
 
         if current_password is not None or new_password is not None:
             if not current_password or not new_password:
@@ -424,6 +428,7 @@ class UsersService:
             role=user.role,
             is_root=user.is_root,
             can_access_ceph_admin=bool(user.can_access_ceph_admin),
+            ui_language=user.ui_language,
             accounts=account_ids,
             account_links=account_links,
             s3_users=s3_user_ids,

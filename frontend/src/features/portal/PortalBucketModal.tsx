@@ -11,6 +11,7 @@ import Modal from "../../components/Modal";
 import PageTabs from "../../components/PageTabs";
 import SplitView from "../../components/SplitView";
 import UsageTile from "../../components/UsageTile";
+import { useI18n } from "../../i18n";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
@@ -38,6 +39,7 @@ export default function PortalBucketModal({
   accountUsedBytes,
   accountUsedObjects,
 }: PortalBucketModalProps) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { generalSettings } = useGeneralSettings();
   const [activeTab, setActiveTab] = useState<"overview" | "objects">("overview");
@@ -95,7 +97,13 @@ export default function PortalBucketModal({
       if (!accountId) {
         setObjects([]);
         setPrefixes([]);
-        setObjectsError("Sélectionnez un compte pour explorer le bucket.");
+        setObjectsError(
+          t({
+            en: "Select an account to browse this bucket.",
+            fr: "Selectionnez un compte pour explorer le bucket.",
+            de: "Wahlen Sie ein Konto, um diesen Bucket zu durchsuchen.",
+          })
+        );
         return;
       }
       setObjectsLoading(true);
@@ -109,12 +117,18 @@ export default function PortalBucketModal({
         console.error(err);
         setObjects([]);
         setPrefixes([]);
-        setObjectsError("Impossible de lister les objets du bucket.");
+        setObjectsError(
+          t({
+            en: "Unable to list bucket objects.",
+            fr: "Impossible de lister les objets du bucket.",
+            de: "Bucket-Objekte konnen nicht aufgelistet werden.",
+          })
+        );
       } finally {
         setObjectsLoading(false);
       }
     },
-    [accountId, bucket.name]
+    [accountId, bucket.name, t]
   );
 
   useEffect(() => {
@@ -137,11 +151,23 @@ export default function PortalBucketModal({
       if (url && typeof window !== "undefined") {
         window.open(url, "_blank", "noopener,noreferrer");
       } else {
-        setDownloadError("URL de téléchargement indisponible.");
+        setDownloadError(
+          t({
+            en: "Download URL unavailable.",
+            fr: "URL de telechargement indisponible.",
+            de: "Download-URL nicht verfugbar.",
+          })
+        );
       }
     } catch (err) {
       console.error(err);
-      setDownloadError("Impossible de récupérer le lien de téléchargement.");
+      setDownloadError(
+        t({
+          en: "Unable to fetch download link.",
+          fr: "Impossible de recuperer le lien de telechargement.",
+          de: "Download-Link kann nicht abgerufen werden.",
+        })
+      );
     } finally {
       setDownloading(false);
     }
@@ -154,11 +180,23 @@ export default function PortalBucketModal({
     setActionMessage(null);
     try {
       await uploadObject(accountId, bucket.name, file, currentPrefix);
-      setActionMessage(`Objet ${file.name} téléversé.`);
+      setActionMessage(
+        t({
+          en: `Object ${file.name} uploaded.`,
+          fr: `Objet ${file.name} televerse.`,
+          de: `Objekt ${file.name} hochgeladen.`,
+        })
+      );
       await loadObjects(currentPrefix);
     } catch (err) {
       console.error(err);
-      setUploadError("Impossible de téléverser cet objet.");
+      setUploadError(
+        t({
+          en: "Unable to upload this object.",
+          fr: "Impossible de televerser cet objet.",
+          de: "Dieses Objekt kann nicht hochgeladen werden.",
+        })
+      );
     } finally {
       setUploading(false);
     }
@@ -173,12 +211,24 @@ export default function PortalBucketModal({
     setObjectsError(null);
     try {
       await deleteObjects(accountId, bucket.name, selectedKeys);
-      setActionMessage(`${selectedKeys.length} objet(s) supprimé(s).`);
+      setActionMessage(
+        t({
+          en: `${selectedKeys.length} object(s) deleted.`,
+          fr: `${selectedKeys.length} objet(s) supprime(s).`,
+          de: `${selectedKeys.length} Objekt(e) geloscht.`,
+        })
+      );
       setSelectedKeys([]);
       await loadObjects(currentPrefix);
     } catch (err) {
       console.error(err);
-      setObjectsError("Suppression impossible. Vérifiez vos droits.");
+      setObjectsError(
+        t({
+          en: "Delete failed. Check your permissions.",
+          fr: "Suppression impossible. Verifiez vos droits.",
+          de: "Loschen fehlgeschlagen. Prufen Sie Ihre Berechtigungen.",
+        })
+      );
     } finally {
       setDeleting(false);
     }
@@ -203,16 +253,19 @@ export default function PortalBucketModal({
         tabs={[
           {
             id: "overview",
-            label: "Général",
+            label: t({ en: "Overview", fr: "General", de: "Ubersicht" }),
             content: (
               <div className="space-y-4">
                 <section className="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
-                      <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Résumé</p>
+                      <p className="ui-caption font-semibold uppercase tracking-wide text-primary">
+                        {t({ en: "Summary", fr: "Resume", de: "Zusammenfassung" })}
+                      </p>
                       <h3 className="ui-title font-semibold text-slate-900 dark:text-slate-100">Bucket {bucket.name}</h3>
                       <p className="ui-caption text-slate-500 dark:text-slate-400">
-                        Créé le {bucket.creation_date ? new Date(bucket.creation_date).toLocaleString() : "—"}
+                        {t({ en: "Created on", fr: "Cree le", de: "Erstellt am" })}{" "}
+                        {bucket.creation_date ? new Date(bucket.creation_date).toLocaleString() : "—"}
                       </p>
                     </div>
                     <button
@@ -225,45 +278,59 @@ export default function PortalBucketModal({
                           : "cursor-not-allowed opacity-60"
                       }`}
                     >
-                      Ouvrir dans Browser
+                      {t({ en: "Open in Browser", fr: "Ouvrir dans Browser", de: "Im Browser offnen" })}
                     </button>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
                     <UsageTile
-                      label="Stockage"
+                      label={t({ en: "Storage", fr: "Stockage", de: "Speicher" })}
                       used={bucket.used_bytes ?? null}
                       quota={bucket.quota_max_size_bytes ?? null}
                       formatter={formatBytes}
                       quotaFormatter={formatBytes}
-                      emptyHint="Aucun quota défini pour ce bucket."
+                      emptyHint={t({ en: "No quota defined for this bucket.", fr: "Aucun quota defini pour ce bucket.", de: "Kein Kontingent fur diesen Bucket definiert." })}
                     />
                     <UsageTile
-                      label="Objets"
+                      label={t({ en: "Objects", fr: "Objets", de: "Objekte" })}
                       used={bucket.object_count ?? null}
                       quota={bucket.quota_max_objects ?? null}
                       formatter={formatCompactNumber}
                       quotaFormatter={(value) => (value != null ? value.toLocaleString() : "-")}
-                      unitHint="objets"
-                      emptyHint="Aucun quota d'objets défini."
+                      unitHint={t({ en: "objects", fr: "objets", de: "Objekte" })}
+                      emptyHint={t({ en: "No object quota defined.", fr: "Aucun quota d'objets defini.", de: "Kein Objektkontingent definiert." })}
                     />
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className={bucketCardClasses}>
-                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Part volumétrie compte</p>
-                      <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{storageShare != null ? formatPercentage(storageShare) : "—"}</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">Basé sur l'usage global du compte.</p>
-                    </div>
-                    <div className={bucketCardClasses}>
-                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Part objets compte</p>
-                      <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{objectsShare != null ? formatPercentage(objectsShare) : "—"}</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">Nombre d'objets vs. total compte.</p>
-                    </div>
-                    <div className={bucketCardClasses}>
-                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Quota détecté</p>
-                      <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
-                        {bucket.quota_max_size_bytes ? formatBytes(bucket.quota_max_size_bytes) : "Non défini"}
+                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        {t({ en: "Account storage share", fr: "Part volumetrie compte", de: "Konto-Speicheranteil" })}
                       </p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">Stockage autorisé pour ce bucket.</p>
+                      <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{storageShare != null ? formatPercentage(storageShare) : "—"}</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        {t({ en: "Based on total account usage.", fr: "Base sur l'usage global du compte.", de: "Basierend auf der gesamten Kontonutzung." })}
+                      </p>
+                    </div>
+                    <div className={bucketCardClasses}>
+                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        {t({ en: "Account object share", fr: "Part objets compte", de: "Konto-Objektanteil" })}
+                      </p>
+                      <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">{objectsShare != null ? formatPercentage(objectsShare) : "—"}</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        {t({ en: "Object count vs account total.", fr: "Nombre d'objets vs. total compte.", de: "Objektanzahl im Vergleich zum Kontogesamtwert." })}
+                      </p>
+                    </div>
+                    <div className={bucketCardClasses}>
+                      <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        {t({ en: "Detected quota", fr: "Quota detecte", de: "Erkanntes Kontingent" })}
+                      </p>
+                      <p className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
+                        {bucket.quota_max_size_bytes
+                          ? formatBytes(bucket.quota_max_size_bytes)
+                          : t({ en: "Not defined", fr: "Non defini", de: "Nicht definiert" })}
+                      </p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        {t({ en: "Allowed storage for this bucket.", fr: "Stockage autorise pour ce bucket.", de: "Zulassiger Speicher fur diesen Bucket." })}
+                      </p>
                     </div>
                   </div>
                 </section>
@@ -272,12 +339,14 @@ export default function PortalBucketModal({
           },
           {
             id: "objects",
-            label: "Parcourir",
+            label: t({ en: "Browse", fr: "Parcourir", de: "Durchsuchen" }),
             content: (
               <SplitView
                 left={
                   <div className="p-3 space-y-2">
-                    <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Préfixes</p>
+                    <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">
+                      {t({ en: "Prefixes", fr: "Prefixes", de: "Prafixe" })}
+                    </p>
                     <div className="space-y-1">
                       <button
                         className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left ui-body ${
@@ -287,14 +356,14 @@ export default function PortalBucketModal({
                         }`}
                         onClick={() => setCurrentPrefix("")}
                       >
-                        <span>(racine)</span>
+                        <span>{t({ en: "(root)", fr: "(racine)", de: "(wurzel)" })}</span>
                       </button>
                       {parentPrefix !== "" && (
                         <button
                           className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left ui-body text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"
                           onClick={() => setCurrentPrefix(parentPrefix)}
                         >
-                          <span>⬆️ Remonter</span>
+                          <span>{t({ en: "Up", fr: "Remonter", de: "Nach oben" })}</span>
                           <span className="ui-caption text-slate-500 dark:text-slate-400">{parentPrefix || "/"}</span>
                         </button>
                       )}
@@ -322,9 +391,11 @@ export default function PortalBucketModal({
                   <div className="space-y-3 p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div className="space-y-1">
-                        <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Chemin actuel</p>
+                        <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">
+                          {t({ en: "Current path", fr: "Chemin actuel", de: "Aktueller Pfad" })}
+                        </p>
                         <div className="ui-caption text-slate-500 dark:text-slate-300">
-                          {bucket.name}/{currentPrefix || "(racine)"}
+                          {bucket.name}/{currentPrefix || t({ en: "(root)", fr: "(racine)", de: "(wurzel)" })}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -333,7 +404,7 @@ export default function PortalBucketModal({
                           onClick={() => loadObjects(currentPrefix)}
                           className="rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
-                          Rafraîchir
+                          {t({ en: "Refresh", fr: "Rafraichir", de: "Aktualisieren" })}
                         </button>
                         <label
                           className="inline-flex cursor-pointer items-center rounded-lg bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
@@ -348,7 +419,9 @@ export default function PortalBucketModal({
                             }}
                             disabled={uploading || objectsLoading || !accountId}
                           />
-                          {uploading ? "Téléversement..." : "Téléverser"}
+                          {uploading
+                            ? t({ en: "Uploading...", fr: "Televersement...", de: "Wird hochgeladen..." })
+                            : t({ en: "Upload", fr: "Televerser", de: "Hochladen" })}
                         </label>
                         <button
                           type="button"
@@ -356,7 +429,9 @@ export default function PortalBucketModal({
                           onClick={handleDownload}
                           className="rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
-                          {downloading ? "Téléchargement..." : "Télécharger"}
+                          {downloading
+                            ? t({ en: "Downloading...", fr: "Telechargement...", de: "Wird heruntergeladen..." })
+                            : t({ en: "Download", fr: "Telecharger", de: "Herunterladen" })}
                         </button>
                         <button
                           type="button"
@@ -364,7 +439,9 @@ export default function PortalBucketModal({
                           onClick={handleDelete}
                           className="rounded-lg border border-rose-200 px-3 py-2 ui-body font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800 dark:hover:text-rose-100"
                         >
-                          {deleting ? "Suppression..." : "Supprimer"}
+                          {deleting
+                            ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird geloscht..." })
+                            : t({ en: "Delete", fr: "Supprimer", de: "Loschen" })}
                         </button>
                       </div>
                     </div>
@@ -400,20 +477,20 @@ export default function PortalBucketModal({
                                 checked={objects.length > 0 && selectedKeys.length === objects.length}
                                 onChange={(e) => setSelectedKeys(e.target.checked ? objects.map((obj) => obj.key) : [])}
                                 className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                                aria-label="Sélectionner tous les objets"
+                                aria-label={t({ en: "Select all objects", fr: "Selectionner tous les objets", de: "Alle Objekte auswahlen" })}
                               />
                             </th>
                             <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Nom
+                              {t({ en: "Name", fr: "Nom", de: "Name" })}
                             </th>
                             <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Taille
+                              {t({ en: "Size", fr: "Taille", de: "Grosse" })}
                             </th>
                             <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Dernière modification
+                              {t({ en: "Last modified", fr: "Derniere modification", de: "Zuletzt geandert" })}
                             </th>
                             <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Classe de stockage
+                              {t({ en: "Storage class", fr: "Classe de stockage", de: "Speicherklasse" })}
                             </th>
                           </tr>
                         </thead>
@@ -421,14 +498,14 @@ export default function PortalBucketModal({
                           {objectsLoading && (
                             <tr>
                               <td colSpan={5} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
-                                Chargement des objets...
+                                {t({ en: "Loading objects...", fr: "Chargement des objets...", de: "Objekte werden geladen..." })}
                               </td>
                             </tr>
                           )}
                           {!objectsLoading && objectRows.length === 0 && (
                             <tr>
                               <td colSpan={5} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
-                                Aucun objet dans ce préfixe.
+                                {t({ en: "No object in this prefix.", fr: "Aucun objet dans ce prefixe.", de: "Keine Objekte in diesem Prafix." })}
                               </td>
                             </tr>
                           )}
@@ -458,7 +535,11 @@ export default function PortalBucketModal({
                                       checked={isSelected}
                                       onChange={() => toggleSelection(row.key)}
                                       className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                                      aria-label={`Sélectionner ${row.name}`}
+                                      aria-label={t({
+                                        en: `Select ${row.name}`,
+                                        fr: `Selectionner ${row.name}`,
+                                        de: `${row.name} auswahlen`,
+                                      })}
                                     />
                                   </td>
                                   <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">{row.name}</td>

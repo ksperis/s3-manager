@@ -4,11 +4,13 @@ from app.core.security import get_password_hash, verify_password
 from app.db import User, UserRole
 from app.main import app
 from app.routers import dependencies
+from uuid import uuid4
 
 
 def _seed_user(db_session, *, hashed_password: str | None) -> User:
+    email = f"profile-user-{uuid4().hex[:8]}@example.com"
     user = User(
-        email="profile-user@example.com",
+        email=email,
         full_name="Profile User",
         display_name="Profile User",
         hashed_password=hashed_password,
@@ -34,6 +36,35 @@ def test_update_users_me_updates_full_name(client, db_session):
     db_session.refresh(user)
     assert user.full_name == "Nouveau Nom"
     assert user.display_name == "Nouveau Nom"
+
+
+def test_update_users_me_updates_ui_language(client, db_session):
+    user = _seed_user(db_session, hashed_password=get_password_hash("old-password"))
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+
+    response = client.put("/api/users/me", json={"ui_language": "de"})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["ui_language"] == "de"
+
+    db_session.refresh(user)
+    assert user.ui_language == "de"
+
+
+def test_update_users_me_clears_ui_language(client, db_session):
+    user = _seed_user(db_session, hashed_password=get_password_hash("old-password"))
+    user.ui_language = "fr"
+    db_session.add(user)
+    db_session.commit()
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+
+    response = client.put("/api/users/me", json={"ui_language": None})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["ui_language"] is None
+
+    db_session.refresh(user)
+    assert user.ui_language is None
 
 
 def test_update_users_me_changes_password_with_current_password(client, db_session):

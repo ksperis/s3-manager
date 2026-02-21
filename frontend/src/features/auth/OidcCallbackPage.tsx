@@ -7,6 +7,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { completeOidcLogin } from "../../api/auth";
 import { fetchGeneralSettings } from "../../api/appSettings";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { useLanguage } from "../../components/language";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
 
 export default function OidcCallbackPage() {
@@ -14,6 +15,7 @@ export default function OidcCallbackPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { setGeneralSettings } = useGeneralSettings();
+  const { setLanguagePreference } = useLanguage();
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(true);
 
@@ -40,6 +42,7 @@ export default function OidcCallbackPage() {
         localStorage.setItem("token", res.access_token);
         const sessionUser: SessionUser = { ...res.user, authType: "oidc" };
         localStorage.setItem("user", JSON.stringify({ ...sessionUser, authProvider: provider }));
+        setLanguagePreference(res.user.ui_language ?? "auto");
         let settings = DEFAULT_GENERAL_SETTINGS;
         try {
           settings = await fetchGeneralSettings();

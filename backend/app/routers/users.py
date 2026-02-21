@@ -26,10 +26,13 @@ def update_users_me(
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> UserOut:
+    update_fields = payload.model_fields_set
     try:
         user = users_service.update_current_user(
             current_user,
-            full_name=payload.full_name,
+            full_name=payload.full_name if "full_name" in update_fields else None,
+            ui_language=payload.ui_language,
+            update_ui_language="ui_language" in update_fields,
             current_password=payload.current_password,
             new_password=payload.new_password,
         )

@@ -11,7 +11,7 @@ import PaginationControls from "../../components/PaginationControls";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useTheme } from "../../components/theme";
-import { useLanguage } from "../../components/language";
+import { UiLanguagePreference, useLanguage } from "../../components/language";
 import { fetchCurrentUser, updateCurrentUser } from "../../api/users";
 import {
   S3Connection,
@@ -57,14 +57,19 @@ type ConnectionCredentialDraft = {
   secret_access_key: string;
 };
 
-function persistUserProfile(fullName: string | null) {
+function persistStoredUser(values: { fullName?: string | null; uiLanguage?: "en" | "fr" | "de" | null }) {
   if (typeof window === "undefined") return;
   const raw = localStorage.getItem("user");
   if (!raw) return;
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    parsed.full_name = fullName;
-    parsed.display_name = fullName;
+    if ("fullName" in values) {
+      parsed.full_name = values.fullName ?? null;
+      parsed.display_name = values.fullName ?? null;
+    }
+    if ("uiLanguage" in values) {
+      parsed.ui_language = values.uiLanguage ?? null;
+    }
     localStorage.setItem("user", JSON.stringify(parsed));
   } catch (error) {
     console.warn("Unable to update stored user profile", error);
@@ -124,7 +129,7 @@ export default function ProfilePage({
   const canChangePassword = authType !== "rgw_session" && authType !== "oidc";
   const { generalSettings } = useGeneralSettings();
   const { theme, setTheme } = useTheme();
-  const { language, setLanguage } = useLanguage();
+  const { languagePreference, setLanguagePreference } = useLanguage();
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
@@ -138,7 +143,7 @@ export default function ProfilePage({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
   const [preferencesTheme, setPreferencesTheme] = useState<"light" | "dark">(theme);
-  const [preferencesLanguage, setPreferencesLanguage] = useState<"fr" | "en">(language);
+  const [preferencesLanguage, setPreferencesLanguage] = useState<UiLanguagePreference>(languagePreference);
   const [connections, setConnections] = useState<S3Connection[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState(false);
   const [connectionsError, setConnectionsError] = useState<string | null>(null);
@@ -215,8 +220,8 @@ export default function ProfilePage({
   }, [theme]);
 
   useEffect(() => {
-    setPreferencesLanguage(language);
-  }, [language]);
+    setPreferencesLanguage(languagePreference);
+  }, [languagePreference]);
 
   useEffect(() => {
     if (!showSettingsCards) return;
@@ -239,6 +244,8 @@ export default function ProfilePage({
     fetchCurrentUser()
       .then((user) => {
         setFullName(user.full_name ?? "");
+        setLanguagePreference(user.ui_language ?? "auto");
+        persistStoredUser({ uiLanguage: user.ui_language ?? null });
       })
       .catch((error) => {
         console.error(error);
@@ -386,7 +393,7 @@ export default function ProfilePage({
       const updated = await updateCurrentUser({ full_name: fullName.trim() || null });
       const updatedName = updated.full_name ?? null;
       setFullName(updatedName ?? "");
-      persistUserProfile(updatedName);
+      persistStoredUser({ fullName: updatedName });
       setProfileMessage("Profile updated.");
     } catch (error) {
       console.error(error);
@@ -427,10 +434,24 @@ export default function ProfilePage({
     }
   };
 
-  const handlePreferencesSave = (event: FormEvent) => {
+  const handlePreferencesSave = async (event: FormEvent) => {
     event.preventDefault();
     setTheme(preferencesTheme);
-    setLanguage(preferencesLanguage);
+    if (!isRgwSession) {
+      try {
+        const updated = await updateCurrentUser({
+          ui_language: preferencesLanguage === "auto" ? null : preferencesLanguage,
+        });
+        setLanguagePreference(updated.ui_language ?? "auto");
+        persistStoredUser({ uiLanguage: updated.ui_language ?? null });
+      } catch (error) {
+        console.error(error);
+        setPreferencesMessage(getErrorMessage(error, "Unable to save language preference."));
+        return;
+      }
+    } else {
+      setLanguagePreference(preferencesLanguage);
+    }
     if (preferredWorkspace) {
       localStorage.setItem(WORKSPACE_STORAGE_KEY, preferredWorkspace);
     } else {
@@ -740,11 +761,13 @@ export default function ProfilePage({
                 </span>
                 <select
                   value={preferencesLanguage}
-                  onChange={(event) => setPreferencesLanguage(event.target.value as "fr" | "en")}
+                  onChange={(event) => setPreferencesLanguage(event.target.value as UiLanguagePreference)}
                   className={inputClasses}
                 >
-                  <option value="fr">French</option>
                   <option value="en">English</option>
+                  <option value="fr">French</option>
+                  <option value="de">Deutsch</option>
+                  <option value="auto">Auto (browser)</option>
                 </select>
               </label>
               <label className="block">

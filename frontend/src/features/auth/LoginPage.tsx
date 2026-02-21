@@ -7,11 +7,13 @@ import { useNavigate } from "react-router-dom";
 import { fetchOidcProviders, login, loginWithKeys, startOidcLogin, type OidcProviderInfo } from "../../api/auth";
 import { fetchGeneralSettings, fetchLoginSettings, type GeneralSettings, type LoginSettings } from "../../api/appSettings";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { useLanguage } from "../../components/language";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { setGeneralSettings } = useGeneralSettings();
+  const { setLanguagePreference } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [seedPrefillApplied, setSeedPrefillApplied] = useState(false);
@@ -109,6 +111,7 @@ export default function LoginPage() {
       localStorage.setItem("token", res.access_token);
       const sessionUser: SessionUser = { ...res.user, authType: "password" };
       localStorage.setItem("user", JSON.stringify(sessionUser));
+      setLanguagePreference(res.user.ui_language ?? "auto");
       localStorage.removeItem("s3SessionEndpoint");
       const settings = await loadGeneralSettings();
       const destination = resolvePostLoginPath(sessionUser, settings);
@@ -151,6 +154,7 @@ export default function LoginPage() {
         capabilities: res.session.capabilities,
       };
       localStorage.setItem("user", JSON.stringify(userPayload));
+      setLanguagePreference("auto");
       const settings = await loadGeneralSettings();
       const destination = resolvePostLoginPath(userPayload, settings);
       navigate(destination, { replace: true });

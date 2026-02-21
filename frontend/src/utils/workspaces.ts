@@ -18,8 +18,10 @@ export type WorkspaceOption = {
 };
 
 export type SessionUser = {
+  id?: number | null;
   email?: string | null;
   role?: string | null;
+  ui_language?: "en" | "fr" | "de" | null;
   can_access_ceph_admin?: boolean | null;
   authType?: "password" | "rgw_session" | "oidc" | null;
   account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;

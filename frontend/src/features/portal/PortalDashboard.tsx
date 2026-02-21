@@ -28,6 +28,7 @@ import {
   fetchPortalUsage,
 } from "../../api/portal";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { useI18n } from "../../i18n";
 import { usePortalAccountContext } from "./PortalAccountContext";
 import Modal from "../../components/Modal";
 import UiBadge from "../../components/ui/UiBadge";
@@ -138,6 +139,7 @@ function formatIncidentWindow(minutes?: number | null) {
 }
 
 export default function PortalDashboard() {
+  const { t } = useI18n();
   const { generalSettings } = useGeneralSettings();
   const { accountIdForApi, selectedAccount, hasAccountContext, loading: accountLoading, error: accountError } = usePortalAccountContext();
   const [state, setState] = useState<PortalState | null>(null);
@@ -245,6 +247,31 @@ export default function PortalDashboard() {
   const hasTrafficSparkline = trafficSparkline.length > 0;
   const endpointHealthEntry = workspaceHealth?.endpoints?.[0] ?? null;
   const endpointHealthBadge = endpointStatusBadge(endpointHealthEntry?.status ?? "unknown");
+  const localizedEndpointHealthLabel = useMemo(() => {
+    if (endpointHealthBadge.label === "Up") return t({ en: "Up", fr: "Disponible", de: "Verfugbar" });
+    if (endpointHealthBadge.label === "Degraded") return t({ en: "Degraded", fr: "Degrade", de: "Beeintrachtigt" });
+    if (endpointHealthBadge.label === "Down") return t({ en: "Down", fr: "Indisponible", de: "Nicht verfugbar" });
+    return t({ en: "Unknown", fr: "Inconnu", de: "Unbekannt" });
+  }, [endpointHealthBadge.label, t]);
+  const formatIncidentWindowLabel = useCallback(
+    (minutes?: number | null) => {
+      const value = Math.max(1, Number(minutes ?? 720));
+      if (value % 60 === 0) {
+        const hours = value / 60;
+        return t({
+          en: `${hours} hour${hours > 1 ? "s" : ""}`,
+          fr: `${hours} heure${hours > 1 ? "s" : ""}`,
+          de: `${hours} Stunde${hours > 1 ? "n" : ""}`,
+        });
+      }
+      return t({
+        en: `${value} minute${value > 1 ? "s" : ""}`,
+        fr: `${value} minute${value > 1 ? "s" : ""}`,
+        de: `${value} Minute${value > 1 ? "n" : ""}`,
+      });
+    },
+    [t]
+  );
   const orderedIncidents = useMemo(() => {
     const incidents = workspaceHealth?.incidents ?? [];
     return [...incidents].sort((left, right) => {
@@ -652,7 +679,13 @@ export default function PortalDashboard() {
       );
     } catch (err) {
       console.error(err);
-      setKeyActionError("Impossible de créer une nouvelle clé. Vérifiez vos droits IAM.");
+      setKeyActionError(
+        t({
+          en: "Unable to create a new key. Check your IAM permissions.",
+          fr: "Impossible de creer une nouvelle cle. Verifiez vos droits IAM.",
+          de: "Neuer Schlussel kann nicht erstellt werden. Prufen Sie Ihre IAM-Berechtigungen.",
+        })
+      );
     } finally {
       setCreatingKey(false);
     }
@@ -685,7 +718,13 @@ export default function PortalDashboard() {
       });
     } catch (err) {
       console.error(err);
-      setKeyActionError("Impossible de renouveler la clé portail.");
+      setKeyActionError(
+        t({
+          en: "Unable to renew portal key.",
+          fr: "Impossible de renouveler la cle portail.",
+          de: "Portal-Schlussel kann nicht erneuert werden.",
+        })
+      );
     } finally {
       setRenewingPortalKey(false);
     }
@@ -701,7 +740,13 @@ export default function PortalDashboard() {
       setShowPortalKeyDetails(true);
     } catch (err) {
       console.error(err);
-      setPortalKeyError("Impossible de récupérer la clé portail.");
+      setPortalKeyError(
+        t({
+          en: "Unable to fetch portal key.",
+          fr: "Impossible de recuperer la cle portail.",
+          de: "Portal-Schlussel kann nicht abgerufen werden.",
+        })
+      );
     } finally {
       setPortalKeyLoading(false);
     }
@@ -720,7 +765,13 @@ export default function PortalDashboard() {
       );
     } catch (err) {
       console.error(err);
-      setKeyActionError("Suppression impossible. Vérifiez vos droits.");
+      setKeyActionError(
+        t({
+          en: "Delete failed. Check your permissions.",
+          fr: "Suppression impossible. Verifiez vos droits.",
+          de: "Loschen fehlgeschlagen. Prufen Sie Ihre Berechtigungen.",
+        })
+      );
     }
   };
 
@@ -742,7 +793,13 @@ export default function PortalDashboard() {
       );
     } catch (err) {
       console.error(err);
-      setKeyActionError("Impossible de mettre à jour le statut de la clé.");
+      setKeyActionError(
+        t({
+          en: "Unable to update key status.",
+          fr: "Impossible de mettre a jour le statut de la cle.",
+          de: "Schlusselstatus kann nicht aktualisiert werden.",
+        })
+      );
     } finally {
       setTogglingKeyId(null);
     }
@@ -752,7 +809,13 @@ export default function PortalDashboard() {
     event.preventDefault();
     const normalizedBucketName = normalizeBucketName(newBucketName);
     if (!accountIdForApi || !normalizedBucketName || !isValidBucketName(normalizedBucketName)) {
-      setBucketActionError("Nom invalide. 3-63 caractères, minuscules, chiffres, points ou tirets.");
+      setBucketActionError(
+        t({
+          en: "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.",
+          fr: "Nom invalide. 3-63 caracteres, minuscules, chiffres, points ou tirets.",
+          de: "Ungueltiger Name. 3-63 Zeichen, Kleinbuchstaben, Zahlen, Punkte oder Bindestriche.",
+        })
+      );
       return;
     }
     setBucketActionError(null);
@@ -765,7 +828,13 @@ export default function PortalDashboard() {
       setNewBucketName("");
     } catch (err) {
       console.error(err);
-      setBucketActionError("Impossible de créer le bucket.");
+      setBucketActionError(
+        t({
+          en: "Unable to create bucket.",
+          fr: "Impossible de creer le bucket.",
+          de: "Bucket kann nicht erstellt werden.",
+        })
+      );
     } finally {
       setCreatingBucket(false);
     }
@@ -809,15 +878,33 @@ export default function PortalDashboard() {
   }, [accountIdForApi, generalSettings.endpoint_status_enabled, hasAccountContext]);
 
   if (accountLoading) {
-    return <UiEmptyState title="Chargement..." description="Récupération des comptes et du contexte portail." />;
+    return (
+      <UiEmptyState
+        title={t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}
+        description={t({
+          en: "Retrieving accounts and portal context.",
+          fr: "Recuperation des comptes et du contexte portail.",
+          de: "Konten und Portal-Kontext werden abgerufen.",
+        })}
+      />
+    );
   }
 
   if (accountError) {
-    return <UiEmptyState title="Erreur de contexte" description={accountError} />;
+    return <UiEmptyState title={t({ en: "Context error", fr: "Erreur de contexte", de: "Kontextfehler" })} description={accountError} />;
   }
 
   if (!hasAccountContext) {
-    return <UiEmptyState title="Aucun compte sélectionné" description="Sélectionnez un compte dans la barre supérieure pour continuer." />;
+    return (
+      <UiEmptyState
+        title={t({ en: "No account selected", fr: "Aucun compte selectionne", de: "Kein Konto ausgewahlt" })}
+        description={t({
+          en: "Select an account in the top bar to continue.",
+          fr: "Selectionnez un compte dans la barre superieure pour continuer.",
+          de: "Wahlen Sie ein Konto in der oberen Leiste, um fortzufahren.",
+        })}
+      />
+    );
   }
 
   return (
@@ -826,9 +913,11 @@ export default function PortalDashboard() {
         <div className="grid gap-6 rounded-[22px] bg-white/95 px-6 py-6 shadow-sm dark:bg-slate-900/90 lg:grid-cols-[1fr_1.4fr_1fr]">
           <div className="flex flex-col space-y-4">
             <div>
-              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Portail utilisateur</p>
+              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {t({ en: "User portal", fr: "Portail utilisateur", de: "Benutzerportal" })}
+              </p>
               <h1 className="mt-2 ui-title font-semibold text-slate-900 dark:text-white">
-                {selectedAccount?.name || "Compte S3"}
+                {selectedAccount?.name || t({ en: "S3 account", fr: "Compte S3", de: "S3-Konto" })}
               </h1>
               {(trafficLoading || hasTrafficSparkline) && (
                 <div className="mt-3">
@@ -837,10 +926,16 @@ export default function PortalDashboard() {
                   ) : (
                     <div className="rounded-2xl border border-white/60 bg-white/40 px-3 py-2 shadow-inner ring-1 ring-white/50 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/40 dark:ring-slate-700/60">
                       <div className="flex items-center justify-between ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
-                        <span>Traffic 24h</span>
+                        <span>{t({ en: "Traffic 24h", fr: "Trafic 24h", de: "Traffic 24h" })}</span>
                         <span className="ui-caption text-slate-800 dark:text-slate-100">{formatBytes(trafficTotal24h)}</span>
                       </div>
-                      <div className="ui-caption font-semibold text-slate-500 text-right dark:text-slate-400">{trafficOps24h.toLocaleString()} req</div>
+                      <div className="ui-caption font-semibold text-slate-500 text-right dark:text-slate-400">
+                        {t({
+                          en: `${trafficOps24h.toLocaleString()} req`,
+                          fr: `${trafficOps24h.toLocaleString()} req`,
+                          de: `${trafficOps24h.toLocaleString()} Anfr`,
+                        })}
+                      </div>
                       <div className="mt-2 h-16">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={trafficSparkline}>
@@ -868,7 +963,11 @@ export default function PortalDashboard() {
               )}
               {state?.just_created && (
                 <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 ui-caption font-semibold text-emerald-700 shadow-sm dark:bg-emerald-900/40 dark:text-emerald-100">
-                  Nouvel utilisateur IAM créé et clé provisionnée
+                  {t({
+                    en: "New IAM user created and key provisioned",
+                    fr: "Nouvel utilisateur IAM cree et cle provisionnee",
+                    de: "Neuer IAM-Benutzer erstellt und Schlussel bereitgestellt",
+                  })}
                 </div>
               )}
             </div>
@@ -877,10 +976,16 @@ export default function PortalDashboard() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div>
-                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Usage compte</div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Volumétrie & objets</p>
+                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {t({ en: "Account usage", fr: "Usage compte", de: "Kontonutzung" })}
+                  </div>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    {t({ en: "Storage & objects", fr: "Volumetrie & objets", de: "Speicher & Objekte" })}
+                  </p>
                   {accountUsageLoading && (
-                    <p className="ui-caption text-slate-400 dark:text-slate-500">Chargement…</p>
+                    <p className="ui-caption text-slate-400 dark:text-slate-500">
+                      {t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}
+                    </p>
                   )}
                   {accountUsageError && (
                     <p className="ui-caption text-rose-600 dark:text-rose-300">{accountUsageError}</p>
@@ -895,7 +1000,7 @@ export default function PortalDashboard() {
                     size: "lg",
                   })}
                   {renderUsageGauge({
-                    label: "Objets",
+                    label: t({ en: "Objects", fr: "Objets", de: "Objekte" }),
                     used: accountUsedObjects,
                     quota: state?.quota_max_objects,
                     formatter: (v) => {
@@ -904,18 +1009,22 @@ export default function PortalDashboard() {
                       if (v >= 10_000) return `${(v / 1_000).toFixed(v >= 100_000 ? 0 : 1)} k`;
                       return v.toLocaleString();
                     },
-                    unitHint: "objets",
+                    unitHint: t({ en: "objects", fr: "objets", de: "Objekte" }),
                     size: "lg",
                   })}
                 </div>
               </div>
                 <div className="grid grid-cols-2 gap-4 sm:gap-6">
                   <div>
-                    <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Utilisateurs</div>
+                    <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      {t({ en: "Users", fr: "Utilisateurs", de: "Benutzer" })}
+                    </div>
                     <div className="mt-1 ui-metric font-semibold">{portalUsersCount}</div>
                   </div>
                   <div>
-                    <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Buckets</div>
+                    <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      {t({ en: "Buckets", fr: "Buckets", de: "Buckets" })}
+                    </div>
                     <div className="mt-1 flex items-baseline gap-2">
                       <span className="ui-metric font-semibold">{visibleBucketCount}</span>
                       <span className="ui-body text-slate-500 dark:text-slate-400">/{totalBucketCount}</span>
@@ -928,7 +1037,9 @@ export default function PortalDashboard() {
             <div className="space-y-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Endpoint S3</div>
+                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {t({ en: "S3 endpoint", fr: "Endpoint S3", de: "S3-Endpunkt" })}
+                  </div>
                   {generalSettings.endpoint_status_enabled && (
                     workspaceHealthLoading ? (
                       <span className="inline-flex h-5 w-12 animate-pulse rounded-full bg-slate-200/80 dark:bg-slate-700/80" aria-hidden />
@@ -937,11 +1048,15 @@ export default function PortalDashboard() {
                         tone={endpointHealthBadge.tone}
                         title={
                           endpointHealthEntry?.checked_at
-                            ? `Last check: ${new Date(endpointHealthEntry.checked_at).toLocaleString()}`
-                            : "Last check: unavailable"
+                            ? t({
+                                en: `Last check: ${new Date(endpointHealthEntry.checked_at).toLocaleString()}`,
+                                fr: `Derniere verification: ${new Date(endpointHealthEntry.checked_at).toLocaleString()}`,
+                                de: `Letzte Prufung: ${new Date(endpointHealthEntry.checked_at).toLocaleString()}`,
+                              })
+                            : t({ en: "Last check: unavailable", fr: "Derniere verification: indisponible", de: "Letzte Prufung: nicht verfugbar" })
                         }
                       >
-                        {endpointHealthBadge.label}
+                        {localizedEndpointHealthLabel}
                       </UiBadge>
                     )
                   )}
@@ -958,7 +1073,7 @@ export default function PortalDashboard() {
                       type="button"
                       onClick={() => navigator?.clipboard?.writeText?.(state.s3_endpoint ?? "").catch(() => {})}
                       className="flex h-6 w-6 items-center justify-center rounded-full ui-caption text-primary opacity-30 transition hover:opacity-80 hover:bg-slate-200/70 hover:text-sky-600 dark:hover:bg-slate-800/60"
-                      aria-label="Copier l'endpoint S3"
+                      aria-label={t({ en: "Copy S3 endpoint", fr: "Copier l'endpoint S3", de: "S3-Endpunkt kopieren" })}
                     >
                       <span aria-hidden>📋</span>
                     </button>
@@ -967,29 +1082,43 @@ export default function PortalDashboard() {
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-3">
                 <div>
-                <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">User</div>
+                <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {t({ en: "User", fr: "Utilisateur", de: "Benutzer" })}
+                </div>
                   <div className="mt-1 font-mono ui-caption text-slate-900 dark:text-slate-100">{userEmail || "—"}</div>
                 </div>
                 <div>
-                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Rôle</div>
+                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {t({ en: "Role", fr: "Role", de: "Rolle" })}
+                  </div>
                   <div className="mt-1">
                     <UiBadge tone={state?.account_role === "portal_manager" ? "success" : "info"}>
-                      {state?.account_role === "portal_manager" ? "Portal manager" : "Portal user"}
+                      {state?.account_role === "portal_manager"
+                        ? t({ en: "Portal manager", fr: "Portal manager", de: "Portal-Manager" })
+                        : t({ en: "Portal user", fr: "Portal user", de: "Portal-Benutzer" })}
                     </UiBadge>
                   </div>
                 </div>
                 <div>
-                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">IAM user</div>
+                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {t({ en: "IAM user", fr: "Utilisateur IAM", de: "IAM-Benutzer" })}
+                  </div>
                   <div className="mt-1 font-mono ui-caption">{state?.iam_user?.iam_username || "—"}</div>
                 </div>
                 <div>
-                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Clés IAM</div>
+                  <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {t({ en: "IAM keys", fr: "Cles IAM", de: "IAM-Schlussel" })}
+                  </div>
                   <button
                     type="button"
                     onClick={() => setShowKeysModal(true)}
                     className="mt-1 ui-body font-semibold text-slate-700 underline decoration-slate-300 decoration-2 underline-offset-4 transition hover:text-slate-900 dark:text-slate-100 dark:decoration-slate-600 dark:hover:text-white"
                   >
-                    {allAccessKeys.length} clé(s)
+                    {t({
+                      en: `${allAccessKeys.length} key(s)`,
+                      fr: `${allAccessKeys.length} cle(s)`,
+                      de: `${allAccessKeys.length} Schlussel`,
+                    })}
                   </button>
                 </div>
               </div>
@@ -1000,9 +1129,15 @@ export default function PortalDashboard() {
 
       {generalSettings.endpoint_status_enabled && hasAccountContext && (workspaceHealthLoading || orderedIncidents.length > 0) && (
         <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Ongoing / Recent Incidents</p>
+          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
+            {t({ en: "Ongoing / Recent Incidents", fr: "Incidents en cours / recents", de: "Laufende / aktuelle Vorfalle" })}
+          </p>
           <p className="ui-caption text-slate-500 dark:text-slate-400">
-            Ongoing incidents and incidents ended in the last {formatIncidentWindow(workspaceHealth?.incident_highlight_minutes)}.
+            {t({
+              en: `Ongoing incidents and incidents ended in the last ${formatIncidentWindowLabel(workspaceHealth?.incident_highlight_minutes)}.`,
+              fr: `Incidents en cours et incidents termines dans les ${formatIncidentWindowLabel(workspaceHealth?.incident_highlight_minutes)} dernieres.`,
+              de: `Laufende Vorfalle und in den letzten ${formatIncidentWindowLabel(workspaceHealth?.incident_highlight_minutes)} beendete Vorfalle.`,
+            })}
           </p>
           {workspaceHealthLoading ? (
             <div className="mt-3 h-24 animate-pulse rounded-xl border border-slate-200/80 bg-slate-100/80 dark:border-slate-700 dark:bg-slate-800/70" />
@@ -1020,18 +1155,45 @@ export default function PortalDashboard() {
                   <div className="flex items-center justify-between gap-2">
                     <p className="ui-caption font-semibold text-slate-900 dark:text-slate-100">{incident.endpoint_name}</p>
                     <div className="flex items-center gap-1.5">
-                      <UiBadge tone={incidentStateBadge(incident.ongoing).tone}>{incidentStateBadge(incident.ongoing).label}</UiBadge>
-                      <UiBadge tone={endpointStatusBadge(incident.status).tone}>{endpointStatusBadge(incident.status).label}</UiBadge>
+                      <UiBadge tone={incidentStateBadge(incident.ongoing).tone}>
+                        {incident.ongoing
+                          ? t({ en: "In progress", fr: "En cours", de: "Laufend" })
+                          : t({ en: "Resolved", fr: "Resolu", de: "Behoben" })}
+                      </UiBadge>
+                      <UiBadge tone={endpointStatusBadge(incident.status).tone}>
+                        {endpointStatusBadge(incident.status).label === "Up"
+                          ? t({ en: "Up", fr: "Disponible", de: "Verfugbar" })
+                          : endpointStatusBadge(incident.status).label === "Degraded"
+                            ? t({ en: "Degraded", fr: "Degrade", de: "Beeintrachtigt" })
+                            : endpointStatusBadge(incident.status).label === "Down"
+                              ? t({ en: "Down", fr: "Indisponible", de: "Nicht verfugbar" })
+                              : t({ en: "Unknown", fr: "Inconnu", de: "Unbekannt" })}
+                      </UiBadge>
                     </div>
                   </div>
                   <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">
-                    {incident.ongoing ? "Ongoing since" : "From"} {new Date(incident.start).toLocaleString()}
-                    {incident.end ? ` to ${new Date(incident.end).toLocaleString()}` : ""}
+                    {incident.ongoing
+                      ? t({ en: "Ongoing since", fr: "En cours depuis", de: "Lauft seit" })
+                      : t({ en: "From", fr: "Du", de: "Von" })}{" "}
+                    {new Date(incident.start).toLocaleString()}
+                    {incident.end
+                      ? t({
+                          en: ` to ${new Date(incident.end).toLocaleString()}`,
+                          fr: ` au ${new Date(incident.end).toLocaleString()}`,
+                          de: ` bis ${new Date(incident.end).toLocaleString()}`,
+                        })
+                      : ""}
                   </p>
                 </div>
               ))}
               {orderedIncidents.length > 5 && (
-                <p className="ui-caption text-slate-500 dark:text-slate-400">+{orderedIncidents.length - 5} more incident(s).</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  {t({
+                    en: `+${orderedIncidents.length - 5} more incident(s).`,
+                    fr: `+${orderedIncidents.length - 5} incident(s) supplementaire(s).`,
+                    de: `+${orderedIncidents.length - 5} weitere Vorfalle.`,
+                  })}
+                </p>
               )}
             </div>
           )}
@@ -1052,12 +1214,12 @@ export default function PortalDashboard() {
       ) : (
         <div className="space-y-4">
           {showKeysModal && (
-            <Modal title="Clés IAM portail" onClose={() => setShowKeysModal(false)}>
+            <Modal title={t({ en: "Portal IAM keys", fr: "Cles IAM portail", de: "Portal-IAM-Schlussel" })} onClose={() => setShowKeysModal(false)}>
               <div className="space-y-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="max-w-xl">
                     <p className="ui-body text-slate-700 dark:text-slate-200">
-                      Clé portail et clés utilisateur IAM pour ce compte.
+                      {t({ en: "Portal key and IAM user keys for this account.", fr: "Cle portail et cles utilisateur IAM pour ce compte.", de: "Portal-Schlussel und IAM-Benutzerschlussel fur dieses Konto." })}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1066,24 +1228,24 @@ export default function PortalDashboard() {
                         type="button"
                         onClick={handleRenewPortalKey}
                         disabled={renewingPortalKey || !accountIdForApi || !canManageBuckets || Boolean(togglingKeyId)}
-                        aria-label="Renouveler la clé portail"
-                        title="Renouveler la clé portail"
+                        aria-label={t({ en: "Renew portal key", fr: "Renouveler la cle portail", de: "Portal-Schlussel erneuern" })}
+                        title={t({ en: "Renew portal key", fr: "Renouveler la cle portail", de: "Portal-Schlussel erneuern" })}
                         className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-200 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800 disabled:opacity-50 dark:border-emerald-900/40 dark:text-emerald-200"
                       >
                         <span aria-hidden>{renewingPortalKey ? "…" : "🔄"}</span>
-                        <span className="sr-only">Renouveler la clé portail</span>
+                        <span className="sr-only">{t({ en: "Renew portal key", fr: "Renouveler la cle portail", de: "Portal-Schlussel erneuern" })}</span>
                       </button>
                     )}
                     <button
                       type="button"
                       onClick={handleRotateKey}
                       disabled={creatingKey || !accountIdForApi || !canCreateAccessKeys || Boolean(togglingKeyId) || renewingPortalKey}
-                      aria-label="Créer une clé utilisateur"
-                      title="Créer une clé utilisateur"
+                      aria-label={t({ en: "Create user key", fr: "Creer une cle utilisateur", de: "Benutzerschlussel erstellen" })}
+                      title={t({ en: "Create user key", fr: "Creer une cle utilisateur", de: "Benutzerschlussel erstellen" })}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
                     >
                       <span aria-hidden>{creatingKey ? "…" : "➕"}</span>
-                      <span className="sr-only">Créer une clé utilisateur</span>
+                      <span className="sr-only">{t({ en: "Create user key", fr: "Creer une cle utilisateur", de: "Benutzerschlussel erstellen" })}</span>
                     </button>
                   </div>
                 </div>
@@ -1095,7 +1257,9 @@ export default function PortalDashboard() {
                 {lastCreatedKey && (
                   <div className="rounded-lg border border-amber-200/70 bg-amber-50/60 px-3 py-2 ui-body text-amber-800 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
                     <p className="ui-body font-semibold">Nouvelle clé utilisateur</p>
-                    <p className="ui-caption text-amber-700 dark:text-amber-200">Le secret est affiché une seule fois.</p>
+                    <p className="ui-caption text-amber-700 dark:text-amber-200">
+                      {t({ en: "Secret is shown only once.", fr: "Le secret est affiche une seule fois.", de: "Das Secret wird nur einmal angezeigt." })}
+                    </p>
                     <div className="mt-2 space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
@@ -1105,7 +1269,11 @@ export default function PortalDashboard() {
                             {lastCreatedKey.accessKey}
                           </span>
                         </div>
-                        <CopyButton value={lastCreatedKey.accessKey} label="Copier l'access key" iconOnly />
+                        <CopyButton
+                          value={lastCreatedKey.accessKey}
+                          label={t({ en: "Copy access key", fr: "Copier l'access key", de: "Access Key kopieren" })}
+                          iconOnly
+                        />
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
@@ -1115,15 +1283,27 @@ export default function PortalDashboard() {
                             {lastCreatedKey.secretKey}
                           </span>
                         </div>
-                        <CopyButton value={lastCreatedKey.secretKey} label="Copier le secret key" iconOnly />
+                        <CopyButton
+                          value={lastCreatedKey.secretKey}
+                          label={t({ en: "Copy secret key", fr: "Copier le secret key", de: "Secret Key kopieren" })}
+                          iconOnly
+                        />
                       </div>
                     </div>
                   </div>
                 )}
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Clés IAM</p>
-                    <span className="ui-caption text-slate-400 dark:text-slate-500">{orderedAccessKeys.length} clé(s)</span>
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      {t({ en: "IAM keys", fr: "Cles IAM", de: "IAM-Schlussel" })}
+                    </p>
+                    <span className="ui-caption text-slate-400 dark:text-slate-500">
+                      {t({
+                        en: `${orderedAccessKeys.length} key(s)`,
+                        fr: `${orderedAccessKeys.length} cle(s)`,
+                        de: `${orderedAccessKeys.length} Schlussel`,
+                      })}
+                    </span>
                   </div>
                   {portalKeyError && (
                     <div className="ui-caption text-rose-600 dark:text-rose-300">{portalKeyError}</div>
@@ -1140,18 +1320,36 @@ export default function PortalDashboard() {
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span
                                     className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
-                                    aria-label={isActive ? "Active" : "Inactive"}
-                                    title={isActive ? "Active" : "Inactive"}
+                                    aria-label={
+                                      isActive
+                                        ? t({ en: "Active", fr: "Active", de: "Aktiv" })
+                                        : t({ en: "Inactive", fr: "Inactive", de: "Inaktiv" })
+                                    }
+                                    title={
+                                      isActive
+                                        ? t({ en: "Active", fr: "Active", de: "Aktiv" })
+                                        : t({ en: "Inactive", fr: "Inactive", de: "Inaktiv" })
+                                    }
                                   />
                                   {k.is_portal && (
-                                    <span className="ui-caption" aria-label="Clé portail" title="Clé portail">
+                                    <span
+                                      className="ui-caption"
+                                      aria-label={t({ en: "Portal key", fr: "Cle portail", de: "Portal-Schlussel" })}
+                                      title={t({ en: "Portal key", fr: "Cle portail", de: "Portal-Schlussel" })}
+                                    >
                                       🛡️
                                     </span>
                                   )}
                                   <span className="font-mono ui-caption text-slate-700 dark:text-slate-200">{k.access_key_id}</span>
                                 </div>
                                 <div className="ui-caption text-slate-500 dark:text-slate-400">
-                                  {k.created_at ? `Créée ${new Date(k.created_at).toLocaleString()}` : "Créée —"}
+                                  {k.created_at
+                                    ? t({
+                                        en: `Created ${new Date(k.created_at).toLocaleString()}`,
+                                        fr: `Creee ${new Date(k.created_at).toLocaleString()}`,
+                                        de: `Erstellt ${new Date(k.created_at).toLocaleString()}`,
+                                      })
+                                    : t({ en: "Created -", fr: "Creee -", de: "Erstellt -" })}
                                 </div>
                                 {showPortalDetails && portalKeyData && (
                                   <div className="mt-2 space-y-1 ui-caption text-slate-600 dark:text-slate-300">
@@ -1160,7 +1358,11 @@ export default function PortalDashboard() {
                                       <span className="font-mono text-slate-800 dark:text-slate-100">
                                         {portalKeyData.access_key_id}
                                       </span>
-                                      <CopyButton value={portalKeyData.access_key_id} label="Copier l'access key portail" iconOnly />
+                                      <CopyButton
+                                        value={portalKeyData.access_key_id}
+                                        label={t({ en: "Copy portal access key", fr: "Copier l'access key portail", de: "Portal Access Key kopieren" })}
+                                        iconOnly
+                                      />
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span aria-hidden title="Secret key">🔒</span>
@@ -1169,10 +1371,16 @@ export default function PortalDashboard() {
                                           <span className="font-mono text-slate-800 dark:text-slate-100">
                                             {portalKeyData.secret_access_key}
                                           </span>
-                                          <CopyButton value={portalKeyData.secret_access_key} label="Copier le secret key portail" iconOnly />
+                                          <CopyButton
+                                            value={portalKeyData.secret_access_key}
+                                            label={t({ en: "Copy portal secret key", fr: "Copier le secret key portail", de: "Portal Secret Key kopieren" })}
+                                            iconOnly
+                                          />
                                         </>
                                       ) : (
-                                        <span className="text-slate-500 dark:text-slate-400">secret masqué</span>
+                                        <span className="text-slate-500 dark:text-slate-400">
+                                          {t({ en: "secret hidden", fr: "secret masque", de: "Secret ausgeblendet" })}
+                                        </span>
                                       )}
                                     </div>
                                   </div>
@@ -1190,8 +1398,8 @@ export default function PortalDashboard() {
                                       }
                                     }}
                                     disabled={portalKeyLoading || !accountIdForApi}
-                                    aria-label="Afficher la clé portail"
-                                    title="Afficher la clé portail"
+                                    aria-label={t({ en: "Show portal key", fr: "Afficher la cle portail", de: "Portal-Schlussel anzeigen" })}
+                                    title={t({ en: "Show portal key", fr: "Afficher la cle portail", de: "Portal-Schlussel anzeigen" })}
                                     className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
                                   >
                                     <span aria-hidden>{portalKeyLoading ? "…" : showPortalKeyDetails ? "🙈" : "👁️"}</span>
@@ -1209,8 +1417,16 @@ export default function PortalDashboard() {
                                     Boolean(togglingKeyId) ||
                                     renewingPortalKey
                                   }
-                                  aria-label={isActive ? "Désactiver la clé" : "Activer la clé"}
-                                  title={isActive ? "Désactiver la clé" : "Activer la clé"}
+                                  aria-label={
+                                    isActive
+                                      ? t({ en: "Disable key", fr: "Desactiver la cle", de: "Schlussel deaktivieren" })
+                                      : t({ en: "Enable key", fr: "Activer la cle", de: "Schlussel aktivieren" })
+                                  }
+                                  title={
+                                    isActive
+                                      ? t({ en: "Disable key", fr: "Desactiver la cle", de: "Schlussel deaktivieren" })
+                                      : t({ en: "Enable key", fr: "Activer la cle", de: "Schlussel aktivieren" })
+                                  }
                                 >
                                   <span aria-hidden>⏻</span>
                                 </button>
@@ -1226,8 +1442,8 @@ export default function PortalDashboard() {
                                     Boolean(togglingKeyId) ||
                                     renewingPortalKey
                                   }
-                                  aria-label="Supprimer la clé"
-                                  title="Supprimer la clé"
+                                  aria-label={t({ en: "Delete key", fr: "Supprimer la cle", de: "Schlussel loschen" })}
+                                  title={t({ en: "Delete key", fr: "Supprimer la cle", de: "Schlussel loschen" })}
                                 >
                                   <span aria-hidden>🗑️</span>
                                 </button>
@@ -1238,7 +1454,10 @@ export default function PortalDashboard() {
                       })}
                     </div>
                   ) : (
-                    <UiEmptyState title="Aucune clé" description="Créez une clé pour commencer." />
+                    <UiEmptyState
+                      title={t({ en: "No key", fr: "Aucune cle", de: "Kein Schlussel" })}
+                      description={t({ en: "Create a key to get started.", fr: "Creez une cle pour commencer.", de: "Erstellen Sie einen Schlussel, um zu starten." })}
+                    />
                   )}
                 </div>
               </div>
@@ -1257,7 +1476,9 @@ export default function PortalDashboard() {
           <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Buckets</p>
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {t({ en: "Buckets", fr: "Buckets", de: "Buckets" })}
+                </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <input
@@ -1265,8 +1486,8 @@ export default function PortalDashboard() {
                   value={bucketFilter}
                   onChange={(e) => setBucketFilter(e.target.value)}
                   className="w-48 rounded-full border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  placeholder="Rechercher..."
-                  aria-label="Filtrer les buckets"
+                  placeholder={t({ en: "Search...", fr: "Rechercher...", de: "Suchen..." })}
+                  aria-label={t({ en: "Filter buckets", fr: "Filtrer les buckets", de: "Buckets filtern" })}
                 />
                 {canCreateBuckets ? (
                   <form onSubmit={handleCreateBucket} className="flex flex-wrap items-center gap-2">
@@ -1278,25 +1499,33 @@ export default function PortalDashboard() {
                       title={
                         isBucketNameValid
                           ? undefined
-                          : "Nom invalide. 3-63 caractères, minuscules, chiffres, points ou tirets."
+                          : t({
+                              en: "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.",
+                              fr: "Nom invalide. 3-63 caracteres, minuscules, chiffres, points ou tirets.",
+                              de: "Ungueltiger Name. 3-63 Zeichen, Kleinbuchstaben, Zahlen, Punkte oder Bindestriche.",
+                            })
                       }
                       className={`w-52 rounded-full border px-3 py-2 ui-body focus:outline-none focus:ring-2 ${
                         isBucketNameValid
                           ? "border-slate-200 focus:border-primary focus:ring-primary/30 dark:border-slate-700"
                           : "border-rose-400 text-rose-700 focus:border-rose-500 focus:ring-rose-200 dark:border-rose-500 dark:text-rose-200 dark:focus:ring-rose-900/50"
                       } dark:bg-slate-900 dark:text-slate-100`}
-                      placeholder="nouveau-bucket"
+                      placeholder={t({ en: "new-bucket", fr: "nouveau-bucket", de: "neuer-bucket" })}
                     />
                     <button
                       type="submit"
                       disabled={creatingBucket || !newBucketName.trim() || !isBucketNameValid}
                       className="rounded-full bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
                     >
-                      {creatingBucket ? "Création..." : "Créer un bucket"}
+                      {creatingBucket
+                        ? t({ en: "Creating...", fr: "Creation...", de: "Erstellung..." })
+                        : t({ en: "Create bucket", fr: "Creer un bucket", de: "Bucket erstellen" })}
                     </button>
                   </form>
                 ) : (
-                  <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Accès en lecture seule</p>
+                  <p className="ui-caption font-semibold text-slate-500 dark:text-slate-400">
+                    {t({ en: "Read-only access", fr: "Acces en lecture seule", de: "Nur-Lese-Zugriff" })}
+                  </p>
                 )}
               </div>
             </div>
@@ -1341,7 +1570,8 @@ export default function PortalDashboard() {
                             {bucket.name}
                           </div>
                           <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                            Créé le {bucket.creation_date ? new Date(bucket.creation_date).toLocaleString() : "—"}
+                            {t({ en: "Created on", fr: "Cree le", de: "Erstellt am" })}{" "}
+                            {bucket.creation_date ? new Date(bucket.creation_date).toLocaleString() : "—"}
                           </p>
                         </div>
                         <div className="ml-auto flex flex-shrink-0 items-start justify-end gap-2 sm:gap-3">
@@ -1357,7 +1587,7 @@ export default function PortalDashboard() {
                             hidePercent: true,
                           })}
                           {renderUsageGauge({
-                            label: "Objets",
+                            label: t({ en: "Objects", fr: "Objets", de: "Objekte" }),
                             used: objectCount,
                             quota: bucketTotalsObjects,
                             formatter: (v) => (v == null ? "—" : v.toLocaleString()),
@@ -1371,11 +1601,15 @@ export default function PortalDashboard() {
                       </div>
                       <div className="mt-2 grid grid-cols-2 gap-2 ui-caption text-slate-600 dark:text-slate-300">
                         <div>
-                          <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Volumétrie</div>
+                          <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            {t({ en: "Storage", fr: "Volumetrie", de: "Speicher" })}
+                          </div>
                           <div className="font-semibold text-slate-800 dark:text-slate-100">{usedLabel}</div>
                         </div>
                         <div className="text-right">
-                          <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Objets</div>
+                          <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            {t({ en: "Objects", fr: "Objets", de: "Objekte" })}
+                          </div>
                           <div className="font-semibold text-slate-800 dark:text-slate-100">{objectsLabel}</div>
                         </div>
                       </div>
@@ -1384,12 +1618,18 @@ export default function PortalDashboard() {
                 })
                 ) : (
                   <div className="w-full">
-                    <UiEmptyState title="Aucun résultat" description="Aucun bucket ne correspond à la recherche." />
+                    <UiEmptyState
+                      title={t({ en: "No result", fr: "Aucun resultat", de: "Kein Ergebnis" })}
+                      description={t({ en: "No bucket matches your search.", fr: "Aucun bucket ne correspond a la recherche.", de: "Kein Bucket entspricht Ihrer Suche." })}
+                    />
                   </div>
                 )
               ) : (
                 <div className="w-full">
-                  <UiEmptyState title="Aucun bucket" description="Créez un bucket pour commencer à stocker des objets." />
+                  <UiEmptyState
+                    title={t({ en: "No bucket", fr: "Aucun bucket", de: "Kein Bucket" })}
+                    description={t({ en: "Create a bucket to start storing objects.", fr: "Creez un bucket pour commencer a stocker des objets.", de: "Erstellen Sie einen Bucket, um Objekte zu speichern." })}
+                  />
                 </div>
               )}
             </div>

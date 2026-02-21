@@ -25,6 +25,7 @@ import PageHeader from "../../components/PageHeader";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { useI18n } from "../../i18n";
 import { confirmAction } from "../../utils/confirm";
 import { usePortalAccountContext } from "./PortalAccountContext";
 
@@ -34,14 +35,6 @@ type SortState = {
   field: SortField;
   direction: "asc" | "desc";
 };
-
-
-const userTableColumns: { label: string; field?: SortField | null; align?: "left" | "right" }[] = [
-  { label: "Email", field: "email" },
-  { label: "IAM user", field: "iam_username" },
-  { label: "Role", field: "role" },
-  { label: "Actions", field: null, align: "right" },
-];
 
 function getUserEmail(): string | null {
   if (typeof window === "undefined") return null;
@@ -60,11 +53,6 @@ const normalizePortalRole = (role?: string | null): PortalAccountRole => {
   return "portal_user";
 };
 
-const portalRoleLabel = (role?: string | null, iamOnly?: boolean | null) => {
-  if (iamOnly) return "IAM (hors portail)";
-  return role === "portal_manager" ? "Portal manager" : "Portal user";
-};
-
 const portalRoleBadgeClasses = (role?: string | null, iamOnly?: boolean | null) => {
   if (iamOnly) {
     return "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200";
@@ -76,6 +64,7 @@ const portalRoleBadgeClasses = (role?: string | null, iamOnly?: boolean | null) 
 };
 
 export default function PortalManagePage() {
+  const { t } = useI18n();
   const { accountIdForApi, selectedAccount, hasAccountContext, loading: accountLoading, error: accountError } =
     usePortalAccountContext();
   const [portalState, setPortalState] = useState<PortalState | null>(null);
@@ -106,7 +95,19 @@ export default function PortalManagePage() {
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<SortState>({ field: "email", direction: "asc" });
   const userEmail = useMemo(() => getUserEmail(), []);
-  const accountName = selectedAccount?.name ?? "compte selectionne";
+  const accountName = selectedAccount?.name ?? t({ en: "selected account", fr: "compte selectionne", de: "ausgewahltes Konto" });
+  const userTableColumns: { label: string; field?: SortField | null; align?: "left" | "right" }[] = [
+    { label: t({ en: "Email", fr: "Email", de: "E-Mail" }), field: "email" },
+    { label: t({ en: "IAM user", fr: "Utilisateur IAM", de: "IAM-Benutzer" }), field: "iam_username" },
+    { label: t({ en: "Role", fr: "Role", de: "Rolle" }), field: "role" },
+    { label: t({ en: "Actions", fr: "Actions", de: "Aktionen" }), field: null, align: "right" },
+  ];
+  const portalRoleLabel = (role?: string | null, iamOnly?: boolean | null) => {
+    if (iamOnly) return t({ en: "IAM only", fr: "IAM (hors portail)", de: "Nur IAM" });
+    return role === "portal_manager"
+      ? t({ en: "Portal manager", fr: "Portal manager", de: "Portal-Manager" })
+      : t({ en: "Portal user", fr: "Portal user", de: "Portal-Benutzer" });
+  };
 
   const canManagePortalUsers = Boolean(portalState?.can_manage_portal_users) || portalState?.account_role === "portal_manager";
 
@@ -126,10 +127,10 @@ export default function PortalManagePage() {
       .catch((err) => {
         console.error(err);
         setPortalState(null);
-        setStateError("Impossible de charger le contexte portail.");
+        setStateError(t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." }));
       })
       .finally(() => setStateLoading(false));
-  }, [accountIdForApi]);
+  }, [accountIdForApi, t]);
 
   useEffect(() => {
     setUsers([]);
@@ -143,10 +144,10 @@ export default function PortalManagePage() {
       })
       .catch((err) => {
         console.error(err);
-        setUsersError("Impossible de charger les utilisateurs du portail.");
+        setUsersError(t({ en: "Unable to load portal users.", fr: "Impossible de charger les utilisateurs du portail.", de: "Portal-Benutzer konnen nicht geladen werden." }));
       })
       .finally(() => setUsersLoading(false));
-  }, [accountIdForApi, canManagePortalUsers]);
+  }, [accountIdForApi, canManagePortalUsers, t]);
 
   useEffect(() => {
     setActionError(null);
@@ -206,7 +207,13 @@ export default function PortalManagePage() {
     hasAccountContext &&
     !stateLoading &&
     canManagePortalUsers;
-  const userCountLabel = canRenderUsers ? `${filteredUsers.length} utilisateur(s)` : "-";
+  const userCountLabel = canRenderUsers
+    ? t({
+        en: `${filteredUsers.length} user(s)`,
+        fr: `${filteredUsers.length} utilisateur(s)`,
+        de: `${filteredUsers.length} Benutzer`,
+      })
+    : "-";
   const bucketAccessRows = useMemo(() => {
     const available = portalState?.buckets || [];
     const query = editBucketFilter.trim().toLowerCase();
@@ -241,7 +248,7 @@ export default function PortalManagePage() {
         setEditBuckets(buckets);
       })
       .catch(() => {
-        setEditError("Impossible de charger les droits buckets.");
+        setEditError(t({ en: "Unable to load bucket permissions.", fr: "Impossible de charger les droits buckets.", de: "Bucket-Berechtigungen konnen nicht geladen werden." }));
       })
       .finally(() => setEditLoading(false));
   };
@@ -266,12 +273,12 @@ export default function PortalManagePage() {
     try {
       const created = await addPortalUser(accountIdForApi, newUserEmail.trim());
       setUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
-      setActionMessage("Utilisateur ajoute au portail.");
+      setActionMessage(t({ en: "User added to portal.", fr: "Utilisateur ajoute au portail.", de: "Benutzer zum Portal hinzugefugt." }));
       setNewUserEmail("");
       setShowCreateModal(false);
     } catch (err) {
       console.error(err);
-      setActionError("Ajout impossible. Verifiez l'email et les droits.");
+      setActionError(t({ en: "Unable to add user. Check email and permissions.", fr: "Ajout impossible. Verifiez l'email et les droits.", de: "Benutzer konnte nicht hinzugefugt werden. Prufen Sie E-Mail und Berechtigungen." }));
     } finally {
       setCreatingUser(false);
     }
@@ -280,23 +287,32 @@ export default function PortalManagePage() {
   const handleRemovePortalUser = async (user: PortalUserSummary) => {
     if (!accountIdForApi || !canManagePortalUsers || !user.id) return;
     if (userEmail && user.email === userEmail) {
-      setActionError("Vous ne pouvez pas retirer votre propre acces.");
+      setActionError(t({ en: "You cannot remove your own access.", fr: "Vous ne pouvez pas retirer votre propre acces.", de: "Sie konnen Ihren eigenen Zugriff nicht entfernen." }));
       return;
     }
-    if (!confirmAction(`Retirer ${user.email} du portail ?`)) return;
+    if (
+      !confirmAction(
+        t({
+          en: `Remove ${user.email} from portal?`,
+          fr: `Retirer ${user.email} du portail ?`,
+          de: `${user.email} aus dem Portal entfernen?`,
+        })
+      )
+    )
+      return;
     setActionError(null);
     setActionMessage(null);
     setBusyUserId(user.id);
     try {
       await deletePortalUser(accountIdForApi, user.id);
       setUsers((prev) => prev.filter((u) => u.id !== user.id));
-      setActionMessage("Utilisateur retire du portail.");
+      setActionMessage(t({ en: "User removed from portal.", fr: "Utilisateur retire du portail.", de: "Benutzer aus dem Portal entfernt." }));
       if (editingUser?.id === user.id) {
         closeEditModal();
       }
     } catch (err) {
       console.error(err);
-      setActionError("Suppression impossible. Verifiez vos droits.");
+      setActionError(t({ en: "Unable to remove user. Check your permissions.", fr: "Suppression impossible. Verifiez vos droits.", de: "Benutzer konnte nicht entfernt werden. Prufen Sie Ihre Berechtigungen." }));
     } finally {
       setBusyUserId(null);
     }
@@ -307,7 +323,7 @@ export default function PortalManagePage() {
     const currentRole = normalizePortalRole(editingUser.role);
     if (editRole === currentRole) return;
     if (editRole === "portal_user" && editingUser.email === userEmail) {
-      setEditError("Vous ne pouvez pas retirer vos propres droits de manager.");
+      setEditError(t({ en: "You cannot remove your own manager rights.", fr: "Vous ne pouvez pas retirer vos propres droits de manager.", de: "Sie konnen Ihre eigenen Manager-Rechte nicht entfernen." }));
       return;
     }
     setEditError(null);
@@ -317,10 +333,10 @@ export default function PortalManagePage() {
       const updated = await updatePortalUserRole(accountIdForApi, editingUser.id, editRole);
       setUsers((prev) => prev.map((u) => (u.id === editingUser.id ? { ...u, role: updated.role ?? editRole } : u)));
       setEditingUser((prev) => (prev ? { ...prev, role: updated.role ?? editRole } : prev));
-      setEditMessage("Role mis a jour.");
+      setEditMessage(t({ en: "Role updated.", fr: "Role mis a jour.", de: "Rolle aktualisiert." }));
     } catch (err) {
       console.error(err);
-      setEditError("Mise a jour impossible. Verifiez vos droits.");
+      setEditError(t({ en: "Update failed. Check your permissions.", fr: "Mise a jour impossible. Verifiez vos droits.", de: "Aktualisierung fehlgeschlagen. Prufen Sie Ihre Berechtigungen." }));
     } finally {
       setBusyUserId(null);
     }
@@ -335,10 +351,16 @@ export default function PortalManagePage() {
       const resp = await grantPortalUserBucket(accountIdForApi, editingUser.id, bucketName);
       const buckets = resp.buckets || [];
       setEditBuckets(buckets);
-      setEditMessage(`Acces ajoute au bucket ${bucketName}.`);
+      setEditMessage(
+        t({
+          en: `Access granted to bucket ${bucketName}.`,
+          fr: `Acces ajoute au bucket ${bucketName}.`,
+          de: `Zugriff auf Bucket ${bucketName} gewahrt.`,
+        })
+      );
     } catch (err) {
       console.error(err);
-      setEditError("Ajout impossible. Verifiez vos droits.");
+      setEditError(t({ en: "Unable to grant access. Check your permissions.", fr: "Ajout impossible. Verifiez vos droits.", de: "Zugriff konnte nicht gewahrt werden. Prufen Sie Ihre Berechtigungen." }));
     } finally {
       setEditBucketAction(null);
     }
@@ -353,10 +375,16 @@ export default function PortalManagePage() {
       const resp = await revokePortalUserBucket(accountIdForApi, editingUser.id, bucketName);
       const buckets = resp.buckets || [];
       setEditBuckets(buckets);
-      setEditMessage(`Acces retire du bucket ${bucketName}.`);
+      setEditMessage(
+        t({
+          en: `Access removed from bucket ${bucketName}.`,
+          fr: `Acces retire du bucket ${bucketName}.`,
+          de: `Zugriff auf Bucket ${bucketName} entfernt.`,
+        })
+      );
     } catch (err) {
       console.error(err);
-      setEditError("Retrait impossible. Verifiez vos droits.");
+      setEditError(t({ en: "Unable to revoke access. Check your permissions.", fr: "Retrait impossible. Verifiez vos droits.", de: "Zugriff konnte nicht entzogen werden. Prufen Sie Ihre Berechtigungen." }));
     } finally {
       setEditBucketAction(null);
     }
@@ -371,7 +399,7 @@ export default function PortalManagePage() {
       setIamReport(report);
     } catch (err) {
       console.error(err);
-      setIamError("Impossible de verifier la conformite IAM.");
+      setIamError(t({ en: "Unable to check IAM compliance.", fr: "Impossible de verifier la conformite IAM.", de: "IAM-Konformitat kann nicht gepruft werden." }));
       setIamReport(null);
     } finally {
       setIamLoading(false);
@@ -380,46 +408,72 @@ export default function PortalManagePage() {
 
   const handleApplyIamCompliance = async () => {
     if (!accountIdForApi || !canManagePortalUsers || !iamReport || iamReport.ok) return;
-    if (!confirmAction("Reappliquer les droits IAM selon les settings du portail ?")) return;
+    if (
+      !confirmAction(
+        t({
+          en: "Reapply IAM permissions from portal settings?",
+          fr: "Reappliquer les droits IAM selon les settings du portail ?",
+          de: "IAM-Berechtigungen gemass Portal-Einstellungen erneut anwenden?",
+        })
+      )
+    )
+      return;
     setIamApplying(true);
     setIamError(null);
     try {
       const report = await applyPortalIamCompliance(accountIdForApi);
       setIamReport(report);
-      setActionMessage("Droits IAM reappliques.");
+      setActionMessage(t({ en: "IAM permissions reapplied.", fr: "Droits IAM reappliques.", de: "IAM-Berechtigungen erneut angewendet." }));
     } catch (err) {
       console.error(err);
-      setIamError("Impossible de reappliquer les droits IAM.");
+      setIamError(t({ en: "Unable to reapply IAM permissions.", fr: "Impossible de reappliquer les droits IAM.", de: "IAM-Berechtigungen konnen nicht erneut angewendet werden." }));
     } finally {
       setIamApplying(false);
     }
   };
 
   const pageDescription = selectedAccount
-    ? `Gerez les utilisateurs et leurs droits buckets pour ${accountName}.`
-    : "Gerez les utilisateurs et leurs droits buckets du portail.";
+    ? t({
+        en: `Manage users and bucket permissions for ${accountName}.`,
+        fr: `Gerez les utilisateurs et leurs droits buckets pour ${accountName}.`,
+        de: `Verwalten Sie Benutzer und Bucket-Rechte fur ${accountName}.`,
+      })
+    : t({
+        en: "Manage portal users and bucket permissions.",
+        fr: "Gerez les utilisateurs et leurs droits buckets du portail.",
+        de: "Verwalten Sie Portal-Benutzer und Bucket-Berechtigungen.",
+      });
 
   const headerActions = canManagePortalUsers
-    ? [{ label: "Ajouter un utilisateur", onClick: () => setShowCreateModal(true) }]
+    ? [{ label: t({ en: "Add user", fr: "Ajouter un utilisateur", de: "Benutzer hinzufugen" }), onClick: () => setShowCreateModal(true) }]
     : [];
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Gestion du portail"
+        title={t({ en: "Portal management", fr: "Gestion du portail", de: "Portal-Verwaltung" })}
         description={pageDescription}
-        breadcrumbs={[{ label: "Portail", to: "/portal" }, { label: "Gestion" }]}
+        breadcrumbs={[
+          { label: t({ en: "Portal", fr: "Portail", de: "Portal" }), to: "/portal" },
+          { label: t({ en: "Manage", fr: "Gestion", de: "Verwaltung" }) },
+        ]}
         actions={headerActions}
       />
 
-      {accountLoading && <PageBanner tone="info">Chargement du contexte portail...</PageBanner>}
+      {accountLoading && (
+        <PageBanner tone="info">
+          {t({ en: "Loading portal context...", fr: "Chargement du contexte portail...", de: "Portal-Kontext wird geladen..." })}
+        </PageBanner>
+      )}
       {accountError && <PageBanner tone="error">{accountError}</PageBanner>}
       {!accountLoading && !hasAccountContext && (
-        <PageBanner tone="warning">Selectionnez un compte dans la barre superieure pour continuer.</PageBanner>
+        <PageBanner tone="warning">
+          {t({ en: "Select an account from the top bar to continue.", fr: "Selectionnez un compte dans la barre superieure pour continuer.", de: "Wahlen Sie ein Konto in der oberen Leiste, um fortzufahren." })}
+        </PageBanner>
       )}
       {stateError && <PageBanner tone="error">{stateError}</PageBanner>}
       {!stateLoading && !stateError && hasAccountContext && !canManagePortalUsers && (
-        <PageBanner tone="warning">Acces reserve aux managers du portail.</PageBanner>
+        <PageBanner tone="warning">{t({ en: "Access reserved for portal managers.", fr: "Acces reserve aux managers du portail.", de: "Zugriff nur fur Portal-Manager." })}</PageBanner>
       )}
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
@@ -430,9 +484,11 @@ export default function PortalManagePage() {
           <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Conformite IAM portail</p>
+                <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">
+                  {t({ en: "Portal IAM compliance", fr: "Conformite IAM portail", de: "Portal-IAM-Konformitat" })}
+                </p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Compare les droits IAM existants avec les settings du portail.
+                  {t({ en: "Compares existing IAM permissions with portal settings.", fr: "Compare les droits IAM existants avec les settings du portail.", de: "Vergleicht bestehende IAM-Rechte mit den Portal-Einstellungen." })}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -442,7 +498,9 @@ export default function PortalManagePage() {
                   disabled={!accountIdForApi || iamLoading || iamApplying}
                   className="rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200"
                 >
-                  {iamLoading ? "Verification..." : "Verifier"}
+                  {iamLoading
+                    ? t({ en: "Checking...", fr: "Verification...", de: "Prufung..." })
+                    : t({ en: "Check", fr: "Verifier", de: "Prufen" })}
                 </button>
                 <button
                   type="button"
@@ -450,20 +508,32 @@ export default function PortalManagePage() {
                   disabled={!iamReport || iamReport.ok || iamLoading || iamApplying}
                   className="rounded-md bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                 >
-                  {iamApplying ? "Reapplication..." : "Reappliquer"}
+                  {iamApplying
+                    ? t({ en: "Reapplying...", fr: "Reapplication...", de: "Erneutes Anwenden..." })
+                    : t({ en: "Reapply", fr: "Reappliquer", de: "Erneut anwenden" })}
                 </button>
               </div>
             </div>
           </div>
           <div className="px-4 py-4">
             {iamError && <PageBanner tone="error">{iamError}</PageBanner>}
-            {!iamError && iamLoading && <PageBanner tone="info">Verification en cours...</PageBanner>}
+            {!iamError && iamLoading && (
+              <PageBanner tone="info">
+                {t({ en: "Check in progress...", fr: "Verification en cours...", de: "Prufung lauft..." })}
+              </PageBanner>
+            )}
             {!iamError && !iamLoading && iamReport && iamReport.ok && (
-              <PageBanner tone="success">Aucune divergence detectee.</PageBanner>
+              <PageBanner tone="success">{t({ en: "No divergence detected.", fr: "Aucune divergence detectee.", de: "Keine Abweichung erkannt." })}</PageBanner>
             )}
             {!iamError && !iamLoading && iamReport && !iamReport.ok && (
               <div className="space-y-3">
-                <PageBanner tone="warning">{iamReport.issues.length} divergence(s) detectee(s).</PageBanner>
+                <PageBanner tone="warning">
+                  {t({
+                    en: `${iamReport.issues.length} divergence(s) detected.`,
+                    fr: `${iamReport.issues.length} divergence(s) detectee(s).`,
+                    de: `${iamReport.issues.length} Abweichung(en) erkannt.`,
+                  })}
+                </PageBanner>
                 <div className="space-y-2">
                   {iamReport.issues.map((issue, index) => (
                     <div
@@ -471,7 +541,9 @@ export default function PortalManagePage() {
                       className="rounded-lg border border-slate-200/80 px-3 py-2 dark:border-slate-700"
                     >
                       <div className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        {issue.scope === "group" ? "Groupe" : "Utilisateur"}
+                        {issue.scope === "group"
+                          ? t({ en: "Group", fr: "Groupe", de: "Gruppe" })
+                          : t({ en: "User", fr: "Utilisateur", de: "Benutzer" })}
                       </div>
                       <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">{issue.subject}</div>
                       <div className="ui-caption text-slate-600 dark:text-slate-300">{issue.message}</div>
@@ -481,7 +553,9 @@ export default function PortalManagePage() {
               </div>
             )}
             {!iamError && !iamLoading && !iamReport && (
-              <PageBanner tone="info">Lancez une verification pour detecter les divergences IAM.</PageBanner>
+              <PageBanner tone="info">
+                {t({ en: "Run a check to detect IAM divergences.", fr: "Lancez une verification pour detecter les divergences IAM.", de: "Starten Sie eine Prufung, um IAM-Abweichungen zu erkennen." })}
+              </PageBanner>
             )}
           </div>
         </div>
@@ -491,22 +565,24 @@ export default function PortalManagePage() {
         <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Utilisateurs du portail</p>
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">
+                {t({ en: "Portal users", fr: "Utilisateurs du portail", de: "Portal-Benutzer" })}
+              </p>
               <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Role et droits buckets pour le compte selectionne.
+                {t({ en: "Role and bucket permissions for selected account.", fr: "Role et droits buckets pour le compte selectionne.", de: "Rolle und Bucket-Rechte fur das ausgewahlte Konto." })}
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
               <span className="ui-caption text-slate-500 dark:text-slate-400">{userCountLabel}</span>
               <div className="flex items-center gap-2 sm:justify-end">
                 <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Filtre
+                  {t({ en: "Filter", fr: "Filtre", de: "Filter" })}
                 </span>
                 <input
                   type="text"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Rechercher par email ou IAM"
+                  placeholder={t({ en: "Search by email or IAM", fr: "Rechercher par email ou IAM", de: "Nach E-Mail oder IAM suchen" })}
                   disabled={!canRenderUsers}
                   className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
                 />
@@ -525,37 +601,63 @@ export default function PortalManagePage() {
                     field={col.field}
                     activeField={sort.field}
                     direction={sort.direction}
-                    align={col.align ?? (col.label === "Actions" ? "right" : "left")}
+                    align={col.align ?? (col.label === t({ en: "Actions", fr: "Actions", de: "Aktionen" }) ? "right" : "left")}
                     onSort={col.field ? (field) => toggleSort(field as SortField) : undefined}
                   />
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {accountLoading && <TableEmptyState colSpan={userTableColumns.length} message="Chargement du contexte..." />}
+              {accountLoading && (
+                <TableEmptyState
+                  colSpan={userTableColumns.length}
+                  message={t({ en: "Loading context...", fr: "Chargement du contexte...", de: "Kontext wird geladen..." })}
+                />
+              )}
               {accountError && !accountLoading && (
-                <TableEmptyState colSpan={userTableColumns.length} message="Erreur de contexte." />
+                <TableEmptyState colSpan={userTableColumns.length} message={t({ en: "Context error.", fr: "Erreur de contexte.", de: "Kontextfehler." })} />
               )}
               {stateError && !accountLoading && !accountError && (
-                <TableEmptyState colSpan={userTableColumns.length} message="Impossible de charger le contexte portail." />
+                <TableEmptyState
+                  colSpan={userTableColumns.length}
+                  message={t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." })}
+                />
               )}
               {!accountLoading && !accountError && !stateError && !hasAccountContext && (
-                <TableEmptyState colSpan={userTableColumns.length} message="Selectionnez un compte pour continuer." />
+                <TableEmptyState
+                  colSpan={userTableColumns.length}
+                  message={t({ en: "Select an account to continue.", fr: "Selectionnez un compte pour continuer.", de: "Wahlen Sie ein Konto, um fortzufahren." })}
+                />
               )}
               {!accountLoading && !accountError && !stateError && hasAccountContext && stateLoading && (
-                <TableEmptyState colSpan={userTableColumns.length} message="Chargement des permissions..." />
+                <TableEmptyState
+                  colSpan={userTableColumns.length}
+                  message={t({ en: "Loading permissions...", fr: "Chargement des permissions...", de: "Berechtigungen werden geladen..." })}
+                />
               )}
               {!accountLoading && !accountError && !stateError && hasAccountContext && !stateLoading && !canManagePortalUsers && (
-                <TableEmptyState colSpan={userTableColumns.length} message="Acces reserve aux managers du portail." />
+                <TableEmptyState
+                  colSpan={userTableColumns.length}
+                  message={t({ en: "Access reserved for portal managers.", fr: "Acces reserve aux managers du portail.", de: "Zugriff nur fur Portal-Manager." })}
+                />
               )}
               {canRenderUsers && usersLoading && (
-                <TableEmptyState colSpan={userTableColumns.length} message="Chargement des utilisateurs..." />
+                <TableEmptyState
+                  colSpan={userTableColumns.length}
+                  message={t({ en: "Loading users...", fr: "Chargement des utilisateurs...", de: "Benutzer werden geladen..." })}
+                />
               )}
               {canRenderUsers && !usersLoading && usersError && (
-                <TableEmptyState colSpan={userTableColumns.length} message="Impossible de charger les utilisateurs." />
+                <TableEmptyState
+                  colSpan={userTableColumns.length}
+                  message={t({ en: "Unable to load users.", fr: "Impossible de charger les utilisateurs.", de: "Benutzer konnen nicht geladen werden." })}
+                />
               )}
               {canRenderUsers && !usersLoading && !usersError && filteredUsers.length === 0 && (
-                <TableEmptyState colSpan={userTableColumns.length} message="Aucun utilisateur portail." />
+                <TableEmptyState
+                  colSpan={userTableColumns.length}
+                  message={t({ en: "No portal user.", fr: "Aucun utilisateur portail.", de: "Kein Portal-Benutzer." })}
+                />
               )}
               {canRenderUsers &&
                 !usersLoading &&
@@ -571,7 +673,7 @@ export default function PortalManagePage() {
                           <span>{user.email}</span>
                           {isSelf && (
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
-                              Vous
+                              {t({ en: "You", fr: "Vous", de: "Sie" })}
                             </span>
                           )}
                         </div>
@@ -595,7 +697,7 @@ export default function PortalManagePage() {
                               className={tableActionButtonClasses}
                               disabled={busy}
                             >
-                              Gerer
+                              {t({ en: "Manage", fr: "Gerer", de: "Verwalten" })}
                             </button>
                             <button
                               type="button"
@@ -603,11 +705,15 @@ export default function PortalManagePage() {
                               className={tableDeleteActionClasses}
                               disabled={busy || isSelf}
                             >
-                              {busy ? "Suppression..." : "Retirer"}
+                              {busy
+                                ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird geloscht..." })
+                                : t({ en: "Remove", fr: "Retirer", de: "Entfernen" })}
                             </button>
                           </div>
                         ) : (
-                          <span className="ui-caption text-slate-400">Lecture seule</span>
+                          <span className="ui-caption text-slate-400">
+                            {t({ en: "Read only", fr: "Lecture seule", de: "Nur lesen" })}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -620,7 +726,7 @@ export default function PortalManagePage() {
 
 
       {showCreateModal && (
-        <Modal title="Ajouter un utilisateur" onClose={() => setShowCreateModal(false)}>
+        <Modal title={t({ en: "Add user", fr: "Ajouter un utilisateur", de: "Benutzer hinzufugen" })} onClose={() => setShowCreateModal(false)}>
           {actionError && (
             <PageBanner tone="error" className="mb-3">
               {actionError}
@@ -633,12 +739,12 @@ export default function PortalManagePage() {
                 type="email"
                 value={newUserEmail}
                 onChange={(e) => setNewUserEmail(e.target.value)}
-                placeholder="prenom.nom@example.com"
+                placeholder={t({ en: "first.last@example.com", fr: "prenom.nom@example.com", de: "vorname.nachname@example.com" })}
                 className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 required
               />
               <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Le role par defaut est "Portal user". Vous pourrez promouvoir ensuite.
+                {t({ en: 'Default role is "Portal user". You can promote later.', fr: 'Le role par defaut est "Portal user". Vous pourrez promouvoir ensuite.', de: 'Die Standardrolle ist "Portal user". Sie konnen spater befordern.' })}
               </p>
             </div>
             <div className="flex justify-end">
@@ -647,7 +753,9 @@ export default function PortalManagePage() {
                 disabled={creatingUser || !newUserEmail.trim()}
                 className="rounded-md bg-primary px-4 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
-                {creatingUser ? "Ajout..." : "Ajouter"}
+                {creatingUser
+                  ? t({ en: "Adding...", fr: "Ajout...", de: "Wird hinzugefugt..." })
+                  : t({ en: "Add", fr: "Ajouter", de: "Hinzufugen" })}
               </button>
             </div>
           </form>
@@ -655,7 +763,14 @@ export default function PortalManagePage() {
       )}
 
       {showEditModal && editingUser && (
-        <Modal title={`Gerer ${editingUser.email}`} onClose={closeEditModal}>
+        <Modal
+          title={t({
+            en: `Manage ${editingUser.email}`,
+            fr: `Gerer ${editingUser.email}`,
+            de: `${editingUser.email} verwalten`,
+          })}
+          onClose={closeEditModal}
+        >
           {editError && (
             <PageBanner tone="error" className="mb-3">
               {editError}
@@ -669,13 +784,17 @@ export default function PortalManagePage() {
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               <div className="flex flex-col gap-1">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Email</span>
+                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {t({ en: "Email", fr: "Email", de: "E-Mail" })}
+                </span>
                 <div className="rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 dark:border-slate-700 dark:text-slate-100">
                   {editingUser.email}
                 </div>
               </div>
               <div className="flex flex-col gap-1">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">IAM user</span>
+                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {t({ en: "IAM user", fr: "Utilisateur IAM", de: "IAM-Benutzer" })}
+                </span>
                 <div className="rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
                   {editingUser.iam_username || "-"}
                 </div>
@@ -685,8 +804,12 @@ export default function PortalManagePage() {
             <div className="rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-700">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Role portail</p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Definit les droits de gestion du portail.</p>
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
+                    {t({ en: "Portal role", fr: "Role portail", de: "Portal-Rolle" })}
+                  </p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    {t({ en: "Defines portal management rights.", fr: "Definit les droits de gestion du portail.", de: "Definiert die Verwaltungsrechte im Portal." })}
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <select
@@ -694,8 +817,8 @@ export default function PortalManagePage() {
                     onChange={(e) => setEditRole(e.target.value as PortalAccountRole)}
                     className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   >
-                    <option value="portal_user">Portal user</option>
-                    <option value="portal_manager">Portal manager</option>
+                    <option value="portal_user">{t({ en: "Portal user", fr: "Portal user", de: "Portal-Benutzer" })}</option>
+                    <option value="portal_manager">{t({ en: "Portal manager", fr: "Portal manager", de: "Portal-Manager" })}</option>
                   </select>
                   <button
                     type="button"
@@ -703,7 +826,9 @@ export default function PortalManagePage() {
                     disabled={busyUserId === editingUser.id}
                     className="rounded-md bg-slate-900 px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                   >
-                    {busyUserId === editingUser.id ? "Mise a jour..." : "Mettre a jour"}
+                    {busyUserId === editingUser.id
+                      ? t({ en: "Updating...", fr: "Mise a jour...", de: "Wird aktualisiert..." })
+                      : t({ en: "Update", fr: "Mettre a jour", de: "Aktualisieren" })}
                   </button>
                 </div>
               </div>
@@ -712,18 +837,26 @@ export default function PortalManagePage() {
             <div className="rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-700">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Droits buckets</p>
+                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
+                    {t({ en: "Bucket permissions", fr: "Droits buckets", de: "Bucket-Berechtigungen" })}
+                  </p>
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    {editBuckets.length} autorise(s)
+                    {t({
+                      en: `${editBuckets.length} authorized`,
+                      fr: `${editBuckets.length} autorise(s)`,
+                      de: `${editBuckets.length} autorisiert`,
+                    })}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Filtre</span>
+                  <span className="ui-caption font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                    {t({ en: "Filter", fr: "Filtre", de: "Filter" })}
+                  </span>
                   <input
                     type="search"
                     value={editBucketFilter}
                     onChange={(e) => setEditBucketFilter(e.target.value)}
-                    placeholder="Rechercher..."
+                    placeholder={t({ en: "Search...", fr: "Rechercher...", de: "Suchen..." })}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64"
                   />
                 </div>
@@ -732,19 +865,28 @@ export default function PortalManagePage() {
                 <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                   <thead className="bg-slate-50 dark:bg-slate-900/50">
                     <tr>
-                      <th className="px-3 py-2 text-left ui-caption font-semibold text-slate-600 dark:text-slate-300">Bucket</th>
-                      <th className="px-3 py-2 text-right ui-caption font-semibold text-slate-600 dark:text-slate-300">Action</th>
+                      <th className="px-3 py-2 text-left ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                        {t({ en: "Bucket", fr: "Bucket", de: "Bucket" })}
+                      </th>
+                      <th className="px-3 py-2 text-right ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                        {t({ en: "Action", fr: "Action", de: "Aktion" })}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                    {editLoading && <TableEmptyState colSpan={2} message="Chargement des buckets..." />}
+                    {editLoading && (
+                      <TableEmptyState
+                        colSpan={2}
+                        message={t({ en: "Loading buckets...", fr: "Chargement des buckets...", de: "Buckets werden geladen..." })}
+                      />
+                    )}
                     {!editLoading && bucketAccessRows.length === 0 && (
                       <TableEmptyState
                         colSpan={2}
                         message={
                           editBucketFilter.trim()
-                            ? "Aucun bucket ne correspond au filtre."
-                            : "Aucun bucket pour ce compte."
+                            ? t({ en: "No bucket matches this filter.", fr: "Aucun bucket ne correspond au filtre.", de: "Kein Bucket entspricht dem Filter." })
+                            : t({ en: "No bucket for this account.", fr: "Aucun bucket pour ce compte.", de: "Kein Bucket fur dieses Konto." })
                         }
                       />
                     )}
@@ -765,7 +907,9 @@ export default function PortalManagePage() {
                                   disabled={disabled}
                                   className={tableDeleteActionClasses}
                                 >
-                                  {busy ? "Retrait..." : "Retirer"}
+                                  {busy
+                                    ? t({ en: "Removing...", fr: "Retrait...", de: "Wird entfernt..." })
+                                    : t({ en: "Remove", fr: "Retirer", de: "Entfernen" })}
                                 </button>
                               ) : (
                                 <button
@@ -774,7 +918,9 @@ export default function PortalManagePage() {
                                   disabled={disabled}
                                   className={tableActionButtonClasses}
                                 >
-                                  {busy ? "Ajout..." : "Ajouter"}
+                                  {busy
+                                    ? t({ en: "Adding...", fr: "Ajout...", de: "Wird hinzugefugt..." })
+                                    : t({ en: "Add", fr: "Ajouter", de: "Hinzufugen" })}
                                 </button>
                               )}
                             </td>

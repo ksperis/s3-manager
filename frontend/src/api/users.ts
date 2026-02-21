@@ -19,6 +19,7 @@ export type User = {
   picture_url?: string | null;
   role?: string | null;
   can_access_ceph_admin?: boolean;
+  ui_language?: "en" | "fr" | "de" | null;
   accounts?: number[];
   account_links?: AccountMembership[];
   s3_users?: number[];
@@ -55,6 +56,7 @@ export type UpdateUserPayload = {
 
 export type UpdateCurrentUserPayload = {
   full_name?: string | null;
+  ui_language?: "en" | "fr" | "de" | null;
   current_password?: string;
   new_password?: string;
 };

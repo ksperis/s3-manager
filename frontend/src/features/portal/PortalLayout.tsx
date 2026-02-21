@@ -9,6 +9,7 @@ import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/Top
 import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { useI18n } from "../../i18n";
 
 type StoredUser = {
   account_links?: { account_id: number; account_role?: string | null }[] | null;
@@ -34,10 +35,18 @@ function resolvePortalRole(user: StoredUser | null, accountId: string | null): s
 }
 
 function AccountSelector() {
+  const { t } = useI18n();
   const { accounts, selectedAccountId, setSelectedAccountId, selectedAccount, loading, error } = usePortalAccountContext();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const options: TopbarDropdownOption[] = [
-    ...(!selectedAccount ? [{ value: "", label: "Sélectionnez un compte" }] : []),
+    ...(!selectedAccount
+      ? [
+          {
+            value: "",
+            label: t({ en: "Select an account", fr: "Selectionnez un compte", de: "Konto auswahlen" }),
+          },
+        ]
+      : []),
     ...accounts.map((acc) => ({
       value: acc.id,
       label: formatAccountLabel(acc, defaultEndpointId, defaultEndpointName, false),
@@ -48,7 +57,7 @@ function AccountSelector() {
     "inline-flex h-9 w-56 items-center rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
 
   if (loading) {
-    return <div className={pillClasses}>Chargement…</div>;
+    return <div className={pillClasses}>{t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}</div>;
   }
 
   if (error) {
@@ -60,7 +69,7 @@ function AccountSelector() {
       <div className={pillClasses} title={selectedAccount?.storage_endpoint_url || undefined}>
         {selectedAccount
           ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
-          : "Aucun compte"}
+          : t({ en: "No account", fr: "Aucun compte", de: "Kein Konto" })}
       </div>
     );
   }
@@ -75,13 +84,14 @@ function AccountSelector() {
       value={selectedAccountId ?? ""}
       options={options}
       onChange={handleChange}
-      ariaLabel="Sélectionner un compte portail"
+      ariaLabel={t({ en: "Select portal account", fr: "Selectionner un compte portail", de: "Portal-Konto auswahlen" })}
       widthClassName="w-56"
     />
   );
 }
 
 function PortalShell() {
+  const { t } = useI18n();
   const { selectedAccountId } = usePortalAccountContext();
   const { generalSettings } = useGeneralSettings();
   const accountRole = resolvePortalRole(getStoredUser(), selectedAccountId);
@@ -89,30 +99,34 @@ function PortalShell() {
   const isPortalManager = accountRole === "portal_manager";
   const navSections: SidebarSection[] = [
     {
-      label: "Portail",
+      label: t({ en: "Portal", fr: "Portail", de: "Portal" }),
       links: [
-        { to: "/portal", label: "Accueil", end: true },
-        ...(isPortalManager ? [{ to: "/portal/buckets", label: "Buckets" }] : []),
+        { to: "/portal", label: t({ en: "Home", fr: "Accueil", de: "Startseite" }), end: true },
+        ...(isPortalManager ? [{ to: "/portal/buckets", label: t({ en: "Buckets", fr: "Buckets", de: "Buckets" }) }] : []),
         ...(generalSettings.browser_enabled && generalSettings.browser_portal_enabled
-          ? [{ to: "/portal/browser", label: "Browser" }]
+          ? [{ to: "/portal/browser", label: t({ en: "Browser", fr: "Browser", de: "Browser" }) }]
           : []),
-        { to: "/portal/manage", label: "Gestion" },
-        ...(generalSettings.billing_enabled ? [{ to: "/portal/billing", label: "Billing" }] : []),
-        { to: "/portal/settings", label: "Configuration" },
+        { to: "/portal/manage", label: t({ en: "Manage", fr: "Gestion", de: "Verwaltung" }) },
+        ...(generalSettings.billing_enabled
+          ? [{ to: "/portal/billing", label: t({ en: "Billing", fr: "Facturation", de: "Abrechnung" }) }]
+          : []),
+        { to: "/portal/settings", label: t({ en: "Settings", fr: "Configuration", de: "Einstellungen" }) },
       ],
     },
   ];
 
   return (
     <Layout
-      headerTitle="Portail"
+      headerTitle={t({ en: "Portal", fr: "Portail", de: "Portal" })}
       navSections={navSections}
       sidebarTitle="PORTAL"
       hideSidebar={hideSidebar}
       hideHeader
       topbarContent={
         <div className="flex items-center gap-3">
-          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Account</span>
+          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {t({ en: "Account", fr: "Compte", de: "Konto" })}
+          </span>
           <AccountSelector />
         </div>
       }
