@@ -4,6 +4,7 @@
  */
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { cx, uiButtonBaseClass, uiButtonVariants, uiCardClass } from "./ui/styles";
 
 type Breadcrumb = { label: string; to?: string };
 type Action = {
@@ -30,7 +31,7 @@ export default function PageHeader({
   rightContent,
 }: PageHeaderProps) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-slate-200/70 bg-white/90 px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+    <div className={cx(uiCardClass, "flex flex-col gap-3 px-4 py-3")}>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
           {breadcrumbs.length > 0 && (
@@ -61,21 +62,20 @@ export default function PageHeader({
             {actions.map((action) => {
               const classes =
                 action.variant === "danger"
-                  ? "bg-rose-600 text-white hover:bg-rose-700"
+                  ? uiButtonVariants.danger
                   : action.variant === "ghost"
-                    ? "border border-slate-200 text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-                    : "bg-primary text-white hover:bg-primary-600";
-              const base =
-                "inline-flex items-center justify-center rounded-md px-3 py-1.5 ui-caption font-semibold shadow-sm transition";
+                    ? uiButtonVariants.ghost
+                    : uiButtonVariants.primary;
+              const base = cx(uiButtonBaseClass, "py-1.5");
               if (action.to) {
                 return (
-                  <Link key={action.label} to={action.to} className={`${base} ${classes}`}>
+                  <Link key={action.label} to={action.to} className={cx(base, classes)}>
                     {action.label}
                   </Link>
                 );
               }
               return (
-                <button key={action.label} onClick={action.onClick} className={`${base} ${classes}`} type="button">
+                <button key={action.label} onClick={action.onClick} className={cx(base, classes)} type="button">
                   {action.label}
                 </button>
               );

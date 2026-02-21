@@ -8,6 +8,7 @@ import { fetchHealthWorkspaceOverview, WorkspaceEndpointHealthOverviewResponse }
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageHeader from "../../components/PageHeader";
 import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
+import { cx, uiCardClass } from "../../components/ui/styles";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 
 type CardLink = {
@@ -87,7 +88,10 @@ export default function CephAdminDashboard() {
           <Link
             key={card.to}
             to={card.to}
-            className="group rounded-xl border border-slate-200/80 bg-white px-3 py-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-800 dark:bg-slate-900"
+            className={cx(
+              "group px-3 py-3 transition hover:-translate-y-[1px] hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+              uiCardClass
+            )}
           >
             <p className="ui-caption font-medium text-slate-500 dark:text-slate-400">Navigation</p>
             <div className="mt-1.5 ui-title font-semibold text-slate-900 dark:text-white">

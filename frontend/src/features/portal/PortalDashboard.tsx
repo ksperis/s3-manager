@@ -30,6 +30,9 @@ import {
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { usePortalAccountContext } from "./PortalAccountContext";
 import Modal from "../../components/Modal";
+import UiBadge from "../../components/ui/UiBadge";
+import UiEmptyState from "../../components/ui/UiEmptyState";
+import type { UiTone } from "../../components/ui/styles";
 import PortalBucketModal from "./PortalBucketModal";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 
@@ -65,16 +68,6 @@ function isValidBucketName(value: string): boolean {
   return true;
 }
 
-function Badge({ label, tone = "slate" }: { label: string; tone?: "slate" | "sky" | "emerald" | "amber" }) {
-  const tones: Record<string, string> = {
-    slate: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
-    sky: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100",
-    emerald: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100",
-    amber: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100",
-  };
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${tones[tone]}`}>{label}</span>;
-}
-
 function CopyButton({ value, label, iconOnly = false }: { value: string; label: string; iconOnly?: boolean }) {
   const handleCopy = () => {
     if (!value) return;
@@ -97,50 +90,41 @@ function CopyButton({ value, label, iconOnly = false }: { value: string; label: 
   );
 }
 
-function EmptyState({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
-      <p className="ui-section font-semibold">{title}</p>
-      <p className="mt-1 ui-body text-slate-500 dark:text-slate-400">{description}</p>
-    </div>
-  );
-}
-
-function endpointStatusBadge(status: HealthCheckStatus): { label: string; className: string } {
+function endpointStatusBadge(status: HealthCheckStatus): { label: string; tone: UiTone } {
   if (status === "up") {
     return {
       label: "Up",
-      className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100",
+      tone: "success",
     };
   }
   if (status === "degraded") {
     return {
       label: "Degraded",
-      className: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100",
+      tone: "warning",
     };
   }
   if (status === "down") {
     return {
       label: "Down",
-      className: "bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-100",
+      tone: "danger",
     };
   }
   return {
     label: "Unknown",
-    className: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+    tone: "neutral",
   };
 }
 
-function incidentStateBadge(ongoing: boolean): { label: string; className: string } {
+function incidentStateBadge(ongoing: boolean): { label: string; tone: UiTone } {
   if (ongoing) {
     return {
       label: "In progress",
-      className: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100",
+      tone: "warning",
     };
   }
   return {
     label: "Resolved",
-    className: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+    tone: "neutral",
   };
 }
 
@@ -825,15 +809,15 @@ export default function PortalDashboard() {
   }, [accountIdForApi, generalSettings.endpoint_status_enabled, hasAccountContext]);
 
   if (accountLoading) {
-    return <EmptyState title="Chargement..." description="Récupération des comptes et du contexte portail." />;
+    return <UiEmptyState title="Chargement..." description="Récupération des comptes et du contexte portail." />;
   }
 
   if (accountError) {
-    return <EmptyState title="Erreur de contexte" description={accountError} />;
+    return <UiEmptyState title="Erreur de contexte" description={accountError} />;
   }
 
   if (!hasAccountContext) {
-    return <EmptyState title="Aucun compte sélectionné" description="Sélectionnez un compte dans la barre supérieure pour continuer." />;
+    return <UiEmptyState title="Aucun compte sélectionné" description="Sélectionnez un compte dans la barre supérieure pour continuer." />;
   }
 
   return (
@@ -949,8 +933,8 @@ export default function PortalDashboard() {
                     workspaceHealthLoading ? (
                       <span className="inline-flex h-5 w-12 animate-pulse rounded-full bg-slate-200/80 dark:bg-slate-700/80" aria-hidden />
                     ) : (
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${endpointHealthBadge.className}`}
+                      <UiBadge
+                        tone={endpointHealthBadge.tone}
                         title={
                           endpointHealthEntry?.checked_at
                             ? `Last check: ${new Date(endpointHealthEntry.checked_at).toLocaleString()}`
@@ -958,7 +942,7 @@ export default function PortalDashboard() {
                         }
                       >
                         {endpointHealthBadge.label}
-                      </span>
+                      </UiBadge>
                     )
                   )}
                 </div>
@@ -989,7 +973,9 @@ export default function PortalDashboard() {
                 <div>
                   <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Rôle</div>
                   <div className="mt-1">
-                    <Badge label={state?.account_role === "portal_manager" ? "Portal manager" : "Portal user"} tone={state?.account_role === "portal_manager" ? "emerald" : "sky"} />
+                    <UiBadge tone={state?.account_role === "portal_manager" ? "success" : "info"}>
+                      {state?.account_role === "portal_manager" ? "Portal manager" : "Portal user"}
+                    </UiBadge>
                   </div>
                 </div>
                 <div>
@@ -1034,12 +1020,8 @@ export default function PortalDashboard() {
                   <div className="flex items-center justify-between gap-2">
                     <p className="ui-caption font-semibold text-slate-900 dark:text-slate-100">{incident.endpoint_name}</p>
                     <div className="flex items-center gap-1.5">
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${incidentStateBadge(incident.ongoing).className}`}>
-                        {incidentStateBadge(incident.ongoing).label}
-                      </span>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold ${endpointStatusBadge(incident.status).className}`}>
-                        {endpointStatusBadge(incident.status).label}
-                      </span>
+                      <UiBadge tone={incidentStateBadge(incident.ongoing).tone}>{incidentStateBadge(incident.ongoing).label}</UiBadge>
+                      <UiBadge tone={endpointStatusBadge(incident.status).tone}>{endpointStatusBadge(incident.status).label}</UiBadge>
                     </div>
                   </div>
                   <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">
@@ -1256,7 +1238,7 @@ export default function PortalDashboard() {
                       })}
                     </div>
                   ) : (
-                    <EmptyState title="Aucune clé" description="Créez une clé pour commencer." />
+                    <UiEmptyState title="Aucune clé" description="Créez une clé pour commencer." />
                   )}
                 </div>
               </div>
@@ -1402,12 +1384,12 @@ export default function PortalDashboard() {
                 })
                 ) : (
                   <div className="w-full">
-                    <EmptyState title="Aucun résultat" description="Aucun bucket ne correspond à la recherche." />
+                    <UiEmptyState title="Aucun résultat" description="Aucun bucket ne correspond à la recherche." />
                   </div>
                 )
               ) : (
                 <div className="w-full">
-                  <EmptyState title="Aucun bucket" description="Créez un bucket pour commencer à stocker des objets." />
+                  <UiEmptyState title="Aucun bucket" description="Créez un bucket pour commencer à stocker des objets." />
                 </div>
               )}
             </div>

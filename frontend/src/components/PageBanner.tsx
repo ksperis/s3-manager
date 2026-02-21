@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ReactNode } from "react";
+import { UiTone, cx, uiToneBannerClasses } from "./ui/styles";
 
 type PageBannerTone = "info" | "success" | "warning" | "error";
 
@@ -12,22 +13,16 @@ type PageBannerProps = {
   className?: string;
 };
 
-const toneClasses: Record<PageBannerTone, string> = {
-  info: "border border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-100",
-  success:
-    "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100",
-  warning:
-    "border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100",
-  error:
-    "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100",
+const toneMap: Record<PageBannerTone, UiTone> = {
+  info: "info",
+  success: "success",
+  warning: "warning",
+  error: "danger",
 };
 
 export default function PageBanner({ tone = "info", children, className }: PageBannerProps) {
   if (!children) {
     return null;
   }
-  const base = "rounded-md px-3 py-2 ui-caption";
-  const toneClass = toneClasses[tone];
-  const extra = className ? ` ${className}` : "";
-  return <div className={`${base} ${toneClass}${extra}`}>{children}</div>;
+  return <div className={cx("rounded-md border px-3 py-2 ui-caption", uiToneBannerClasses[toneMap[tone]], className)}>{children}</div>;
 }

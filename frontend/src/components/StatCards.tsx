@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { Link } from "react-router-dom";
+import { cx, uiCardClass } from "./ui/styles";
 
 type Stat = {
   label: string;
@@ -18,8 +19,7 @@ type StatCardsProps = {
 
 export default function StatCards({ stats, columns = 3 }: StatCardsProps) {
   const grid = columns === 4 ? "lg:grid-cols-4" : columns === 2 ? "lg:grid-cols-2" : "lg:grid-cols-3";
-  const baseClasses =
-    "rounded-xl border border-slate-200/80 bg-white px-3 py-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md dark:border-slate-800 dark:bg-slate-900";
+  const baseClasses = cx(uiCardClass, "px-3 py-3 transition hover:-translate-y-[1px] hover:shadow-md");
 
   return (
     <div className={`grid gap-4 sm:grid-cols-2 ${grid}`}>

@@ -5,6 +5,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import Modal from "../../components/Modal";
+import UiBadge from "../../components/ui/UiBadge";
+import UiButton from "../../components/ui/UiButton";
+import { UiTone, uiCheckboxClass, uiInputClass, uiLabelClass } from "../../components/ui/styles";
 import {
   CephAdminBucketCompareResult,
   CephAdminEndpoint,
@@ -117,6 +120,17 @@ const renderDiffLines = (lines: CompareDiffLine[]) => (
   </div>
 );
 
+const getRunStatusTone = (item: CompareRunItem): UiTone => {
+  if (item.status === "failed") return "danger";
+  if (item.status === "cancelled") return "warning";
+  if (item.status === "success") {
+    return item.result?.has_differences ? "warning" : "success";
+  }
+  return "neutral";
+};
+
+const getChangedTone = (changed: boolean): UiTone => (changed ? "warning" : "neutral");
+
 const parseRawMappingText = (value: string): ParsedRawMappingResult => {
   const mapping = new Map<string, string>();
   const invalidLines: string[] = [];
@@ -194,6 +208,9 @@ export default function CephAdminBucketCompareModal({
   const parsedRawMapping = useMemo(() => parseRawMappingText(rawMappingText), [rawMappingText]);
   const cancelRequestedRef = useRef(false);
   const requestControllersRef = useRef(new Set<AbortController>());
+  const controlClass = uiInputClass;
+  const compactControlClass =
+    "w-full rounded-md border border-slate-200 px-2 py-1 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100";
 
   useEffect(() => {
     if (targetEndpointOptions.length === 0) {
@@ -633,14 +650,12 @@ export default function CephAdminBucketCompareModal({
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
-            <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Target endpoint
-            </label>
+            <label className={uiLabelClass}>Target endpoint</label>
             <select
               value={targetEndpointId ?? ""}
               onChange={(event) => setTargetEndpointId(event.target.value ? Number(event.target.value) : null)}
               disabled={running || targetEndpointOptions.length === 0}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className={controlClass}
             >
               {targetEndpointOptions.length === 0 && <option value="">No other endpoint available</option>}
               {targetEndpointOptions.map((endpoint) => (
@@ -651,14 +666,12 @@ export default function CephAdminBucketCompareModal({
             </select>
           </div>
           <div className="space-y-1">
-            <label className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Mapping mode
-            </label>
+            <label className={uiLabelClass}>Mapping mode</label>
             <select
               value={mappingMode}
               onChange={(event) => setMappingMode(event.target.value as "by_name" | "manual")}
               disabled={running}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className={controlClass}
             >
               <option value="by_name" disabled={sameEndpointSelected}>
                 1:1 by bucket name{sameEndpointSelected ? " (disabled on same endpoint)" : ""}
@@ -679,7 +692,7 @@ export default function CephAdminBucketCompareModal({
               checked={includeConfig}
               onChange={(event) => setIncludeConfig(event.target.checked)}
               disabled={running}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+              className={uiCheckboxClass}
             />
             Include bucket configuration
           </label>
@@ -689,7 +702,7 @@ export default function CephAdminBucketCompareModal({
               checked={sizeOnly}
               onChange={(event) => setSizeOnly(event.target.checked)}
               disabled={running}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+              className={uiCheckboxClass}
             />
             Quick check (size only)
           </label>
@@ -702,7 +715,7 @@ export default function CephAdminBucketCompareModal({
               value={parallelism}
               onChange={(event) => setParallelism(Number(event.target.value))}
               disabled={running}
-              className="w-full rounded-md border border-slate-200 px-2 py-1 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className={compactControlClass}
             />
           </label>
         </div>
@@ -726,7 +739,7 @@ export default function CephAdminBucketCompareModal({
                   disabled={running}
                   rows={6}
                   placeholder={"source-bucket-a => target-bucket-a\nsource-bucket-b -> target-bucket-b"}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono text-xs text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className={`${controlClass} font-mono text-xs`}
                 />
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Accepted formats per line: <code>source =&gt; target</code>, <code>source -&gt; target</code>, <code>source = target</code>.
@@ -772,7 +785,7 @@ export default function CephAdminBucketCompareModal({
                               }))
                             }
                             disabled={running || Boolean(rawTarget)}
-                            className="w-full rounded-md border border-slate-200 px-2 py-1 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            className={compactControlClass}
                             placeholder="target bucket"
                           />
                           {rawTarget && (
@@ -820,30 +833,19 @@ export default function CephAdminBucketCompareModal({
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
+          <UiButton
             onClick={runCompare}
             disabled={running || Boolean(comparePlan.error) || !targetEndpointId}
-            className="rounded-md bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+            className="ui-body"
           >
             {running ? "Comparing..." : "Run comparison"}
-          </button>
-          <button
-            type="button"
-            onClick={stopComparison}
-            disabled={!running}
-            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-body font-semibold text-amber-700 hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:border-amber-800"
-          >
+          </UiButton>
+          <UiButton onClick={stopComparison} disabled={!running} variant="warning" className="ui-body">
             {stopping ? "Stopping..." : "Stop"}
-          </button>
-          <button
-            type="button"
-            onClick={exportGlobalDiff}
-            disabled={running || items.length === 0}
-            className="rounded-md border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-          >
+          </UiButton>
+          <UiButton onClick={exportGlobalDiff} disabled={running || items.length === 0} variant="secondary" className="ui-body">
             Export global diff
-          </button>
+          </UiButton>
           {items.length > 0 && !running && (
             <p className="ui-caption text-slate-600 dark:text-slate-300">
               Success: {resultSummary.success} / Failed: {resultSummary.failed} / Cancelled: {resultSummary.cancelled} / With
@@ -859,12 +861,12 @@ export default function CephAdminBucketCompareModal({
                 value={resultSearch}
                 onChange={(event) => setResultSearch(event.target.value)}
                 placeholder="Filter by source/target bucket or error"
-                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className={controlClass}
               />
               <select
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value as "all" | CompareRunItem["status"])}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className={controlClass}
               >
                 <option value="all">All statuses</option>
                 <option value="pending">Pending</option>
@@ -876,19 +878,15 @@ export default function CephAdminBucketCompareModal({
               <select
                 value={diffFilter}
                 onChange={(event) => setDiffFilter(event.target.value as "all" | "with_diff" | "no_diff")}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                className={controlClass}
               >
                 <option value="all">All diff states</option>
                 <option value="with_diff">With differences</option>
                 <option value="no_diff">No differences</option>
               </select>
-              <button
-                type="button"
-                onClick={resetResultFilters}
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600"
-              >
+              <UiButton onClick={resetResultFilters} variant="secondary" className="ui-body">
                 Reset filters
-              </button>
+              </UiButton>
             </div>
             <p className="ui-caption text-slate-600 dark:text-slate-300">
               Showing {filteredItems.length} / {items.length} result(s).
@@ -971,21 +969,9 @@ export default function CephAdminBucketCompareModal({
                       <span className="font-semibold text-slate-900 dark:text-slate-100">
                         {item.sourceBucket} → {item.targetBucket}
                       </span>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                          item.status === "success"
-                            ? item.result?.has_differences
-                              ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
-                              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
-                            : item.status === "failed"
-                              ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-100"
-                              : item.status === "cancelled"
-                                ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
-                              : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200"
-                        }`}
-                      >
+                      <UiBadge tone={getRunStatusTone(item)} className="px-2 text-[10px]">
                         {item.status}
-                      </span>
+                      </UiBadge>
                       {content && (
                         <span className="ui-caption text-slate-500 dark:text-slate-400">
                           Matched {content.matched_count} · Different {content.different_count} · Source only{" "}
@@ -1009,15 +995,9 @@ export default function CephAdminBucketCompareModal({
                             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
                               Content diff ({content.compare_mode === "size_only" ? "size only" : "md5 or size"})
                             </span>
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                                contentHasDifferences
-                                  ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
-                                  : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200"
-                              }`}
-                            >
+                            <UiBadge tone={getChangedTone(contentHasDifferences)} className="px-2 text-[10px]">
                               {contentHasDifferences ? "Changed" : "Unchanged"}
-                            </span>
+                            </UiBadge>
                           </div>
                         </summary>
                         <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
@@ -1030,15 +1010,9 @@ export default function CephAdminBucketCompareModal({
                               <summary className="cursor-pointer list-none px-2 py-1.5">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
-                                  <span
-                                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                                      section.changed
-                                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
-                                        : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200"
-                                    }`}
-                                  >
+                                  <UiBadge tone={getChangedTone(section.changed)} className="px-2 text-[10px]">
                                     {section.changed ? "Changed" : "Unchanged"}
-                                  </span>
+                                  </UiBadge>
                                 </div>
                               </summary>
                               <div className="grid gap-2 border-t border-slate-200 px-2 py-2 lg:grid-cols-2 dark:border-slate-800">
@@ -1068,15 +1042,9 @@ export default function CephAdminBucketCompareModal({
                         <summary className="cursor-pointer list-none px-2.5 py-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Config diff</span>
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                                configHasDifferences
-                                  ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
-                                  : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200"
-                              }`}
-                            >
+                            <UiBadge tone={getChangedTone(configHasDifferences)} className="px-2 text-[10px]">
                               {configHasDifferences ? "Changed" : "Unchanged"}
-                            </span>
+                            </UiBadge>
                           </div>
                         </summary>
                         <div className="space-y-2 border-t border-slate-200 px-2.5 py-2 dark:border-slate-800">
@@ -1089,15 +1057,9 @@ export default function CephAdminBucketCompareModal({
                               <summary className="cursor-pointer list-none px-2 py-1.5">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
-                                  <span
-                                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                                      section.changed
-                                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100"
-                                        : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-200"
-                                    }`}
-                                  >
+                                  <UiBadge tone={getChangedTone(section.changed)} className="px-2 text-[10px]">
                                     {section.changed ? "Changed" : "Unchanged"}
-                                  </span>
+                                  </UiBadge>
                                 </div>
                               </summary>
                               <div className="grid gap-2 border-t border-slate-200 px-2 py-2 lg:grid-cols-2 dark:border-slate-800">

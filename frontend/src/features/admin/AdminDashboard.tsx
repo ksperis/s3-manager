@@ -13,6 +13,8 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import StatCards from "../../components/StatCards";
 import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
+import UiBadge from "../../components/ui/UiBadge";
+import { cx, uiButtonBaseClass, uiButtonVariants, uiCardClass, uiCardMutedClass } from "../../components/ui/styles";
 
 const ENDPOINT_STATUS_MAX_AGE_HOURS = 24;
 const ENDPOINT_STATUS_MAX_AGE_MS = ENDPOINT_STATUS_MAX_AGE_HOURS * 60 * 60 * 1000;
@@ -288,7 +290,7 @@ export default function AdminDashboard() {
       />
 
       {onboarding && !onboarding.dismissed && (
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className={cx(uiCardClass, "rounded-2xl px-6 py-5")}>
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="space-y-2">
               <h2 className="ui-subtitle font-semibold text-slate-900 dark:text-white">
@@ -303,7 +305,7 @@ export default function AdminDashboard() {
               type="button"
               onClick={handleDismissOnboarding}
               disabled={!onboarding.can_dismiss || dismissBusy}
-              className="rounded-lg border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+              className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "rounded-lg px-4 py-2 ui-body disabled:opacity-50")}
             >
               {dismissBusy ? "Dismissing..." : "Dismiss checklist"}
             </button>
@@ -312,7 +314,7 @@ export default function AdminDashboard() {
           {onboardingError && <p className="mt-3 ui-body text-rose-600">{onboardingError}</p>}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className={cx(uiCardMutedClass, "px-4 py-4")}>
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">1. Secure the default admin</p>
@@ -320,27 +322,21 @@ export default function AdminDashboard() {
                     Change the seeded admin email and password so the default credentials are no longer active.
                   </p>
                 </div>
-                <span
-                  className={`rounded-full px-3 py-1 ui-caption font-semibold ${
-                    onboarding.seed_user_configured
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}
-                >
+                <UiBadge tone={onboarding.seed_user_configured ? "success" : "warning"} className="px-3 py-1">
                   {onboarding.seed_user_configured ? "Done" : "Pending"}
-                </span>
+                </UiBadge>
               </div>
               <div className="mt-3">
                 <Link
                   to="/admin/users"
-                  className="inline-flex items-center rounded-lg bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
+                  className={cx(uiButtonBaseClass, uiButtonVariants.primary, "rounded-lg")}
                 >
                   Go to UI users
                 </Link>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className={cx(uiCardMutedClass, "px-4 py-4")}>
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">2. Configure a storage endpoint</p>
@@ -348,20 +344,14 @@ export default function AdminDashboard() {
                     Add at least one S3 or Ceph endpoint so the platform can manage accounts and users.
                   </p>
                 </div>
-                <span
-                  className={`rounded-full px-3 py-1 ui-caption font-semibold ${
-                    onboarding.endpoint_configured
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}
-                >
+                <UiBadge tone={onboarding.endpoint_configured ? "success" : "warning"} className="px-3 py-1">
                   {onboarding.endpoint_configured ? "Done" : "Pending"}
-                </span>
+                </UiBadge>
               </div>
               <div className="mt-3">
                 <Link
                   to="/admin/storage-endpoints"
-                  className="inline-flex items-center rounded-lg bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600"
+                  className={cx(uiButtonBaseClass, uiButtonVariants.primary, "rounded-lg")}
                 >
                   Configure endpoints
                 </Link>
@@ -369,7 +359,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="mt-5 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-900">
+          <div className={cx(uiCardClass, "mt-5 rounded-xl border-dashed px-4 py-4")}>
             <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Next steps</p>
             <p className="mt-2 ui-caption text-slate-600 dark:text-slate-300">
               Add a UI user, create an account, and link that account to the UI user. If you plan to use the portal, enable the
@@ -378,13 +368,13 @@ export default function AdminDashboard() {
             <div className="mt-3 flex flex-wrap gap-3">
               <Link
                 to="/admin/users"
-                className="rounded-lg border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "rounded-lg")}
               >
                 Add UI user
               </Link>
               <Link
                 to="/admin/s3-accounts"
-                className="rounded-lg border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+                className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "rounded-lg")}
               >
                 Create account
               </Link>
@@ -397,7 +387,7 @@ export default function AdminDashboard() {
       {endpointFreshnessWarning && <PageBanner tone="warning">{endpointFreshnessWarning}</PageBanner>}
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
-      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className={cx(uiCardClass, "p-3")}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 className="ui-body font-semibold text-slate-900 dark:text-white">Active core features</h2>
@@ -407,7 +397,7 @@ export default function AdminDashboard() {
           </div>
           <Link
             to="/admin/general-settings"
-            className="rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
+            className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "px-2.5 py-1.5")}
           >
             Configure features
           </Link>
@@ -424,15 +414,14 @@ export default function AdminDashboard() {
               const labelClasses = feature.critical
                 ? "text-orange-900 dark:text-orange-100"
                 : "text-emerald-900 dark:text-emerald-100";
-              const badgeClasses = feature.critical
-                ? "bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-200"
-                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200";
 
               return (
                 <div key={feature.id} className={`rounded-lg border px-2.5 py-2 ${baseClasses}`}>
                   <div className="flex items-center justify-between gap-2">
                     <p className={`ui-caption font-semibold ${labelClasses}`}>{feature.label}</p>
-                    <span className={`rounded-full px-1.5 py-0.5 ui-caption font-semibold ${badgeClasses}`}>ON</span>
+                    <UiBadge tone={feature.critical ? "warning" : "success"} className="px-1.5 py-0.5">
+                      ON
+                    </UiBadge>
                   </div>
                 </div>
               );

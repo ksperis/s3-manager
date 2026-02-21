@@ -10,12 +10,36 @@
   color-scheme: light;
   color: #0f172a;
   background-color: #f8fafc;
+  --ui-bg: #f8fafc;
+  --ui-surface: #ffffff;
+  --ui-surface-muted: #f1f5f9;
+  --ui-surface-elevated: #ffffff;
+  --ui-border: #cbd5e1;
+  --ui-text: #0f172a;
+  --ui-text-muted: #475569;
+  --ui-primary: #0ea5e9;
+  --ui-primary-strong: #0284c7;
+  --ui-success: #059669;
+  --ui-warning: #d97706;
+  --ui-danger: #e11d48;
 }
 
 :root.dark {
   color-scheme: dark;
   color: #e2e8f0;
   background-color: #0b1220;
+  --ui-bg: #0b1220;
+  --ui-surface: #0f172a;
+  --ui-surface-muted: #111827;
+  --ui-surface-elevated: #0b1220;
+  --ui-border: #334155;
+  --ui-text: #e2e8f0;
+  --ui-text-muted: #94a3b8;
+  --ui-primary: #38bdf8;
+  --ui-primary-strong: #0ea5e9;
+  --ui-success: #34d399;
+  --ui-warning: #fbbf24;
+  --ui-danger: #fb7185;
 }
 
 body {
@@ -64,6 +88,38 @@ body {
 
   .ui-metric {
     @apply text-lg font-semibold leading-snug;
+  }
+
+  .ui-surface-card {
+    @apply rounded-xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70;
+  }
+
+  .ui-surface-muted {
+    @apply rounded-xl border border-slate-200/70 bg-slate-50/80 shadow-sm dark:border-slate-800 dark:bg-slate-900/40;
+  }
+
+  .ui-control {
+    @apply w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+  }
+
+  .ui-button-base {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 ui-caption font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .ui-button-primary {
+    @apply bg-primary text-white shadow-sm hover:bg-primary-600;
+  }
+
+  .ui-button-secondary {
+    @apply border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600;
+  }
+
+  .ui-button-warning {
+    @apply border border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:border-amber-800;
+  }
+
+  .ui-button-danger {
+    @apply bg-rose-600 text-white shadow-sm hover:bg-rose-700;
   }
 }
 
