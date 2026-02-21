@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import S3Account, S3Connection, S3User, User, UserS3Account, UserS3Connection, UserS3User, UserRole
+from app.db import S3Account, S3Connection, S3User, User, UserS3Account, UserS3Connection, UserS3User, is_admin_ui_role
 from app.models.s3_account import S3Account as S3AccountSchema
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_current_account_admin
@@ -105,7 +105,7 @@ def list_manager_accounts(
     for acc in accounts:
         endpoint = acc.storage_endpoint
         root_link = None
-        if user.role == UserRole.UI_ADMIN.value:
+        if is_admin_ui_role(user.role):
             root_link = (
                 db.query(UserS3Account)
                 .filter(

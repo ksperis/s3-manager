@@ -19,6 +19,8 @@ from app.db import (
     UserS3Account,
     UserS3Connection,
     UserS3User,
+    is_admin_ui_role,
+    is_superadmin_ui_role,
 )
 from app.models.admin_automation import (
     AdminAutomationApplyRequest,
@@ -256,6 +258,11 @@ class AdminAutomationService:
             if not user:
                 if not spec:
                     raise ValueError("ui_users.spec is required to create a new user")
+                normalized_role = self._normalize_ui_role(spec.role)
+                if normalized_role is not None:
+                    spec.role = normalized_role
+                if spec.role == UserRole.UI_SUPERADMIN.value and not is_superadmin_ui_role(current_user.role):
+                    raise ValueError("Only superadmin users can promote superadmins")
                 email = spec.email or item.match.email
                 if not email:
                     raise ValueError("ui_users.spec.email is required to create a new user")
@@ -288,6 +295,12 @@ class AdminAutomationService:
 
             if dry_run:
                 return self._updated("ui_user", key, user.id, diff, dry_run=dry_run)
+            if item.spec:
+                normalized_role = self._normalize_ui_role(item.spec.role)
+                if normalized_role is not None:
+                    item.spec.role = normalized_role
+                if item.spec.role == UserRole.UI_SUPERADMIN.value and not is_superadmin_ui_role(current_user.role):
+                    raise ValueError("Only superadmin users can promote superadmins")
             update_payload = self._build_ui_user_update(item)
             updated = self.users.update_user(user.id, update_payload)
             audit_service.record_action(
@@ -1366,11 +1379,26 @@ class AdminAutomationService:
     def _default_account_role(self, user: User, portal_enabled: bool) -> str:
         if not portal_enabled:
             return AccountRole.PORTAL_NONE.value
-        if user.role == UserRole.UI_ADMIN.value:
+        if is_admin_ui_role(user.role):
             return AccountRole.PORTAL_MANAGER.value
         if user.role == UserRole.UI_NONE.value:
             return AccountRole.PORTAL_USER.value
         return AccountRole.PORTAL_USER.value
+
+    @staticmethod
+    def _normalize_ui_role(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if normalized in {"ui_superadmin", "super_admin", "superadmin"}:
+            return UserRole.UI_SUPERADMIN.value
+        if normalized in {"ui_admin", "admin"}:
+            return UserRole.UI_ADMIN.value
+        if normalized in {"ui_user", "user"}:
+            return UserRole.UI_USER.value
+        if normalized in {"ui_none", "none"}:
+            return UserRole.UI_NONE.value
+        return value
 
     def _delete_s3_user_db_only(self, s3_user: S3User) -> None:
         (

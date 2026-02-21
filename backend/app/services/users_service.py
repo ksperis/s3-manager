@@ -10,7 +10,19 @@ from sqlalchemy.orm import Session, aliased
 from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.core.security import get_password_hash, verify_password
-from app.db import AccountIAMUser, AccountRole, S3Account, S3Connection, User, UserS3Account, UserS3Connection, UserRole, S3User, UserS3User
+from app.db import (
+    AccountIAMUser,
+    AccountRole,
+    S3Account,
+    S3Connection,
+    S3User,
+    User,
+    UserRole,
+    UserS3Account,
+    UserS3Connection,
+    UserS3User,
+    is_admin_ui_role,
+)
 from app.models.user import AccountMembership, LinkedS3Connection, LinkedS3User, UserCreate, UserOut, UserUpdate, UserSummary
 from app.services.app_settings_service import load_app_settings
 
@@ -37,7 +49,7 @@ class UsersService:
             display_name=payload.full_name,
             hashed_password=get_password_hash(payload.password),
             is_active=True,
-            role=UserRole.UI_ADMIN.value,
+            role=UserRole.UI_SUPERADMIN.value,
             can_access_ceph_admin=False,
         )
         self.db.add(user)
@@ -51,8 +63,10 @@ class UsersService:
         if existing:
             raise ValueError("User already exists")
         role = payload.role or UserRole.UI_USER.value
+        if role not in {entry.value for entry in UserRole}:
+            raise ValueError("Invalid role")
         is_root = bool(payload.is_root)
-        can_access_ceph_admin = bool(payload.can_access_ceph_admin) if role == UserRole.UI_ADMIN.value else False
+        can_access_ceph_admin = bool(payload.can_access_ceph_admin) if is_admin_ui_role(role) else False
         user = User(
             email=payload.email,
             full_name=payload.full_name,
@@ -81,6 +95,8 @@ class UsersService:
         if payload.password:
             user.hashed_password = get_password_hash(payload.password)
         next_role = payload.role or user.role
+        if payload.role and payload.role not in {entry.value for entry in UserRole}:
+            raise ValueError("Invalid role")
         if payload.role:
             user.role = payload.role
         if payload.is_active is not None:
@@ -88,8 +104,8 @@ class UsersService:
         if payload.is_root is not None:
             user.is_root = payload.is_root
         if payload.can_access_ceph_admin is not None:
-            user.can_access_ceph_admin = bool(payload.can_access_ceph_admin) if next_role == UserRole.UI_ADMIN.value else False
-        elif next_role != UserRole.UI_ADMIN.value:
+            user.can_access_ceph_admin = bool(payload.can_access_ceph_admin) if is_admin_ui_role(next_role) else False
+        elif not is_admin_ui_role(next_role):
             user.can_access_ceph_admin = False
         if payload.s3_user_ids is not None:
             self._set_s3_user_links(user, payload.s3_user_ids)
@@ -301,15 +317,15 @@ class UsersService:
             else:
                 desired_account_role = AccountRole.PORTAL_NONE.value
         else:
-            desired_account_role = account_role or (
-                AccountRole.PORTAL_MANAGER.value
-                if user.role == UserRole.UI_ADMIN.value
-                else AccountRole.PORTAL_USER.value
-            )
+                desired_account_role = account_role or (
+                    AccountRole.PORTAL_MANAGER.value
+                    if is_admin_ui_role(user.role)
+                    else AccountRole.PORTAL_USER.value
+                )
         if desired_account_role not in {role.value for role in AccountRole}:
             raise ValueError("Invalid account role")
         # Keep platform role untouched unless explicitly overridden
-        if role and user.role != UserRole.UI_ADMIN.value:
+        if role and not is_admin_ui_role(user.role):
             user.role = role
         if user.role == UserRole.UI_NONE.value:
             user.role = UserRole.UI_USER.value
@@ -425,7 +441,7 @@ class UsersService:
             display_name=user.display_name or user.full_name,
             picture_url=user.picture_url,
             is_active=user.is_active,
-            is_admin=user.role == UserRole.UI_ADMIN.value,
+            is_admin=is_admin_ui_role(user.role),
             role=user.role,
             is_root=user.is_root,
             can_access_ceph_admin=bool(user.can_access_ceph_admin),

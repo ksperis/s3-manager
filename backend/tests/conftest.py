@@ -46,7 +46,7 @@ def client(db_session):
             full_name="Admin",
             hashed_password="x",
             is_active=True,
-            role=UserRole.UI_ADMIN.value,
+            role=UserRole.UI_SUPERADMIN.value,
         )
 
     def override_account_admin():

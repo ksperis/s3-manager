@@ -6,6 +6,7 @@ import type { GeneralSettings } from "../api/appSettings";
 
 export const WORKSPACE_STORAGE_KEY = "selectedWorkspace";
 
+const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
 
@@ -38,6 +39,16 @@ const ALL_WORKSPACES: WorkspaceOption[] = [
   { id: "portal", label: "Portail (self-service)", path: "/portal" },
 ];
 
+export function isSuperAdminRole(role?: string | null): boolean {
+  const normalized = (role ?? "").trim().toLowerCase();
+  return normalized === SUPERADMIN_ROLE || normalized === "super_admin" || normalized === "superadmin";
+}
+
+export function isAdminLikeRole(role?: string | null): boolean {
+  const normalized = (role ?? "").trim().toLowerCase();
+  return normalized === ADMIN_ROLE || isSuperAdminRole(normalized);
+}
+
 export function readStoredUser(): SessionUser | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem("user");
@@ -60,7 +71,7 @@ export function readStoredWorkspaceId(): WorkspaceId | null {
 
 function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[] {
   if (!user || !user.role) return [];
-  if (user.role === ADMIN_ROLE) {
+  if (isAdminLikeRole(user.role)) {
     return ALL_WORKSPACES.filter((workspace) => workspace.id !== "ceph-admin" || Boolean(user.can_access_ceph_admin));
   }
   if (user.role !== USER_ROLE) return [];
@@ -118,7 +129,7 @@ export function resolveWorkspaceFromPath(pathname: string, options: WorkspaceOpt
 
 export function resolveRoleHomePath(user: SessionUser | null, generalSettings: GeneralSettings): string {
   if (!user || !user.role) return "/login";
-  if (user.role === ADMIN_ROLE) return "/admin";
+  if (isAdminLikeRole(user.role)) return "/admin";
   if (user.role !== USER_ROLE) return "/unauthorized";
   if (user.authType === "rgw_session") {
     if (generalSettings.manager_enabled) return "/manager";

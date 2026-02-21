@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import create_access_token, hash_refresh_token
-from app.db import ApiToken, User, UserRole
+from app.db import ApiToken, User, is_admin_ui_role
 
 settings = get_settings()
 
@@ -36,7 +36,7 @@ class ApiTokenService:
         name: str,
         expires_in_days: Optional[int] = None,
     ) -> tuple[str, ApiToken]:
-        if user.role != UserRole.UI_ADMIN.value:
+        if not is_admin_ui_role(user.role):
             raise ApiTokenError("Only UI admins can create API tokens")
         if user.id is None:
             raise ApiTokenError("User id is required to create API tokens")
@@ -125,7 +125,7 @@ class ApiTokenService:
         if row.user_id != user_id:
             return None
         user = self.db.query(User).filter(User.id == user_id).first()
-        if not user or not user.is_active or user.role != UserRole.UI_ADMIN.value:
+        if not user or not user.is_active or not is_admin_ui_role(user.role):
             return None
         row.last_used_at = now
         self.db.add(row)

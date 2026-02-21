@@ -64,7 +64,7 @@ class AdminMetricsService:
         unassigned_accounts = max(total_accounts - assigned_accounts, 0)
         total_admins = (
             db.query(func.count(User.id))
-            .filter(User.role == UserRole.UI_ADMIN.value)
+            .filter(User.role.in_([UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]))
             .scalar()
             or 0
         )

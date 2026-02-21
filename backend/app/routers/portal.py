@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import AccountIAMUser, AccountRole, S3Account, User, UserS3Account
+from app.db import AccountIAMUser, AccountRole, S3Account, User, UserS3Account, is_admin_ui_role
 from app.models.bucket import Bucket, BucketCreate
 from app.models.app_settings import PortalSettingsOverride, PortalSettings
 from app.models.portal import (
@@ -85,7 +85,7 @@ def list_portal_accounts(
         if endpoint and not resolve_feature_flags(endpoint).iam_enabled:
             continue
         root_link = None
-        if user.role == UserRole.UI_ADMIN.value:
+        if is_admin_ui_role(user.role):
             root_link = (
                 db.query(UserS3Account)
                 .filter(
@@ -245,7 +245,7 @@ def list_portal_bucket_users(
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value]
+    roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]
     rows = (
         users_service.db.query(User, UserS3Account.account_role, AccountIAMUser.iam_username)  # type: ignore[attr-defined]
         .join(UserS3Account, UserS3Account.user_id == User.id)
@@ -618,7 +618,7 @@ def list_portal_ui_users(
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value]
+    roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]
     rows = (
         users_service.db.query(User, UserS3Account.account_role, AccountIAMUser.iam_username)  # type: ignore[attr-defined]
         .join(UserS3Account, UserS3Account.user_id == User.id)
@@ -709,7 +709,7 @@ def add_portal_ui_user(
     target = users_service.get_by_email(payload.email)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if target.role == UserRole.UI_ADMIN.value:
+    if is_admin_ui_role(target.role):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot assign this user")
     users_service.assign_user_to_account(
         target.id,
@@ -865,7 +865,7 @@ def update_portal_ui_user_role(
     target = users_service.get_by_id(user_id)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if target.role == UserRole.UI_ADMIN.value:
+    if is_admin_ui_role(target.role):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot assign this user")
     if actor.id == target.id and payload.account_role == AccountRole.PORTAL_USER:
         raise HTTPException(
@@ -915,7 +915,7 @@ def remove_portal_ui_user(
     target = users_service.get_by_id(user_id)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if target.role == UserRole.UI_ADMIN.value:
+    if is_admin_ui_role(target.role):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove this user")
     if actor.id == target.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Managers cannot remove their own account access")

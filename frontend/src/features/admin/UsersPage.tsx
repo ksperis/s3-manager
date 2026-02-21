@@ -25,6 +25,7 @@ import PaginationControls from "../../components/PaginationControls";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
 
@@ -672,6 +673,8 @@ export default function UsersPage() {
 
   const MAX_VISIBLE_OPTIONS = 10;
   const { generalSettings } = useGeneralSettings();
+  const currentUser = useMemo(() => readStoredUser(), []);
+  const currentIsSuperAdmin = isSuperAdminRole(currentUser?.role);
   const portalEnabled = generalSettings.portal_enabled;
   const cephAdminFeatureEnabled = generalSettings.ceph_admin_enabled;
   const [users, setUsers] = useState<User[]>([]);
@@ -827,13 +830,15 @@ export default function UsersPage() {
   const visibleEditS3Connections = limitedOptions(availableEditS3Connections);
   const normalizeUiRoleValue = (role?: string | null): string => {
     const value = (role || "").toLowerCase();
-    if (value === "ui_admin" || value === "super_admin" || value === "account_admin") return "ui_admin";
+    if (value === "ui_superadmin" || value === "super_admin" || value === "superadmin") return "ui_superadmin";
+    if (value === "ui_admin" || value === "account_admin" || value === "admin") return "ui_admin";
     if (value === "ui_none" || value === "none") return "ui_none";
     return "ui_user";
   };
   const displayUiRole = (role?: string | null) => {
     const value = (role || "").toLowerCase();
-    if (value === "ui_admin" || value === "super_admin" || value === "account_admin") return "Admin";
+    if (value === "ui_superadmin" || value === "super_admin" || value === "superadmin") return "Superadmin";
+    if (value === "ui_admin" || value === "account_admin" || value === "admin") return "Admin";
     if (value === "ui_user" || value === "account_user") return "User";
     if (value === "ui_none" || value === "none") return "No access";
     return role || "-";
@@ -905,8 +910,10 @@ export default function UsersPage() {
   );
   const editRoleValue = normalizeUiRoleValue(editForm.role ?? editingUser?.role ?? "ui_user");
   const createRoleValue = normalizeUiRoleValue(form.role);
-  const createCanGrantCephAdmin = createRoleValue === "ui_admin";
-  const editCanGrantCephAdmin = editRoleValue === "ui_admin";
+  const createTargetSupportsCephAdmin = createRoleValue === "ui_admin" || createRoleValue === "ui_superadmin";
+  const editTargetSupportsCephAdmin = editRoleValue === "ui_admin" || editRoleValue === "ui_superadmin";
+  const createCanGrantCephAdmin = currentIsSuperAdmin && createTargetSupportsCephAdmin;
+  const editCanGrantCephAdmin = currentIsSuperAdmin && editTargetSupportsCephAdmin;
 
   const formatLastLogin = (value?: string | null) => {
     if (!value) return "-";
@@ -1211,7 +1218,10 @@ export default function UsersPage() {
       email: form.email,
       password: form.password,
       role: normalizedRole,
-      can_access_ceph_admin: normalizedRole === "ui_admin" ? Boolean(form.can_access_ceph_admin) : false,
+      can_access_ceph_admin:
+        currentIsSuperAdmin && (normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin")
+          ? Boolean(form.can_access_ceph_admin)
+          : false,
     };
     try {
       const created = await createUser(payload);
@@ -1273,7 +1283,10 @@ export default function UsersPage() {
       email: user.email,
       password: "",
       role: normalizedRole,
-      can_access_ceph_admin: normalizedRole === "ui_admin" ? Boolean(user.can_access_ceph_admin) : false,
+      can_access_ceph_admin:
+        normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin"
+          ? Boolean(user.can_access_ceph_admin)
+          : false,
     });
     const accountRoles = new Map<number, string | null>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), link.account_role ?? null])
@@ -1335,7 +1348,7 @@ export default function UsersPage() {
         payload.role = nextRole;
       }
       payload.can_access_ceph_admin =
-        nextRole === "ui_admin"
+        currentIsSuperAdmin && (nextRole === "ui_admin" || nextRole === "ui_superadmin")
           ? Boolean(editForm.can_access_ceph_admin ?? editingUser.can_access_ceph_admin)
           : false;
       payload.s3_user_ids = editSelectedS3Users;
@@ -1524,16 +1537,21 @@ export default function UsersPage() {
                 value={createRoleValue}
                 onChange={(e) => {
                   const value = normalizeUiRoleValue(e.target.value);
+                  const supportsCephAdmin = value === "ui_admin" || value === "ui_superadmin";
                   setForm((f) => ({
                     ...f,
                     role: value,
-                    can_access_ceph_admin: value === "ui_admin" ? Boolean(f.can_access_ceph_admin) : false,
+                    can_access_ceph_admin:
+                      currentIsSuperAdmin && supportsCephAdmin ? Boolean(f.can_access_ceph_admin) : false,
                   }));
                 }}
               >
                 <option value="ui_none">No access</option>
                 <option value="ui_user">User</option>
                 <option value="ui_admin">Admin</option>
+                <option value="ui_superadmin" disabled={!currentIsSuperAdmin}>
+                  Superadmin{currentIsSuperAdmin ? "" : " (restricted)"}
+                </option>
               </select>
             </div>
             <div className="flex flex-col gap-1">
@@ -1554,7 +1572,7 @@ export default function UsersPage() {
                 <span>Allow access to /ceph-admin</span>
               </label>
               <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Available only for role "Admin". Grants access to advanced Ceph cluster operations.
+                Grantable only by Superadmin for roles "Admin" and "Superadmin".
               </p>
             </div>
             <div className="md:col-span-2">
@@ -1744,7 +1762,8 @@ export default function UsersPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span>{displayUiRole(user.role)}</span>
                         {cephAdminFeatureEnabled &&
-                          normalizeUiRoleValue(user.role) === "ui_admin" &&
+                          (normalizeUiRoleValue(user.role) === "ui_admin" ||
+                            normalizeUiRoleValue(user.role) === "ui_superadmin") &&
                           user.can_access_ceph_admin && (
                             <span className="rounded-full bg-amber-100 px-1.5 py-0.5 ui-badge font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-900/40 dark:text-amber-100">
                               Ceph Admin
@@ -1847,16 +1866,21 @@ export default function UsersPage() {
                 value={editRoleValue}
                 onChange={(e) => {
                   const value = normalizeUiRoleValue(e.target.value);
+                  const supportsCephAdmin = value === "ui_admin" || value === "ui_superadmin";
                   setEditForm((f) => ({
                     ...f,
                     role: value,
-                    can_access_ceph_admin: value === "ui_admin" ? Boolean(f.can_access_ceph_admin) : false,
+                    can_access_ceph_admin:
+                      currentIsSuperAdmin && supportsCephAdmin ? Boolean(f.can_access_ceph_admin) : false,
                   }));
                 }}
               >
                 <option value="ui_none">No access</option>
                 <option value="ui_user">User</option>
                 <option value="ui_admin">Admin</option>
+                <option value="ui_superadmin" disabled={!currentIsSuperAdmin}>
+                  Superadmin{currentIsSuperAdmin ? "" : " (restricted)"}
+                </option>
               </select>
             </div>
             <div className="flex flex-col gap-1">
@@ -1877,7 +1901,7 @@ export default function UsersPage() {
                 <span>Allow access to /ceph-admin</span>
               </label>
               <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Available only for role "Admin". Grants access to advanced Ceph cluster operations.
+                Grantable only by Superadmin for roles "Admin" and "Superadmin".
               </p>
             </div>
             <div className="md:col-span-2">

@@ -14,6 +14,9 @@ backend-tests:
   before_script:
     - python -m pip install --upgrade pip
     - pip install -r backend/requirements-test.txt
+    - rm -f backend/.env
+    - for var in $(env | cut -d= -f1 | grep '^OIDC_PROVIDERS__' || true); do unset "$var"; done
+    - export OIDC_PROVIDERS="{}"
   script:
     - cd backend
     - PYTHONPATH=. python -m pytest tests -q

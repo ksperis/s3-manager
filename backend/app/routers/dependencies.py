@@ -13,7 +13,21 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import decode_token
-from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, StorageProvider, User, UserS3Account, UserS3Connection, UserS3User, UserRole
+from app.db import (
+    AccountRole,
+    S3Account,
+    S3Connection,
+    S3User,
+    StorageEndpoint,
+    StorageProvider,
+    User,
+    UserS3Account,
+    UserS3Connection,
+    UserS3User,
+    UserRole,
+    is_admin_ui_role,
+    is_superadmin_ui_role,
+)
 from app.models.session import ManagerSessionPrincipal
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.app_settings_service import load_app_settings
@@ -89,20 +103,26 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
 
 
 def get_current_super_admin(user: User = Depends(get_current_user)) -> User:
-    if user.role != UserRole.UI_ADMIN.value:
+    if not is_admin_ui_role(user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    return user
+
+
+def get_current_ui_superadmin(user: User = Depends(get_current_user)) -> User:
+    if not is_superadmin_ui_role(user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     return user
 
 
 def get_current_ceph_admin(user: User = Depends(get_current_user)) -> User:
-    if user.role != UserRole.UI_ADMIN.value or not bool(user.can_access_ceph_admin):
+    if not is_admin_ui_role(user.role) or not bool(user.can_access_ceph_admin):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     return user
 
 
 def get_current_account_admin(actor: ManagerActor = Depends(get_current_actor)) -> ManagerActor:
     if isinstance(actor, User):
-        if actor.role not in {UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:
+        if actor.role not in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
         return actor
     return actor
@@ -110,6 +130,7 @@ def get_current_account_admin(actor: ManagerActor = Depends(get_current_actor)) 
 
 def get_current_account_user(user: User = Depends(get_current_user)) -> User:
     if user.role not in {
+        UserRole.UI_SUPERADMIN.value,
         UserRole.UI_ADMIN.value,
         UserRole.UI_USER.value,
     }:
@@ -290,7 +311,7 @@ def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int) -> S3Acco
     s3_user = db.query(S3User).filter(S3User.id == s3_user_id).first()
     if not s3_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3 user not found")
-    if user.role != UserRole.UI_ADMIN.value:
+    if not is_admin_ui_role(user.role):
         link_exists = (
             db.query(UserS3User)
             .filter(

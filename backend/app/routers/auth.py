@@ -21,7 +21,7 @@ from app.models.oidc import (
     OIDCStartResponse,
 )
 from app.models.user import UserCreate, UserOut
-from app.routers.dependencies import get_audit_logger, get_current_super_admin
+from app.routers.dependencies import get_audit_logger, get_current_super_admin, get_current_ui_superadmin
 from app.services.audit_service import AuditService
 from app.services.api_token_service import ApiTokenError, ApiTokenNotFoundError, ApiTokenService
 from app.services.oidc_service import (
@@ -160,7 +160,7 @@ def revoke_api_token(
 def register_admin(
     payload: UserCreate,
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
-    _: dict = Depends(get_current_super_admin),
+    _: dict = Depends(get_current_ui_superadmin),
 ) -> UserOut:
     try:
         user = users_service.create_super_admin(payload)

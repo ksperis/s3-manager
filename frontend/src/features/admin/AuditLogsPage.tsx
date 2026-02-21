@@ -8,11 +8,12 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 
-type RoleFilter = "all" | "ui_admin" | "ui_user" | "ui_none";
+type RoleFilter = "all" | "ui_superadmin" | "ui_admin" | "ui_user" | "ui_none";
 type ScopeFilter = "all" | "admin" | "manager" | "portal";
 
 const roleLabels: Record<RoleFilter, string> = {
   all: "All actors",
+  ui_superadmin: "Superadmin",
   ui_admin: "Admin",
   ui_user: "User",
   ui_none: "No access",
@@ -27,6 +28,13 @@ const scopeLabels: Record<ScopeFilter, string> = {
 
 function RoleBadge({ role }: { role: string }) {
   const base = "inline-flex items-center rounded-full px-2 py-0.5 ui-caption font-semibold";
+  if (role === "ui_superadmin") {
+    return (
+      <span className={`${base} bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200`}>
+        Superadmin
+      </span>
+    );
+  }
   if (role === "ui_admin") {
     return <span className={`${base} bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200`}>Admin</span>;
   }

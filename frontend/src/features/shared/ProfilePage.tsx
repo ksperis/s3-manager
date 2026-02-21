@@ -24,6 +24,7 @@ import {
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import {
   WORKSPACE_STORAGE_KEY,
+  isAdminLikeRole,
   type SessionUser,
   type WorkspaceId,
   readStoredUser,
@@ -170,7 +171,8 @@ export default function ProfilePage({
   const [preferredWorkspace, setPreferredWorkspace] = useState<WorkspaceId | null>(() => readStoredWorkspaceId());
   const canManagePrivateConnections =
     !isRgwSession &&
-    (storedUser?.role === "ui_admin" || (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
+    (isAdminLikeRole(storedUser?.role) ||
+      (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
 
   const sortedConnections = useMemo(
     () =>

@@ -19,6 +19,7 @@ import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type FormState = {
   name: string;
@@ -297,6 +298,8 @@ function resolveFeatureState(endpoint: StorageEndpoint, provider: StorageProvide
 
 export default function StorageEndpointsPage() {
   const { generalSettings } = useGeneralSettings();
+  const currentUser = useMemo(() => readStoredUser(), []);
+  const canEditEndpoints = isSuperAdminRole(currentUser?.role);
   const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
   const [envManaged, setEnvManaged] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -350,7 +353,7 @@ export default function StorageEndpointsPage() {
   const cephAdminConfigEnabled = Boolean(generalSettings.ceph_admin_enabled);
   const defaultEndpoint = useMemo(() => endpoints.find((ep) => ep.is_default), [endpoints]);
   useEffect(() => {
-    if (!showForm || !cephMode) {
+    if (!showForm || !cephMode || !canEditEndpoints) {
       setFeatureDetectBusy(false);
       setFeatureDetectError(null);
       setFeatureDetectWarnings([]);
@@ -482,6 +485,7 @@ export default function StorageEndpointsPage() {
     form.supervision_access_key,
     form.supervision_secret_key,
     showForm,
+    canEditEndpoints,
   ]);
 
   const updateFeatures = useCallback(
@@ -519,13 +523,13 @@ export default function StorageEndpointsPage() {
   };
 
   const startCreate = () => {
-    if (envManaged) return;
+    if (envManaged || !canEditEndpoints) return;
     resetForm();
     setShowForm(true);
   };
 
   const startEdit = (endpoint: StorageEndpoint) => {
-    if (envManaged) return;
+    if (envManaged || !canEditEndpoints) return;
     const features = resolveFeatureState(endpoint, endpoint.provider);
     setEditingId(endpoint.id);
     setForm({
@@ -553,7 +557,7 @@ export default function StorageEndpointsPage() {
   };
 
   const handleDelete = async () => {
-    if (envManaged) return;
+    if (envManaged || !canEditEndpoints) return;
     if (!deleteTarget) return;
     setDeleteBusy(true);
     setDeleteError(null);
@@ -570,7 +574,7 @@ export default function StorageEndpointsPage() {
   };
 
   const handleSetDefault = async (endpoint: StorageEndpoint) => {
-    if (envManaged) return;
+    if (envManaged || !canEditEndpoints) return;
     if (endpoint.is_default) return;
     setDefaultError(null);
     setDefaultBusyId(endpoint.id);
@@ -671,7 +675,7 @@ export default function StorageEndpointsPage() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (envManaged) return;
+    if (envManaged || !canEditEndpoints) return;
     setFormError(null);
     const payload = buildPayload();
     if (!payload) return;
@@ -720,7 +724,7 @@ export default function StorageEndpointsPage() {
       stsEnabled &&
       Boolean(stsEndpointOverride) &&
       stsEndpointOverride !== endpoint.endpoint_url;
-    const readOnly = envManaged || !endpoint.is_editable;
+    const readOnly = envManaged || !endpoint.is_editable || !canEditEndpoints;
 
     return (
       <div
@@ -776,7 +780,7 @@ export default function StorageEndpointsPage() {
                 className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-400 dark:hover:text-primary-100"
                 onClick={() => handleSetDefault(endpoint)}
                 type="button"
-                disabled={Boolean(defaultBusyId) || envManaged}
+                disabled={Boolean(defaultBusyId) || envManaged || !canEditEndpoints}
               >
                 {settingDefault ? "Setting..." : "Set as default"}
               </button>
@@ -962,7 +966,7 @@ export default function StorageEndpointsPage() {
         title="Storage endpoints"
         description="Manage the S3/Ceph endpoints used by the console."
         breadcrumbs={[{ label: "Admin" }, { label: "Endpoints" }]}
-        actions={envManaged ? [] : [{ label: "New endpoint", onClick: startCreate }]}
+        actions={envManaged || !canEditEndpoints ? [] : [{ label: "New endpoint", onClick: startCreate }]}
         inlineContent={
           endpoints.length > 0 ? (
             <span className="ui-body font-semibold text-slate-500 dark:text-slate-300">
@@ -975,6 +979,11 @@ export default function StorageEndpointsPage() {
       {envManaged && (
         <PageBanner tone="info">
           Storage endpoints are managed by environment variables (ENV_STORAGE_ENDPOINTS). UI changes are disabled.
+        </PageBanner>
+      )}
+      {!envManaged && !canEditEndpoints && (
+        <PageBanner tone="info">
+          Endpoint editing is restricted to superadmin users. You currently have read-only access.
         </PageBanner>
       )}
       {error && <PageBanner tone="error">{error}</PageBanner>}

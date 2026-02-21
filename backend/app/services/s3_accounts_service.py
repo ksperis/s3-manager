@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 import logging
 from datetime import datetime
 
-from app.db import AccountRole, S3Account, User, UserS3Account, StorageEndpoint, StorageProvider
+from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserS3Account, is_admin_ui_role
 from app.models.s3_account import (
     AccountUserLink,
     S3Account as S3AccountSchema,
@@ -875,7 +875,7 @@ class S3AccountsService:
                     user = self.db.query(User).filter(User.id == user_id).first()
                     if not user:
                         raise ValueError(f"User not found: {user_id}")
-                    if user.role != UserRole.UI_ADMIN.value:
+                    if not is_admin_ui_role(user.role):
                         user.role = UserRole.UI_USER.value
                         self.db.add(user)
                     db_link = UserS3Account(

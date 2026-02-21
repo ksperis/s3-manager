@@ -62,8 +62,15 @@ import CephAdminBucketsPage from "./features/cephAdmin/CephAdminBucketsPage";
 import CephAdminBucketDetailPage from "./features/cephAdmin/CephAdminBucketDetailPage";
 import CephAdminMetricsPage from "./features/cephAdmin/CephAdminMetricsPage";
 import ProfilePage from "./features/shared/ProfilePage";
-import { readStoredUser, resolvePostLoginPath, type SessionUser } from "./utils/workspaces";
+import {
+  isAdminLikeRole,
+  isSuperAdminRole,
+  readStoredUser,
+  resolvePostLoginPath,
+  type SessionUser,
+} from "./utils/workspaces";
 
+const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
 
@@ -71,7 +78,8 @@ const buildAdminNav = (
   portalEnabled: boolean,
   browserEnabled: boolean,
   billingEnabled: boolean,
-  endpointStatusEnabled: boolean
+  endpointStatusEnabled: boolean,
+  isSuperAdmin: boolean
 ) => {
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
@@ -117,11 +125,15 @@ const buildAdminNav = (
       label: "Governance",
       links: [{ to: "/admin/audit", label: "Audit trail" }],
     },
-    {
-      label: "Settings",
-      links: settingsLinks,
-      collapsed: true,
-    },
+    ...(isSuperAdmin
+      ? [
+          {
+            label: "Settings",
+            links: settingsLinks,
+            collapsed: true,
+          },
+        ]
+      : []),
   ];
 };
 
@@ -138,11 +150,14 @@ function RequireAuth() {
 
 function AdminLayoutShell() {
   const { generalSettings } = useGeneralSettings();
+  const currentUser = getStoredUser();
+  const canConfigureApp = isSuperAdminRole(currentUser?.role);
   const adminNav = buildAdminNav(
     generalSettings.portal_enabled,
     generalSettings.browser_enabled,
     generalSettings.billing_enabled,
-    generalSettings.endpoint_status_enabled
+    generalSettings.endpoint_status_enabled,
+    canConfigureApp
   );
   return (
     <Layout
@@ -215,7 +230,7 @@ function RequireFeature({ feature }: { feature: "manager" | "browser" | "portal"
 function RequireCephAdminFeature() {
   const { generalSettings } = useGeneralSettings();
   const user = getStoredUser();
-  if (!user || user.role !== ADMIN_ROLE || !user.can_access_ceph_admin) {
+  if (!user || !isAdminLikeRole(user.role) || !user.can_access_ceph_admin) {
     return <Navigate to="/unauthorized" replace />;
   }
   if (!generalSettings.ceph_admin_enabled) {
@@ -265,7 +280,7 @@ export default function AppRouter() {
             <Route index element={<ProfilePage />} />
           </Route>
 
-          <Route element={<RequireRole roles={[ADMIN_ROLE]} />}>
+          <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE]} />}>
             <Route path="/admin" element={<AdminLayoutShell />}>
               <Route index element={<AdminDashboard />} />
               <Route path="s3-accounts" element={<S3AccountsPage />} />
@@ -280,16 +295,18 @@ export default function AppRouter() {
               <Route path="audit" element={<AuditLogsPage />} />
               <Route path="metrics" element={<AdminMetricsPage />} />
               <Route path="billing" element={<AdminBillingRoute />} />
-              <Route path="general-settings" element={<GeneralSettingsPage />} />
-              <Route path="manager-settings" element={<ManagerSettingsPage />} />
               <Route path="api-tokens" element={<ApiTokensPage />} />
-              <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
-              <Route path="browser-settings" element={<BrowserSettingsPage />} />
-              <Route path="key-rotation" element={<KeyRotationPage />} />
+              <Route element={<RequireRole roles={[SUPERADMIN_ROLE]} />}>
+                <Route path="general-settings" element={<GeneralSettingsPage />} />
+                <Route path="manager-settings" element={<ManagerSettingsPage />} />
+                <Route path="portal-settings" element={<AdminPortalSettingsRoute />} />
+                <Route path="browser-settings" element={<BrowserSettingsPage />} />
+                <Route path="key-rotation" element={<KeyRotationPage />} />
+              </Route>
             </Route>
           </Route>
 
-          <Route element={<RequireRole roles={[ADMIN_ROLE]} />}>
+          <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE]} />}>
             <Route element={<RequireCephAdminFeature />}>
               <Route path="/ceph-admin" element={<CephAdminLayout />}>
                 <Route index element={<CephAdminDashboard />} />
@@ -302,7 +319,7 @@ export default function AppRouter() {
             </Route>
           </Route>
 
-          <Route element={<RequireRole roles={[ADMIN_ROLE, USER_ROLE]} />}>
+          <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
             <Route element={<RequireFeature feature="manager" />}>
               <Route path="/manager" element={<ManagerLayout />}>
                 <Route index element={<ManagerDashboard />} />
@@ -334,7 +351,7 @@ export default function AppRouter() {
             </Route>
           </Route>
 
-          <Route element={<RequireRole roles={[ADMIN_ROLE, USER_ROLE]} />}>
+          <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
             <Route element={<RequireFeature feature="portal" />}>
               <Route path="/portal" element={<PortalLayout />}>
                 <Route index element={<PortalDashboard />} />

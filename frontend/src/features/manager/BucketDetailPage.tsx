@@ -102,6 +102,7 @@ import SplitView from "../../components/SplitView";
 import UsageTile from "../../components/UsageTile";
 import Modal from "../../components/Modal";
 import { formatCompactNumber } from "../../utils/format";
+import { isAdminLikeRole } from "../../utils/workspaces";
 import { useS3AccountContext } from "./S3AccountContext";
 import TrafficAnalytics from "./TrafficAnalytics";
 import PropertySummaryChip, { PropertySummaryTone } from "../../components/PropertySummaryChip";
@@ -447,7 +448,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
   ]
 }`;
   const userRole = getUserRole();
-  const isAdmin = userRole === "ui_admin" || userRole === "super_admin";
+  const isAdmin = isAdminLikeRole(userRole);
   const canEditQuota = quotaFeatureEnabled && isCephAdmin && isAdmin && hasCephContext;
   const quotaSectionRestricted = quotaFeatureEnabled && !canEditQuota;
   const objectLockPersistentlyEnabled =

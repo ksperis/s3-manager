@@ -3,8 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import ProfilePage from "../features/shared/ProfilePage";
-import { readStoredUser } from "../utils/workspaces";
+import { isAdminLikeRole, readStoredUser } from "../utils/workspaces";
 import EnvironmentSwitcher from "./EnvironmentSwitcher";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 import Modal from "./Modal";
@@ -22,11 +23,75 @@ type TopbarProps = {
   onMobileMenuToggle?: () => void;
 };
 
+type StoredAccountLink = {
+  account_id: number;
+  account_role?: string | null;
+  account_admin?: boolean | null;
+};
+
+type StoredTopbarUser = {
+  role?: string | null;
+  authType?: "password" | "rgw_session" | "oidc" | null;
+  account_links?: StoredAccountLink[] | null;
+};
+
 function buildAccountInitial(value?: string | null): string {
   if (!value) return "U";
   const clean = value.trim().replace(/[^a-zA-Z0-9]/g, "");
   if (!clean) return "U";
   return clean[0].toUpperCase();
+}
+
+function resolveUiRoleLabel(user: StoredTopbarUser | null): string {
+  if (!user) return "Unknown";
+  if (user.authType === "rgw_session") return "S3 Session";
+  const role = (user.role ?? "").trim().toLowerCase();
+  if (role === "ui_superadmin" || role === "super_admin" || role === "superadmin") return "Superadmin";
+  if (role === "ui_admin" || role === "admin") return "Admin";
+  if (role === "ui_user" || role === "user") return "User";
+  if (role === "ui_none" || role === "none") return "No access";
+  return "Unknown";
+}
+
+function resolveActiveContextId(pathname: string): string | null {
+  if (typeof window === "undefined") return null;
+  if (pathname.startsWith("/portal")) {
+    return localStorage.getItem("selectedPortalAccountId");
+  }
+  if (pathname.startsWith("/manager") || pathname.startsWith("/browser")) {
+    return (
+      localStorage.getItem("selectedExecutionContextId") ??
+      localStorage.getItem("selectedS3AccountId") ??
+      localStorage.getItem("selectedBrowserContextId")
+    );
+  }
+  return null;
+}
+
+function resolveAccountRoleLabel(user: StoredTopbarUser | null, pathname: string): string | null {
+  if (!user || user.authType === "rgw_session") {
+    return user?.authType === "rgw_session" ? "Session context" : null;
+  }
+  const contextId = resolveActiveContextId(pathname);
+  if (!contextId) return null;
+  if (contextId.startsWith("conn-")) return "Connection context";
+  if (contextId.startsWith("s3u-")) return "Legacy S3 user context";
+  const numericId = Number(contextId);
+  if (!Number.isFinite(numericId)) return null;
+  const link = (user.account_links ?? []).find((entry) => Number(entry.account_id) === numericId);
+  if (!link) return "Account context";
+
+  const role = (link.account_role ?? "").trim().toLowerCase();
+  const roleLabel =
+    role === "portal_manager"
+      ? "Portal manager"
+      : role === "portal_user"
+        ? "Portal user"
+        : role === "portal_none"
+          ? "Portal none"
+          : "Portal role";
+  if (link.account_admin) return `${roleLabel} · Account admin`;
+  return roleLabel;
 }
 
 export default function Topbar({
@@ -41,12 +106,18 @@ export default function Topbar({
   onMobileMenuToggle,
 }: TopbarProps) {
   const { generalSettings } = useGeneralSettings();
-  const storedUser = useMemo(() => readStoredUser(), []);
+  const location = useLocation();
+  const storedUser = useMemo(() => readStoredUser() as StoredTopbarUser | null, []);
   const isRgwSession = storedUser?.authType === "rgw_session";
   const canManagePrivateConnections =
     !isRgwSession &&
-    (storedUser?.role === "ui_admin" ||
+    (isAdminLikeRole(storedUser?.role) ||
       (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
+  const uiRoleLabel = useMemo(() => resolveUiRoleLabel(storedUser), [storedUser]);
+  const accountRoleLabel = useMemo(
+    () => resolveAccountRoleLabel(storedUser, location.pathname),
+    [location.pathname, storedUser]
+  );
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -156,6 +227,16 @@ export default function Topbar({
                   <div className="mb-1 rounded-lg border border-slate-200/70 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/70">
                     <p className="ui-caption text-slate-500 dark:text-slate-400">Signed in as</p>
                     <p className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">{accountDisplay}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
+                        UI: {uiRoleLabel}
+                      </span>
+                      {accountRoleLabel && (
+                        <span className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 ui-caption font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
+                          Account: {accountRoleLabel}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <button

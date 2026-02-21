@@ -10,11 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.db import (
     S3User as S3UserModel,
+    StorageEndpoint,
+    StorageProvider,
     User,
     UserS3User as UserS3UserModel,
     UserRole,
-    StorageEndpoint,
-    StorageProvider,
 )
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -265,7 +265,7 @@ class S3UsersService:
                 missing_ids = ", ".join(str(mid) for mid in sorted(missing))
                 raise ValueError(f"Users not found: {missing_ids}")
             for user in users:
-                if user.role not in {UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:
+                if user.role not in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:
                     user.role = UserRole.UI_USER.value
                     self.db.add(user)
                 self.db.add(UserS3UserModel(user_id=user.id, s3_user_id=s3_user.id))

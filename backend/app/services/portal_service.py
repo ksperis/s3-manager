@@ -1100,7 +1100,7 @@ class PortalService:
         return []
 
     def _portal_user_rows(self, account: S3Account) -> list[tuple[User, Optional[str], Optional[str]]]:
-        roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value]
+        roles = [UserRole.UI_USER.value, UserRole.UI_ADMIN.value, UserRole.UI_SUPERADMIN.value]
         return (
             self.db.query(User, UserS3Account.account_role, AccountIAMUser.iam_username)
             .join(UserS3Account, UserS3Account.user_id == User.id)

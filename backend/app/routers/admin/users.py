@@ -7,12 +7,38 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db import User as DbUser
+from app.db import UserRole, is_superadmin_ui_role
 from app.models.user import PaginatedUsersResponse, UserAssignS3Account, UserCreate, UserOut, UserSummary, UserUpdate
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.users_service import UsersService, get_users_service
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
+
+
+def _normalize_role(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"ui_superadmin", "super_admin", "superadmin"}:
+        return UserRole.UI_SUPERADMIN.value
+    if normalized in {"ui_admin", "admin"}:
+        return UserRole.UI_ADMIN.value
+    if normalized in {"ui_user", "user"}:
+        return UserRole.UI_USER.value
+    if normalized in {"ui_none", "none"}:
+        return UserRole.UI_NONE.value
+    return value
+
+
+def _require_superadmin_for_privileged_change(current_user: DbUser, *, role: Optional[str], can_access_ceph_admin: Optional[bool]) -> None:
+    wants_superadmin = role == UserRole.UI_SUPERADMIN.value
+    wants_ceph_admin_grant = can_access_ceph_admin is True
+    if (wants_superadmin or wants_ceph_admin_grant) and not is_superadmin_ui_role(current_user.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only superadmin users can promote superadmins or grant ceph_admin access",
+        )
 
 
 @router.get("", response_model=PaginatedUsersResponse)
@@ -51,6 +77,12 @@ def create_user(
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> UserOut:
+    payload.role = _normalize_role(payload.role)
+    _require_superadmin_for_privileged_change(
+        current_user,
+        role=payload.role,
+        can_access_ceph_admin=payload.can_access_ceph_admin,
+    )
     try:
         user = users_service.create_user(payload)
         audit_service.record_action(
@@ -74,6 +106,12 @@ def update_user(
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> UserOut:
+    payload.role = _normalize_role(payload.role)
+    _require_superadmin_for_privileged_change(
+        current_user,
+        role=payload.role,
+        can_access_ceph_admin=payload.can_access_ceph_admin,
+    )
     try:
         user = users_service.update_user(user_id, payload)
         audit_service.record_action(

@@ -15,6 +15,7 @@ import StatCards from "../../components/StatCards";
 import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
 import UiBadge from "../../components/ui/UiBadge";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiCardClass, uiCardMutedClass } from "../../components/ui/styles";
+import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 const ENDPOINT_STATUS_MAX_AGE_HOURS = 24;
 const ENDPOINT_STATUS_MAX_AGE_MS = ENDPOINT_STATUS_MAX_AGE_HOURS * 60 * 60 * 1000;
@@ -52,6 +53,8 @@ export default function AdminDashboard() {
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
   const [dismissBusy, setDismissBusy] = useState(false);
   const { generalSettings } = useGeneralSettings();
+  const currentUser = useMemo(() => readStoredUser(), []);
+  const canConfigureApp = isSuperAdminRole(currentUser?.role);
 
   useEffect(() => {
     const load = async () => {
@@ -395,12 +398,18 @@ export default function AdminDashboard() {
               {enabledCoreFeatures.length} / {coreFeatures.length} enabled
             </p>
           </div>
-          <Link
-            to="/admin/general-settings"
-            className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "px-2.5 py-1.5")}
-          >
-            Configure features
-          </Link>
+          {canConfigureApp ? (
+            <Link
+              to="/admin/general-settings"
+              className={cx(uiButtonBaseClass, uiButtonVariants.ghost, "px-2.5 py-1.5")}
+            >
+              Configure features
+            </Link>
+          ) : (
+            <UiBadge tone="neutral" className="px-2 py-1">
+              Superadmin required
+            </UiBadge>
+          )}
         </div>
 
         {enabledCoreFeatures.length === 0 ? (

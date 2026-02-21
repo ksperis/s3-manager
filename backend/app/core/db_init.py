@@ -40,9 +40,14 @@ def init_db(engine, session_factory) -> None:
                 full_name=settings.seed_super_admin_full_name,
                 hashed_password=get_password_hash(settings.seed_super_admin_password),
                 is_active=True,
-                role=UserRole.UI_ADMIN.value,
+                role=UserRole.UI_SUPERADMIN.value,
             )
             db.add(admin_user)
+            db.commit()
+        elif admin.role != UserRole.UI_SUPERADMIN.value:
+            # Backward compatibility: historical seed user role was ui_admin.
+            admin.role = UserRole.UI_SUPERADMIN.value
+            db.add(admin)
             db.commit()
         # Ensure env-managed endpoints or default endpoint are registered
         storage_service = StorageEndpointsService(db)

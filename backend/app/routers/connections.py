@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import User, UserRole
+from app.db import User, UserRole, is_admin_ui_role
 from app.models.s3_connection import (
     S3Connection,
     S3ConnectionCreate,
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/connections", tags=["connections"])
 
 
 def _ensure_private_connections_allowed(user: User) -> None:
-    if user.role == UserRole.UI_ADMIN.value:
+    if is_admin_ui_role(user.role):
         return
     if user.role == UserRole.UI_USER.value and load_app_settings().general.allow_user_private_connections:
         return

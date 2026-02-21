@@ -33,6 +33,7 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useAdminAccountStats } from "./useAdminAccountStats";
 import { confirmAction } from "../../utils/confirm";
+import { isAdminLikeRole } from "../../utils/workspaces";
 
 type SortField = "name" | "rgw_account_id";
 type TriState = "inherit" | "enabled" | "disabled";
@@ -146,7 +147,7 @@ export default function S3AccountsPage() {
       return null;
     }
   }, []);
-  const isSuperAdmin = currentUser?.role === "ui_admin";
+  const isSuperAdmin = isAdminLikeRole(currentUser?.role);
   const editingAccountId = editingS3Account?.db_id ?? null;
   const editingEndpoint = useMemo(() => {
     if (!editingS3Account?.storage_endpoint_id) return null;
