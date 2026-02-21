@@ -53,12 +53,18 @@ const normalizePortalRole = (role?: string | null): PortalAccountRole => {
   return "portal_user";
 };
 
+const hasPortalBucketRole = (role?: string | null) =>
+  role === "portal_manager" || role === "portal_user";
+
 const portalRoleBadgeClasses = (role?: string | null, iamOnly?: boolean | null) => {
   if (iamOnly) {
     return "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200";
   }
   if (role === "portal_manager") {
     return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100";
+  }
+  if (role === "portal_none") {
+    return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100";
   }
   return "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100";
 };
@@ -104,9 +110,16 @@ export default function PortalManagePage() {
   ];
   const portalRoleLabel = (role?: string | null, iamOnly?: boolean | null) => {
     if (iamOnly) return t({ en: "IAM only", fr: "IAM (hors portail)", de: "Nur IAM" });
-    return role === "portal_manager"
-      ? t({ en: "Portal manager", fr: "Portal manager", de: "Portal-Manager" })
-      : t({ en: "Portal user", fr: "Portal user", de: "Portal-Benutzer" });
+    if (role === "portal_manager") {
+      return t({ en: "Portal manager", fr: "Portal manager", de: "Portal-Manager" });
+    }
+    if (role === "portal_user") {
+      return t({ en: "Portal user", fr: "Portal user", de: "Portal-Benutzer" });
+    }
+    if (role === "portal_none") {
+      return t({ en: "No portal access", fr: "Pas d'acces portail", de: "Kein Portalzugriff" });
+    }
+    return t({ en: "Unknown role", fr: "Role inconnu", de: "Unbekannte Rolle" });
   };
 
   const canManagePortalUsers = Boolean(portalState?.can_manage_portal_users) || portalState?.account_role === "portal_manager";
@@ -344,6 +357,16 @@ export default function PortalManagePage() {
 
   const handleGrantPortalBucket = async (bucketName: string) => {
     if (!accountIdForApi || !editingUser?.id || !bucketName) return;
+    if (!hasPortalBucketRole(editingUser.role)) {
+      setEditError(
+        t({
+          en: "Assign a portal role before managing bucket permissions.",
+          fr: "Attribuez un role portail avant de gerer les droits bucket.",
+          de: "Weisen Sie zuerst eine Portal-Rolle zu, bevor Sie Bucket-Rechte verwalten.",
+        })
+      );
+      return;
+    }
     setEditBucketAction(bucketName);
     setEditError(null);
     setEditMessage(null);
@@ -368,6 +391,16 @@ export default function PortalManagePage() {
 
   const handleRevokePortalBucket = async (bucketName: string) => {
     if (!accountIdForApi || !editingUser?.id || !bucketName) return;
+    if (!hasPortalBucketRole(editingUser.role)) {
+      setEditError(
+        t({
+          en: "Assign a portal role before managing bucket permissions.",
+          fr: "Attribuez un role portail avant de gerer les droits bucket.",
+          de: "Weisen Sie zuerst eine Portal-Rolle zu, bevor Sie Bucket-Rechte verwalten.",
+        })
+      );
+      return;
+    }
     setEditBucketAction(bucketName);
     setEditError(null);
     setEditMessage(null);
@@ -861,6 +894,15 @@ export default function PortalManagePage() {
                   />
                 </div>
               </div>
+              {!hasPortalBucketRole(editingUser.role) && (
+                <p className="mt-2 ui-caption text-amber-700 dark:text-amber-300">
+                  {t({
+                    en: "Bucket permissions are available only for portal users/managers.",
+                    fr: "Les droits bucket sont disponibles uniquement pour les portal users/managers.",
+                    de: "Bucket-Rechte sind nur fur Portal-Benutzer/-Manager verfugbar.",
+                  })}
+                </p>
+              )}
               <div className="mt-3 overflow-x-auto">
                 <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                   <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -893,7 +935,8 @@ export default function PortalManagePage() {
                     {!editLoading &&
                       bucketAccessRows.map((bucket) => {
                         const busy = editBucketAction === bucket.name;
-                        const disabled = editLoading || Boolean(editBucketAction);
+                        const disabled =
+                          editLoading || Boolean(editBucketAction) || !hasPortalBucketRole(editingUser.role);
                         return (
                           <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                             <td className="px-3 py-2 ui-body font-mono text-slate-700 dark:text-slate-200">

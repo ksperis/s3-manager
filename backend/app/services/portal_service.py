@@ -1250,6 +1250,8 @@ class PortalService:
         return self.check_iam_compliance(account)
 
     def list_user_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
+        if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+            raise RuntimeError("Le role du compte ne permet pas la gestion des droits bucket.")
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
         portal_settings = self._effective_portal_settings(account)
@@ -1257,9 +1259,29 @@ class PortalService:
         policy = iam_service.get_user_inline_policy(link.iam_username, self._bucket_access_policy_name)
         return self._extract_bucket_access(policy)
 
+    def list_existing_user_bucket_access(self, target: User, account: S3Account, account_role: str) -> list[str]:
+        """Read bucket permissions without provisioning IAM user/key side effects."""
+        if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+            return []
+        link = (
+            self.db.query(AccountIAMUser)
+            .filter(
+                AccountIAMUser.user_id == target.id,
+                AccountIAMUser.account_id == account.id,
+            )
+            .first()
+        )
+        if not link or not link.iam_username:
+            return []
+        iam_service = self._get_iam_service(account)
+        policy = iam_service.get_user_inline_policy(link.iam_username, self._bucket_access_policy_name)
+        return self._extract_bucket_access(policy)
+
     def grant_bucket_access(self, target: User, account: S3Account, account_role: str, bucket_name: str) -> list[str]:
         if not bucket_name:
             raise RuntimeError("Bucket name requis.")
+        if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+            raise RuntimeError("Le role du compte ne permet pas la gestion des droits bucket.")
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
         portal_settings = self._effective_portal_settings(account)
@@ -1277,6 +1299,8 @@ class PortalService:
     def revoke_bucket_access(self, target: User, account: S3Account, account_role: str, bucket_name: str) -> list[str]:
         if not bucket_name:
             raise RuntimeError("Bucket name requis.")
+        if account_role not in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+            raise RuntimeError("Le role du compte ne permet pas la gestion des droits bucket.")
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(target, account, iam_service)
         portal_settings = self._effective_portal_settings(account)

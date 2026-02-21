@@ -25,7 +25,6 @@ from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
 from app.models.s3_account import S3Account as S3AccountSchema
 from app.routers.dependencies import (
     AccountAccess,
-    get_account_access,
     get_audit_logger,
     get_current_account_user,
     get_portal_account_access,
@@ -258,15 +257,17 @@ def list_portal_bucket_users(
     results: list[PortalUserCard] = []
     try:
         for user_obj, account_role, iam_username in rows:
-            role_value = account_role or AccountRole.PORTAL_USER.value
-            buckets = service.list_user_bucket_access(user_obj, access.account, role_value)
+            role_value = account_role or AccountRole.PORTAL_NONE.value
+            if role_value not in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}:
+                continue
+            buckets = service.list_existing_user_bucket_access(user_obj, access.account, role_value)
             if bucket_name not in buckets:
                 continue
             results.append(
                 PortalUserCard(
                     id=user_obj.id,
                     email=user_obj.email,
-                    role=account_role or user_obj.role,
+                    role=role_value,
                     iam_username=iam_username,
                     iam_only=False,
                 )
@@ -593,7 +594,7 @@ def portal_apply_iam_compliance(
 
 @router.get("/users", response_model=list[PortalUserCard])
 def list_portal_ui_users(
-    access: AccountAccess = Depends(get_account_access),
+    access: AccountAccess = Depends(require_portal_manager),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
 ) -> list[PortalUserCard]:
     actor = access.actor
@@ -618,11 +619,12 @@ def list_portal_ui_users(
     }
     results: list[PortalUserCard] = []
     for user_obj, account_role, iam_username in rows:
+        role_value = account_role or AccountRole.PORTAL_NONE.value
         results.append(
             PortalUserCard(
                 id=user_obj.id,
                 email=user_obj.email,
-                role=account_role or user_obj.role,
+                role=role_value,
                 iam_username=iam_username,
                 iam_only=False,
             )
@@ -741,9 +743,9 @@ def list_portal_user_buckets(
     )
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not linked to this account")
-    account_role = link.account_role or AccountRole.PORTAL_USER.value
+    account_role = link.account_role or AccountRole.PORTAL_NONE.value
     try:
-        buckets = service.list_user_bucket_access(target, access.account, account_role)
+        buckets = service.list_existing_user_bucket_access(target, access.account, account_role)
         return PortalUserBuckets(buckets=buckets)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -754,6 +756,7 @@ def grant_portal_user_bucket(
     user_id: int,
     payload: PortalUserBucketGrant,
     access: AccountAccess = Depends(require_portal_manager),
+    audit_service: AuditService = Depends(get_audit_logger),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalUserBuckets:
@@ -770,9 +773,20 @@ def grant_portal_user_bucket(
     )
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not linked to this account")
-    account_role = link.account_role or AccountRole.PORTAL_USER.value
+    account_role = link.account_role or AccountRole.PORTAL_NONE.value
+    if account_role not in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User has no portal role for bucket permissions")
     try:
         buckets = service.grant_bucket_access(target, access.account, account_role, payload.bucket)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="grant_bucket_access",
+            entity_type="iam_user",
+            entity_id=str(target.id),
+            account=access.account,
+            metadata={"bucket": payload.bucket},
+        )
         return PortalUserBuckets(buckets=buckets)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -783,6 +797,7 @@ def revoke_portal_user_bucket(
     user_id: int,
     bucket: str,
     access: AccountAccess = Depends(require_portal_manager),
+    audit_service: AuditService = Depends(get_audit_logger),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> PortalUserBuckets:
@@ -799,9 +814,20 @@ def revoke_portal_user_bucket(
     )
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not linked to this account")
-    account_role = link.account_role or AccountRole.PORTAL_USER.value
+    account_role = link.account_role or AccountRole.PORTAL_NONE.value
+    if account_role not in {AccountRole.PORTAL_USER.value, AccountRole.PORTAL_MANAGER.value}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User has no portal role for bucket permissions")
     try:
         buckets = service.revoke_bucket_access(target, access.account, account_role, bucket)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="revoke_bucket_access",
+            entity_type="iam_user",
+            entity_id=str(target.id),
+            account=access.account,
+            metadata={"bucket": bucket},
+        )
         return PortalUserBuckets(buckets=buckets)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
@@ -871,6 +897,10 @@ def remove_portal_ui_user(
     target = users_service.get_by_id(user_id)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if target.role == UserRole.UI_ADMIN.value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove this user")
+    if actor.id == target.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Managers cannot remove their own account access")
     link = (
         users_service.db.query(UserS3Account)
         .filter(UserS3Account.user_id == target.id, UserS3Account.account_id == access.account.id, UserS3Account.is_root.is_(False))

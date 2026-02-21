@@ -82,6 +82,9 @@ const formatNumber = (value?: number | null) => {
   return value.toLocaleString();
 };
 
+const hasPortalBucketRole = (role?: string | null) =>
+  role === "portal_manager" || role === "portal_user";
+
 export default function PortalBucketsPage() {
   const { t } = useI18n();
   const { accountIdForApi, selectedAccount, hasAccountContext, loading: accountLoading, error: accountError } =
@@ -322,7 +325,9 @@ export default function PortalBucketsPage() {
           listPortalUsers(accountIdForApi),
           listPortalBucketUsers(accountIdForApi, bucket.name),
         ]);
-        const eligibleUsers = users.filter((user) => !user.iam_only && user.id != null);
+        const eligibleUsers = users.filter(
+          (user) => !user.iam_only && user.id != null && hasPortalBucketRole(user.role)
+        );
         const assigned = new Set(
           bucketUsers
             .map((user) => user.id)
@@ -682,7 +687,11 @@ export default function PortalBucketsPage() {
                           <td className="px-3 py-2 ui-body text-slate-600 dark:text-slate-300">
                             {user.role === "portal_manager"
                               ? t({ en: "Portal manager", fr: "Portal manager", de: "Portal-Manager" })
-                              : t({ en: "Portal user", fr: "Portal user", de: "Portal-Benutzer" })}
+                              : user.role === "portal_user"
+                                ? t({ en: "Portal user", fr: "Portal user", de: "Portal-Benutzer" })
+                                : user.role === "portal_none"
+                                  ? t({ en: "No portal access", fr: "Pas d'acces portail", de: "Kein Portalzugriff" })
+                                  : t({ en: "Unknown role", fr: "Role inconnu", de: "Unbekannte Rolle" })}
                           </td>
                           <td className="px-3 py-2 text-right">
                             {hasAccess ? (
