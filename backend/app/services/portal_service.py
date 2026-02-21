@@ -469,6 +469,9 @@ class PortalService:
             policy = copy.deepcopy(group_policy.advanced_policy)
         else:
             actions = self._normalize_actions(group_policy.actions)
+            # Delegate bucket creation through IAM user credentials when enabled.
+            if group_key == "user" and portal_settings.allow_portal_user_bucket_create and "s3:CreateBucket" not in actions:
+                actions.append("s3:CreateBucket")
             if not actions:
                 return None
             policy = {
@@ -1015,11 +1018,26 @@ class PortalService:
             raise RuntimeError("IAM username missing for this portal user")
         settings = portal_settings or self._portal_settings()
         policy_settings = settings.bucket_access_policy
-        use_advanced = policy_settings.advanced_policy is not None
-        if use_advanced:
-            policy = copy.deepcopy(policy_settings.advanced_policy)
+        advanced_policy = policy_settings.advanced_policy if isinstance(policy_settings.advanced_policy, dict) else None
+        use_advanced = advanced_policy is not None
+        existing_policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name) or {}
+        existing_resources: list[str] = []
+        if isinstance(existing_policy, dict):
+            existing_statements = existing_policy.get("Statement") or []
+            if not isinstance(existing_statements, list):
+                existing_statements = [existing_statements]
+            for stmt in existing_statements:
+                if not isinstance(stmt, dict) or stmt.get("Sid") != self._bucket_access_sid:
+                    continue
+                resources = stmt.get("Resource") or []
+                if not isinstance(resources, list):
+                    resources = [resources]
+                existing_resources = [arn for arn in resources if isinstance(arn, str)]
+                break
+        if use_advanced and advanced_policy is not None:
+            policy = copy.deepcopy(advanced_policy)
         else:
-            policy = iam_service.get_user_inline_policy(iam_username, self._bucket_access_policy_name) or {}
+            policy = existing_policy
         statements = policy.get("Statement") or []
         if not isinstance(statements, list):
             statements = [statements]
@@ -1046,6 +1064,9 @@ class PortalService:
         resources = bucket_statement.get("Resource") or []
         if not isinstance(resources, list):
             resources = [resources]
+        for arn in existing_resources:
+            if arn not in resources:
+                resources.append(arn)
 
         for arn in (f"arn:aws:s3:::{bucket_name}", f"arn:aws:s3:::{bucket_name}/*"):
             if arn not in resources:
@@ -1306,6 +1327,7 @@ class PortalService:
         portal_settings = self._effective_portal_settings(account)
         self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
         bucket_actions = self._bucket_access_actions(portal_settings)
+        use_advanced = isinstance(portal_settings.bucket_access_policy.advanced_policy, dict)
         policy = iam_service.get_user_inline_policy(link.iam_username, self._bucket_access_policy_name) or {}
         statements = policy.get("Statement") or []
         if not isinstance(statements, list):
@@ -1324,7 +1346,8 @@ class PortalService:
         remaining_resources = [arn for arn in resources if arn not in remove_arns]
         if remaining_resources:
             bucket_statement["Resource"] = remaining_resources
-            bucket_statement["Action"] = bucket_actions
+            if not use_advanced or "Action" not in bucket_statement:
+                bucket_statement["Action"] = bucket_actions
             policy = {
                 "Version": policy.get("Version") or "2012-10-17",
                 "Statement": statements,
@@ -1380,18 +1403,7 @@ class PortalService:
                     quota_max_objects=None,
                 )
             )
-        total_buckets: Optional[int] = None
-        if access.capabilities.can_manage_buckets:
-            total_buckets = len(buckets)
-        else:
-            if not account.rgw_account_id and not account.rgw_user_uid:
-                total_buckets = None
-            else:
-                try:
-                    total_buckets = len(self._admin_bucket_list(account))
-                except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
-                    logger.warning("Unable to list total buckets for portal summary: %s", exc)
-                    total_buckets = None
+        total_buckets = len(buckets)
         quota_max_size_bytes, quota_max_objects = self._account_quota(account)
         return PortalState(
             account_id=account.id,
@@ -1417,6 +1429,39 @@ class PortalService:
 
     def get_usage(self, user: User, access: "AccountAccess") -> PortalUsage:
         account = access.account
+        if not access.capabilities.can_manage_buckets:
+            allowed = set(self.list_existing_user_bucket_access(user, account, access.role))
+            if not allowed:
+                return PortalUsage(used_bytes=None, used_objects=None)
+            try:
+                rgw_admin = self._supervision_admin_for_account(account)
+                bucket_payloads = self._admin_bucket_list(account, admin=rgw_admin)
+            except (RGWAdminError, RuntimeError) as exc:  # pragma: no cover - defensive path
+                logger.warning("Unable to list scoped bucket usage for portal user %s: %s", user.email, exc)
+                return PortalUsage(used_bytes=None, used_objects=None)
+
+            total_bytes = 0
+            total_objects = 0
+            has_bytes = False
+            has_objects = False
+            for item in bucket_payloads:
+                if not isinstance(item, dict):
+                    continue
+                bucket_name = item.get("bucket") or item.get("name")
+                if bucket_name not in allowed:
+                    continue
+                usage = item.get("usage")
+                usage_bytes, usage_objects = extract_usage_stats(usage)
+                if usage_bytes is not None:
+                    total_bytes += usage_bytes
+                    has_bytes = True
+                if usage_objects is not None:
+                    total_objects += usage_objects
+                    has_objects = True
+            return PortalUsage(
+                used_bytes=total_bytes if has_bytes else None,
+                used_objects=total_objects if has_objects else None,
+            )
         used_bytes, used_objects = self._account_usage_summary(account)
         if used_bytes is None or used_objects is None:
             bucket_bytes, bucket_objects, _ = self._account_usage(account)
@@ -1431,7 +1476,7 @@ class PortalService:
             raise RuntimeError("Bucket name requis.")
         account = access.account
         if not access.capabilities.can_manage_buckets:
-            allowed = self.list_user_bucket_access(user, access.account, access.role)
+            allowed = self.list_existing_user_bucket_access(user, access.account, access.role)
             if bucket_name not in allowed:
                 raise RuntimeError("Accès bucket non autorisé.")
         try:
@@ -1555,7 +1600,6 @@ class PortalService:
         access: "AccountAccess",
         bucket_name: str,
         versioning: Optional[bool] = None,
-        use_root: bool = False,
         portal_settings: Optional[PortalSettings] = None,
     ) -> Bucket:
         account = access.account
@@ -1564,14 +1608,12 @@ class PortalService:
         iam_service = self._get_iam_service(account)
         link, _, _ = self._ensure_portal_user(user, account, iam_service)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_defaults)
-        if use_root:
-            active_key_id, active_secret = self._account_credentials(account)
-        else:
-            active_key_id, active_secret = self._active_credentials(link, iam_service)
+        active_key_id, active_secret = self._active_credentials(link, iam_service)
         s3_client.create_bucket(
             bucket_name, access_key=active_key_id, secret_key=active_secret, **self._s3_client_kwargs(account)
         )
-        if versioning_flag:
+        apply_bucket_defaults = bool(access.capabilities.can_manage_buckets)
+        if versioning_flag and apply_bucket_defaults:
             s3_client.set_bucket_versioning(
                 bucket_name,
                 enabled=True,
@@ -1579,7 +1621,7 @@ class PortalService:
                 secret_key=active_secret,
                 **self._s3_client_kwargs(account),
             )
-        if portal_defaults.bucket_defaults.enable_lifecycle:
+        if portal_defaults.bucket_defaults.enable_lifecycle and apply_bucket_defaults:
             s3_client.put_bucket_lifecycle(
                 bucket_name,
                 rules=self._portal_bucket_lifecycle_rules(),
@@ -1587,7 +1629,7 @@ class PortalService:
                 secret_key=active_secret,
                 **self._s3_client_kwargs(account),
             )
-        if portal_defaults.bucket_defaults.enable_cors:
+        if portal_defaults.bucket_defaults.enable_cors and apply_bucket_defaults:
             origins = self._normalize_origins(portal_defaults.bucket_defaults.cors_allowed_origins)
             if origins:
                 s3_client.put_bucket_cors(
@@ -1634,14 +1676,28 @@ class PortalService:
 
     def provision_portal_user(self, target: User, account: S3Account, account_role: str) -> None:
         """Create/sync IAM user and group membership immediately when roles change."""
-        iam_service = self._get_iam_service(account)
-        link, _, _ = self._ensure_portal_user(target, account, iam_service)
-        portal_settings = self._effective_portal_settings(account)
-        self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
         if account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}:
+            iam_service = self._get_iam_service(account)
+            link, _, _ = self._ensure_portal_user(target, account, iam_service)
+            portal_settings = self._effective_portal_settings(account)
+            self._sync_user_group_membership(iam_service, link.iam_username, account_role, portal_settings=portal_settings)
             self._ensure_active_key(link, iam_service)
             return
-        self._clear_user_bucket_policy(iam_service, link.iam_username)
+        link = (
+            self.db.query(AccountIAMUser)
+            .filter(
+                AccountIAMUser.user_id == target.id,
+                AccountIAMUser.account_id == account.id,
+            )
+            .first()
+        )
+        if not link:
+            return
+        iam_service = self._get_iam_service(account)
+        if link.iam_username:
+            self._delete_portal_iam_user(iam_service, link.iam_username)
+        self.db.delete(link)
+        self.db.commit()
 
     def _delete_portal_iam_user(self, iam_service: RGWIAMService, iam_username: str) -> None:
         iam_user = iam_service.get_user(iam_username)

@@ -72,8 +72,17 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
     (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
   );
   const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
+  const hasManagerAccess = links.some(
+    (link) => Boolean(link.account_admin) || link.account_role === "portal_manager"
+  );
+  const hasBucketAccess = links.some(
+    (link) =>
+      Boolean(link.account_admin) ||
+      link.account_role === "portal_manager" ||
+      link.account_role === "portal_user"
+  );
   const portalOnly = hasPortalAccess && !hasAccountAdmin;
-  const canManageBuckets = user.capabilities?.can_manage_buckets !== false;
+  const canManageBuckets = user.capabilities?.can_manage_buckets ?? hasBucketAccess;
 
   if (portalOnly) {
     return ALL_WORKSPACES.filter((workspace) => workspace.id === "portal");
@@ -81,7 +90,7 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
 
   return ALL_WORKSPACES.filter((workspace) => {
     if (workspace.id === "portal") return hasPortalAccess;
-    if (workspace.id === "manager") return true;
+    if (workspace.id === "manager") return hasManagerAccess;
     if (workspace.id === "browser") return canManageBuckets;
     return false;
   });
@@ -123,10 +132,19 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
     (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
   );
   const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
+  const hasManagerAccess = links.some(
+    (link) => Boolean(link.account_admin) || link.account_role === "portal_manager"
+  );
+  const hasBucketAccess = links.some(
+    (link) =>
+      Boolean(link.account_admin) ||
+      link.account_role === "portal_manager" ||
+      link.account_role === "portal_user"
+  );
   const portalOnly = hasPortalAccess && !hasAccountAdmin;
-  const canManageBuckets = user.capabilities?.can_manage_buckets !== false;
+  const canManageBuckets = user.capabilities?.can_manage_buckets ?? hasBucketAccess;
   if (portalOnly && generalSettings.portal_enabled) return "/portal";
-  if (generalSettings.manager_enabled) return "/manager";
+  if (generalSettings.manager_enabled && hasManagerAccess) return "/manager";
   if (hasPortalAccess && generalSettings.portal_enabled) return "/portal";
   if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && canManageBuckets) return "/browser";
   return "/unauthorized";

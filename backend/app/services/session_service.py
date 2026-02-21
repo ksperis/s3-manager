@@ -16,6 +16,7 @@ from app.models.session import ManagerSessionPrincipal, SessionCapabilities
 from app.services import s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.rgw_iam import get_iam_client
+from app.utils.s3_endpoint import normalize_s3_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,7 @@ class SessionService:
                 actor_type = "account_root"
         iam_full_access = self._probe_iam_manage(access_key, secret_key, endpoint=endpoint)
         capabilities = self._derive_capabilities(actor_type, user_info, iam_full_access)
+        capabilities.endpoint_url = normalize_s3_endpoint(endpoint)
         return actor_type, account_id, account_name, user_uid, capabilities
 
     # helpers

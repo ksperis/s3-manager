@@ -28,6 +28,7 @@ export type SessionCapabilities = {
   can_manage_iam: boolean;
   can_manage_buckets: boolean;
   can_view_traffic: boolean;
+  endpoint_url?: string | null;
 };
 
 export type KeyLoginResponse = {

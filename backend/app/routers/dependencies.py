@@ -326,9 +326,8 @@ def _manager_membership_capabilities(
     else:
         using_root = bool(is_account_admin)
     can_manage_iam = bool(using_root or account_role == AccountRole.PORTAL_MANAGER.value)
-    can_manage_buckets = bool(
-        using_root or account_role in {AccountRole.PORTAL_MANAGER.value, AccountRole.PORTAL_USER.value}
-    )
+    # Manager workspace actions stay restricted to account admins/root and portal managers.
+    can_manage_buckets = bool(is_account_admin or account_role == AccountRole.PORTAL_MANAGER.value)
     can_manage_portal_users = bool(account_role == AccountRole.PORTAL_MANAGER.value or (is_account_admin and using_root))
     capabilities = AccountCapabilities(
         can_manage_buckets=can_manage_buckets,
@@ -384,6 +383,28 @@ def _resolve_session_account(
     return account
 
 
+def _resolve_requested_session_endpoint(
+    db: Session,
+    actor: ManagerSessionPrincipal,
+    requested_endpoint: Optional[str],
+) -> Optional[str]:
+    pinned_endpoint = normalize_s3_endpoint(getattr(actor.capabilities, "endpoint_url", None))
+    if pinned_endpoint:
+        if requested_endpoint and requested_endpoint != pinned_endpoint:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Endpoint override is not allowed for this session")
+        return pinned_endpoint
+    if not requested_endpoint:
+        return None
+    general = load_app_settings().general
+    if general.allow_login_custom_endpoint:
+        return requested_endpoint
+    if general.allow_login_endpoint_list:
+        service = get_storage_endpoints_service(db)
+        if any(endpoint.endpoint_url == requested_endpoint for endpoint in service.list_endpoints()):
+            return requested_endpoint
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Endpoint is not allowed for this session")
+
+
 def get_account_context(
     request: Request,
     account_ref: Optional[str] = Query(default=None, alias="account_id"),
@@ -393,16 +414,11 @@ def get_account_context(
     account_id, s3_user_id, connection_id = _parse_account_selector(account_ref)
     requested_mode = _normalize_access_mode(request.headers.get("X-Manager-Access-Mode")) if request else None
     requested_endpoint = normalize_s3_endpoint(request.headers.get("X-S3-Endpoint")) if request else None
-    if requested_endpoint:
-        general = load_app_settings().general
-        if general.allow_login_custom_endpoint:
-            pass
-        elif general.allow_login_endpoint_list:
-            service = get_storage_endpoints_service(db)
-            if not any(endpoint.endpoint_url == requested_endpoint for endpoint in service.list_endpoints()):
-                requested_endpoint = None
-        else:
-            requested_endpoint = None
+    if isinstance(actor, ManagerSessionPrincipal):
+        requested_endpoint = _resolve_requested_session_endpoint(db, actor, requested_endpoint)
+    else:
+        # UI users are bound to the endpoint configured on the selected account.
+        requested_endpoint = None
     if isinstance(actor, User):
         if connection_id is not None:
             surface = "browser" if request and "/browser" in str(request.url.path) else "manager"
@@ -443,18 +459,6 @@ def get_account_context(
         can_view_root_key=False,
         using_root_key=False,
     )
-    return account
-
-
-def get_portal_account_context(
-    account_ref: Optional[str] = Query(default=None, alias="account_id"),
-    user: User = Depends(get_current_account_user),
-    db: Session = Depends(get_db),
-) -> S3Account:
-    account_id, s3_user_id, connection_id = _parse_account_selector(account_ref)
-    if s3_user_id is not None or connection_id is not None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
-    account, _ = _resolve_user_account_link(db, user, account_id, allow_default=False)
     return account
 
 

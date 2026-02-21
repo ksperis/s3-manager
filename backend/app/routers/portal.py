@@ -28,7 +28,6 @@ from app.routers.dependencies import (
     get_audit_logger,
     get_current_account_user,
     get_portal_account_access,
-    get_portal_account_context,
     require_portal_manager,
 )
 from app.services.audit_service import AuditService
@@ -84,16 +83,18 @@ def list_portal_accounts(
             continue
         if endpoint and not resolve_feature_flags(endpoint).iam_enabled:
             continue
-        root_link = (
-            db.query(UserS3Account)
-            .filter(
-                UserS3Account.account_id == acc.id,
-                UserS3Account.is_root.is_(True),
+        root_link = None
+        if user.role == UserRole.UI_ADMIN.value:
+            root_link = (
+                db.query(UserS3Account)
+                .filter(
+                    UserS3Account.account_id == acc.id,
+                    UserS3Account.is_root.is_(True),
+                )
+                .join(User)
+                .with_entities(User.email, User.id)
+                .first()
             )
-            .join(User)
-            .with_entities(User.email, User.id)
-            .first()
-        )
         quota_max_size_gb, quota_max_objects = quota_service.get_account_quota(acc)
         results.append(
             S3AccountSchema(
@@ -165,12 +166,13 @@ def portal_usage(
 
 @router.get("/endpoint-health", response_model=WorkspaceEndpointHealthOverviewResponse)
 def portal_endpoint_health(
-    account: S3Account = Depends(get_portal_account_context),
+    access: AccountAccess = Depends(get_portal_account_access),
     db: Session = Depends(get_db),
 ) -> WorkspaceEndpointHealthOverviewResponse:
     app_settings = load_app_settings()
     if not app_settings.general.endpoint_status_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Endpoint Status feature is disabled.")
+    account = access.account
     endpoint_id = getattr(account, "storage_endpoint_id", None)
     if endpoint_id is None:
         return WorkspaceEndpointHealthOverviewResponse(
@@ -311,15 +313,14 @@ def create_portal_bucket(
     is_portal_user = access.role == AccountRole.PORTAL_USER.value
     if not (is_manager or (allow_portal_user_create and is_portal_user)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket creation not allowed for this role.")
-    use_root = bool(allow_portal_user_create and is_portal_user and not is_manager)
     try:
         versioning = payload.versioning if payload.versioning is not None else portal_settings.bucket_defaults.versioning
+        defaults_applied = bool(is_manager)
         bucket = service.create_bucket(
             actor,
             access,
             payload.name,
             versioning=versioning,
-            use_root=use_root,
             portal_settings=portal_settings,
         )
         audit_service.record_action(
@@ -330,9 +331,10 @@ def create_portal_bucket(
             entity_id=payload.name,
             account=access.account,
             metadata={
-                "versioning": versioning,
-                "lifecycle": portal_settings.bucket_defaults.enable_lifecycle,
-                "cors": portal_settings.bucket_defaults.enable_cors,
+                "versioning": bool(versioning and defaults_applied),
+                "lifecycle": bool(portal_settings.bucket_defaults.enable_lifecycle and defaults_applied),
+                "cors": bool(portal_settings.bucket_defaults.enable_cors and defaults_applied),
+                "defaults_applied": defaults_applied,
             },
         )
         return bucket
@@ -509,18 +511,33 @@ def delete_portal_access_key(
 def portal_traffic(
     window: TrafficWindow = Query(TrafficWindow.WEEK),
     bucket: Optional[str] = Query(None),
-    account: S3Account = Depends(get_portal_account_context),
     access: AccountAccess = Depends(get_portal_account_access),
+    portal_service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> dict:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    account = access.account
     endpoint = getattr(account, "storage_endpoint", None)
     if endpoint and not resolve_feature_flags(endpoint).usage_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage logs are disabled for this endpoint")
+    if not access.capabilities.can_manage_buckets:
+        requested_bucket = (bucket or "").strip()
+        if not requested_bucket:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Bucket filter is required for this role.",
+            )
+        allowed_buckets = set(portal_service.list_existing_user_bucket_access(actor, account, access.role))
+        if requested_bucket not in allowed_buckets:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket access not allowed for this role.")
+        bucket = requested_bucket
     try:
-        service = TrafficService(account)
+        traffic_service = TrafficService(account)
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     try:
-        return service.get_traffic(window=window, bucket=bucket)
+        return traffic_service.get_traffic(window=window, bucket=bucket)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RGWAdminError as exc:

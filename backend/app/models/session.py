@@ -28,6 +28,15 @@ class SessionCapabilities(BaseModel):
     can_manage_iam: bool = False
     can_manage_buckets: bool = True
     can_view_traffic: bool = False
+    endpoint_url: Optional[str] = None
+
+    @field_validator("endpoint_url", mode="before")
+    @classmethod
+    def normalize_capability_endpoint(cls, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        normalized = value.strip().rstrip("/")
+        return normalized or None
 
 
 class SessionDescriptor(BaseModel):

@@ -104,16 +104,18 @@ def list_manager_accounts(
     results: list[S3AccountSchema] = []
     for acc in accounts:
         endpoint = acc.storage_endpoint
-        root_link = (
-            db.query(UserS3Account)
-            .filter(
-                UserS3Account.account_id == acc.id,
-                UserS3Account.is_root.is_(True),
+        root_link = None
+        if user.role == UserRole.UI_ADMIN.value:
+            root_link = (
+                db.query(UserS3Account)
+                .filter(
+                    UserS3Account.account_id == acc.id,
+                    UserS3Account.is_root.is_(True),
+                )
+                .join(User)
+                .with_entities(User.email, User.id)
+                .first()
             )
-            .join(User)
-            .with_entities(User.email, User.id)
-            .first()
-        )
         quota_max_size_gb, quota_max_objects = quota_service.get_account_quota(acc)
         results.append(
             S3AccountSchema(

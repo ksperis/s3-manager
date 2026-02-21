@@ -16,7 +16,6 @@ export default function LoginPage() {
   const { setLanguagePreference } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [seedPrefillApplied, setSeedPrefillApplied] = useState(false);
   const [accessKey, setAccessKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
   const [mode, setMode] = useState<"password" | "keys">("password");
@@ -92,15 +91,6 @@ export default function LoginPage() {
       setSelectedEndpoint(defaultEndpoint.endpoint_url);
     }
   }, [loginSettings, selectedEndpoint, customEndpoint]);
-
-  useEffect(() => {
-    if (!loginSettings || seedPrefillApplied) return;
-    if (loginSettings.seed_login_prefill && !email && !password) {
-      setEmail(loginSettings.seed_login_email ?? "");
-      setPassword(loginSettings.seed_login_password ?? "");
-    }
-    setSeedPrefillApplied(true);
-  }, [email, loginSettings, password, seedPrefillApplied]);
 
   const handlePasswordLogin = async (event: FormEvent) => {
     event.preventDefault();
