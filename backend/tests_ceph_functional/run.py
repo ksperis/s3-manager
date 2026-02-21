@@ -18,7 +18,7 @@ def main(argv: list[str]) -> int:
     else:
         env["PYTHONPATH"] = str(backend_root)
 
-    cmd = ["pytest", "tests_ceph_functional", "-m", "ceph_functional"]
+    cmd = [sys.executable, "-m", "pytest", "tests_ceph_functional", "-m", "ceph_functional"]
     if len(argv) > 1:
         cmd.extend(argv[1:])
 

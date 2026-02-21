@@ -13,7 +13,7 @@ backend-tests:
   allow_failure: true
   before_script:
     - python -m pip install --upgrade pip
-    - pip install -r backend/requirements.txt pytest
+    - pip install -r backend/requirements-test.txt
   script:
     - cd backend
     - PYTHONPATH=. python -m pytest tests -q
