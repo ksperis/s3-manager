@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional, List, Literal
 
-from pydantic import BaseModel, Field, root_validator, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class BucketTag(BaseModel):
@@ -39,7 +39,8 @@ class BucketCreate(BaseModel):
     versioning: Optional[bool] = None
     location_constraint: Optional[str] = None
 
-    @validator("location_constraint", pre=True)
+    @field_validator("location_constraint", mode="before")
+    @classmethod
     def normalize_location_constraint(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
@@ -86,22 +87,23 @@ class BucketObjectLockUpdate(BaseModel):
     days: Optional[int] = None
     years: Optional[int] = None
 
-    @validator("days", "years")
+    @field_validator("days", "years")
+    @classmethod
     def validate_positive(cls, value: Optional[int]) -> Optional[int]:
         if value is not None and value < 0:
             raise ValueError("Retention must be positive.")
         return value
 
-    @root_validator(skip_on_failure=True)
-    def validate_retention(cls, values: dict) -> dict:
-        days = values.get("days")
-        years = values.get("years")
-        mode = values.get("mode")
+    @model_validator(mode="after")
+    def validate_retention(self) -> "BucketObjectLockUpdate":
+        days = self.days
+        years = self.years
+        mode = self.mode
         if days is not None and years is not None:
             raise ValueError("Specify either Days or Years, not both.")
         if (days is not None or years is not None) and not mode:
             raise ValueError("Mode is required to set a default retention.")
-        return values
+        return self
 
 
 class BucketProperties(BaseModel):

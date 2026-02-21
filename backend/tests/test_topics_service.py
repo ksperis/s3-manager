@@ -6,7 +6,9 @@ from app.services.topics_service import TopicsService
 
 
 def _account() -> S3Account:
-    return S3Account(rgw_access_key="AKIA_TEST", rgw_secret_key="SECRET_TEST")
+    account = S3Account(rgw_access_key="AKIA_TEST", rgw_secret_key="SECRET_TEST")
+    account.storage_endpoint_url = "https://ceph-sns.example.test"
+    return account
 
 
 def test_set_topic_configuration_skips_noop(monkeypatch):
@@ -23,7 +25,7 @@ def test_set_topic_configuration_skips_noop(monkeypatch):
     monkeypatch.setattr(sns_client, "get_topic_attributes", lambda *_, **__: attributes)
     calls: list[dict] = []
 
-    def fake_set_topic_attributes(topic_arn, attrs, access_key=None, secret_key=None):
+    def fake_set_topic_attributes(topic_arn, attrs, access_key=None, secret_key=None, **kwargs):
         calls.append({"topic_arn": topic_arn, "attrs": attrs})
 
     monkeypatch.setattr(sns_client, "set_topic_attributes", fake_set_topic_attributes)
@@ -66,7 +68,7 @@ def test_set_topic_configuration_only_sends_changes(monkeypatch):
     monkeypatch.setattr(sns_client, "get_topic_attributes", fake_get_topic_attributes)
     sent: dict | None = None
 
-    def fake_set_topic_attributes(topic_arn, attrs, access_key=None, secret_key=None):
+    def fake_set_topic_attributes(topic_arn, attrs, access_key=None, secret_key=None, **kwargs):
         nonlocal sent
         sent = {"topic_arn": topic_arn, "attrs": attrs}
 

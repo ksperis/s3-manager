@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.utils.time import utcnow
 from datetime import datetime
 from typing import Optional
 import logging
@@ -329,7 +330,7 @@ class UsersService:
         link.can_manage_portal_users = link.account_admin or desired_account_role == AccountRole.PORTAL_MANAGER.value
         link.can_manage_iam = link.can_manage_portal_users or link.account_admin
         link.can_view_root_key = bool(link.account_admin or link.is_root or link.can_manage_portal_users or link.can_manage_iam)
-        link.updated_at = datetime.utcnow()
+        link.updated_at = utcnow()
         self.db.add(link)
         self.db.add(user)
         self.db.commit()
@@ -440,7 +441,7 @@ class UsersService:
         )
 
     def mark_last_login(self, user: User) -> User:
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = utcnow()
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)

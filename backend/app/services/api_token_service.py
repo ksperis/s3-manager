@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.utils.time import utcnow
+
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -46,7 +48,7 @@ class ApiTokenService:
             raise ApiTokenError(
                 f"Token expiry must be between 1 and {settings.api_token_max_expire_days} days",
             )
-        now = datetime.utcnow()
+        now = utcnow()
         expires_at = now + timedelta(days=days)
         jti = uuid.uuid4().hex
         token = create_access_token(
@@ -79,7 +81,7 @@ class ApiTokenService:
         if not include_revoked:
             query = query.filter(
                 ApiToken.revoked_at.is_(None),
-                ApiToken.expires_at > datetime.utcnow(),
+                ApiToken.expires_at > utcnow(),
             )
         return query.order_by(ApiToken.created_at.desc()).all()
 
@@ -95,7 +97,7 @@ class ApiTokenService:
         if not row:
             raise ApiTokenNotFoundError("API token not found")
         if row.revoked_at is None:
-            row.revoked_at = datetime.utcnow()
+            row.revoked_at = utcnow()
             self.db.add(row)
             self.db.commit()
             self.db.refresh(row)
@@ -117,7 +119,7 @@ class ApiTokenService:
         row = self.db.query(ApiToken).filter(ApiToken.jti == jti).first()
         if not row:
             return None
-        now = datetime.utcnow()
+        now = utcnow()
         if row.revoked_at is not None or row.expires_at <= now:
             return None
         if row.user_id != user_id:

@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.utils.time import utcnow
 import logging
 from datetime import datetime
 from typing import Optional
@@ -146,7 +147,7 @@ def endpoint_health_overview(
     endpoint_id = getattr(account, "storage_endpoint_id", None)
     if endpoint_id is None:
         return WorkspaceEndpointHealthOverviewResponse(
-            generated_at=datetime.utcnow().isoformat(),
+            generated_at=utcnow().isoformat(),
             incident_highlight_minutes=max(1, int(app_settings.healthcheck_incident_recent_minutes or 720)),
             endpoint_count=0,
             up_count=0,

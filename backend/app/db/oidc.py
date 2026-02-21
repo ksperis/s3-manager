@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from datetime import datetime
+from app.utils.time import utcnow
 
 from sqlalchemy import Column, DateTime, String
 
@@ -15,4 +15,4 @@ class OidcLoginState(Base):
     code_verifier = Column(String, nullable=False)
     nonce = Column(String, nullable=True)
     redirect_path = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)

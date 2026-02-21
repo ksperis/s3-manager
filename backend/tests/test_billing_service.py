@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.utils.time import utcnow
 from datetime import date, datetime
 
 import pytest
@@ -55,7 +56,7 @@ def test_billing_summary_and_cost(db_session):
                 bytes_out=2048,
                 ops_total=1000,
                 source="rgw_admin_usage",
-                collected_at=datetime.utcnow(),
+                collected_at=utcnow(),
             ),
             BillingUsageDaily(
                 day=day_two,
@@ -65,7 +66,7 @@ def test_billing_summary_and_cost(db_session):
                 bytes_out=4096,
                 ops_total=500,
                 source="rgw_admin_usage",
-                collected_at=datetime.utcnow(),
+                collected_at=utcnow(),
             ),
             BillingStorageDaily(
                 day=day_one,
@@ -74,7 +75,7 @@ def test_billing_summary_and_cost(db_session):
                 total_bytes=100,
                 total_objects=10,
                 source="rgw_admin_bucket_stats",
-                collected_at=datetime.utcnow(),
+                collected_at=utcnow(),
             ),
             BillingStorageDaily(
                 day=day_two,
@@ -83,7 +84,7 @@ def test_billing_summary_and_cost(db_session):
                 total_bytes=300,
                 total_objects=20,
                 source="rgw_admin_bucket_stats",
-                collected_at=datetime.utcnow(),
+                collected_at=utcnow(),
             ),
         ]
     )
@@ -97,8 +98,8 @@ def test_billing_summary_and_cost(db_session):
         requests_per_1000_price=3.0,
         effective_from=date(2025, 1, 1),
         storage_endpoint_id=endpoint.id,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=utcnow(),
+        updated_at=utcnow(),
     )
     db_session.add(rate_card)
     db_session.commit()
@@ -131,7 +132,7 @@ def test_billing_subject_detail_and_export(db_session):
             bytes_out=1024,
             ops_total=100,
             source="rgw_admin_usage",
-            collected_at=datetime.utcnow(),
+            collected_at=utcnow(),
         )
     )
     db_session.add(
@@ -142,7 +143,7 @@ def test_billing_subject_detail_and_export(db_session):
             total_bytes=2048,
             total_objects=5,
             source="rgw_admin_bucket_stats",
-            collected_at=datetime.utcnow(),
+            collected_at=utcnow(),
         )
     )
     db_session.commit()

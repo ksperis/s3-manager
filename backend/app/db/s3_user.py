@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from datetime import datetime
+from app.utils.time import utcnow
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -19,7 +19,7 @@ class S3User(Base):
     email = Column(String, nullable=True)
     rgw_access_key = Column(String, nullable=False)
     rgw_secret_key = Column(EncryptedString, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
 
     users = relationship(

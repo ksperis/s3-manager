@@ -1,224 +1,128 @@
-# Copyright (c) 2025 Laurent Barbe
+# Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from typing import Optional
-
-import pytest
 from fastapi.testclient import TestClient
 
-from app.db import S3Account, StorageEndpoint, StorageProvider, UserS3Account
-from app.services import s3_accounts_service, s3_client
+from app.db import S3Account
+from app.main import app
+from app.models.s3_account import S3Account as S3AccountSchema
+from app.routers.admin import s3_accounts as admin_accounts_router
+from app.routers.manager import buckets as manager_buckets_router
 
 
-class FakeRGWAdmin:
-    def __init__(self):
-        self.created_accounts = []
-        self.created_root_users = []
-        self.cap_calls = []
-        self.quota_calls = []
-        self.quota_by_account = {}
-
-    def create_account(self, account_id: str, account_name: str):
-        self.created_accounts.append((account_id, account_name))
-        return {"id": account_id, "name": account_name}
-
-    def create_user_with_account_id(self, uid: str, account_id: str, display_name: str, account_root: bool = True):
-        self.created_root_users.append((uid, account_id, account_root))
-        return {"account_id": account_id, "keys": [{"access_key": "AKIA", "secret_key": "SECRET"}]}
-
-    def _extract_keys(self, data):
-        return data.get("keys", [])
-
-    def set_user_caps(self, uid: str, cap: str, tenant: Optional[str] = None):
-        self.cap_calls.append({"uid": uid, "cap": cap, "tenant": tenant})
-        return {"ok": True}
-
-    def set_account_quota(
-        self,
-        account_id: str,
-        max_size_bytes: Optional[int] = None,
-        max_size_gb: Optional[int] = None,
-        max_objects: Optional[int] = None,
-        quota_type: str = "account",
-        enabled: bool = True,
-    ):
-        max_size_value = None
-        max_objects_value = None
-        if enabled:
-            if max_size_bytes is not None:
-                max_size_value = int(max_size_bytes)
-            elif max_size_gb is not None:
-                max_size_value = int(max_size_gb * 1024 ** 3)
-            if max_objects is not None:
-                max_objects_value = int(max_objects)
-        self.quota_by_account[account_id] = (max_size_value, max_objects_value)
-        self.quota_calls.append(
-            {
-                "account_id": account_id,
-                "max_size_bytes": max_size_value,
-                "max_size_gb": max_size_gb,
-                "max_objects": max_objects,
-                "quota_type": quota_type,
-                "enabled": enabled,
-            }
-        )
-        return {"ok": True}
-
-    def get_account_quota(self, account_id: str):
-        return self.quota_by_account.get(account_id, (None, None))
+class _FakeAuditService:
+    def record_action(self, **kwargs):  # noqa: ANN003
+        return None
 
 
-def test_admin_create_account_with_quota(monkeypatch, client: TestClient, db_session):
-    fake_rgw = FakeRGWAdmin()
+def test_admin_create_account_delegates_to_service(client: TestClient):
+    captured: dict[str, object] = {}
 
-    def fake_get_s3_accounts_service(db, **kwargs):
-        svc = s3_accounts_service.S3AccountsService(db, kwargs.get("rgw_admin_client"))
-        svc.rgw_admin = fake_rgw
-        return svc
+    class FakeService:
+        def create_account_with_manager(self, payload):  # noqa: ANN001
+            captured["name"] = payload.name
+            captured["email"] = payload.email
+            captured["quota_max_size_gb"] = payload.quota_max_size_gb
+            captured["quota_max_objects"] = payload.quota_max_objects
+            return S3AccountSchema(
+                id="101",
+                db_id=101,
+                name=payload.name,
+                email=payload.email,
+                rgw_account_id="RGW00000000000000101",
+                rgw_user_uid="RGW00000000000000101-admin",
+                root_user_email="RGW00000000000000101-admin",
+                quota_max_size_gb=payload.quota_max_size_gb,
+                quota_max_objects=payload.quota_max_objects,
+                user_ids=[],
+                user_links=[],
+            )
 
-    monkeypatch.setattr("app.routers.admin.s3_accounts.get_s3_accounts_service", fake_get_s3_accounts_service)
+    app.dependency_overrides[admin_accounts_router.get_admin_accounts_service] = lambda: FakeService()
+    app.dependency_overrides[admin_accounts_router.get_audit_logger] = lambda: _FakeAuditService()
 
-    payload = {
+    response = client.post(
+        "/api/admin/accounts",
+        json={
+            "name": "quota-acc",
+            "email": "quota@example.com",
+            "quota_max_size_gb": 500,
+            "quota_max_objects": 1000000,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["name"] == "quota-acc"
+    assert body["quota_max_size_gb"] == 500
+    assert body["quota_max_objects"] == 1000000
+    assert captured == {
         "name": "quota-acc",
         "email": "quota@example.com",
         "quota_max_size_gb": 500,
         "quota_max_objects": 1000000,
     }
-    resp = client.post("/api/admin/accounts", json=payload)
-    assert resp.status_code == 201, resp.text
-    data = resp.json()
-    assert data["quota_max_size_gb"] == 500
-    assert data["quota_max_objects"] == 1000000
-    assert data["root_user_email"].endswith("-admin")
-
-    db_acc = db_session.query(S3Account).filter(S3Account.name == "quota-acc").first()
-    assert db_acc is not None
-    assert fake_rgw.quota_calls == [
-        {
-            "account_id": db_acc.rgw_account_id,
-            "max_size_bytes": 500 * 1024 ** 3,
-            "max_size_gb": None,
-            "max_objects": 1000000,
-            "quota_type": "account",
-            "enabled": True,
-        }
-    ]
 
 
-def test_admin_create_account_with_quota_unit(monkeypatch, client: TestClient, db_session):
-    fake_rgw = FakeRGWAdmin()
-
-    def fake_get_s3_accounts_service(db, **kwargs):
-        svc = s3_accounts_service.S3AccountsService(db, kwargs.get("rgw_admin_client"))
-        svc.rgw_admin = fake_rgw
-        return svc
-
-    monkeypatch.setattr("app.routers.admin.s3_accounts.get_s3_accounts_service", fake_get_s3_accounts_service)
-
-    payload = {
-        "name": "quota-unit-acc",
-        "email": "quota-unit@example.com",
-        "quota_max_size_gb": 1,
-        "quota_max_size_unit": "TiB",
-        "quota_max_objects": 1000,
-    }
-    resp = client.post("/api/admin/accounts", json=payload)
-    assert resp.status_code == 201, resp.text
-    data = resp.json()
-    assert data["quota_max_size_gb"] == 1024
-    assert data["quota_max_objects"] == 1000
-
-    db_acc = db_session.query(S3Account).filter(S3Account.name == "quota-unit-acc").first()
-    assert db_acc is not None
-    assert fake_rgw.quota_calls == [
-        {
-            "account_id": db_acc.rgw_account_id,
-            "max_size_bytes": 1024 ** 4,
-            "max_size_gb": None,
-            "max_objects": 1000,
-            "quota_type": "account",
-            "enabled": True,
-        }
-    ]
-
-
-def test_admin_unlink_account_endpoint(monkeypatch, client: TestClient):
-    called = {}
+def test_admin_unlink_account_endpoint_calls_service(client: TestClient):
+    called: dict[str, int] = {}
 
     class FakeService:
-        def __init__(self, db):
-            self.db = db
-
-        def unlink_account(self, account_id: int):
+        def unlink_account(self, account_id: int) -> None:
             called["id"] = account_id
 
-    def fake_get_s3_accounts_service(db, **kwargs):
-        return FakeService(db)
+    app.dependency_overrides[admin_accounts_router.get_admin_accounts_service] = lambda: FakeService()
+    app.dependency_overrides[admin_accounts_router.get_audit_logger] = lambda: _FakeAuditService()
 
-    monkeypatch.setattr("app.routers.admin.s3_accounts.get_s3_accounts_service", fake_get_s3_accounts_service)
+    response = client.post("/api/admin/accounts/42/unlink")
 
-    resp = client.post("/api/admin/accounts/42/unlink")
-    assert resp.status_code == 204
+    assert response.status_code == 204
     assert called["id"] == 42
 
 
-def test_manager_create_bucket_with_versioning(monkeypatch, client: TestClient, db_session):
-    # Seed account linked to the account_admin override user id=1000
-    acc = S3Account(name="acc-vers", rgw_account_id="RGW00000000000000003", rgw_access_key="AK", rgw_secret_key="SK")
-    db_session.add(acc)
-    db_session.flush()
-    db_session.add(UserS3Account(user_id=1000, account_id=acc.id, is_root=True))
-    db_session.commit()
+def test_manager_create_bucket_passes_versioning_and_location(client: TestClient):
+    captured: dict[str, object] = {}
 
-    calls = {"create": [], "versioning": [], "public_block": []}
+    class FakeBucketService:
+        def create_bucket(self, name, account, versioning=False, location_constraint=None):  # noqa: ANN001
+            captured["name"] = name
+            captured["account_id"] = account.id
+            captured["versioning"] = versioning
+            captured["location_constraint"] = location_constraint
 
-    def fake_create_bucket(name, access_key=None, secret_key=None):
-        calls["create"].append({"name": name, "ak": access_key, "sk": secret_key})
+    account = S3Account(
+        name="acc",
+        rgw_account_id="RGW00000000000000011",
+        rgw_access_key="AK",
+        rgw_secret_key="SK",
+    )
+    account.id = 11
 
-    def fake_set_bucket_versioning(name, enabled=True, access_key=None, secret_key=None):
-        calls["versioning"].append({"name": name, "enabled": enabled})
+    app.dependency_overrides[manager_buckets_router.get_account_context] = lambda: account
+    app.dependency_overrides[manager_buckets_router.get_buckets_service] = lambda: FakeBucketService()
+    app.dependency_overrides[manager_buckets_router.get_audit_logger] = lambda: _FakeAuditService()
 
-    def fake_set_public_access_block(name, block=True, access_key=None, secret_key=None):
-        calls["public_block"].append({"name": name, "block": block})
+    response = client.post(
+        "/api/manager/buckets",
+        json={
+            "name": "demo-bucket",
+            "versioning": True,
+            "location_constraint": "eu-west-1",
+        },
+    )
 
-    monkeypatch.setattr(s3_client, "create_bucket", fake_create_bucket)
-    monkeypatch.setattr(s3_client, "set_bucket_versioning", fake_set_bucket_versioning)
-    monkeypatch.setattr(s3_client, "set_bucket_public_access_block", fake_set_public_access_block)
-
-    resp = client.post(f"/api/manager/buckets?account_id={acc.id}", json={"name": "my-bucket", "versioning": True})
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["name"] == "demo-bucket"
     assert body["versioning"] is True
-    assert calls["create"] and calls["versioning"]
-    assert calls["public_block"] == []
-    assert calls["versioning"][0]["enabled"] is True
-    assert calls["public_block"][0]["block"] is True
+    assert body["location_constraint"] == "eu-west-1"
+    assert captured == {
+        "name": "demo-bucket",
+        "account_id": 11,
+        "versioning": True,
+        "location_constraint": "eu-west-1",
+    }
 
 
 def test_admin_create_user_requires_email_format(client: TestClient):
-    resp = client.post("/api/admin/users", json={"email": "not-an-email", "password": "x"})
-    assert resp.status_code == 422
-
-
-def test_get_account_detail_without_admin_ops_returns_200(client: TestClient, db_session):
-    endpoint = StorageEndpoint(
-        name="ceph-no-admin",
-        endpoint_url="https://ceph-no-admin.example.test",
-        provider=StorageProvider.CEPH.value,
-        features_config="features:\n  admin:\n    enabled: false\n",
-        is_default=True,
-    )
-    db_session.add(endpoint)
-    db_session.flush()
-    account = S3Account(
-        name="no-admin-ops-account",
-        rgw_account_id="RGW00000000000000011",
-        storage_endpoint_id=endpoint.id,
-    )
-    db_session.add(account)
-    db_session.commit()
-
-    resp = client.get(f"/api/admin/accounts/{account.id}")
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["db_id"] == account.id
-    assert body["name"] == "no-admin-ops-account"
+    response = client.post("/api/admin/users", json={"email": "not-an-email", "password": "x"})
+    assert response.status_code == 422

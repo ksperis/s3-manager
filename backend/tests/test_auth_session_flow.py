@@ -1,11 +1,27 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from types import SimpleNamespace
+
 import pytest
 from botocore.exceptions import ClientError
 
 from app.core.security import get_password_hash
 from app.db import S3Account, UserS3Account, User, UserRole
+from app.main import app
+from app.routers import dependencies
 from app.services import session_service as session_module
+
+
+def _enable_access_key_login(monkeypatch) -> None:
+    general = SimpleNamespace(
+        allow_login_access_keys=True,
+        allow_login_endpoint_list=False,
+        allow_login_custom_endpoint=True,
+    )
+    monkeypatch.setattr(
+        "app.routers.auth.load_app_settings",
+        lambda: SimpleNamespace(general=general),
+    )
 
 
 def _mock_external(monkeypatch, *, iam_allowed: bool) -> None:
@@ -52,11 +68,12 @@ def _mock_external(monkeypatch, *, iam_allowed: bool) -> None:
 
 
 def test_login_s3_grants_iam_capability_when_iam_client_succeeds(monkeypatch, client, db_session):
+    _enable_access_key_login(monkeypatch)
     _mock_external(monkeypatch, iam_allowed=True)
 
     response = client.post(
         "/api/auth/login-s3",
-        json={"access_key": "AKIA", "secret_key": "SECRET"},
+        json={"access_key": "AKIA", "secret_key": "SECRET", "endpoint_url": "https://s3.example.test"},
     )
     assert response.status_code == 200
     payload = response.json()
@@ -67,11 +84,12 @@ def test_login_s3_grants_iam_capability_when_iam_client_succeeds(monkeypatch, cl
 
 
 def test_login_s3_disables_iam_capability_when_iam_client_denied(monkeypatch, client, db_session):
+    _enable_access_key_login(monkeypatch)
     _mock_external(monkeypatch, iam_allowed=False)
 
     response = client.post(
         "/api/auth/login-s3",
-        json={"access_key": "AKIA", "secret_key": "SECRET"},
+        json={"access_key": "AKIA", "secret_key": "SECRET", "endpoint_url": "https://s3.example.test"},
     )
     assert response.status_code == 200
     payload = response.json()
@@ -88,7 +106,7 @@ def _setup_account(db_session) -> S3Account:
             full_name="Manager",
             hashed_password="x",
             is_active=True,
-            role=UserRole.ACCOUNT_ADMIN.value,
+            role=UserRole.UI_USER.value,
         )
         db_session.add(manager)
         db_session.commit()
@@ -130,7 +148,7 @@ def test_ui_login_updates_last_login_timestamp(client, db_session):
         full_name="UI Admin",
         hashed_password=get_password_hash(password),
         is_active=True,
-        role=UserRole.SUPER_ADMIN.value,
+        role=UserRole.UI_ADMIN.value,
     )
     db_session.add(user)
     db_session.commit()
@@ -167,8 +185,21 @@ def test_iam_overview_success(monkeypatch, client, db_session):
             return []
 
     monkeypatch.setattr("app.routers.manager.iam_overview.get_iam_service", lambda *args, **kwargs: FakeService())
-
-    resp = client.get(f"/api/manager/iam/overview?account_id={account.id}")
+    previous_account_context = app.dependency_overrides.get(dependencies.get_account_context)
+    previous_iam_guard = app.dependency_overrides.get(dependencies.require_iam_capable_manager)
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+    app.dependency_overrides[dependencies.require_iam_capable_manager] = lambda: {"ok": True}
+    try:
+        resp = client.get(f"/api/manager/iam/overview?account_id={account.id}")
+    finally:
+        if previous_account_context is not None:
+            app.dependency_overrides[dependencies.get_account_context] = previous_account_context
+        else:
+            app.dependency_overrides.pop(dependencies.get_account_context, None)
+        if previous_iam_guard is not None:
+            app.dependency_overrides[dependencies.require_iam_capable_manager] = previous_iam_guard
+        else:
+            app.dependency_overrides.pop(dependencies.require_iam_capable_manager, None)
     assert resp.status_code == 200
     data = resp.json()
     assert data["iam_users"] == 2
@@ -197,8 +228,21 @@ def test_iam_overview_handles_partial_failures(monkeypatch, client, db_session):
             return []
 
     monkeypatch.setattr("app.routers.manager.iam_overview.get_iam_service", lambda *args, **kwargs: PartialService())
-
-    resp = client.get(f"/api/manager/iam/overview?account_id={account.id}")
+    previous_account_context = app.dependency_overrides.get(dependencies.get_account_context)
+    previous_iam_guard = app.dependency_overrides.get(dependencies.require_iam_capable_manager)
+    app.dependency_overrides[dependencies.get_account_context] = lambda: account
+    app.dependency_overrides[dependencies.require_iam_capable_manager] = lambda: {"ok": True}
+    try:
+        resp = client.get(f"/api/manager/iam/overview?account_id={account.id}")
+    finally:
+        if previous_account_context is not None:
+            app.dependency_overrides[dependencies.get_account_context] = previous_account_context
+        else:
+            app.dependency_overrides.pop(dependencies.get_account_context, None)
+        if previous_iam_guard is not None:
+            app.dependency_overrides[dependencies.require_iam_capable_manager] = previous_iam_guard
+        else:
+            app.dependency_overrides.pop(dependencies.require_iam_capable_manager, None)
     assert resp.status_code == 200
     data = resp.json()
     assert data["iam_users"] == 0

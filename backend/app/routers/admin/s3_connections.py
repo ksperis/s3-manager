@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 
+from app.utils.time import utcnow
 import logging
 from datetime import datetime
 from typing import Optional
@@ -223,8 +224,8 @@ def create_s3_connection(
         is_public=is_public,
         access_key_id=payload.access_key_id,
         secret_access_key=payload.secret_access_key,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=utcnow(),
+        updated_at=utcnow(),
     )
     db.add(conn)
     try:
@@ -324,7 +325,7 @@ def update_s3_connection(
             verify_tls,
             provider,
         )
-    conn.updated_at = datetime.utcnow()
+    conn.updated_at = utcnow()
     db.commit()
     db.refresh(conn)
     audit.record_action(
@@ -373,7 +374,7 @@ def rotate_s3_connection_credentials(
     _ensure_editable(conn, current_user)
     conn.access_key_id = payload.access_key_id
     conn.secret_access_key = payload.secret_access_key
-    conn.updated_at = datetime.utcnow()
+    conn.updated_at = utcnow()
     db.commit()
     db.refresh(conn)
     audit.record_action(
@@ -486,7 +487,7 @@ def add_connection_user(
         .filter(UserS3Connection.user_id == payload.user_id, UserS3Connection.s3_connection_id == connection_id)
         .first()
     )
-    now = datetime.utcnow()
+    now = utcnow()
     if existing:
         existing.updated_at = now
         link = existing
@@ -544,7 +545,7 @@ def update_connection_user(
     )
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
-    link.updated_at = datetime.utcnow()
+    link.updated_at = utcnow()
     db.commit()
     audit.record_action(
         user=current_user,

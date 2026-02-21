@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import datetime
+from app.utils.time import utcnow
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -15,7 +15,7 @@ class EndpointHealthCheck(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=False, index=True)
-    checked_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    checked_at = Column(DateTime, nullable=False, default=utcnow, index=True)
     http_status = Column(Integer, nullable=True)
     latency_ms = Column(Integer, nullable=True)
     check_mode = Column(String, nullable=False, default="http", server_default="http")
@@ -52,7 +52,7 @@ class EndpointHealthLatest(Base):
     max_latency_ms = Column(Integer, nullable=True)
     latency_sample_count = Column(Integer, nullable=False, default=0, server_default="0")
     availability_24h = Column(Integer, nullable=True)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, index=True)
 
     storage_endpoint = relationship("StorageEndpoint")
 
@@ -73,7 +73,7 @@ class EndpointHealthStatusSegment(Base):
     avg_latency_ms = Column(Integer, nullable=True)
     max_latency_ms = Column(Integer, nullable=True)
     latency_sample_count = Column(Integer, nullable=False, default=0, server_default="0")
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, index=True)
 
     storage_endpoint = relationship("StorageEndpoint")
 
@@ -108,6 +108,6 @@ class EndpointHealthRollup(Base):
     latency_max_ms = Column(Integer, nullable=True)
     latency_p95_ms = Column(Integer, nullable=True)
     latency_sample_count = Column(Integer, nullable=False, default=0, server_default="0")
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, index=True)
 
     storage_endpoint = relationship("StorageEndpoint")

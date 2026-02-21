@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.utils.time import utcnow
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -34,7 +35,7 @@ class RefreshSessionService:
         )
 
     def rotate(self, session: RefreshSession) -> str:
-        now = datetime.utcnow()
+        now = utcnow()
         token = create_refresh_token()
         session.token_hash = hash_refresh_token(token)
         session.last_used_at = now
@@ -44,14 +45,14 @@ class RefreshSessionService:
         return token
 
     def revoke(self, session: RefreshSession) -> None:
-        session.revoked_at = datetime.utcnow()
+        session.revoked_at = utcnow()
         self.db.add(session)
         self.db.commit()
 
     def is_expired(self, session: RefreshSession) -> bool:
         if session.revoked_at is not None:
             return True
-        return session.expires_at <= datetime.utcnow()
+        return session.expires_at <= utcnow()
 
     def _create(
         self,
@@ -60,7 +61,7 @@ class RefreshSessionService:
         rgw_session_id: Optional[str],
         auth_type: Optional[str],
     ) -> tuple[str, RefreshSession]:
-        now = datetime.utcnow()
+        now = utcnow()
         token = create_refresh_token()
         session = RefreshSession(
             id=str(uuid.uuid4()),

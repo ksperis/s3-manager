@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-from datetime import datetime
+from app.utils.time import utcnow
 
 from sqlalchemy import BigInteger, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -33,7 +33,7 @@ class BillingUsageDaily(Base):
     ops_total = Column(BigInteger, nullable=False, default=0, server_default="0")
     ops_breakdown = Column(Text, nullable=True)
     source = Column(String, nullable=False, default="rgw_admin_usage")
-    collected_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    collected_at = Column(DateTime, nullable=False, default=utcnow)
 
     storage_endpoint = relationship("StorageEndpoint")
     account = relationship("S3Account")
@@ -62,7 +62,7 @@ class BillingStorageDaily(Base):
     total_objects = Column(BigInteger, nullable=False, default=0, server_default="0")
     by_bucket = Column(Text, nullable=True)
     source = Column(String, nullable=False, default="rgw_admin_bucket_stats")
-    collected_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    collected_at = Column(DateTime, nullable=False, default=utcnow)
 
     storage_endpoint = relationship("StorageEndpoint")
     account = relationship("S3Account")
@@ -83,8 +83,8 @@ class BillingRateCard(Base):
     effective_from = Column(Date, nullable=False)
     effective_to = Column(Date, nullable=True)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True, index=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow)
 
     storage_endpoint = relationship("StorageEndpoint")
 
@@ -97,7 +97,7 @@ class BillingAssignment(Base):
     s3_account_id = Column(Integer, ForeignKey("s3_accounts.id"), nullable=True, index=True)
     s3_user_id = Column(Integer, ForeignKey("s3_users.id"), nullable=True, index=True)
     rate_card_id = Column(Integer, ForeignKey("billing_rate_cards.id"), nullable=False, index=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
 
     storage_endpoint = relationship("StorageEndpoint")
     account = relationship("S3Account")

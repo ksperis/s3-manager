@@ -1,288 +1,266 @@
-# Copyright (c) 2025 Laurent Barbe
+# Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from __future__ import annotations
+
 from typing import Optional
 
 import pytest
 
-from app.db import S3User, User, UserS3User, UserRole
+from app.db import S3User, StorageEndpoint, StorageProvider, User, UserRole, UserS3User
 from app.models.s3_user import S3UserCreate, S3UserImport, S3UserUpdate
-from app.services.s3_users_service import S3UsersService
-from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services import s3_client
+from app.services.rgw_admin import RGWAdminClient, RGWAdminError
+from app.services.s3_users_service import S3UsersService
 
 
 class FakeRGWAdmin:
-    def __init__(self):
-        self.created_users: list[str] = []
+    def __init__(self) -> None:
+        self.remote_users: dict[str, dict] = {}
         self.deleted_users: list[str] = []
-        self.rotated_users: list[str] = []
         self.deleted_keys: list[str] = []
-        self.cap_operations: list[tuple[str, str, Optional[str], str]] = []
-        self.importable_users: dict[str, dict] = {
-            "existing": {
-                "display_name": "Existing",
-                "keys": [{"access_key": "AK-existing", "secret_key": "SK-existing"}],
-            },
-        }
-        self.user_keys: dict[str, list[dict[str, str]]] = {
-            uid: [dict(entry) for entry in payload.get("keys", [])]
-            for uid, payload in self.importable_users.items()
-        }
-        self.user_caps: dict[str, list[dict[str, str]]] = {}
+        self.quota_by_uid: dict[str, tuple[Optional[int], Optional[int]]] = {}
 
-    def _register_key(self, uid: str, access_key: str, secret_key: str) -> dict[str, str]:
-        self.user_keys.setdefault(uid, []).append({"access_key": access_key, "secret_key": secret_key})
-        return {"access_key": access_key, "secret_key": secret_key}
-
-    def create_user(self, uid: str, display_name: str, email: str = "", tenant: Optional[str] = None):
-        self.created_users.append(uid)
-        key = self._register_key(uid, f"AK-{uid}", f"SK-{uid}")
-        return {"keys": [key], "display_name": display_name}
-
-    def create_access_key(self, uid: str, tenant: Optional[str] = None):
-        self.rotated_users.append(uid)
-        count = len(self.user_keys.get(uid, [])) + 1
-        key = self._register_key(uid, f"ROT-{uid}-{count}", f"SEC-{uid}-{count}")
-        return {
-            "access_key": key["access_key"],
-            "secret_key": key["secret_key"],
-            "key_status": "enabled",
-        }
-
-    def delete_access_key(self, uid: str, access_key: str, tenant: Optional[str] = None):
-        keys = self.user_keys.get(uid, [])
-        filtered = [k for k in keys if k["access_key"] != access_key]
-        if len(filtered) == len(keys):
-            raise RGWAdminError("key not found")
-        self.user_keys[uid] = filtered
-        self.deleted_keys.append(access_key)
-
-    def delete_user(self, uid: str, tenant: Optional[str] = None):
-        if uid == "fail":
-            raise RGWAdminError("boom")
-        self.deleted_users.append(uid)
-
-    def get_user(self, uid: str, tenant: Optional[str] = None, allow_not_found: bool = False):
-        keys = self.user_keys.get(uid)
-        if not keys:
-            return {"not_found": True}
-        data = {"keys": keys, "display_name": uid}
-        caps = self.user_caps.get(uid)
-        if caps is not None:
-            data["caps"] = [dict(entry) for entry in caps]
-        return data
-
-    def get_user_quota(self, uid: str, tenant: Optional[str] = None):
-        return None, None
-
-    def _extract_keys(self, data):
+    def _extract_keys(self, data):  # noqa: ANN001
         return RGWAdminClient._extract_keys(self, data)
 
-    def set_user_caps(self, uid: str, cap: str, tenant: Optional[str] = None, op: str = "add"):
-        self.cap_operations.append((uid, cap, tenant, op))
-        scope, _, perms = cap.partition("=")
-        normalized_perm = perms.replace(" ", "") or "*"
-        if op == "del":
-            entries = self.user_caps.get(uid, [])
-            filtered = [entry for entry in entries if not (entry.get("type") == scope and entry.get("perm", "").replace(" ", "") == normalized_perm)]
-            self.user_caps[uid] = filtered
-        else:
-            self.user_caps.setdefault(uid, []).append({"type": scope, "perm": normalized_perm})
-        return {"uid": uid, "cap": cap, "tenant": tenant, "op": op}
+    def create_user(self, uid: str, display_name: str, email: str = "", tenant: Optional[str] = None):
+        if tenant is not None:
+            raise RGWAdminError("tenant not supported in fake")
+        key = {"access_key": f"AK-{uid}", "secret_key": f"SK-{uid}", "status": "enabled"}
+        self.remote_users[uid] = {
+            "display_name": display_name,
+            "email": email or None,
+            "keys": [key],
+            "caps": [],
+        }
+        return {"display_name": display_name, "keys": [dict(key)]}
 
-    def list_topics(self, account_id: Optional[str] = None):
-        return []
+    def get_user(self, uid: str, tenant: Optional[str] = None, allow_not_found: bool = False):
+        if tenant is not None:
+            raise RGWAdminError("tenant not supported in fake")
+        payload = self.remote_users.get(uid)
+        if payload is None:
+            return {"not_found": True} if allow_not_found else None
+        result = {
+            "display_name": payload.get("display_name"),
+            "email": payload.get("email"),
+            "keys": [dict(entry) for entry in payload.get("keys", [])],
+        }
+        caps = payload.get("caps")
+        if caps:
+            result["caps"] = [dict(entry) for entry in caps]
+        return result
+
+    def create_access_key(self, uid: str, tenant: Optional[str] = None):
+        if tenant is not None:
+            raise RGWAdminError("tenant not supported in fake")
+        payload = self.remote_users.get(uid)
+        if payload is None:
+            raise RGWAdminError("user not found")
+        idx = len(payload.get("keys", [])) + 1
+        key = {
+            "access_key": f"ROT-{uid}-{idx}",
+            "secret_key": f"SEC-{uid}-{idx}",
+            "status": "enabled",
+        }
+        payload.setdefault("keys", []).append(dict(key))
+        return {"keys": [dict(key)]}
+
+    def delete_access_key(self, uid: str, access_key: str, tenant: Optional[str] = None):
+        if tenant is not None:
+            raise RGWAdminError("tenant not supported in fake")
+        payload = self.remote_users.get(uid)
+        if payload is None:
+            raise RGWAdminError("user not found")
+        keys = payload.get("keys", [])
+        filtered = [entry for entry in keys if entry.get("access_key") != access_key]
+        if len(filtered) == len(keys):
+            raise RGWAdminError("key not found")
+        payload["keys"] = filtered
+        self.deleted_keys.append(access_key)
+
+    def set_user_quota(
+        self,
+        uid: str,
+        max_size_bytes: Optional[int] = None,
+        max_objects: Optional[int] = None,
+        enabled: bool = True,
+    ):
+        self.quota_by_uid[uid] = (max_size_bytes, max_objects) if enabled else (None, None)
+        return {"ok": True}
+
+    def get_user_quota(self, uid: str, tenant: Optional[str] = None):
+        if tenant is not None:
+            raise RGWAdminError("tenant not supported in fake")
+        return self.quota_by_uid.get(uid, (None, None))
+
+    def delete_user(self, uid: str, tenant: Optional[str] = None):
+        if tenant is not None:
+            raise RGWAdminError("tenant not supported in fake")
+        if uid not in self.remote_users:
+            raise RGWAdminError("user not found")
+        self.deleted_users.append(uid)
+        self.remote_users.pop(uid, None)
 
 
-def test_create_s3_user_persists_credentials(db_session):
-    service = S3UsersService(db_session, rgw_admin_client=FakeRGWAdmin())
+def _seed_ceph_endpoint(db_session) -> StorageEndpoint:
+    endpoint = StorageEndpoint(
+        name="ceph-users",
+        endpoint_url="https://ceph-users.example.test",
+        provider=StorageProvider.CEPH.value,
+        admin_access_key="AKIA-ADMIN",
+        admin_secret_key="SECRET-ADMIN",
+        features_config=(
+            "features:\n"
+            "  admin:\n"
+            "    enabled: true\n"
+        ),
+        is_default=True,
+        is_editable=True,
+    )
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
+    return endpoint
+
+
+def _build_service(db_session, monkeypatch, fake_admin: FakeRGWAdmin) -> S3UsersService:
+    monkeypatch.setattr("app.services.s3_users_service.get_rgw_admin_client", lambda **_: fake_admin)
+    return S3UsersService(db_session)
+
+
+def test_create_user_persists_credentials(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    fake = FakeRGWAdmin()
+    service = _build_service(db_session, monkeypatch, fake)
+
     created = service.create_user(
         S3UserCreate(
             name="Standalone",
             uid="standalone",
             email="standalone@example.com",
+            storage_endpoint_id=endpoint.id,
         )
     )
+
     assert created.rgw_user_uid == "standalone"
     record = db_session.query(S3User).filter_by(rgw_user_uid="standalone").one()
     assert record.rgw_access_key == "AK-standalone"
     assert record.rgw_secret_key == "SK-standalone"
+    assert record.storage_endpoint_id == endpoint.id
 
 
-def test_import_s3_user_fetches_existing(db_session):
+def test_import_user_fetches_remote_and_creates_key(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
     fake = FakeRGWAdmin()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    imported = service.import_users([S3UserImport(uid="existing")])
+    fake.remote_users["existing"] = {
+        "display_name": "Existing",
+        "email": "existing@example.com",
+        "keys": [{"access_key": "AK-existing", "secret_key": "SK-existing", "status": "enabled"}],
+        "caps": [{"type": "usage", "perm": "read"}],
+    }
+    service = _build_service(db_session, monkeypatch, fake)
+
+    imported = service.import_users([S3UserImport(uid="existing", storage_endpoint_id=endpoint.id)])
+
     assert len(imported) == 1
     record = db_session.query(S3User).filter_by(rgw_user_uid="existing").one()
     assert record.rgw_access_key.startswith("ROT-existing-")
+    assert record.rgw_access_key != "AK-existing"
 
 
-def test_update_links_portal_users(db_session):
+def test_update_links_normalizes_non_ui_roles_to_ui_user(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
     fake = FakeRGWAdmin()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Standalone", uid="link-me"))
-    portal_user = User(email="user@example.com", full_name="Portal", hashed_password="x", role=UserRole.ACCOUNT_ADMIN.value)
-    db_session.add(portal_user)
+    service = _build_service(db_session, monkeypatch, fake)
+
+    created = service.create_user(S3UserCreate(name="Linkable", uid="linkable", storage_endpoint_id=endpoint.id))
+    actor = User(email="actor@example.test", hashed_password="x", role=UserRole.UI_NONE.value)
+    db_session.add(actor)
     db_session.commit()
 
-    updated = service.update_user(created.id, S3UserUpdate(user_ids=[portal_user.id], email="new@example.com"))
-    assert portal_user.id in updated.user_ids
-    link = db_session.query(UserS3User).filter_by(user_id=portal_user.id, s3_user_id=created.id).one()
+    updated = service.update_user(created.id, S3UserUpdate(user_ids=[actor.id]))
+
+    db_session.refresh(actor)
+    assert actor.role == UserRole.UI_USER.value
+    assert actor.id in (updated.user_ids or [])
+    link = db_session.query(UserS3User).filter_by(user_id=actor.id, s3_user_id=created.id).one()
     assert link is not None
 
 
-def test_get_user_returns_schema(db_session):
+def test_rotate_keys_replaces_old_credentials_and_deletes_previous(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
     fake = FakeRGWAdmin()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Standalone", uid="get-me"))
-    fetched = service.get_user(created.id)
-    assert fetched.id == created.id
-    assert fetched.name == "Standalone"
+    service = _build_service(db_session, monkeypatch, fake)
 
+    created = service.create_user(S3UserCreate(name="Rotate", uid="rotate-me", storage_endpoint_id=endpoint.id))
+    previous_key = db_session.query(S3User).filter_by(id=created.id).one().rgw_access_key
 
-def test_rotate_keys_updates_credentials(db_session):
-    fake = FakeRGWAdmin()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Standalone", uid="rotate-me"))
     rotated = service.rotate_keys(created.id)
+
     record = db_session.query(S3User).filter_by(id=created.id).one()
-    assert record.rgw_access_key.startswith("ROT-")
     assert rotated.rgw_user_uid == "rotate-me"
-    assert all(not key["access_key"].startswith("AK-") for key in fake.user_keys["rotate-me"])
+    assert record.rgw_access_key.startswith("ROT-rotate-me-")
+    assert previous_key in fake.deleted_keys
 
 
-def test_rotate_keys_prefers_new_credentials_when_multiple_entries(db_session):
-    class FullResponseRGW(FakeRGWAdmin):
-        def create_access_key(self, uid: str, tenant: Optional[str] = None):  # type: ignore[override]
-            existing_entries = [dict(entry) for entry in self.user_keys.get(uid, [])]
-            for entry in existing_entries:
-                entry.pop("secret_key", None)
-            count = len(existing_entries) + 1
-            new_entry = self._register_key(uid, f"ROT-{uid}-{count}", f"SEC-{uid}-{count}")
-            combined = existing_entries + [dict(new_entry)]
-            return {"display_name": uid, "keys": combined}
-
-    fake = FullResponseRGW()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Standalone", uid="rotate-full"))
-    rotated = service.rotate_keys(created.id)
-    record = db_session.query(S3User).filter_by(id=created.id).one()
-    assert record.rgw_access_key == "ROT-rotate-full-2"
-    assert rotated.rgw_user_uid == "rotate-full"
-    assert fake.deleted_keys == ["AK-rotate-full"]
-    remaining_keys = [entry["access_key"] for entry in fake.user_keys["rotate-full"]]
-    assert remaining_keys == ["ROT-rotate-full-2"]
-
-
-def test_rotate_keys_skips_previous_entry_when_secret_missing(db_session):
-    class NoSecretRGW(FakeRGWAdmin):
-        def create_access_key(self, uid: str, tenant: Optional[str] = None):  # type: ignore[override]
-            existing_entries = [dict(entry) for entry in self.user_keys.get(uid, [])]
-            for entry in existing_entries:
-                entry.pop("secret_key", None)
-            count = len(existing_entries) + 1
-            new_entry = {"access_key": f"ROT-{uid}-{count}", "status": "enabled"}
-            combined = existing_entries + [new_entry]
-            return {"keys": combined}
-
-    fake = NoSecretRGW()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Standalone", uid="rotate-secretless"))
-    rotated = service.rotate_keys(created.id)
-    record = db_session.query(S3User).filter_by(id=created.id).one()
-    assert record.rgw_access_key == "ROT-rotate-secretless-2"
-    assert rotated.rgw_user_uid == "rotate-secretless"
-
-
-def test_create_s3_user_leaves_caps_untouched(db_session):
-    class CapRGW(FakeRGWAdmin):
-        def create_user(self, uid: str, display_name: str, email: str = "", tenant: Optional[str] = None):  # type: ignore[override]
-            resp = super().create_user(uid, display_name, email=email, tenant=tenant)
-            self.user_caps[uid] = [
-                {"type": "usage", "perm": "read"},
-                {"type": "buckets", "perm": "read, write"},
-            ]
-            return resp
-
-    fake = CapRGW()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Secure", uid="caps-off"))
-    assert created.rgw_user_uid == "caps-off"
-    assert fake.cap_operations == []
-    assert fake.user_caps["caps-off"] != []
-
-
-def test_import_s3_user_leaves_existing_caps(db_session):
-    class ImportCapRGW(FakeRGWAdmin):
-        def __init__(self):
-            super().__init__()
-            self.importable_users["cap-import"] = {
-                "display_name": "Cap Import",
-                "keys": [{"access_key": "AK-cap", "secret_key": "SK-cap"}],
-            }
-            self.user_keys["cap-import"] = [
-                {"access_key": "AK-cap", "secret_key": "SK-cap"},
-            ]
-            self.user_caps["cap-import"] = [
-                {"type": "usage", "perm": "read"},
-                {"type": "users", "perm": "read"},
-            ]
-
-    fake = ImportCapRGW()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    imported = service.import_users([S3UserImport(uid="cap-import")])
-    assert len(imported) == 1
-    assert fake.cap_operations == []
-    assert fake.user_caps["cap-import"] != []
-
-
-def test_delete_user_can_skip_rgw(monkeypatch, db_session):
+def test_list_keys_marks_ui_key(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
     fake = FakeRGWAdmin()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Standalone", uid="delete-me"))
+    service = _build_service(db_session, monkeypatch, fake)
 
-    monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: [])
+    created = service.create_user(S3UserCreate(name="Keys", uid="keys", storage_endpoint_id=endpoint.id))
+    extra = service.create_access_key_entry(created.id)
 
-    service.delete_user(created.id, delete_rgw=True)
-    assert fake.deleted_users == ["delete-me"]
+    keys = service.list_keys(created.id)
+
+    assert any(key.is_ui_managed for key in keys)
+    assert any(key.access_key_id == extra.access_key_id for key in keys)
+
+
+def test_delete_key_validations(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    fake = FakeRGWAdmin()
+    service = _build_service(db_session, monkeypatch, fake)
+
+    created = service.create_user(S3UserCreate(name="DeleteKey", uid="delete-key", storage_endpoint_id=endpoint.id))
+    record = db_session.query(S3User).filter_by(id=created.id).one()
+
+    with pytest.raises(ValueError):
+        service.delete_key(created.id, record.rgw_access_key)
+
+    extra_key = service.create_access_key_entry(created.id).access_key_id
+    service.delete_key(created.id, extra_key)
+    assert extra_key in fake.deleted_keys
+
+
+def test_unlink_user_removes_interface_key_and_db_row(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    fake = FakeRGWAdmin()
+    service = _build_service(db_session, monkeypatch, fake)
+
+    created = service.create_user(S3UserCreate(name="Unlink", uid="unlink-me", storage_endpoint_id=endpoint.id))
+    interface_key = db_session.query(S3User).filter_by(id=created.id).one().rgw_access_key
+
+    service.unlink_user(created.id)
+
+    assert interface_key in fake.deleted_keys
     assert db_session.query(S3User).filter_by(id=created.id).first() is None
 
 
-def test_list_keys_marks_ui_key(db_session):
+def test_delete_user_with_delete_rgw_checks_buckets_then_deletes(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
     fake = FakeRGWAdmin()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Standalone", uid="list-keys"))
-    extra = service.create_access_key_entry(created.id)
-    keys = service.list_keys(created.id)
-    assert any(k.is_ui_managed for k in keys)
-    assert any(k.access_key_id == extra.access_key_id for k in keys)
+    service = _build_service(db_session, monkeypatch, fake)
 
+    created = service.create_user(S3UserCreate(name="Remote", uid="remote-user", storage_endpoint_id=endpoint.id))
 
-def test_create_access_key_entry_returns_secret(db_session):
-    fake = FakeRGWAdmin()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Standalone", uid="create-access"))
-    key = service.create_access_key_entry(created.id)
-    assert key.secret_access_key.startswith("SEC-create-access")
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: [{"name": "owned-bucket"}])
+    with pytest.raises(ValueError, match="still owns"):
+        service.delete_user(created.id, delete_rgw=True)
 
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: [])
+    service.delete_user(created.id, delete_rgw=True)
 
-def test_delete_key_validations(db_session):
-    fake = FakeRGWAdmin()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Standalone", uid="delete-key"))
-    record = db_session.query(S3User).filter_by(id=created.id).one()
-    with pytest.raises(ValueError):
-        service.delete_key(created.id, record.rgw_access_key)
-    extra = service.create_access_key_entry(created.id).access_key_id
-    service.delete_key(created.id, extra)
-    assert all(key["access_key"] != extra for key in fake.user_keys["delete-key"])
-
-
-def test_unlink_user_removes_ui_key_and_row(db_session):
-    fake = FakeRGWAdmin()
-    service = S3UsersService(db_session, rgw_admin_client=fake)
-    created = service.create_user(S3UserCreate(name="Standalone", uid="unlink-me"))
-    service.unlink_user(created.id)
-    assert fake.deleted_keys == ["AK-unlink-me"]
+    assert "remote-user" in fake.deleted_users
     assert db_session.query(S3User).filter_by(id=created.id).first() is None

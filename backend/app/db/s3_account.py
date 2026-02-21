@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from datetime import datetime
+from app.utils.time import utcnow
 from typing import Optional
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
@@ -21,7 +21,7 @@ class S3Account(Base):
     rgw_access_key = Column(String, nullable=True)
     rgw_secret_key = Column(EncryptedString, nullable=True)
     rgw_user_uid = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
     portal_settings_override = Column(Text, nullable=True)
 
@@ -81,8 +81,8 @@ class UserS3Account(Base):
     can_manage_buckets = Column(Boolean, nullable=False, default=True, server_default="1")
     can_manage_portal_users = Column(Boolean, nullable=False, default=False, server_default="0")
     can_view_root_key = Column(Boolean, nullable=False, default=False, server_default="0")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
 
     user = relationship(
         "User",
@@ -110,7 +110,7 @@ class AccountIAMUser(Base):
     iam_username = Column(String, nullable=True)
     active_access_key = Column(String, nullable=True)
     active_secret_key = Column(EncryptedString, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
 
     user = relationship(
         "User",

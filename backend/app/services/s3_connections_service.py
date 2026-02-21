@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 
+from app.utils.time import utcnow
 import json
 from datetime import datetime
 from typing import Any, Optional
@@ -67,8 +68,8 @@ class S3ConnectionsService:
             row = self.get_visible(user_id, connection_id)
         except KeyError:
             return
-        row.last_used_at = datetime.utcnow()
-        row.updated_at = datetime.utcnow()
+        row.last_used_at = utcnow()
+        row.updated_at = utcnow()
         self.db.commit()
 
     def update_credentials(self, user_id: int, connection_id: int, *, access_key_id: str, secret_access_key: str) -> S3Connection:
@@ -76,7 +77,7 @@ class S3ConnectionsService:
         row = self.get_owned(user_id, connection_id)
         row.access_key_id = access_key_id
         row.secret_access_key = secret_access_key
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utcnow()
         self.db.commit()
         self.db.refresh(row)
         return self._to_model(row)
@@ -121,7 +122,7 @@ class S3ConnectionsService:
         temp_user_uid: Optional[str],
         temp_access_key_id: Optional[str],
     ) -> DBS3Connection:
-        now = datetime.utcnow()
+        now = utcnow()
         row = DBS3Connection(
             owner_user_id=owner_user_id,
             name=name,
@@ -175,8 +176,8 @@ class S3ConnectionsService:
             access_key_id=payload.access_key_id,
             secret_access_key=payload.secret_access_key,
             capabilities_json=json.dumps({}),
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=utcnow(),
+            updated_at=utcnow(),
         )
         self.db.add(row)
         self.db.commit()
@@ -224,7 +225,7 @@ class S3ConnectionsService:
             row.access_key_id = payload.access_key_id
         if payload.secret_access_key is not None:
             row.secret_access_key = payload.secret_access_key
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utcnow()
         self.db.commit()
         self.db.refresh(row)
         return self._to_model(row)
@@ -241,7 +242,7 @@ class S3ConnectionsService:
     def set_capabilities(self, user_id: int, connection_id: int, caps: dict[str, Any]) -> None:
         row = self.get_owned(user_id, connection_id)
         row.capabilities_json = json.dumps(caps)
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utcnow()
         self.db.commit()
 
     def _parse_capabilities(self, value: Optional[str]) -> dict[str, Any]:

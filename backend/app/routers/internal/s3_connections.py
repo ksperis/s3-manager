@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.utils.time import utcnow
 from datetime import datetime
 import logging
 
@@ -21,7 +22,7 @@ def cleanup_temporary_connections(
     _: None = Depends(require_internal_cron_token),
     db: Session = Depends(get_db),
 ) -> dict[str, int]:
-    now = datetime.utcnow()
+    now = utcnow()
     rows = (
         db.query(S3Connection)
         .filter(S3Connection.is_temporary.is_(True))

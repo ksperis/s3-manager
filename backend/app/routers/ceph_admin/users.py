@@ -204,7 +204,7 @@ def _parse_advanced_filter(raw: str | None) -> CephAdminUserFilterQuery | None:
     try:
         if hasattr(CephAdminUserFilterQuery, "model_validate"):
             return CephAdminUserFilterQuery.model_validate(parsed)
-        return CephAdminUserFilterQuery.parse_obj(parsed)
+        return CephAdminUserFilterQuery(**parsed)
     except ValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.utils.time import utcnow
 from datetime import datetime
 from typing import Optional
 
@@ -150,7 +151,7 @@ def list_execution_contexts(
         db.query(UserS3Connection.s3_connection_id)
         .filter(UserS3Connection.user_id == user.id)
     )
-    now = datetime.utcnow()
+    now = utcnow()
     connections = (
         db.query(S3Connection)
         .filter(

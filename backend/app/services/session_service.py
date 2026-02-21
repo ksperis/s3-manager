@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.utils.time import utcnow
 import hashlib
 import json
 import logging
@@ -57,8 +58,8 @@ class SessionService:
             can_manage_iam=capabilities.can_manage_iam,
             can_manage_buckets=capabilities.can_manage_buckets,
             can_view_traffic=capabilities.can_view_traffic,
-            created_at=datetime.utcnow(),
-            last_used_at=datetime.utcnow(),
+            created_at=utcnow(),
+            last_used_at=utcnow(),
         )
         self.db.add(session)
         self.db.commit()
@@ -68,7 +69,7 @@ class SessionService:
         session = self.db.query(RgwSession).filter(RgwSession.id == session_id).first()
         if not session:
             return None
-        session.last_used_at = datetime.utcnow()
+        session.last_used_at = utcnow()
         self.db.add(session)
         self.db.commit()
         return self._to_principal(session)

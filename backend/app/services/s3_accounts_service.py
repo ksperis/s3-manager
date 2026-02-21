@@ -1,5 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+from app.utils.time import utcnow
 from sqlalchemy.orm import Session
 import logging
 from datetime import datetime
@@ -891,7 +892,7 @@ class S3AccountsService:
                 db_link.can_manage_portal_users = db_link.account_admin or account_role == AccountRole.PORTAL_MANAGER.value
                 db_link.can_manage_iam = db_link.can_manage_portal_users
                 db_link.can_view_root_key = bool(db_link.account_admin or db_link.can_manage_portal_users or db_link.can_manage_iam)
-                db_link.updated_at = datetime.utcnow()
+                db_link.updated_at = utcnow()
                 self.db.add(db_link)
 
         self.db.add(account)

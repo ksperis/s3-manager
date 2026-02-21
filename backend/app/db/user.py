@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from datetime import datetime
+from app.utils.time import utcnow
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -28,7 +28,7 @@ class User(Base):
     can_access_ceph_admin = Column(Boolean, default=False, nullable=False, server_default="0")
     auth_provider = Column(String, nullable=True)
     auth_provider_subject = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     last_login_at = Column(DateTime, nullable=True)
     ui_language = Column(String, nullable=True)
 
@@ -78,5 +78,5 @@ class User(Base):
     s3_connection_links = relationship(
         "UserS3Connection",
         back_populates="user",
-        overlaps="shared_s3_connections,s3_connections",
+        overlaps="shared_s3_connections,s3_connections,users",
     )

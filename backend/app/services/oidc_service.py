@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.utils.time import utcnow
+
 import base64
 import hashlib
 import logging
@@ -117,7 +119,7 @@ class OidcService:
         if not login_state or login_state.provider != provider_key:
             raise OIDCStateError("Invalid OIDC state")
         ttl = timedelta(seconds=self.settings.oidc_state_ttl_seconds)
-        if login_state.created_at < datetime.utcnow() - ttl:
+        if login_state.created_at < utcnow() - ttl:
             self.db.delete(login_state)
             self.db.commit()
             raise OIDCStateError("OIDC state expired")
@@ -287,7 +289,7 @@ class OidcService:
         return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
 
     def _purge_expired_states(self) -> None:
-        cutoff = datetime.utcnow() - timedelta(seconds=self.settings.oidc_state_ttl_seconds)
+        cutoff = utcnow() - timedelta(seconds=self.settings.oidc_state_ttl_seconds)
         self.db.query(OidcLoginState).filter(OidcLoginState.created_at < cutoff).delete()
         self.db.commit()
 

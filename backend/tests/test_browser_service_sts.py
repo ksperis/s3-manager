@@ -2,13 +2,30 @@
 # Licensed under the Apache License, Version 2.0
 from datetime import datetime, timedelta, timezone
 
-from app.db import S3Account
+from app.db import S3Account, StorageEndpoint, StorageProvider
 from app.services import browser_service
+
+
+def _account_with_sts_endpoint() -> S3Account:
+    endpoint = StorageEndpoint(
+        name="ceph-sts",
+        endpoint_url="https://ceph-sts.example.test",
+        provider=StorageProvider.CEPH.value,
+        features_config=(
+            "features:\n"
+            "  sts:\n"
+            "    enabled: true\n"
+        ),
+    )
+    account = S3Account(rgw_access_key="root", rgw_secret_key="secret")
+    account.storage_endpoint = endpoint
+    account.storage_endpoint_id = 1
+    return account
 
 
 def test_browser_service_prefers_sts_credentials(monkeypatch):
     browser_service._STS_CACHE.clear()
-    account = S3Account(rgw_access_key="root", rgw_secret_key="secret")
+    account = _account_with_sts_endpoint()
 
     def fake_get_session_token(*args, **kwargs):
         return (
@@ -21,10 +38,12 @@ def test_browser_service_prefers_sts_credentials(monkeypatch):
     monkeypatch.setattr(browser_service, "get_session_token", fake_get_session_token)
     captured = {}
 
-    def fake_get_s3_client(access_key, secret_key, endpoint=None, session_token=None):
+    def fake_get_s3_client(access_key, secret_key, endpoint=None, session_token=None, **kwargs):
         captured["access_key"] = access_key
         captured["secret_key"] = secret_key
         captured["session_token"] = session_token
+        captured["endpoint"] = endpoint
+        captured["extra"] = kwargs
         return object()
 
     monkeypatch.setattr(browser_service, "get_s3_client", fake_get_s3_client)
@@ -39,7 +58,9 @@ def test_browser_service_prefers_sts_credentials(monkeypatch):
 
 def test_browser_service_falls_back_on_sts_error(monkeypatch):
     browser_service._STS_CACHE.clear()
-    account = S3Account(rgw_access_key="root-access", rgw_secret_key="root-secret")
+    account = _account_with_sts_endpoint()
+    account.rgw_access_key = "root-access"
+    account.rgw_secret_key = "root-secret"
     account._session_token = "session-token"
 
     def fake_get_session_token(*args, **kwargs):
@@ -48,10 +69,12 @@ def test_browser_service_falls_back_on_sts_error(monkeypatch):
     monkeypatch.setattr(browser_service, "get_session_token", fake_get_session_token)
     captured = {}
 
-    def fake_get_s3_client(access_key, secret_key, endpoint=None, session_token=None):
+    def fake_get_s3_client(access_key, secret_key, endpoint=None, session_token=None, **kwargs):
         captured["access_key"] = access_key
         captured["secret_key"] = secret_key
         captured["session_token"] = session_token
+        captured["endpoint"] = endpoint
+        captured["extra"] = kwargs
         return object()
 
     monkeypatch.setattr(browser_service, "get_s3_client", fake_get_s3_client)

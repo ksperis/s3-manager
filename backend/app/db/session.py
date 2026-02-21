@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from datetime import datetime
+from app.utils.time import utcnow
 
 from sqlalchemy import Boolean, Column, DateTime, String, Text
 
@@ -24,5 +24,5 @@ class RgwSession(Base):
     can_manage_iam = Column(Boolean, default=False, nullable=False)
     can_manage_buckets = Column(Boolean, default=True, nullable=False)
     can_view_traffic = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    last_used_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    last_used_at = Column(DateTime, default=utcnow, nullable=False)

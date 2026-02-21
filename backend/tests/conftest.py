@@ -1,20 +1,19 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-import os
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 
-from app.db import Base, User, UserRole, S3Account
+from app.db import Base, User, UserRole
 from app.main import app
 from app.routers import dependencies
 
 
 @pytest.fixture(scope="session")
 def test_engine():
-    # Use in-memory sqlite
+    # Shared in-memory sqlite database for the whole test session.
     return create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -22,15 +21,11 @@ def test_engine():
     )
 
 
-@pytest.fixture(scope="session")
-def tables(test_engine):
-    Base.metadata.create_all(bind=test_engine)
-    yield
-    Base.metadata.drop_all(bind=test_engine)
-
-
 @pytest.fixture
-def db_session(test_engine, tables):
+def db_session(test_engine):
+    # Full schema reset per test to avoid order-dependent state leaks.
+    Base.metadata.drop_all(bind=test_engine)
+    Base.metadata.create_all(bind=test_engine)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     session = SessionLocal()
     try:
@@ -42,12 +37,8 @@ def db_session(test_engine, tables):
 @pytest.fixture
 def client(db_session):
     def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
+        yield db_session
 
-    # Fake current users
     def override_super_admin():
         return User(
             id=999,
@@ -55,7 +46,7 @@ def client(db_session):
             full_name="Admin",
             hashed_password="x",
             is_active=True,
-            role=UserRole.SUPER_ADMIN.value,
+            role=UserRole.UI_ADMIN.value,
         )
 
     def override_account_admin():
@@ -65,7 +56,7 @@ def client(db_session):
             full_name="Manager",
             hashed_password="x",
             is_active=True,
-            role=UserRole.ACCOUNT_ADMIN.value,
+            role=UserRole.UI_USER.value,
         )
 
     app.dependency_overrides[dependencies.get_db] = override_get_db

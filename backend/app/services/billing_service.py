@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.utils.time import utcnow
+
 import csv
 import io
 import json
@@ -444,7 +446,7 @@ class BillingCollector:
             .first()
         )
         payload = json.dumps(ops_breakdown) if ops_breakdown else None
-        now = datetime.utcnow()
+        now = utcnow()
         if existing:
             existing.bytes_in = bytes_in
             existing.bytes_out = bytes_out
@@ -491,7 +493,7 @@ class BillingCollector:
             .first()
         )
         payload = json.dumps(by_bucket) if by_bucket else None
-        now = datetime.utcnow()
+        now = utcnow()
         if existing:
             existing.total_bytes = total_bytes
             existing.total_objects = total_objects

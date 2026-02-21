@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from app.utils.time import utcnow
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -46,8 +46,8 @@ class S3Connection(Base):
     # Cached capability profile (JSON) computed from probes (optional)
     capabilities_json = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
     last_used_at = Column(DateTime, nullable=True)
 
     owner = relationship("User", back_populates="s3_connections", overlaps="s3_connections")
@@ -57,7 +57,7 @@ class S3Connection(Base):
         "User",
         secondary="user_s3_connections",
         back_populates="shared_s3_connections",
-        overlaps="user_links,connection_links,owner",
+        overlaps="user_links,connection_links,owner,s3_connection_links",
     )
     user_links = relationship(
         "UserS3Connection",
@@ -74,13 +74,13 @@ class UserS3Connection(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     s3_connection_id = Column(Integer, ForeignKey("s3_connections.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, nullable=False)
 
     user = relationship(
         "User",
         back_populates="s3_connection_links",
-        overlaps="shared_s3_connections,s3_connections",
+        overlaps="shared_s3_connections,s3_connections,users",
     )
     connection = relationship(
         "S3Connection",

@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from app.utils.time import utcnow
+
 import logging
 import math
 import time
@@ -135,7 +137,7 @@ class HealthCheckService:
             .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
             .all()
         )
-        run_started_at = datetime.utcnow()
+        run_started_at = utcnow()
         profiles = {endpoint.id: self._resolve_healthcheck_profile(endpoint) for endpoint in endpoints}
         baselines = {
             endpoint.id: self._load_latency_baseline(endpoint.id, profiles[endpoint.id].mode, run_started_at)
@@ -166,7 +168,7 @@ class HealthCheckService:
                             HealthCheckResult(
                                 endpoint_id=endpoint_id,
                                 status=HealthCheckStatus.DOWN,
-                                checked_at=datetime.utcnow(),
+                                checked_at=utcnow(),
                                 latency_ms=None,
                                 http_status=None,
                                 error_message=f"Healthcheck worker failure: {exc}",
@@ -235,7 +237,7 @@ class HealthCheckService:
         endpoint_ids = [endpoint.id for endpoint in endpoints]
         latest_scope_by_endpoint = self._load_latest_scope_by_endpoint(endpoint_ids)
         summaries: list[dict] = []
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = utcnow().isoformat()
         for endpoint in endpoints:
             profile = self._resolve_healthcheck_profile(endpoint)
             latest = latest_scope_by_endpoint.get(endpoint.id)
@@ -269,14 +271,14 @@ class HealthCheckService:
                     "check_target_url": profile.target_url,
                 }
             )
-        return {"generated_at": datetime.utcnow().isoformat(), "endpoints": summaries}
+        return {"generated_at": utcnow().isoformat(), "endpoints": summaries}
 
     def build_series(self, endpoint_id: int, window: HealthWindow) -> dict:
         endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:
             raise ValueError("Endpoint not found.")
         profile = self._resolve_healthcheck_profile(endpoint)
-        now = datetime.utcnow()
+        now = utcnow()
         start = now - WINDOW_DELTAS[window]
         rollup_rows = (
             self.db.query(EndpointHealthRollup)
@@ -343,7 +345,7 @@ class HealthCheckService:
             .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
             .all()
         )
-        now = datetime.utcnow()
+        now = utcnow()
         start = now - WINDOW_DELTAS[window]
         endpoint_ids = [endpoint.id for endpoint in endpoints]
         payload: list[dict] = []
@@ -410,7 +412,7 @@ class HealthCheckService:
             .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
             .all()
         )
-        now = datetime.utcnow()
+        now = utcnow()
         start = now - WINDOW_DELTAS[window]
         endpoint_ids = [endpoint.id for endpoint in endpoints]
 
@@ -478,7 +480,7 @@ class HealthCheckService:
             }
             for endpoint in endpoints
         }
-        now = datetime.utcnow()
+        now = utcnow()
         start = now - WINDOW_DELTAS[window]
 
         segment_rows = (
@@ -551,7 +553,7 @@ class HealthCheckService:
         if endpoint_id is not None and not endpoints:
             raise ValueError("Endpoint not found.")
 
-        now = datetime.utcnow()
+        now = utcnow()
         endpoint_ids = [int(endpoint.id) for endpoint in endpoints]
         latest_scope_by_endpoint = self._load_latest_scope_by_endpoint(endpoint_ids)
 
@@ -677,7 +679,7 @@ class HealthCheckService:
         check_mode = _coerce_check_mode(
             (latest_scope.check_mode if latest_scope else None) or profile.mode
         )
-        now = datetime.utcnow()
+        now = utcnow()
         start = now - WINDOW_DELTAS[window]
         rows = (
             self.db.query(EndpointHealthStatusSegment)
@@ -726,7 +728,7 @@ class HealthCheckService:
         endpoint = self.db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
         if not endpoint:
             raise ValueError("Endpoint not found.")
-        now = datetime.utcnow()
+        now = utcnow()
         start = now - WINDOW_DELTAS[window]
         safe_page = max(1, int(page))
         safe_page_size = max(1, int(page_size))
@@ -817,7 +819,7 @@ class HealthCheckService:
         entry.max_latency_ms = max(latencies) if latencies else None
         entry.latency_sample_count = len(latencies)
         entry.availability_24h = availability_24h
-        entry.updated_at = datetime.utcnow()
+        entry.updated_at = utcnow()
         self.db.add(entry)
 
     def _update_status_segment(self, result: HealthCheckResult) -> None:
@@ -850,13 +852,13 @@ class HealthCheckService:
                 active.max_latency_ms = (
                     latency_value if active.max_latency_ms is None else max(int(active.max_latency_ms), latency_value)
                 )
-            active.updated_at = datetime.utcnow()
+            active.updated_at = utcnow()
             self.db.add(active)
             return
 
         if active:
             active.ended_at = result.checked_at
-            active.updated_at = datetime.utcnow()
+            active.updated_at = utcnow()
             self.db.add(active)
 
         self.db.add(
@@ -873,7 +875,7 @@ class HealthCheckService:
                 avg_latency_ms=latency_value,
                 max_latency_ms=latency_value,
                 latency_sample_count=(1 if latency_value is not None else 0),
-                updated_at=datetime.utcnow(),
+                updated_at=utcnow(),
             )
         )
 
@@ -942,7 +944,7 @@ class HealthCheckService:
         entry.latency_avg_ms = int(round(sum(latencies) / len(latencies))) if latencies else None
         entry.latency_max_ms = max(latencies) if latencies else None
         entry.latency_p95_ms = _percentile(latencies, 0.95) if latencies else None
-        entry.updated_at = datetime.utcnow()
+        entry.updated_at = utcnow()
         self.db.add(entry)
 
     def _resolve_healthcheck_profile(self, endpoint: StorageEndpoint) -> HealthCheckProfile:
@@ -1038,7 +1040,7 @@ class HealthCheckService:
         baseline_latency_ms: Optional[int],
     ) -> HealthCheckResult:
         url = profile.target_url.strip().rstrip("/")
-        checked_at = datetime.utcnow()
+        checked_at = utcnow()
         if not url:
             return HealthCheckResult(
                 endpoint_id=target.endpoint_id,
@@ -1299,7 +1301,7 @@ class HealthCheckService:
         retention_days = settings.healthcheck_retention_days
         if retention_days <= 0:
             return
-        cutoff = datetime.utcnow() - timedelta(days=retention_days)
+        cutoff = utcnow() - timedelta(days=retention_days)
         deleted_raw = (
             self.db.query(EndpointHealthCheck)
             .filter(EndpointHealthCheck.checked_at < cutoff)

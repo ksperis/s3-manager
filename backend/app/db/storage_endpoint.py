@@ -1,6 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from datetime import datetime
+from app.utils.time import utcnow
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
 from app.core.security import EncryptedString
@@ -30,5 +30,5 @@ class StorageEndpoint(Base):
     features_config = Column(Text, nullable=True)
     is_default = Column(Boolean, default=False, nullable=False, server_default="0")
     is_editable = Column(Boolean, default=True, nullable=False, server_default="1")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
