@@ -24,7 +24,7 @@ export type SessionUser = {
   role?: string | null;
   ui_language?: "en" | "fr" | "de" | null;
   can_access_ceph_admin?: boolean | null;
-  authType?: "password" | "rgw_session" | "oidc" | null;
+  authType?: "password" | "s3_session" | "oidc" | null;
   account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
   capabilities?: {
     can_manage_buckets?: boolean;
@@ -75,7 +75,7 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
     return ALL_WORKSPACES.filter((workspace) => workspace.id !== "ceph-admin" || Boolean(user.can_access_ceph_admin));
   }
   if (user.role !== USER_ROLE) return [];
-  if (user.authType === "rgw_session") {
+  if (user.authType === "s3_session") {
     return ALL_WORKSPACES.filter((workspace) => workspace.id === "manager" || workspace.id === "browser");
   }
   const links = user.account_links ?? [];
@@ -131,7 +131,7 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
   if (!user || !user.role) return "/login";
   if (isAdminLikeRole(user.role)) return "/admin";
   if (user.role !== USER_ROLE) return "/unauthorized";
-  if (user.authType === "rgw_session") {
+  if (user.authType === "s3_session") {
     if (generalSettings.manager_enabled) return "/manager";
     if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && user.capabilities?.can_manage_buckets !== false) {
       return "/browser";

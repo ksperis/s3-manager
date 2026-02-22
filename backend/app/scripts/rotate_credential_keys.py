@@ -18,7 +18,7 @@ from app.core.security import (
 from app.db.s3_account import AccountIAMUser, S3Account
 from app.db.s3_connection import S3Connection
 from app.db.s3_user import S3User
-from app.db.session import RgwSession
+from app.db.session import S3Session
 from app.db.storage_endpoint import StorageEndpoint
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ def _rotate_encrypted_fields(session: Session, model, fields: list[str]) -> int:
 
 
 def _rotate_session_fields(session: Session) -> int:
-    rows = session.execute(select(RgwSession)).scalars().all()
+    rows = session.execute(select(S3Session)).scalars().all()
     updated = 0
     for row in rows:
         for field in ("access_key_enc", "secret_key_enc"):

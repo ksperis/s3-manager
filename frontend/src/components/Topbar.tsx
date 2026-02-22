@@ -31,7 +31,7 @@ type StoredAccountLink = {
 
 type StoredTopbarUser = {
   role?: string | null;
-  authType?: "password" | "rgw_session" | "oidc" | null;
+  authType?: "password" | "s3_session" | "oidc" | null;
   account_links?: StoredAccountLink[] | null;
 };
 
@@ -44,7 +44,7 @@ function buildAccountInitial(value?: string | null): string {
 
 function resolveUiRoleLabel(user: StoredTopbarUser | null): string {
   if (!user) return "Unknown";
-  if (user.authType === "rgw_session") return "S3 Session";
+  if (user.authType === "s3_session") return "S3 Session";
   const role = (user.role ?? "").trim().toLowerCase();
   if (role === "ui_superadmin" || role === "super_admin" || role === "superadmin") return "Superadmin";
   if (role === "ui_admin" || role === "admin") return "Admin";
@@ -69,8 +69,8 @@ function resolveActiveContextId(pathname: string): string | null {
 }
 
 function resolveAccountRoleLabel(user: StoredTopbarUser | null, pathname: string): string | null {
-  if (!user || user.authType === "rgw_session") {
-    return user?.authType === "rgw_session" ? "Session context" : null;
+  if (!user || user.authType === "s3_session") {
+    return user?.authType === "s3_session" ? "Session context" : null;
   }
   const contextId = resolveActiveContextId(pathname);
   if (!contextId) return null;
@@ -108,9 +108,9 @@ export default function Topbar({
   const { generalSettings } = useGeneralSettings();
   const location = useLocation();
   const storedUser = useMemo(() => readStoredUser() as StoredTopbarUser | null, []);
-  const isRgwSession = storedUser?.authType === "rgw_session";
+  const isS3Session = storedUser?.authType === "s3_session";
   const canManagePrivateConnections =
-    !isRgwSession &&
+    !isS3Session &&
     (isAdminLikeRole(storedUser?.role) ||
       (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
   const uiRoleLabel = useMemo(() => resolveUiRoleLabel(storedUser), [storedUser]);

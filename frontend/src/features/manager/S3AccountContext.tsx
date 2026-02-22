@@ -72,7 +72,7 @@ function readSessionInfo(): SessionInfo {
   }
   try {
     const parsed = JSON.parse(raw) as { authType?: string | null; accountName?: string | null; accountId?: string | null };
-    const isSession = parsed.authType === "rgw_session";
+    const isSession = parsed.authType === "s3_session";
     const accountName = parsed.accountName ?? parsed.accountId ?? null;
     return { isSession, accountName };
   } catch {

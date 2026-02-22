@@ -33,7 +33,7 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_oidc_login_states_created_at'), ['created_at'], unique=False)
         batch_op.create_index(batch_op.f('ix_oidc_login_states_state'), ['state'], unique=False)
 
-    op.create_table('rgw_sessions',
+    op.create_table('s3_sessions',
     sa.Column('id', sa.String(), nullable=False),
     sa.Column('access_key_enc', sa.String(), nullable=False),
     sa.Column('secret_key_enc', sa.String(), nullable=False),
@@ -51,9 +51,9 @@ def upgrade() -> None:
     sa.Column('last_used_at', sa.DateTime(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('rgw_sessions', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_rgw_sessions_access_key_hash'), ['access_key_hash'], unique=False)
-        batch_op.create_index(batch_op.f('ix_rgw_sessions_id'), ['id'], unique=False)
+    with op.batch_alter_table('s3_sessions', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_s3_sessions_access_key_hash'), ['access_key_hash'], unique=False)
+        batch_op.create_index(batch_op.f('ix_s3_sessions_id'), ['id'], unique=False)
 
     op.create_table('storage_endpoints',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -103,19 +103,19 @@ def upgrade() -> None:
     sa.Column('id', sa.String(), nullable=False),
     sa.Column('token_hash', sa.String(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=True),
-    sa.Column('rgw_session_id', sa.String(), nullable=True),
+    sa.Column('s3_session_id', sa.String(), nullable=True),
     sa.Column('auth_type', sa.String(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('last_used_at', sa.DateTime(), nullable=False),
     sa.Column('expires_at', sa.DateTime(), nullable=False),
     sa.Column('revoked_at', sa.DateTime(), nullable=True),
-    sa.ForeignKeyConstraint(['rgw_session_id'], ['rgw_sessions.id'], ),
+    sa.ForeignKeyConstraint(['s3_session_id'], ['s3_sessions.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('refresh_sessions', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_refresh_sessions_id'), ['id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_refresh_sessions_rgw_session_id'), ['rgw_session_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_refresh_sessions_s3_session_id'), ['s3_session_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_refresh_sessions_token_hash'), ['token_hash'], unique=True)
         batch_op.create_index(batch_op.f('ix_refresh_sessions_user_id'), ['user_id'], unique=False)
 
@@ -310,7 +310,7 @@ def downgrade() -> None:
     with op.batch_alter_table('refresh_sessions', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_refresh_sessions_user_id'))
         batch_op.drop_index(batch_op.f('ix_refresh_sessions_token_hash'))
-        batch_op.drop_index(batch_op.f('ix_refresh_sessions_rgw_session_id'))
+        batch_op.drop_index(batch_op.f('ix_refresh_sessions_s3_session_id'))
         batch_op.drop_index(batch_op.f('ix_refresh_sessions_id'))
 
     op.drop_table('refresh_sessions')
@@ -322,11 +322,11 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_storage_endpoints_id'))
 
     op.drop_table('storage_endpoints')
-    with op.batch_alter_table('rgw_sessions', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_rgw_sessions_id'))
-        batch_op.drop_index(batch_op.f('ix_rgw_sessions_access_key_hash'))
+    with op.batch_alter_table('s3_sessions', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_s3_sessions_id'))
+        batch_op.drop_index(batch_op.f('ix_s3_sessions_access_key_hash'))
 
-    op.drop_table('rgw_sessions')
+    op.drop_table('s3_sessions')
     with op.batch_alter_table('oidc_login_states', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_oidc_login_states_state'))
         batch_op.drop_index(batch_op.f('ix_oidc_login_states_created_at'))

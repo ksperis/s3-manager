@@ -126,8 +126,8 @@ export default function ProfilePage({
 }: ProfilePageProps) {
   const storedUser = useMemo<SessionUser | null>(() => readStoredUser(), []);
   const authType = storedUser?.authType ?? null;
-  const isRgwSession = authType === "rgw_session";
-  const canChangePassword = authType !== "rgw_session" && authType !== "oidc";
+  const isS3Session = authType === "s3_session";
+  const canChangePassword = authType !== "s3_session" && authType !== "oidc";
   const { generalSettings } = useGeneralSettings();
   const { theme, setTheme } = useTheme();
   const { languagePreference, setLanguagePreference } = useLanguage();
@@ -170,7 +170,7 @@ export default function ProfilePage({
   );
   const [preferredWorkspace, setPreferredWorkspace] = useState<WorkspaceId | null>(() => readStoredWorkspaceId());
   const canManagePrivateConnections =
-    !isRgwSession &&
+    !isS3Session &&
     (isAdminLikeRole(storedUser?.role) ||
       (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
 
@@ -240,7 +240,7 @@ export default function ProfilePage({
   }, [availableWorkspaces, showSettingsCards]);
 
   useEffect(() => {
-    if (!showSettingsCards || isRgwSession) return;
+    if (!showSettingsCards || isS3Session) return;
     setProfileLoading(true);
     setProfileError(null);
     fetchCurrentUser()
@@ -256,7 +256,7 @@ export default function ProfilePage({
       .finally(() => {
         setProfileLoading(false);
       });
-  }, [isRgwSession, showSettingsCards]);
+  }, [isS3Session, showSettingsCards]);
 
   useEffect(() => {
     if (!showConnectionsSection || !canManagePrivateConnections) {
@@ -387,7 +387,7 @@ export default function ProfilePage({
 
   const handleProfileSave = async (event: FormEvent) => {
     event.preventDefault();
-    if (isRgwSession) return;
+    if (isS3Session) return;
     setProfileSaving(true);
     setProfileError(null);
     setProfileMessage(null);
@@ -407,7 +407,7 @@ export default function ProfilePage({
 
   const handlePasswordSave = async (event: FormEvent) => {
     event.preventDefault();
-    if (!canChangePassword || isRgwSession) return;
+    if (!canChangePassword || isS3Session) return;
     setPasswordError(null);
     setPasswordMessage(null);
     if (!currentPassword || !newPassword) {
@@ -439,7 +439,7 @@ export default function ProfilePage({
   const handlePreferencesSave = async (event: FormEvent) => {
     event.preventDefault();
     setTheme(preferencesTheme);
-    if (!isRgwSession) {
+    if (!isS3Session) {
       try {
         const updated = await updateCurrentUser({
           ui_language: preferencesLanguage === "auto" ? null : preferencesLanguage,
@@ -666,13 +666,13 @@ export default function ProfilePage({
                   type="text"
                   value={fullName}
                   onChange={(event) => setFullName(event.target.value)}
-                  disabled={isRgwSession}
-                  className={`${inputClasses} ${isRgwSession ? "cursor-not-allowed opacity-70" : ""}`}
+                  disabled={isS3Session}
+                  className={`${inputClasses} ${isS3Session ? "cursor-not-allowed opacity-70" : ""}`}
                   placeholder="Your name"
                 />
               </label>
             </div>
-            {isRgwSession && (
+            {isS3Session && (
               <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Temporary S3 session: user profile is not editable.
               </p>
@@ -681,7 +681,7 @@ export default function ProfilePage({
               <p className="ui-caption font-semibold text-emerald-700 dark:text-emerald-300">{profileMessage}</p>
             )}
             <div>
-              <button type="submit" disabled={profileSaving || isRgwSession} className={primaryButtonClasses}>
+              <button type="submit" disabled={profileSaving || isS3Session} className={primaryButtonClasses}>
                 {profileSaving ? "Saving..." : "Save profile"}
               </button>
             </div>

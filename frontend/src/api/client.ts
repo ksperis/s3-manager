@@ -82,7 +82,7 @@ client.interceptors.request.use((config) => {
   if (userRaw) {
     try {
       const parsed = JSON.parse(userRaw) as { authType?: string };
-      if (parsed?.authType === "rgw_session") {
+      if (parsed?.authType === "s3_session") {
         const endpoint = localStorage.getItem("s3SessionEndpoint");
         if (endpoint) {
           config.headers = config.headers ?? {};

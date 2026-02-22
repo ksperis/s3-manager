@@ -255,11 +255,11 @@ def login_with_s3_keys(
     )
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     token = create_access_token(
-        {"sid": principal.session_id, "auth_type": "rgw"},
+        {"sid": principal.session_id, "auth_type": "s3_session"},
         expires_delta=access_token_expires,
     )
     refresh_service = RefreshSessionService(db)
-    refresh_token, _ = refresh_service.create_for_rgw(principal.session_id, auth_type="rgw")
+    refresh_token, _ = refresh_service.create_for_s3_session(principal.session_id, auth_type="s3_session")
     _set_refresh_cookie(response, refresh_token)
     descriptor = SessionDescriptor(
         session_id=principal.session_id,
@@ -276,7 +276,7 @@ def login_with_s3_keys(
         user_role=role,
         scope="auth",
         action="login_s3",
-        entity_type="rgw_session",
+        entity_type="s3_session",
         metadata={
             "actor_type": principal.actor_type,
             "account_id": principal.account_id,
@@ -377,13 +377,13 @@ def refresh_access_token(
             data={"sub": user.email, "role": user.role, "uid": user.id},
             expires_delta=access_token_expires,
         )
-    elif session.rgw_session_id:
-        principal = SessionService(db).get_principal(session.rgw_session_id)
+    elif session.s3_session_id:
+        principal = SessionService(db).get_principal(session.s3_session_id)
         if not principal:
             refresh_service.revoke(session)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
         token = create_access_token(
-            data={"sid": principal.session_id, "auth_type": "rgw"},
+            data={"sid": principal.session_id, "auth_type": "s3_session"},
             expires_delta=access_token_expires,
         )
     else:

@@ -11,7 +11,7 @@ from typing import Optional
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.security import decrypt_secret, encrypt_secret
-from app.db import RgwSession, UserRole
+from app.db import S3Session, UserRole
 from app.models.session import ManagerSessionPrincipal, SessionCapabilities
 
 from app.services import s3_client
@@ -44,7 +44,7 @@ class SessionService:
     ) -> ManagerSessionPrincipal:
         self._cleanup_existing_sessions(access_key)
 
-        session = RgwSession(
+        session = S3Session(
             id=str(uuid.uuid4()),
             access_key_enc=encrypt_secret(access_key),
             secret_key_enc=encrypt_secret(secret_key),
@@ -66,7 +66,7 @@ class SessionService:
         return self._to_principal(session)
 
     def get_principal(self, session_id: str) -> Optional[ManagerSessionPrincipal]:
-        session = self.db.query(RgwSession).filter(RgwSession.id == session_id).first()
+        session = self.db.query(S3Session).filter(S3Session.id == session_id).first()
         if not session:
             return None
         session.last_used_at = utcnow()
@@ -113,7 +113,7 @@ class SessionService:
     # helpers
     def _cleanup_existing_sessions(self, access_key: str) -> None:
         hashed = self._hash_key(access_key)
-        existing = self.db.query(RgwSession).filter(RgwSession.access_key_hash == hashed).all()
+        existing = self.db.query(S3Session).filter(S3Session.access_key_hash == hashed).all()
         for row in existing:
             self.db.delete(row)
         if existing:
@@ -140,11 +140,11 @@ class SessionService:
             can_view_traffic=can_view_traffic,
         )
 
-    def _to_principal(self, session: RgwSession) -> ManagerSessionPrincipal:
+    def _to_principal(self, session: S3Session) -> ManagerSessionPrincipal:
         capabilities = self._capabilities_from_row(session)
         access_key = decrypt_secret(session.access_key_enc)
         secret_key = decrypt_secret(session.secret_key_enc)
-        email = f"rgw:{session.account_id or 'session'}"
+        email = f"s3:{session.account_id or 'session'}"
         return ManagerSessionPrincipal(
             session_id=session.id,
             access_key=access_key,
@@ -159,7 +159,7 @@ class SessionService:
             id=None,
         )
 
-    def _capabilities_from_row(self, session: RgwSession) -> SessionCapabilities:
+    def _capabilities_from_row(self, session: S3Session) -> SessionCapabilities:
         raw = session.capabilities
         if not raw:
             return SessionCapabilities(

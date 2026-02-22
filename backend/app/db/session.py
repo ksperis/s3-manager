@@ -8,8 +8,8 @@ from .base import Base
 from .enums import UserRole
 
 
-class RgwSession(Base):
-    __tablename__ = "rgw_sessions"
+class S3Session(Base):
+    __tablename__ = "s3_sessions"
 
     id = Column(String, primary_key=True, index=True)
     access_key_enc = Column(String, nullable=False)

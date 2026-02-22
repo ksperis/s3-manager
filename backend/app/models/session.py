@@ -63,6 +63,6 @@ class ManagerSessionPrincipal:
     id: Optional[int] = None
 
     def audit_fallbacks(self) -> tuple[str, str]:
-        fallback_email = self.email or f"rgw:{self.account_id or 'unknown'}"
-        fallback_role = self.role or "rgw_session"
+        fallback_email = self.email or f"s3:{self.account_id or 'unknown'}"
+        fallback_role = self.role or "s3_session"
         return fallback_email, fallback_role

@@ -6,7 +6,7 @@ from .storage_endpoint import StorageEndpoint
 from .s3_account import AccountIAMUser, S3Account, UserS3Account
 from .user import User
 from .audit import AuditLog
-from .session import RgwSession
+from .session import S3Session
 from .refresh_session import RefreshSession
 from .api_token import ApiToken
 from .s3_user import S3User, UserS3User
@@ -34,7 +34,7 @@ __all__ = [
     "UserS3Account",
     "User",
     "AuditLog",
-    "RgwSession",
+    "S3Session",
     "RefreshSession",
     "ApiToken",
     "S3User",

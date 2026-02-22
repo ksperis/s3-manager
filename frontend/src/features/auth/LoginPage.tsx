@@ -137,7 +137,7 @@ export default function LoginPage() {
       const userPayload = {
         email: res.session.account_id ? `${res.session.account_id}@s3-session` : "s3-session",
         role: "ui_user",
-        authType: "rgw_session",
+        authType: "s3_session",
         actorType: res.session.actor_type,
         accountId: res.session.account_id ?? null,
         accountName: res.session.account_name ?? null,

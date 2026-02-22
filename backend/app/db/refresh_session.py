@@ -14,7 +14,7 @@ class RefreshSession(Base):
     id = Column(String, primary_key=True, index=True)
     token_hash = Column(String, nullable=False, unique=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    rgw_session_id = Column(String, ForeignKey("rgw_sessions.id"), nullable=True, index=True)
+    s3_session_id = Column(String, ForeignKey("s3_sessions.id"), nullable=True, index=True)
     auth_type = Column(String, nullable=True)
     created_at = Column(DateTime, default=utcnow, nullable=False)
     last_used_at = Column(DateTime, default=utcnow, nullable=False)
@@ -22,4 +22,4 @@ class RefreshSession(Base):
     revoked_at = Column(DateTime, nullable=True)
 
     user = relationship("User")
-    rgw_session = relationship("RgwSession")
+    s3_session = relationship("S3Session")
