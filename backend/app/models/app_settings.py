@@ -123,8 +123,8 @@ class GeneralSettings(BaseModel):
     manager_enabled: bool = True
     ceph_admin_enabled: bool = False
     browser_enabled: bool = True
-    browser_root_enabled: bool = False
-    browser_manager_enabled: bool = True
+    browser_root_enabled: bool = True
+    browser_manager_enabled: bool = False
     browser_portal_enabled: bool = True
     allow_portal_manager_workspace: bool = False
     portal_enabled: bool = False

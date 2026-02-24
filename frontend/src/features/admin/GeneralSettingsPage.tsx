@@ -24,6 +24,7 @@ import { confirmAction } from "../../utils/confirm";
 const CEPH_ADMIN_WARNING_MESSAGE =
   "Ceph Admin is an advanced Ceph cluster mass-management feature (accounts, users, buckets). " +
   "It is not recommended to enable it on the same s3-manager instance exposed to end users.";
+const PORTAL_EXPERIMENTAL_WARNING_MESSAGE = "Portal is an experimental feature.";
 const BILLING_CRON_REMINDER_MESSAGE =
   "Billing feature enabled. Think about enabling the billing collection cron job.";
 const FEATURE_FIELDS = [
@@ -169,11 +170,6 @@ export default function GeneralSettingsPage() {
             {forcedFeaturesCount} feature switch(es) are currently forced by environment variables.
           </PageBanner>
         )}
-        {settings?.general.ceph_admin_enabled && (
-          <PageBanner tone="warning">
-            Ceph Admin is currently enabled on this instance. {CEPH_ADMIN_WARNING_MESSAGE}
-          </PageBanner>
-        )}
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
           <div className="grid gap-4">
@@ -232,6 +228,7 @@ export default function GeneralSettingsPage() {
                     />
                   }
                 >
+                  <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{PORTAL_EXPERIMENTAL_WARNING_MESSAGE}</p>
                   {getFeatureLockHint("portal_enabled") && (
                     <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
                       {getFeatureLockHint("portal_enabled")}
@@ -250,6 +247,9 @@ export default function GeneralSettingsPage() {
                     />
                   }
                 >
+                  {settings.general.ceph_admin_enabled && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{CEPH_ADMIN_WARNING_MESSAGE}</p>
+                  )}
                   {getFeatureLockHint("ceph_admin_enabled") && (
                     <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
                       {getFeatureLockHint("ceph_admin_enabled")}

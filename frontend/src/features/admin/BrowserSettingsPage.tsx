@@ -17,6 +17,9 @@ const PARALLELISM_MIN = 1;
 const PARALLELISM_MAX = 20;
 const ZIP_STREAM_THRESHOLD_MIN = 0;
 const ZIP_STREAM_THRESHOLD_MAX = 10240;
+const BROWSER_MANAGER_WARNING_MESSAGE =
+  "Not recommended: /manager is intended for storage administration, not day-to-day bucket usage. " +
+  "Using admin/root identities for bucket operations should be avoided.";
 
 const normalizeParallelism = (value: number) => {
   if (!Number.isFinite(value)) return PARALLELISM_MIN;
@@ -202,7 +205,11 @@ export default function BrowserSettingsPage() {
                       ariaLabel="Enable /manager/browser workspace"
                     />
                   }
-                />
+                >
+                  {settings.general.browser_manager_enabled && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{BROWSER_MANAGER_WARNING_MESSAGE}</p>
+                  )}
+                </PortalSettingsItem>
                 <PortalSettingsItem
                   title="/portal/browser"
                   description="Browser tab inside the portal workspace."
