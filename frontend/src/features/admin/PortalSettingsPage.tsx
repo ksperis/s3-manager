@@ -13,6 +13,8 @@ import {
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { confirmAction } from "../../utils/confirm";
 
+const PORTAL_KEY_ROTATION_WARNING = "When enabled, key rotations can immediately impact portal users relying on the displayed key.";
+
 export default function PortalSettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
@@ -297,7 +299,11 @@ export default function PortalSettingsPage() {
                   </label>
                 </div>
               }
-            />
+            >
+              {portalKeyEnabled && (
+                <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{PORTAL_KEY_ROTATION_WARNING}</p>
+              )}
+            </PortalSettingsItem>
             <PortalSettingsItem
               title="Bucket creation"
               description="Allow portal users to create buckets from the portal."

@@ -228,7 +228,9 @@ export default function GeneralSettingsPage() {
                     />
                   }
                 >
-                  <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{PORTAL_EXPERIMENTAL_WARNING_MESSAGE}</p>
+                  {settings.general.portal_enabled && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{PORTAL_EXPERIMENTAL_WARNING_MESSAGE}</p>
+                  )}
                   {getFeatureLockHint("portal_enabled") && (
                     <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
                       {getFeatureLockHint("portal_enabled")}

@@ -41,6 +41,11 @@ function getUserEmail(): string | null {
   }
 }
 
+function buildSidebarCompactStorageKey(sidebarTitle?: string, headerTitle?: string): string {
+  const source = (sidebarTitle || headerTitle || "default").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return `sidebar_compact_${source}`;
+}
+
 export default function Layout({
   navLinks = [],
   navSections,
@@ -62,6 +67,8 @@ export default function Layout({
 }: LayoutProps) {
   const location = useLocation();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const sidebarCompactStorageKey = buildSidebarCompactStorageKey(sidebarTitle, headerTitle);
+  const [desktopSidebarCompact, setDesktopSidebarCompact] = useState(false);
   const shouldShowSidebar = !hideSidebar;
   const userEmail = getUserEmail();
   const logout = () => {
@@ -90,6 +97,18 @@ export default function Layout({
       setMobileSidebarOpen(false);
     }
   }, [shouldShowSidebar]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!shouldShowSidebar) return;
+    const raw = window.localStorage.getItem(sidebarCompactStorageKey);
+    setDesktopSidebarCompact(raw === "1");
+  }, [shouldShowSidebar, sidebarCompactStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(sidebarCompactStorageKey, desktopSidebarCompact ? "1" : "0");
+  }, [desktopSidebarCompact, sidebarCompactStorageKey]);
 
   useEffect(() => {
     if (!mobileSidebarOpen) return;
@@ -162,7 +181,14 @@ export default function Layout({
       )}
       <div className={`flex min-h-0 flex-1 ${hideTopbar ? "pt-0" : "pt-14"}`}>
         {shouldShowSidebar && (
-          <Sidebar title={sidebarTitle} sections={navSections} links={navLinks} headerAction={sidebarAction} />
+          <Sidebar
+            title={sidebarTitle}
+            sections={navSections}
+            links={navLinks}
+            headerAction={sidebarAction}
+            compact={desktopSidebarCompact}
+            onToggleCompact={() => setDesktopSidebarCompact((value) => !value)}
+          />
         )}
         <main className={mainClasses}>
           {!hideHeader && (

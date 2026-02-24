@@ -165,7 +165,7 @@ class LoginSettings(BaseModel):
 class PortalSettings(BaseModel):
     allow_portal_key: bool = False
     allow_portal_user_bucket_create: bool = True
-    allow_portal_user_access_key_create: bool = False
+    allow_portal_user_access_key_create: bool = True
     iam_group_manager_policy: PortalIAMPolicySettings = Field(
         default_factory=lambda: PortalIAMPolicySettings(actions=_default_portal_manager_actions())
     )
