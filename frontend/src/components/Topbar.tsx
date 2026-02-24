@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
 import ProfilePage from "../features/shared/ProfilePage";
 import { isAdminLikeRole, readStoredUser } from "../utils/workspaces";
 import EnvironmentSwitcher from "./EnvironmentSwitcher";
@@ -53,47 +52,6 @@ function resolveUiRoleLabel(user: StoredTopbarUser | null): string {
   return "Unknown";
 }
 
-function resolveActiveContextId(pathname: string): string | null {
-  if (typeof window === "undefined") return null;
-  if (pathname.startsWith("/portal")) {
-    return localStorage.getItem("selectedPortalAccountId");
-  }
-  if (pathname.startsWith("/manager") || pathname.startsWith("/browser")) {
-    return (
-      localStorage.getItem("selectedExecutionContextId") ??
-      localStorage.getItem("selectedS3AccountId") ??
-      localStorage.getItem("selectedBrowserContextId")
-    );
-  }
-  return null;
-}
-
-function resolveAccountRoleLabel(user: StoredTopbarUser | null, pathname: string): string | null {
-  if (!user || user.authType === "s3_session") {
-    return user?.authType === "s3_session" ? "Session context" : null;
-  }
-  const contextId = resolveActiveContextId(pathname);
-  if (!contextId) return null;
-  if (contextId.startsWith("conn-")) return "Connection context";
-  if (contextId.startsWith("s3u-")) return "Legacy S3 user context";
-  const numericId = Number(contextId);
-  if (!Number.isFinite(numericId)) return null;
-  const link = (user.account_links ?? []).find((entry) => Number(entry.account_id) === numericId);
-  if (!link) return "Account context";
-
-  const role = (link.account_role ?? "").trim().toLowerCase();
-  const roleLabel =
-    role === "portal_manager"
-      ? "Portal manager"
-      : role === "portal_user"
-        ? "Portal user"
-        : role === "portal_none"
-          ? "Portal none"
-          : "Portal role";
-  if (link.account_admin) return `${roleLabel} · Account admin`;
-  return roleLabel;
-}
-
 export default function Topbar({
   projectName,
   section,
@@ -106,7 +64,6 @@ export default function Topbar({
   onMobileMenuToggle,
 }: TopbarProps) {
   const { generalSettings } = useGeneralSettings();
-  const location = useLocation();
   const storedUser = useMemo(() => readStoredUser() as StoredTopbarUser | null, []);
   const isS3Session = storedUser?.authType === "s3_session";
   const canManagePrivateConnections =
@@ -114,10 +71,6 @@ export default function Topbar({
     (isAdminLikeRole(storedUser?.role) ||
       (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
   const uiRoleLabel = useMemo(() => resolveUiRoleLabel(storedUser), [storedUser]);
-  const accountRoleLabel = useMemo(
-    () => resolveAccountRoleLabel(storedUser, location.pathname),
-    [location.pathname, storedUser]
-  );
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -229,13 +182,8 @@ export default function Topbar({
                     <p className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">{accountDisplay}</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <span className="inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
-                        UI: {uiRoleLabel}
+                        {uiRoleLabel}
                       </span>
-                      {accountRoleLabel && (
-                        <span className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 ui-caption font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-100">
-                          Account: {accountRoleLabel}
-                        </span>
-                      )}
                     </div>
                   </div>
 
