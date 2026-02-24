@@ -89,18 +89,13 @@ import {
   updateCephAdminBucketPublicAccessBlock,
 } from "../../api/cephAdmin";
 import {
-  createFolder,
-  deleteObjects,
-  getObjectDownloadUrl,
   listObjects,
   S3Object,
-  uploadObject,
 } from "../../api/objects";
 import PageHeader from "../../components/PageHeader";
 import PageTabs from "../../components/PageTabs";
 import SplitView from "../../components/SplitView";
 import UsageTile from "../../components/UsageTile";
-import Modal from "../../components/Modal";
 import { formatCompactNumber } from "../../utils/format";
 import { isAdminLikeRole } from "../../utils/workspaces";
 import { useS3AccountContext } from "./S3AccountContext";
@@ -248,14 +243,12 @@ type BucketDetailPageProps = {
   mode?: BucketDetailMode;
   bucketNameOverride?: string;
   embedded?: boolean;
-  hideObjectsTab?: boolean;
 };
 
 export default function BucketDetailPage({
   mode = "manager",
   bucketNameOverride,
   embedded = false,
-  hideObjectsTab = false,
 }: BucketDetailPageProps) {
   const params = useParams<{ bucketName: string }>();
   const bucketName = bucketNameOverride ?? params.bucketName;
@@ -365,12 +358,6 @@ export default function BucketDetailPage({
   const [objectsLoading, setObjectsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [showUpload, setShowUpload] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [showPolicyExample, setShowPolicyExample] = useState(false);
   const [showCorsExample, setShowCorsExample] = useState(false);
   const [quotaSizeGb, setQuotaSizeGb] = useState<string>("");
@@ -403,10 +390,8 @@ export default function BucketDetailPage({
     if (isCephAdmin) {
       return ["overview", "ceph", "properties", "permissions", "advanced", "metrics"];
     }
-    return hideObjectsTab
-      ? ["overview", "properties", "permissions", "advanced", "metrics"]
-      : ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
-  }, [hideObjectsTab, isCephAdmin]);
+    return ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
+  }, [isCephAdmin]);
 
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {
@@ -934,7 +919,6 @@ export default function BucketDetailPage({
       if (isCephAdmin || !bucketName || !hasAccountContext) return;
       setObjectsLoading(true);
       setObjectsError(null);
-      setActionMessage(null);
       try {
         const data = await listObjects(accountId, bucketName, prefix);
         setObjects(data.objects);
@@ -951,7 +935,6 @@ export default function BucketDetailPage({
   );
 
   useEffect(() => {
-    setSelectedKeys([]);
     if (isCephAdmin) return;
     loadObjects(currentPrefix);
   }, [currentPrefix, isCephAdmin, loadObjects]);
@@ -1245,15 +1228,6 @@ export default function BucketDetailPage({
     return rows;
   }, [currentPrefix, objects, prefixes]);
 
-  const objectRows = useMemo(
-    () => rowData.filter((r): r is Extract<Row, { type: "object" }> => r.type === "object"),
-    [rowData]
-  );
-
-  const toggleSelection = (key: string) => {
-    setSelectedKeys((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
-  };
-
   const storageUsage = useMemo(
     () => ({
       used: bucket?.used_bytes ?? null,
@@ -1481,88 +1455,12 @@ export default function BucketDetailPage({
     { label: bucketName ?? "" },
   ];
 
-  const handleNewFolder = async () => {
-    if (isCephAdmin || !bucketName || !hasAccountContext) return;
-    const name = window.prompt("Folder name (no trailing slash):");
-    if (!name) return;
-    const prefix = `${currentPrefix}${name}`.replace(/\/+$/, "");
-    setObjectsLoading(true);
-    setObjectsError(null);
-    try {
-      await createFolder(accountId, bucketName, `${prefix}/`);
-      setActionMessage(`Folder '${name}' created`);
-      await loadObjects(currentPrefix);
-    } catch (err) {
-      setObjectsError("Unable to create the folder.");
-    } finally {
-      setObjectsLoading(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (isCephAdmin || !bucketName || !hasAccountContext || selectedKeys.length === 0) return;
-    const confirmDelete = window.confirm(`Delete ${selectedKeys.length} object(s)?`);
-    if (!confirmDelete) return;
-    setObjectsLoading(true);
-    setObjectsError(null);
-    try {
-      await deleteObjects(accountId, bucketName, selectedKeys);
-      setActionMessage(`Deleted ${selectedKeys.length} object(s)`);
-      setSelectedKeys([]);
-      await loadObjects(currentPrefix);
-    } catch (err) {
-      setObjectsError("Unable to delete the objects.");
-    } finally {
-      setObjectsLoading(false);
-    }
-  };
-
   const handleTogglePublicAccessField = (key: keyof BucketPublicAccessBlock, value: boolean) => {
     setPublicAccessBlock((prev) => ({
       ...defaultPublicAccessBlock,
       ...prev,
       [key]: value,
     }));
-  };
-
-  const handleDownload = async () => {
-    if (isCephAdmin || !bucketName || !hasAccountContext || selectedKeys.length === 0) {
-      setObjectsError("Select a single object to download.");
-      return;
-    }
-    if (selectedKeys.length > 1) {
-      setObjectsError("Please select only one object to download.");
-      return;
-    }
-    setObjectsError(null);
-    try {
-      const { url } = await getObjectDownloadUrl(accountId, bucketName, selectedKeys[0]);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      setObjectsError("Unable to generate the download link.");
-    }
-  };
-
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isCephAdmin || !bucketName || !hasAccountContext || !uploadFile) {
-      setUploadError("Choose a file before uploading.");
-      return;
-    }
-    setUploading(true);
-    setUploadError(null);
-    try {
-      const normalizedPrefix = currentPrefix;
-      await uploadObject(accountId, bucketName, uploadFile, normalizedPrefix);
-      setActionMessage(`Upload successful: ${uploadFile.name}`);
-      setShowUpload(false);
-      setUploadFile(null);
-      await loadObjects(currentPrefix);
-    } catch (err) {
-      setUploadError("Upload failed (check the backend service).");
-    } finally {
-      setUploading(false);
-    }
   };
 
   const toggleVersioning = async () => {
@@ -2366,7 +2264,7 @@ export default function BucketDetailPage({
               </section>
             ),
           },
-          ...(!isCephAdmin && !hideObjectsTab
+          ...(!isCephAdmin
             ? [
                 {
                   id: "objects",
@@ -2424,46 +2322,21 @@ export default function BucketDetailPage({
                         <div className="ui-caption text-slate-500 dark:text-slate-300">
                           {bucketName}/{currentPrefix || "(root)"}
                         </div>
+                        <div className="ui-caption text-slate-500 dark:text-slate-400">
+                          Read-only preview. Use the main Browser page for object operations.
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          disabled={selectedKeys.length !== 1}
-                          onClick={handleDownload}
+                          onClick={() => loadObjects(currentPrefix)}
+                          disabled={objectsLoading}
                           className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
                         >
-                          Download
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowUpload(true)}
-                          className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm hover:bg-primary-600"
-                        >
-                          Upload
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleNewFolder}
-                          className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        >
-                          New folder
-                        </button>
-                        <button
-                          type="button"
-                          disabled={selectedKeys.length === 0}
-                          onClick={handleDelete}
-                          className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-700 dark:hover:text-rose-100"
-                        >
-                          Delete
+                          Refresh
                         </button>
                       </div>
                     </div>
-
-                    {actionMessage && (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                        {actionMessage}
-                      </div>
-                    )}
                     {objectsError && (
                       <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                         {objectsError}
@@ -2474,16 +2347,6 @@ export default function BucketDetailPage({
                       <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
                         <thead className="bg-slate-50 dark:bg-slate-900/50">
                           <tr>
-                            <th className="px-4 py-2 text-left">
-                              <input
-                                type="checkbox"
-                                checked={selectedKeys.length > 0 && selectedKeys.length === objectRows.length}
-                                onChange={(e) =>
-                                  setSelectedKeys(e.target.checked ? objectRows.map((r) => r.key) : [])
-                                }
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                              />
-                            </th>
                             <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               Name
                             </th>
@@ -2501,14 +2364,14 @@ export default function BucketDetailPage({
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                           {objectsLoading && (
                             <tr>
-                              <td colSpan={5} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
+                              <td colSpan={4} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
                                 Loading objects...
                               </td>
                             </tr>
                           )}
                           {!objectsLoading && rowData.length === 0 && (
                             <tr>
-                              <td colSpan={5} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
+                              <td colSpan={4} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
                                 No objects in this prefix.
                               </td>
                             </tr>
@@ -2522,7 +2385,6 @@ export default function BucketDetailPage({
                                     className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
                                     onClick={() => setCurrentPrefix(row.key)}
                                   >
-                                    <td className="px-4 py-2" />
                                     <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">
                                       📁 {row.name}
                                     </td>
@@ -2532,17 +2394,8 @@ export default function BucketDetailPage({
                                   </tr>
                                 );
                               }
-                              const isSelected = selectedKeys.includes(row.key);
                               return (
                                 <tr key={row.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                  <td className="px-4 py-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={() => toggleSelection(row.key)}
-                                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                                    />
-                                  </td>
                                   <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">{row.name}</td>
                                   <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{formatBytes(row.object.size)}</td>
                                   <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
@@ -4053,47 +3906,6 @@ export default function BucketDetailPage({
         ].sort((a, b) => availableTabs.indexOf(a.id) - availableTabs.indexOf(b.id))}
       />
 
-      {showUpload && (
-        <Modal title="Upload object" onClose={() => setShowUpload(false)}>
-          <form className="space-y-4" onSubmit={handleUpload}>
-            <div className="space-y-1">
-              <p className="ui-body font-semibold text-slate-800 dark:text-slate-100">Destination</p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                {bucketName}/{currentPrefix || "(root)"}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <label className="ui-body font-medium text-slate-700 dark:text-slate-200">File</label>
-              <input
-                type="file"
-                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-              />
-            </div>
-            {uploadError && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                {uploadError}
-              </div>
-            )}
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowUpload(false)}
-                className="rounded-md border border-slate-200 px-4 py-2 ui-body font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={uploading}
-                className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-              >
-                {uploading ? "Uploading..." : "Upload"}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
     </div>
   );
 }

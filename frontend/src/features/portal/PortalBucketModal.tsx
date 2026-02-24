@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { Bucket } from "../../api/buckets";
-import { deleteObjects, getObjectDownloadUrl, listObjects, uploadObject, S3Object } from "../../api/objects";
+import { listObjects, S3Object } from "../../api/objects";
 import Modal from "../../components/Modal";
 import PageTabs from "../../components/PageTabs";
 import SplitView from "../../components/SplitView";
@@ -48,25 +48,12 @@ export default function PortalBucketModal({
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [objectsLoading, setObjectsLoading] = useState(false);
   const [objectsError, setObjectsError] = useState<string | null>(null);
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [downloading, setDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setCurrentPrefix("");
-    setSelectedKeys([]);
     setObjects([]);
     setPrefixes([]);
     setObjectsError(null);
-    setDownloadError(null);
-    setUploadError(null);
-    setActionMessage(null);
-    setDeleting(false);
-    setUploading(false);
     setActiveTab("overview");
   }, [bucket.name]);
 
@@ -108,7 +95,6 @@ export default function PortalBucketModal({
       }
       setObjectsLoading(true);
       setObjectsError(null);
-      setDownloadError(null);
       try {
         const data = await listObjects(accountId, bucket.name, prefix);
         setObjects(data.objects);
@@ -133,106 +119,8 @@ export default function PortalBucketModal({
 
   useEffect(() => {
     if (activeTab !== "objects") return;
-    setSelectedKeys([]);
     loadObjects(currentPrefix);
   }, [activeTab, currentPrefix, loadObjects]);
-
-  const toggleSelection = (key: string) => {
-    setSelectedKeys((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
-  };
-
-  const handleDownload = async () => {
-    if (!accountId || selectedKeys.length !== 1) return;
-    setDownloading(true);
-    setDownloadError(null);
-    setActionMessage(null);
-    try {
-      const { url } = await getObjectDownloadUrl(accountId, bucket.name, selectedKeys[0]);
-      if (url && typeof window !== "undefined") {
-        window.open(url, "_blank", "noopener,noreferrer");
-      } else {
-        setDownloadError(
-          t({
-            en: "Download URL unavailable.",
-            fr: "URL de telechargement indisponible.",
-            de: "Download-URL nicht verfugbar.",
-          })
-        );
-      }
-    } catch (err) {
-      console.error(err);
-      setDownloadError(
-        t({
-          en: "Unable to fetch download link.",
-          fr: "Impossible de recuperer le lien de telechargement.",
-          de: "Download-Link kann nicht abgerufen werden.",
-        })
-      );
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  const handleUpload = async (file: File | null) => {
-    if (!accountId || !file) return;
-    setUploading(true);
-    setUploadError(null);
-    setActionMessage(null);
-    try {
-      await uploadObject(accountId, bucket.name, file, currentPrefix);
-      setActionMessage(
-        t({
-          en: `Object ${file.name} uploaded.`,
-          fr: `Objet ${file.name} televerse.`,
-          de: `Objekt ${file.name} hochgeladen.`,
-        })
-      );
-      await loadObjects(currentPrefix);
-    } catch (err) {
-      console.error(err);
-      setUploadError(
-        t({
-          en: "Unable to upload this object.",
-          fr: "Impossible de televerser cet objet.",
-          de: "Dieses Objekt kann nicht hochgeladen werden.",
-        })
-      );
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!accountId || selectedKeys.length === 0) return;
-    setDeleting(true);
-    setActionMessage(null);
-    setUploadError(null);
-    setDownloadError(null);
-    setObjectsError(null);
-    try {
-      await deleteObjects(accountId, bucket.name, selectedKeys);
-      setActionMessage(
-        t({
-          en: `${selectedKeys.length} object(s) deleted.`,
-          fr: `${selectedKeys.length} objet(s) supprime(s).`,
-          de: `${selectedKeys.length} Objekt(e) geloscht.`,
-        })
-      );
-      setSelectedKeys([]);
-      await loadObjects(currentPrefix);
-    } catch (err) {
-      console.error(err);
-      setObjectsError(
-        t({
-          en: "Delete failed. Check your permissions.",
-          fr: "Suppression impossible. Verifiez vos droits.",
-          de: "Loschen fehlgeschlagen. Prufen Sie Ihre Berechtigungen.",
-        })
-      );
-    } finally {
-      setDeleting(false);
-    }
-  };
 
   const storageShare = computeRelativeShare(bucket.used_bytes, accountUsedBytes);
   const objectsShare = computeRelativeShare(bucket.object_count, accountUsedObjects);
@@ -397,6 +285,13 @@ export default function PortalBucketModal({
                         <div className="ui-caption text-slate-500 dark:text-slate-300">
                           {bucket.name}/{currentPrefix || t({ en: "(root)", fr: "(racine)", de: "(wurzel)" })}
                         </div>
+                        <div className="ui-caption text-slate-500 dark:text-slate-400">
+                          {t({
+                            en: "Read-only preview. Use the main Browser page for object operations.",
+                            fr: "Apercu en lecture seule. Utilisez la page Browser principale pour les operations.",
+                            de: "Schreibgeschutzte Vorschau. Verwenden Sie fur Operationen die Hauptseite Browser.",
+                          })}
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <button
@@ -406,43 +301,6 @@ export default function PortalBucketModal({
                         >
                           {t({ en: "Refresh", fr: "Rafraichir", de: "Aktualisieren" })}
                         </button>
-                        <label
-                          className="inline-flex cursor-pointer items-center rounded-lg bg-primary px-3 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <input
-                            type="file"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0] || null;
-                              void handleUpload(file);
-                              e.target.value = "";
-                            }}
-                            disabled={uploading || objectsLoading || !accountId}
-                          />
-                          {uploading
-                            ? t({ en: "Uploading...", fr: "Televersement...", de: "Wird hochgeladen..." })
-                            : t({ en: "Upload", fr: "Televerser", de: "Hochladen" })}
-                        </label>
-                        <button
-                          type="button"
-                          disabled={selectedKeys.length !== 1 || objectsLoading || !accountId}
-                          onClick={handleDownload}
-                          className="rounded-lg border border-slate-200 px-3 py-2 ui-body font-semibold text-slate-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        >
-                          {downloading
-                            ? t({ en: "Downloading...", fr: "Telechargement...", de: "Wird heruntergeladen..." })
-                            : t({ en: "Download", fr: "Telecharger", de: "Herunterladen" })}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={selectedKeys.length === 0 || deleting || objectsLoading || !accountId}
-                          onClick={handleDelete}
-                          className="rounded-lg border border-rose-200 px-3 py-2 ui-body font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800 dark:hover:text-rose-100"
-                        >
-                          {deleting
-                            ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird geloscht..." })
-                            : t({ en: "Delete", fr: "Supprimer", de: "Loschen" })}
-                        </button>
                       </div>
                     </div>
 
@@ -451,35 +309,11 @@ export default function PortalBucketModal({
                         {objectsError}
                       </div>
                     )}
-                    {downloadError && (
-                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-body text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                        {downloadError}
-                      </div>
-                    )}
-                    {uploadError && (
-                      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                        {uploadError}
-                      </div>
-                    )}
-                    {actionMessage && (
-                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
-                        {actionMessage}
-                      </div>
-                    )}
 
                     <div className="rounded-xl border border-slate-200 dark:border-slate-800">
                       <table className="min-w-full divide-y divide-slate-200 ui-body dark:divide-slate-800">
                         <thead className="bg-slate-50 dark:bg-slate-900/50">
                           <tr>
-                            <th className="px-4 py-2 text-left">
-                              <input
-                                type="checkbox"
-                                checked={objects.length > 0 && selectedKeys.length === objects.length}
-                                onChange={(e) => setSelectedKeys(e.target.checked ? objects.map((obj) => obj.key) : [])}
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                                aria-label={t({ en: "Select all objects", fr: "Selectionner tous les objets", de: "Alle Objekte auswahlen" })}
-                              />
-                            </th>
                             <th className="px-4 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               {t({ en: "Name", fr: "Nom", de: "Name" })}
                             </th>
@@ -497,14 +331,14 @@ export default function PortalBucketModal({
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                           {objectsLoading && (
                             <tr>
-                              <td colSpan={5} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
+                              <td colSpan={4} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
                                 {t({ en: "Loading objects...", fr: "Chargement des objets...", de: "Objekte werden geladen..." })}
                               </td>
                             </tr>
                           )}
                           {!objectsLoading && objectRows.length === 0 && (
                             <tr>
-                              <td colSpan={5} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
+                              <td colSpan={4} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
                                 {t({ en: "No object in this prefix.", fr: "Aucun objet dans ce prefixe.", de: "Keine Objekte in diesem Prafix." })}
                               </td>
                             </tr>
@@ -518,7 +352,6 @@ export default function PortalBucketModal({
                                     className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
                                     onClick={() => setCurrentPrefix(row.key)}
                                   >
-                                    <td className="px-4 py-2" />
                                     <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">📁 {row.name}</td>
                                     <td className="px-4 py-2 text-slate-600 dark:text-slate-300">—</td>
                                     <td className="px-4 py-2 text-slate-600 dark:text-slate-300">—</td>
@@ -526,22 +359,8 @@ export default function PortalBucketModal({
                                   </tr>
                                 );
                               }
-                              const isSelected = selectedKeys.includes(row.key);
                               return (
                                 <tr key={row.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                  <td className="px-4 py-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={() => toggleSelection(row.key)}
-                                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                                      aria-label={t({
-                                        en: `Select ${row.name}`,
-                                        fr: `Selectionner ${row.name}`,
-                                        de: `${row.name} auswahlen`,
-                                      })}
-                                    />
-                                  </td>
                                   <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100">{row.name}</td>
                                   <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{formatBytes(row.object.size)}</td>
                                   <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
