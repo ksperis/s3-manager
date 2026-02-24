@@ -17,14 +17,16 @@ function BrowserShell() {
     contexts,
     selectedContextId,
     setSelectedContextId,
+    requiresContextSelection,
     selectedKind,
+    sessionAccountName,
     accessError,
   } = useBrowserContext();
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
   const [identityAccessMode, setIdentityAccessMode] = useState<ContextAccessMode>(null);
   const visibleContexts = contexts.filter((ctx) => !ctx.hidden || ctx.id === selectedContextId);
   const selected = contexts.find((a) => a.id === selectedContextId);
-  const showSelector = visibleContexts.length > 1;
+  const showSelector = requiresContextSelection && visibleContexts.length > 1;
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const identityLabel = iamIdentity
     ? identityAccessMode === "connection"
@@ -36,9 +38,16 @@ function BrowserShell() {
   const pillClasses = `inline-flex items-center ${baseControlClasses} ${selected ? "" : "text-slate-500 dark:text-slate-400"}`;
   const selectedLabel = selected
     ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
-    : "No account selected";
+    : requiresContextSelection
+      ? "No account selected"
+      : sessionAccountName || "S3 session";
 
   useEffect(() => {
+    if (!requiresContextSelection) {
+      setIamIdentity(null);
+      setIdentityAccessMode("session");
+      return;
+    }
     if (!selectedContextId) {
       setIamIdentity(null);
       setIdentityAccessMode(null);
@@ -59,7 +68,7 @@ function BrowserShell() {
     return () => {
       isMounted = false;
     };
-  }, [selectedContextId]);
+  }, [requiresContextSelection, selectedContextId]);
 
   const handleS3AccountChange = (selectedValue: string) => {
     const value = selectedValue || null;
@@ -87,7 +96,7 @@ function BrowserShell() {
             {selectedLabel}
           </div>
         )}
-        {selectedKind === "legacy_user" && (
+        {requiresContextSelection && selectedKind === "legacy_user" && (
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
             S3 user context
           </span>

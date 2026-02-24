@@ -25,6 +25,20 @@ export default function ManagerSettingsPage() {
     setSettings((prev) => (prev ? { ...prev, manager: { ...prev.manager, allow_manager_user_usage_stats: value } } : prev));
   };
 
+  const handleToggleAllowPortalManagerWorkspace = (value: boolean) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            general: {
+              ...prev.general,
+              allow_portal_manager_workspace: value,
+            },
+          }
+        : prev
+    );
+  };
+
   const handleSave = async (event?: React.FormEvent | React.MouseEvent) => {
     event?.preventDefault();
     if (!settings) return;
@@ -51,7 +65,18 @@ export default function ManagerSettingsPage() {
     setSavedMessage(null);
     try {
       const defaults = await fetchDefaultAppSettings();
-      setSettings((prev) => (prev ? { ...prev, manager: defaults.manager } : defaults));
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              manager: defaults.manager,
+              general: {
+                ...prev.general,
+                allow_portal_manager_workspace: defaults.general.allow_portal_manager_workspace,
+              },
+            }
+          : defaults
+      );
     } catch (err) {
       console.error(err);
       setError("Unable to load default settings.");
@@ -96,7 +121,7 @@ export default function ManagerSettingsPage() {
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Allow stats for all users</p>
@@ -111,6 +136,25 @@ export default function ManagerSettingsPage() {
                   checked={Boolean(settings.manager.allow_manager_user_usage_stats)}
                   onChange={(e) => handleToggleAllowManagerUserStats(e.target.checked)}
                   aria-label="Allow manager user stats"
+                />
+                <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
+                <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
+              </label>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Allow portal managers in Manager workspace</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  When enabled, users with role portal_manager can use /manager for their linked accounts.
+                </p>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  className="peer sr-only"
+                  checked={Boolean(settings.general.allow_portal_manager_workspace)}
+                  onChange={(e) => handleToggleAllowPortalManagerWorkspace(e.target.checked)}
+                  aria-label="Allow portal manager workspace"
                 />
                 <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
                 <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />

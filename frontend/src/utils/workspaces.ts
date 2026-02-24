@@ -26,8 +26,11 @@ export type SessionUser = {
   can_access_ceph_admin?: boolean | null;
   authType?: "password" | "s3_session" | "oidc" | null;
   account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
+  s3_connections?: number[] | null;
+  s3_connection_details?: { id: number; name?: string | null; iam_capable?: boolean | null }[] | null;
   capabilities?: {
     can_manage_buckets?: boolean;
+    can_manage_iam?: boolean;
   };
 };
 
@@ -76,33 +79,34 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
   }
   if (user.role !== USER_ROLE) return [];
   if (user.authType === "s3_session") {
-    return ALL_WORKSPACES.filter((workspace) => workspace.id === "manager" || workspace.id === "browser");
+    const canManager = user.capabilities?.can_manage_iam !== false;
+    const canBrowser = user.capabilities?.can_manage_buckets !== false;
+    return ALL_WORKSPACES.filter((workspace) => {
+      if (workspace.id === "manager") return canManager;
+      if (workspace.id === "browser") return canBrowser;
+      return false;
+    });
   }
   const links = user.account_links ?? [];
+  const connectionDetails = user.s3_connection_details ?? [];
+  const connectionIds = user.s3_connections ?? [];
   const hasPortalAccess = links.some(
     (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
   );
   const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
-  const hasManagerAccess = links.some(
-    (link) => Boolean(link.account_admin) || link.account_role === "portal_manager"
-  );
-  const hasBucketAccess = links.some(
-    (link) =>
-      Boolean(link.account_admin) ||
-      link.account_role === "portal_manager" ||
-      link.account_role === "portal_user"
-  );
-  const portalOnly = hasPortalAccess && !hasAccountAdmin;
-  const canManageBuckets = user.capabilities?.can_manage_buckets ?? hasBucketAccess;
-
-  if (portalOnly) {
-    return ALL_WORKSPACES.filter((workspace) => workspace.id === "portal");
-  }
+  const hasPortalManagerRole = links.some((link) => link.account_role === "portal_manager");
+  const hasBrowserConnectionAccess = connectionDetails.length > 0 || connectionIds.length > 0;
+  const hasManagerConnectionAccess =
+    connectionDetails.length > 0
+      ? connectionDetails.some((connection) => connection.iam_capable !== false)
+      : connectionIds.length > 0;
+  const hasManagerAccess = hasAccountAdmin || hasManagerConnectionAccess || hasPortalManagerRole;
+  const hasBrowserAccess = hasBrowserConnectionAccess;
 
   return ALL_WORKSPACES.filter((workspace) => {
     if (workspace.id === "portal") return hasPortalAccess;
     if (workspace.id === "manager") return hasManagerAccess;
-    if (workspace.id === "browser") return canManageBuckets;
+    if (workspace.id === "browser") return hasBrowserAccess;
     return false;
   });
 }
@@ -111,14 +115,26 @@ export function resolveAvailableWorkspacesWithFlags(
   user: SessionUser | null,
   generalSettings: GeneralSettings
 ): WorkspaceOption[] {
-  const filtered = resolveAvailableWorkspaces(user);
-  return filtered.filter((workspace) => {
+  const filtered = resolveAvailableWorkspaces(user).filter((workspace) => {
     if (workspace.id === "ceph-admin") return generalSettings.ceph_admin_enabled;
-    if (workspace.id === "manager") return generalSettings.manager_enabled;
+    if (workspace.id === "manager") {
+      if (!generalSettings.manager_enabled) return false;
+      if (user?.role !== USER_ROLE || user?.authType === "s3_session") return true;
+      if (user.account_links?.some((link) => Boolean(link.account_admin))) return true;
+      const hasIamConnections = user.s3_connection_details && user.s3_connection_details.length > 0
+        ? user.s3_connection_details.some((connection) => connection.iam_capable !== false)
+        : Boolean(user.s3_connections && user.s3_connections.length > 0);
+      if (hasIamConnections) return true;
+      return Boolean(
+        generalSettings.allow_portal_manager_workspace &&
+          user.account_links?.some((link) => link.account_role === "portal_manager")
+      );
+    }
     if (workspace.id === "browser") return generalSettings.browser_enabled && generalSettings.browser_root_enabled;
     if (workspace.id === "portal") return generalSettings.portal_enabled;
     return true;
   });
+  return filtered;
 }
 
 export function resolveWorkspaceFromPath(pathname: string, options: WorkspaceOption[]): WorkspaceOption | null {
@@ -132,32 +148,35 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
   if (isAdminLikeRole(user.role)) return "/admin";
   if (user.role !== USER_ROLE) return "/unauthorized";
   if (user.authType === "s3_session") {
-    if (generalSettings.manager_enabled) return "/manager";
-    if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && user.capabilities?.can_manage_buckets !== false) {
+    const canManager = user.capabilities?.can_manage_iam !== false;
+    const canBrowser = user.capabilities?.can_manage_buckets !== false;
+    if (generalSettings.manager_enabled && canManager) return "/manager";
+    if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && canBrowser) {
       return "/browser";
     }
     return "/unauthorized";
   }
   const links = user.account_links ?? [];
+  const connectionDetails = user.s3_connection_details ?? [];
+  const connectionIds = user.s3_connections ?? [];
   const hasPortalAccess = links.some(
     (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
   );
   const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
-  const hasManagerAccess = links.some(
-    (link) => Boolean(link.account_admin) || link.account_role === "portal_manager"
-  );
-  const hasBucketAccess = links.some(
-    (link) =>
-      Boolean(link.account_admin) ||
-      link.account_role === "portal_manager" ||
-      link.account_role === "portal_user"
-  );
-  const portalOnly = hasPortalAccess && !hasAccountAdmin;
-  const canManageBuckets = user.capabilities?.can_manage_buckets ?? hasBucketAccess;
-  if (portalOnly && generalSettings.portal_enabled) return "/portal";
+  const hasPortalManager = links.some((link) => link.account_role === "portal_manager");
+  const hasBrowserAccess = connectionDetails.length > 0 || connectionIds.length > 0;
+  const hasManagerConnectionAccess =
+    connectionDetails.length > 0
+      ? connectionDetails.some((connection) => connection.iam_capable !== false)
+      : connectionIds.length > 0;
+  const hasManagerAccess =
+    hasAccountAdmin ||
+    hasManagerConnectionAccess ||
+    (generalSettings.allow_portal_manager_workspace && hasPortalManager);
+
   if (generalSettings.manager_enabled && hasManagerAccess) return "/manager";
   if (hasPortalAccess && generalSettings.portal_enabled) return "/portal";
-  if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && canManageBuckets) return "/browser";
+  if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && hasBrowserAccess) return "/browser";
   return "/unauthorized";
 }
 

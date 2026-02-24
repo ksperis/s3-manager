@@ -12,6 +12,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   browser_root_enabled: false,
   browser_manager_enabled: true,
   browser_portal_enabled: true,
+  allow_portal_manager_workspace: false,
   portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,

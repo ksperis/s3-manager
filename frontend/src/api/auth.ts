@@ -20,6 +20,8 @@ export type LoginResponse = {
     ui_language?: "en" | "fr" | "de" | null;
     accounts?: number[];
     account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
+    s3_connections?: number[] | null;
+    s3_connection_details?: { id: number; name: string; iam_capable?: boolean | null }[] | null;
     auth_provider?: string | null;
   };
 };

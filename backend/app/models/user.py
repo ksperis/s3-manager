@@ -17,6 +17,7 @@ class LinkedS3User(BaseModel):
 class LinkedS3Connection(BaseModel):
     id: int
     name: str
+    iam_capable: Optional[bool] = None
 
 
 class AccountMembership(BaseModel):

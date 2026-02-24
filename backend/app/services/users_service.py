@@ -193,11 +193,15 @@ class UsersService:
         rows = self.db.query(S3User.id, S3User.name).filter(S3User.id.in_(ids)).all()
         return {row[0]: row[1] for row in rows}
 
-    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, str]:
+    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, tuple[str, bool]]:
         if not ids:
             return {}
-        rows = self.db.query(S3Connection.id, S3Connection.name).filter(S3Connection.id.in_(ids)).all()
-        return {row[0]: row[1] for row in rows}
+        rows = (
+            self.db.query(S3Connection.id, S3Connection.name, S3Connection.iam_capable)
+            .filter(S3Connection.id.in_(ids))
+            .all()
+        )
+        return {row[0]: (row[1], bool(row[2])) for row in rows}
 
     def paginate_users(
         self,
@@ -368,7 +372,7 @@ class UsersService:
         *,
         s3_user_labels: Optional[dict[int, str]] = None,
         preloaded_s3_links: Optional[dict[int, list[int]]] = None,
-        s3_connection_labels: Optional[dict[int, str]] = None,
+        s3_connection_labels: Optional[dict[int, tuple[str, bool]]] = None,
         preloaded_connection_links: Optional[dict[int, list[int]]] = None,
     ) -> UserOut:
         account_ids: list[int] = []
@@ -421,7 +425,7 @@ class UsersService:
             s3_user_names = s3_user_labels
         else:
             s3_user_names = self._load_s3_user_names(s3_user_ids)
-        s3_connection_names: dict[int, str]
+        s3_connection_names: dict[int, tuple[str, bool]]
         if s3_connection_labels is not None:
             s3_connection_names = s3_connection_labels
         else:
@@ -430,10 +434,18 @@ class UsersService:
             LinkedS3User(id=s3_id, name=s3_user_names.get(s3_id) or f"S3 User #{s3_id}")
             for s3_id in s3_user_ids
         ]
-        s3_connection_details = [
-            LinkedS3Connection(id=conn_id, name=s3_connection_names.get(conn_id) or f"Connection #{conn_id}")
-            for conn_id in s3_connection_ids
-        ]
+        s3_connection_details = []
+        for conn_id in s3_connection_ids:
+            connection_details = s3_connection_names.get(conn_id)
+            if connection_details is None:
+                s3_connection_details.append(
+                    LinkedS3Connection(id=conn_id, name=f"Connection #{conn_id}", iam_capable=None)
+                )
+                continue
+            label, iam_capable = connection_details
+            s3_connection_details.append(
+                LinkedS3Connection(id=conn_id, name=label or f"Connection #{conn_id}", iam_capable=iam_capable)
+            )
         return UserOut(
             id=user.id,
             email=user.email,

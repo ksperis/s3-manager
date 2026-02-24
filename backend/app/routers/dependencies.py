@@ -17,13 +17,11 @@ from app.db import (
     AccountRole,
     S3Account,
     S3Connection,
-    S3User,
     StorageEndpoint,
     StorageProvider,
     User,
     UserS3Account,
     UserS3Connection,
-    UserS3User,
     UserRole,
     is_admin_ui_role,
     is_superadmin_ui_role,
@@ -212,6 +210,8 @@ def _resolve_connection_context(db: Session, user: User, connection_id: int, *, 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
     if conn.is_temporary and conn.expires_at and conn.expires_at <= utcnow():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Connection expired")
+    if surface == "manager" and not bool(conn.iam_capable):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IAM-capable S3Connection is required in manager workspace")
     if not conn.is_public and conn.owner_user_id != user.id:
         link = (
             db.query(UserS3Connection)
@@ -255,20 +255,14 @@ def _normalize_access_mode(value: Optional[str]) -> Optional[str]:
     return None
 
 
-def _build_s3_user_account(s3_user: S3User) -> S3Account:
-    account = S3Account(
-        name=s3_user.name,
-        rgw_account_id=None,
-        email=s3_user.email,
-        rgw_user_uid=s3_user.rgw_user_uid,
-    )
-    account.id = -s3_user.id
-    account.rgw_access_key = s3_user.rgw_access_key
-    account.rgw_secret_key = s3_user.rgw_secret_key
-    account.storage_endpoint_id = s3_user.storage_endpoint_id
-    account.storage_endpoint = s3_user.storage_endpoint
-    account.s3_user_id = s3_user.id  # type: ignore[attr-defined]
-    return account
+def _resolve_workspace_surface(request: Optional[Request]) -> str:
+    if not request:
+        return "manager"
+    path = str(request.url.path)
+    browser_prefix = f"{settings.api_v1_prefix}/browser"
+    if path.startswith(browser_prefix):
+        return "browser"
+    return "manager"
 
 
 def _resolve_default_account_id(db: Session, user: User) -> int:
@@ -307,33 +301,6 @@ def _resolve_user_account_link(
     return account, link
 
 
-def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int) -> S3Account:
-    s3_user = db.query(S3User).filter(S3User.id == s3_user_id).first()
-    if not s3_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3 user not found")
-    if not is_admin_ui_role(user.role):
-        link_exists = (
-            db.query(UserS3User)
-            .filter(
-                UserS3User.user_id == user.id,
-                UserS3User.s3_user_id == s3_user.id,
-            )
-            .first()
-        )
-        if not link_exists:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this user")
-    account = _build_s3_user_account(s3_user)
-    account.set_session_credentials(s3_user.rgw_access_key, s3_user.rgw_secret_key)
-    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
-        can_manage_buckets=True,
-        can_manage_portal_users=False,
-        can_manage_iam=False,
-        can_view_root_key=False,
-        using_root_key=False,
-    )
-    return account
-
-
 def _manager_membership_capabilities(
     link: UserS3Account,
     requested_mode: Optional[str],
@@ -342,15 +309,19 @@ def _manager_membership_capabilities(
     is_account_admin = bool(link.account_admin or link.is_root)
     if account_role == AccountRole.PORTAL_NONE.value and not is_account_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
+    allow_portal_manager_workspace = bool(load_app_settings().general.allow_portal_manager_workspace)
+    portal_manager_enabled = bool(
+        account_role == AccountRole.PORTAL_MANAGER.value and allow_portal_manager_workspace
+    )
     can_portal_role = account_role != AccountRole.PORTAL_NONE.value
     if can_portal_role:
         using_root = bool(is_account_admin and requested_mode == "admin")
     else:
         using_root = bool(is_account_admin)
-    can_manage_iam = bool(using_root or account_role == AccountRole.PORTAL_MANAGER.value)
-    # Manager workspace actions stay restricted to account admins/root and portal managers.
-    can_manage_buckets = bool(is_account_admin or account_role == AccountRole.PORTAL_MANAGER.value)
-    can_manage_portal_users = bool(account_role == AccountRole.PORTAL_MANAGER.value or (is_account_admin and using_root))
+    can_manage_iam = bool(using_root or portal_manager_enabled)
+    # Manager workspace actions stay restricted to account admins/root and optionally portal managers.
+    can_manage_buckets = bool(is_account_admin or portal_manager_enabled)
+    can_manage_portal_users = bool(portal_manager_enabled or (is_account_admin and using_root))
     capabilities = AccountCapabilities(
         can_manage_buckets=can_manage_buckets,
         can_manage_portal_users=can_manage_portal_users,
@@ -434,6 +405,7 @@ def get_account_context(
     db: Session = Depends(get_db),
 ) -> S3Account:
     account_id, s3_user_id, connection_id = _parse_account_selector(account_ref)
+    surface = _resolve_workspace_surface(request)
     requested_mode = _normalize_access_mode(request.headers.get("X-Manager-Access-Mode")) if request else None
     requested_endpoint = normalize_s3_endpoint(request.headers.get("X-S3-Endpoint")) if request else None
     if isinstance(actor, ManagerSessionPrincipal):
@@ -443,10 +415,11 @@ def get_account_context(
         requested_endpoint = None
     if isinstance(actor, User):
         if connection_id is not None:
-            surface = "browser" if request and "/browser" in str(request.url.path) else "manager"
             return _resolve_connection_context(db, actor, connection_id, surface=surface)
         if s3_user_id is not None:
-            return _resolve_s3_user_context(db, actor, s3_user_id)
+            if surface == "browser":
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not allowed in browser workspace")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not allowed in manager workspace")
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
         account_role, capabilities = _manager_membership_capabilities(link, requested_mode)
         if not capabilities.can_manage_buckets:

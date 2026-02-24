@@ -28,7 +28,11 @@ export type ExecutionContext = {
   capabilities: ExecutionContextCapabilities;
 };
 
-export async function listExecutionContexts(): Promise<ExecutionContext[]> {
-  const { data } = await client.get<ExecutionContext[]>("/me/execution-contexts");
+export type ExecutionWorkspace = "manager" | "browser";
+
+export async function listExecutionContexts(workspace?: ExecutionWorkspace): Promise<ExecutionContext[]> {
+  const { data } = await client.get<ExecutionContext[]>("/me/execution-contexts", {
+    params: workspace ? { workspace } : undefined,
+  });
   return data;
 }

@@ -100,7 +100,7 @@ export function S3AccountProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        const data = await listExecutionContexts();
+        const data = await listExecutionContexts("manager");
         setS3Accounts(data);
       } catch (err) {
         setS3Accounts([]);
@@ -140,7 +140,8 @@ export function S3AccountProvider({ children }: { children: ReactNode }) {
       setSearchParams(nextParams, { replace: true });
       return;
     }
-    if (!selectedS3AccountId) {
+    const selectedExists = selectedS3AccountId ? accounts.some((context) => context.id === selectedS3AccountId) : false;
+    if (!selectedS3AccountId || !selectedExists) {
       const nextId = String(accounts[0].id);
       setSelectedS3AccountId(nextId);
       localStorage.setItem(EXECUTION_CONTEXT_STORAGE_KEY, nextId);

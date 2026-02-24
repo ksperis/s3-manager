@@ -2,12 +2,14 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGeneralSettings } from "./GeneralSettingsContext";
 import TopbarDropdownSelect, { TopbarDropdownOption } from "./TopbarDropdownSelect";
+import { listExecutionContexts } from "../api/executionContexts";
 import {
   WORKSPACE_STORAGE_KEY,
+  isAdminLikeRole,
   type WorkspaceId,
   readStoredUser,
   readStoredWorkspaceId,
@@ -18,10 +20,51 @@ import {
 export default function EnvironmentSwitcher() {
   const navigate = useNavigate();
   const location = useLocation();
-  const user = readStoredUser();
+  const user = useMemo(() => readStoredUser(), [location.pathname]);
+  const [workspaceContextAvailability, setWorkspaceContextAvailability] = useState<{
+    manager: boolean | null;
+    browser: boolean | null;
+  }>({
+    manager: null,
+    browser: null,
+  });
   const { generalSettings } = useGeneralSettings();
-  const environments = resolveAvailableWorkspacesWithFlags(user, generalSettings);
+  const environments = useMemo(() => {
+    const base = resolveAvailableWorkspacesWithFlags(user, generalSettings);
+    const isUiUser = user?.role === "ui_user";
+    const isSessionUser = user?.authType === "s3_session";
+    if (!isUiUser || isSessionUser) {
+      return base;
+    }
+    return base.filter((workspace) => {
+      if (workspace.id === "manager" && workspaceContextAvailability.manager === false) return false;
+      if (workspace.id === "browser" && workspaceContextAvailability.browser === false) return false;
+      return true;
+    });
+  }, [generalSettings, user, workspaceContextAvailability.browser, workspaceContextAvailability.manager]);
   const current = resolveWorkspaceFromPath(location.pathname, environments);
+
+  useEffect(() => {
+    const isUiUser = user?.role === "ui_user";
+    const isSessionUser = user?.authType === "s3_session";
+    if (!isUiUser || isSessionUser || isAdminLikeRole(user?.role)) {
+      setWorkspaceContextAvailability({ manager: null, browser: null });
+      return;
+    }
+    let cancelled = false;
+    Promise.allSettled([listExecutionContexts("manager"), listExecutionContexts("browser")]).then((results) => {
+      if (cancelled) return;
+      const managerAvailable = results[0].status === "fulfilled" && results[0].value.length > 0;
+      const browserAvailable = results[1].status === "fulfilled" && results[1].value.length > 0;
+      setWorkspaceContextAvailability({
+        manager: managerAvailable,
+        browser: browserAvailable,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.authType, user?.role]);
 
   useEffect(() => {
     if (!current) {
