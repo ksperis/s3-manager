@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -17,6 +17,11 @@ class S3ConnectionAdminItem(BaseModel):
     storage_endpoint_id: Optional[int] = None
     endpoint_url: str
     is_public: bool = False
+    is_shared: bool = False
+    visibility: Literal["private", "shared", "public"] = "private"
+    iam_capable: bool = False
+    credential_owner_type: Optional[str] = None
+    credential_owner_identifier: Optional[str] = None
     provider_hint: Optional[str] = None
     region: Optional[str] = None
     force_path_style: bool = False
@@ -35,6 +40,8 @@ class S3ConnectionSummary(BaseModel):
     name: str
     owner_user_id: Optional[int] = None
     is_public: bool = False
+    is_shared: bool = False
+    visibility: Literal["private", "shared", "public"] = "private"
 
 
 class PaginatedS3ConnectionsResponse(BaseModel):

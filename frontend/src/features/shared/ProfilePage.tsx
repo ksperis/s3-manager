@@ -21,6 +21,7 @@ import {
   rotateConnectionCredentials,
   updateConnection,
 } from "../../api/connections";
+import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import {
   WORKSPACE_STORAGE_KEY,
@@ -42,6 +43,8 @@ const defaultCreateConnectionForm = {
   force_path_style: false,
   verify_tls: true,
 };
+
+type CreateConnectionEndpointMode = "preset" | "custom";
 
 type ConnectionDraft = {
   name: string;
@@ -157,6 +160,11 @@ export default function ProfilePage({
   const [editingConnectionId, setEditingConnectionId] = useState<number | null>(null);
   const [rotatingCredentialsConnectionId, setRotatingCredentialsConnectionId] = useState<number | null>(null);
   const [createConnectionForm, setCreateConnectionForm] = useState(defaultCreateConnectionForm);
+  const [createConnectionEndpointMode, setCreateConnectionEndpointMode] = useState<CreateConnectionEndpointMode>("custom");
+  const [createConnectionEndpointId, setCreateConnectionEndpointId] = useState("");
+  const [availableStorageEndpoints, setAvailableStorageEndpoints] = useState<StorageEndpoint[]>([]);
+  const [loadingStorageEndpoints, setLoadingStorageEndpoints] = useState(false);
+  const [storageEndpointsError, setStorageEndpointsError] = useState<string | null>(null);
   const [connectionDrafts, setConnectionDrafts] = useState<Record<number, ConnectionDraft>>({});
   const [connectionCredentialDrafts, setConnectionCredentialDrafts] = useState<Record<number, ConnectionCredentialDraft>>(
     {}
@@ -203,6 +211,14 @@ export default function ProfilePage({
     const start = (connectionsPage - 1) * connectionsPageSize;
     return filteredConnections.slice(start, start + connectionsPageSize);
   }, [connectionsPage, connectionsPageSize, filteredConnections]);
+  const storageEndpointLabelById = useMemo(() => {
+    const labels = new Map<number, string>();
+    availableStorageEndpoints.forEach((endpoint) => {
+      const label = endpoint.name?.trim() || endpoint.endpoint_url || `Endpoint #${endpoint.id}`;
+      labels.set(endpoint.id, label);
+    });
+    return labels;
+  }, [availableStorageEndpoints]);
 
   const editingConnection = useMemo(
     () =>
@@ -311,6 +327,36 @@ export default function ProfilePage({
   }, [canManagePrivateConnections, showConnectionsSection]);
 
   useEffect(() => {
+    if (!showConnectionsSection || !canManagePrivateConnections) {
+      setAvailableStorageEndpoints([]);
+      setStorageEndpointsError(null);
+      setLoadingStorageEndpoints(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingStorageEndpoints(true);
+    setStorageEndpointsError(null);
+    listStorageEndpoints()
+      .then((items) => {
+        if (cancelled) return;
+        setAvailableStorageEndpoints(items);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setAvailableStorageEndpoints([]);
+        setStorageEndpointsError(getErrorMessage(error, "Unable to load configured endpoints."));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingStorageEndpoints(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManagePrivateConnections, showConnectionsSection]);
+
+  useEffect(() => {
     if (!showConnectionsSection) return;
     const totalPages = Math.max(1, Math.ceil(filteredConnections.length / (connectionsPageSize || 1)));
     if (connectionsPage > totalPages) {
@@ -330,6 +376,29 @@ export default function ProfilePage({
       setRotatingCredentialsConnectionId(null);
     }
   }, [connections, editingConnectionId, rotatingCredentialsConnectionId, showConnectionsSection]);
+
+  useEffect(() => {
+    if (!showCreateConnectionModal) return;
+    if (createConnectionEndpointMode !== "preset") return;
+    if (availableStorageEndpoints.length === 0) {
+      setCreateConnectionEndpointMode("custom");
+      setCreateConnectionEndpointId("");
+      return;
+    }
+    if (
+      createConnectionEndpointId &&
+      availableStorageEndpoints.some((item) => String(item.id) === createConnectionEndpointId)
+    ) {
+      return;
+    }
+    const preferred = availableStorageEndpoints.find((item) => item.is_default) ?? availableStorageEndpoints[0];
+    setCreateConnectionEndpointId(String(preferred.id));
+  }, [
+    availableStorageEndpoints,
+    createConnectionEndpointId,
+    createConnectionEndpointMode,
+    showCreateConnectionModal,
+  ]);
 
   const refreshConnections = async () => {
     if (!showConnectionsSection || !canManagePrivateConnections) return;
@@ -362,6 +431,14 @@ export default function ProfilePage({
     setConnectionsError(null);
     setConnectionsMessage(null);
     setCreateConnectionForm(defaultCreateConnectionForm);
+    if (availableStorageEndpoints.length > 0) {
+      const preferred = availableStorageEndpoints.find((item) => item.is_default) ?? availableStorageEndpoints[0];
+      setCreateConnectionEndpointMode("preset");
+      setCreateConnectionEndpointId(String(preferred.id));
+    } else {
+      setCreateConnectionEndpointMode("custom");
+      setCreateConnectionEndpointId("");
+    }
     setShowCreateConnectionModal(true);
   };
 
@@ -471,7 +548,11 @@ export default function ProfilePage({
       setConnectionsError("Connection name is required.");
       return;
     }
-    if (!createConnectionForm.endpoint_url.trim()) {
+    if (createConnectionEndpointMode === "preset" && !createConnectionEndpointId) {
+      setConnectionsError("Select a configured endpoint.");
+      return;
+    }
+    if (createConnectionEndpointMode === "custom" && !createConnectionForm.endpoint_url.trim()) {
       setConnectionsError("Endpoint URL is required.");
       return;
     }
@@ -479,20 +560,28 @@ export default function ProfilePage({
       setConnectionsError("S3 credentials are required.");
       return;
     }
+    const storageEndpointId =
+      createConnectionEndpointMode === "preset" && createConnectionEndpointId
+        ? Number(createConnectionEndpointId)
+        : null;
     setCreatingConnection(true);
     try {
       await createConnection({
         name: createConnectionForm.name.trim(),
-        provider_hint: createConnectionForm.provider_hint.trim() || undefined,
-        endpoint_url: createConnectionForm.endpoint_url.trim(),
-        region: createConnectionForm.region.trim() || undefined,
+        provider_hint:
+          createConnectionEndpointMode === "custom" ? createConnectionForm.provider_hint.trim() || undefined : undefined,
+        storage_endpoint_id: storageEndpointId,
+        endpoint_url: storageEndpointId ? undefined : createConnectionForm.endpoint_url.trim(),
+        region: storageEndpointId ? undefined : createConnectionForm.region.trim() || undefined,
         access_key_id: createConnectionForm.access_key_id.trim(),
         secret_access_key: createConnectionForm.secret_access_key,
-        force_path_style: createConnectionForm.force_path_style,
-        verify_tls: createConnectionForm.verify_tls,
-        is_public: false,
+        force_path_style: storageEndpointId ? undefined : createConnectionForm.force_path_style,
+        verify_tls: storageEndpointId ? undefined : createConnectionForm.verify_tls,
+        visibility: "private",
       });
       setCreateConnectionForm(defaultCreateConnectionForm);
+      setCreateConnectionEndpointMode(availableStorageEndpoints.length > 0 ? "preset" : "custom");
+      setCreateConnectionEndpointId("");
       setShowCreateConnectionModal(false);
       setConnectionsPage(1);
       setConnectionsMessage("Private S3 connection created.");
@@ -893,7 +982,8 @@ export default function ProfilePage({
                       {!connectionsLoading &&
                         pagedConnections.map((connection) => {
                           const endpointLabel = connection.storage_endpoint_id
-                            ? `Managed endpoint #${connection.storage_endpoint_id}`
+                            ? storageEndpointLabelById.get(connection.storage_endpoint_id) ||
+                              `Managed endpoint #${connection.storage_endpoint_id}`
                             : connection.endpoint_url || "-";
                           return (
                             <tr key={connection.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -997,46 +1087,137 @@ export default function ProfilePage({
                   placeholder="Mon endpoint S3"
                 />
               </label>
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Provider
-                </span>
-                <input
-                  type="text"
-                  value={createConnectionForm.provider_hint}
-                  onChange={(event) =>
-                    setCreateConnectionForm((prev) => ({ ...prev, provider_hint: event.target.value }))
-                  }
-                  className={inputClasses}
-                  placeholder="aws | minio | ceph ..."
-                />
-              </label>
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Endpoint URL
-                </span>
-                <input
-                  type="url"
-                  value={createConnectionForm.endpoint_url}
-                  onChange={(event) =>
-                    setCreateConnectionForm((prev) => ({ ...prev, endpoint_url: event.target.value }))
-                  }
-                  className={inputClasses}
-                  placeholder="https://s3.example.com"
-                />
-              </label>
-              <label className="block">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Region
-                </span>
-                <input
-                  type="text"
-                  value={createConnectionForm.region}
-                  onChange={(event) => setCreateConnectionForm((prev) => ({ ...prev, region: event.target.value }))}
-                  className={inputClasses}
-                  placeholder="us-east-1"
-                />
-              </label>
+              <div className="sm:col-span-2 space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                <div>
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Endpoint
+                  </p>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    Choose a configured endpoint or enter a custom endpoint.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                    <input
+                      type="radio"
+                      name="create-connection-endpoint-mode"
+                      checked={createConnectionEndpointMode === "preset"}
+                      onChange={() => setCreateConnectionEndpointMode("preset")}
+                      disabled={availableStorageEndpoints.length === 0}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                    />
+                    Endpoint UI existant
+                  </label>
+                  <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                    <input
+                      type="radio"
+                      name="create-connection-endpoint-mode"
+                      checked={createConnectionEndpointMode === "custom"}
+                      onChange={() => setCreateConnectionEndpointMode("custom")}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    Endpoint custom
+                  </label>
+                </div>
+                {createConnectionEndpointMode === "preset" ? (
+                  <label className="block">
+                    <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Configured endpoint
+                    </span>
+                    <select
+                      value={createConnectionEndpointId}
+                      onChange={(event) => setCreateConnectionEndpointId(event.target.value)}
+                      disabled={loadingStorageEndpoints || availableStorageEndpoints.length === 0}
+                      className={inputClasses}
+                    >
+                      <option value="">
+                        {loadingStorageEndpoints
+                          ? "Loading endpoints..."
+                          : availableStorageEndpoints.length === 0
+                            ? "No configured endpoint"
+                            : "Select endpoint"}
+                      </option>
+                      {availableStorageEndpoints.map((endpoint) => (
+                        <option key={endpoint.id} value={endpoint.id}>
+                          {endpoint.name} ({endpoint.endpoint_url})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Provider
+                      </span>
+                      <input
+                        type="text"
+                        value={createConnectionForm.provider_hint}
+                        onChange={(event) =>
+                          setCreateConnectionForm((prev) => ({ ...prev, provider_hint: event.target.value }))
+                        }
+                        className={inputClasses}
+                        placeholder="aws | minio | ceph ..."
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Region
+                      </span>
+                      <input
+                        type="text"
+                        value={createConnectionForm.region}
+                        onChange={(event) => setCreateConnectionForm((prev) => ({ ...prev, region: event.target.value }))}
+                        className={inputClasses}
+                        placeholder="us-east-1"
+                      />
+                    </label>
+                    <label className="block sm:col-span-2">
+                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Endpoint URL
+                      </span>
+                      <input
+                        type="url"
+                        value={createConnectionForm.endpoint_url}
+                        onChange={(event) =>
+                          setCreateConnectionForm((prev) => ({ ...prev, endpoint_url: event.target.value }))
+                        }
+                        className={inputClasses}
+                        placeholder="https://s3.example.com"
+                      />
+                    </label>
+                    <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
+                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={createConnectionForm.force_path_style}
+                          onChange={(event) =>
+                            setCreateConnectionForm((prev) => ({ ...prev, force_path_style: event.target.checked }))
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        Force path style
+                      </label>
+                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={createConnectionForm.verify_tls}
+                          onChange={(event) =>
+                            setCreateConnectionForm((prev) => ({ ...prev, verify_tls: event.target.checked }))
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        Verify TLS
+                      </label>
+                    </div>
+                  </div>
+                )}
+                {storageEndpointsError && (
+                  <p className="ui-caption text-amber-700 dark:text-amber-300">
+                    Unable to load configured endpoints ({storageEndpointsError}). Use custom mode.
+                  </p>
+                )}
+              </div>
               <label className="block">
                 <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Access Key
@@ -1064,30 +1245,6 @@ export default function ProfilePage({
                   className={inputClasses}
                   placeholder="********"
                 />
-              </label>
-            </div>
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={createConnectionForm.force_path_style}
-                  onChange={(event) =>
-                    setCreateConnectionForm((prev) => ({ ...prev, force_path_style: event.target.checked }))
-                  }
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                />
-                Force path style
-              </label>
-              <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={createConnectionForm.verify_tls}
-                  onChange={(event) =>
-                    setCreateConnectionForm((prev) => ({ ...prev, verify_tls: event.target.checked }))
-                  }
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                />
-                Verify TLS
               </label>
             </div>
             <div className="flex justify-end gap-2">

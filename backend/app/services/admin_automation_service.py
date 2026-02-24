@@ -49,6 +49,7 @@ from app.utils.quota_stats import bytes_to_gb
 from app.utils.size_units import size_to_bytes
 from app.utils.storage_endpoint_features import dump_features_config, normalize_features_config
 from app.utils.s3_connection_endpoint import build_custom_endpoint_config, parse_custom_endpoint_config, resolve_connection_details
+from app.utils.s3_connection_visibility import normalize_visibility, visibility_from_flags
 
 logger = logging.getLogger(__name__)
 
@@ -906,9 +907,16 @@ class AdminAutomationService:
         fields_set = spec.model_fields_set
         if "name" in fields_set and spec.name and spec.name != conn.name:
             diff["name"] = {"from": conn.name, "to": spec.name}
-        if "is_public" in fields_set and spec.is_public is not None:
-            if bool(spec.is_public) != bool(conn.is_public):
-                diff["is_public"] = {"from": bool(conn.is_public), "to": bool(spec.is_public)}
+        if {"visibility", "is_public", "is_shared"} & fields_set:
+            desired_visibility = normalize_visibility(
+                visibility=spec.visibility if "visibility" in fields_set else None,
+                is_public=spec.is_public if "is_public" in fields_set else None,
+                is_shared=spec.is_shared if "is_shared" in fields_set else None,
+                default=visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared)),
+            )
+            current_visibility = visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared))
+            if desired_visibility != current_visibility:
+                diff["visibility"] = {"from": current_visibility, "to": desired_visibility}
         if "storage_endpoint_id" in fields_set:
             desired = spec.storage_endpoint_id
             if desired != conn.storage_endpoint_id:
@@ -930,6 +938,16 @@ class AdminAutomationService:
                     diff["verify_tls"] = {"from": bool(details.verify_tls), "to": bool(spec.verify_tls)}
             if "provider_hint" in fields_set and spec.provider_hint is not None and spec.provider_hint != details.provider:
                 diff["provider_hint"] = {"from": details.provider, "to": spec.provider_hint}
+        if "iam_capable" in fields_set and spec.iam_capable is not None:
+            if bool(spec.iam_capable) != bool(conn.iam_capable):
+                diff["iam_capable"] = {"from": bool(conn.iam_capable), "to": bool(spec.iam_capable)}
+        if "credential_owner_type" in fields_set and spec.credential_owner_type != conn.credential_owner_type:
+            diff["credential_owner_type"] = {"from": conn.credential_owner_type, "to": spec.credential_owner_type}
+        if "credential_owner_identifier" in fields_set and spec.credential_owner_identifier != conn.credential_owner_identifier:
+            diff["credential_owner_identifier"] = {
+                "from": conn.credential_owner_identifier,
+                "to": spec.credential_owner_identifier,
+            }
         if item.update_credentials:
             if "access_key_id" in fields_set and spec.access_key_id is not None and spec.access_key_id != conn.access_key_id:
                 diff["access_key_id"] = {
@@ -1212,7 +1230,14 @@ class AdminAutomationService:
                 bool(spec.verify_tls if spec.verify_tls is not None else True),
                 spec.provider_hint,
             )
-        is_public = bool(spec.is_public) if spec.is_public is not None else False
+        visibility = normalize_visibility(
+            visibility=spec.visibility,
+            is_public=spec.is_public,
+            is_shared=spec.is_shared,
+            default="private",
+        )
+        is_public = visibility == "public"
+        is_shared = visibility == "shared"
         owner_user_id = None if is_public else current_user.id
         conn = S3Connection(
             owner_user_id=owner_user_id,
@@ -1220,6 +1245,10 @@ class AdminAutomationService:
             storage_endpoint_id=storage_endpoint_id,
             custom_endpoint_config=custom_endpoint_config,
             is_public=is_public,
+            is_shared=is_shared,
+            iam_capable=bool(spec.iam_capable),
+            credential_owner_type=spec.credential_owner_type,
+            credential_owner_identifier=spec.credential_owner_identifier,
             access_key_id=spec.access_key_id,
             secret_access_key=spec.secret_access_key,
         )
@@ -1235,14 +1264,25 @@ class AdminAutomationService:
         payload_data = spec.model_dump(exclude_unset=True)
         if "name" in payload_data and spec.name is not None:
             conn.name = spec.name
-        if "is_public" in payload_data and spec.is_public is not None:
-            if spec.is_public:
-                conn.is_public = True
+        if {"visibility", "is_public", "is_shared"} & set(payload_data.keys()):
+            visibility = normalize_visibility(
+                visibility=spec.visibility if "visibility" in payload_data else None,
+                is_public=spec.is_public if "is_public" in payload_data else None,
+                is_shared=spec.is_shared if "is_shared" in payload_data else None,
+                default=visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared)),
+            )
+            conn.is_public = visibility == "public"
+            conn.is_shared = visibility == "shared"
+            if conn.is_public:
                 conn.owner_user_id = None
-            else:
-                conn.is_public = False
-                if conn.owner_user_id is None:
-                    conn.owner_user_id = current_user.id
+            elif conn.owner_user_id is None:
+                conn.owner_user_id = current_user.id
+            if visibility != "shared":
+                (
+                    self.db.query(UserS3Connection)
+                    .filter(UserS3Connection.s3_connection_id == conn.id)
+                    .delete(synchronize_session=False)
+                )
         if "storage_endpoint_id" in payload_data:
             if spec.storage_endpoint_id is not None:
                 storage_endpoint = (
@@ -1282,6 +1322,12 @@ class AdminAutomationService:
                 verify_tls,
                 provider,
             )
+        if "iam_capable" in payload_data and spec.iam_capable is not None:
+            conn.iam_capable = bool(spec.iam_capable)
+        if "credential_owner_type" in payload_data:
+            conn.credential_owner_type = spec.credential_owner_type
+        if "credential_owner_identifier" in payload_data:
+            conn.credential_owner_identifier = spec.credential_owner_identifier
         if item.update_credentials:
             if "access_key_id" in payload_data and spec.access_key_id is not None:
                 conn.access_key_id = spec.access_key_id
@@ -1334,11 +1380,26 @@ class AdminAutomationService:
         if match.id is not None:
             return self.db.query(S3Connection).filter(S3Connection.id == match.id).first()
         if match.name:
-            desired_public = bool(item.spec.is_public) if item.spec and item.spec.is_public is not None else False
-            if desired_public:
+            desired_visibility = normalize_visibility(
+                visibility=item.spec.visibility if item.spec else None,
+                is_public=item.spec.is_public if item.spec else None,
+                is_shared=item.spec.is_shared if item.spec else None,
+                default="private",
+            )
+            if desired_visibility == "public":
                 return (
                     self.db.query(S3Connection)
                     .filter(S3Connection.name == match.name, S3Connection.is_public.is_(True))
+                    .first()
+                )
+            if desired_visibility == "shared":
+                return (
+                    self.db.query(S3Connection)
+                    .filter(
+                        S3Connection.name == match.name,
+                        S3Connection.is_public.is_(False),
+                        S3Connection.is_shared.is_(True),
+                    )
                     .first()
                 )
             return (
@@ -1346,6 +1407,7 @@ class AdminAutomationService:
                 .filter(
                     S3Connection.name == match.name,
                     S3Connection.is_public.is_(False),
+                    S3Connection.is_shared.is_(False),
                     S3Connection.owner_user_id == current_user.id,
                 )
                 .first()

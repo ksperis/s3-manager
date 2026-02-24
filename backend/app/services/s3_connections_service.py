@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.s3_connection import S3Connection as DBS3Connection, UserS3Connection
 from app.models.s3_connection import S3Connection, S3ConnectionCreate, S3ConnectionUpdate
+from app.utils.s3_connection_visibility import normalize_visibility, visibility_from_flags
 from app.utils.s3_connection_endpoint import (
     build_custom_endpoint_config,
     parse_custom_endpoint_config,
@@ -18,11 +19,7 @@ from app.utils.s3_connection_endpoint import (
 
 
 class S3ConnectionsService:
-    """CRUD for user-scoped S3 connections.
-
-    This intentionally keeps things simple (private-by-default) and does not
-    attempt to infer IAM/account concepts.
-    """
+    """CRUD for S3 connections."""
 
     def __init__(self, db: Session):
         self.db = db
@@ -36,7 +33,7 @@ class S3ConnectionsService:
                 DBS3Connection.is_temporary.is_(False),
                 (DBS3Connection.is_public.is_(True))
                 | (DBS3Connection.owner_user_id == user_id)
-                | (UserS3Connection.user_id == user_id)
+                | ((DBS3Connection.is_shared.is_(True)) & (UserS3Connection.user_id == user_id))
             )
             .distinct()
             .order_by(DBS3Connection.name.asc())
@@ -51,6 +48,7 @@ class S3ConnectionsService:
             .filter(
                 DBS3Connection.owner_user_id == user_id,
                 DBS3Connection.is_public.is_(False),
+                DBS3Connection.is_shared.is_(False),
                 DBS3Connection.is_temporary.is_(False),
             )
             .order_by(DBS3Connection.name.asc())
@@ -105,7 +103,7 @@ class S3ConnectionsService:
                 )
                 .first()
             )
-            if not link:
+            if not row.is_shared or not link:
                 raise KeyError("S3Connection not found")
         return row
 
@@ -147,7 +145,14 @@ class S3ConnectionsService:
         return row
 
     def create(self, user_id: int, payload: S3ConnectionCreate) -> S3Connection:
-        is_public = bool(payload.is_public)
+        visibility = normalize_visibility(
+            visibility=payload.visibility,
+            is_public=payload.is_public,
+            is_shared=payload.is_shared,
+            default="private",
+        )
+        is_public = visibility == "public"
+        is_shared = visibility == "shared"
         endpoint_url = (payload.endpoint_url or "").strip()
         region = payload.region
         force_path_style = bool(payload.force_path_style)
@@ -173,6 +178,10 @@ class S3ConnectionsService:
             storage_endpoint_id=payload.storage_endpoint_id,
             custom_endpoint_config=custom_endpoint_config,
             is_public=is_public,
+            is_shared=is_shared,
+            iam_capable=bool(payload.iam_capable),
+            credential_owner_type=payload.credential_owner_type,
+            credential_owner_identifier=payload.credential_owner_identifier,
             access_key_id=payload.access_key_id,
             secret_access_key=payload.secret_access_key,
             capabilities_json=json.dumps({}),
@@ -189,10 +198,25 @@ class S3ConnectionsService:
         payload_data = payload.model_dump(exclude_unset=True)
         if payload.name is not None:
             row.name = payload.name
-        if payload.is_public is not None:
-            row.is_public = bool(payload.is_public)
+        if {"visibility", "is_public", "is_shared"} & set(payload_data.keys()):
+            visibility = normalize_visibility(
+                visibility=payload.visibility,
+                is_public=payload.is_public if "is_public" in payload_data else None,
+                is_shared=payload.is_shared if "is_shared" in payload_data else None,
+                default=visibility_from_flags(is_public=bool(row.is_public), is_shared=bool(row.is_shared)),
+            )
+            row.is_public = visibility == "public"
+            row.is_shared = visibility == "shared"
             if row.is_public:
                 row.owner_user_id = None
+            elif row.owner_user_id is None:
+                row.owner_user_id = user_id
+            if visibility != "shared":
+                (
+                    self.db.query(UserS3Connection)
+                    .filter(UserS3Connection.s3_connection_id == row.id)
+                    .delete(synchronize_session=False)
+                )
         if "storage_endpoint_id" in payload_data:
             row.storage_endpoint_id = payload.storage_endpoint_id
             if payload.storage_endpoint_id is not None:
@@ -225,6 +249,12 @@ class S3ConnectionsService:
             row.access_key_id = payload.access_key_id
         if payload.secret_access_key is not None:
             row.secret_access_key = payload.secret_access_key
+        if payload.iam_capable is not None:
+            row.iam_capable = bool(payload.iam_capable)
+        if "credential_owner_type" in payload_data:
+            row.credential_owner_type = payload.credential_owner_type
+        if "credential_owner_identifier" in payload_data:
+            row.credential_owner_identifier = payload.credential_owner_identifier
         row.updated_at = utcnow()
         self.db.commit()
         self.db.refresh(row)
@@ -263,6 +293,11 @@ class S3ConnectionsService:
             provider_hint=details.provider,
             storage_endpoint_id=row.storage_endpoint_id,
             is_public=bool(row.is_public),
+            is_shared=bool(row.is_shared),
+            visibility=visibility_from_flags(is_public=bool(row.is_public), is_shared=bool(row.is_shared)),
+            iam_capable=bool(row.iam_capable),
+            credential_owner_type=row.credential_owner_type,
+            credential_owner_identifier=row.credential_owner_identifier,
             endpoint_url=details.endpoint_url or "",
             region=details.region,
             access_key_id=masked_access_key,

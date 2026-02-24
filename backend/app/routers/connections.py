@@ -16,6 +16,7 @@ from app.routers.dependencies import get_current_account_user
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services.s3_connections_service import S3ConnectionsService
+from app.utils.s3_connection_visibility import normalize_visibility
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
@@ -48,10 +49,21 @@ def create_connection(
     user: User = Depends(get_current_account_user),
 ):
     _ensure_private_connections_allowed(user)
-    if payload.is_public:
+    visibility = normalize_visibility(
+        visibility=payload.visibility,
+        is_public=payload.is_public,
+        is_shared=payload.is_shared,
+        default="private",
+    )
+    if visibility == "public":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Public connections must be managed from the admin workspace",
+        )
+    if visibility == "shared":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Shared connections must be managed from the admin workspace",
         )
     if payload.storage_endpoint_id is None and not (payload.endpoint_url or "").strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Endpoint URL is required for manual connections")
@@ -69,6 +81,8 @@ def create_connection(
                 "name": created.name,
                 "endpoint_url": created.endpoint_url,
                 "provider_hint": created.provider_hint,
+                "visibility": created.visibility,
+                "iam_capable": created.iam_capable,
                 "access_key_id": created.access_key_id,
             },
         )
@@ -89,12 +103,22 @@ def update_connection(
     user: User = Depends(get_current_account_user),
 ):
     _ensure_private_connections_allowed(user)
-    if payload.is_public is not None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Public connections can only be managed by an admin")
+    payload_data = payload.model_dump(exclude_unset=True)
+    if {"visibility", "is_public", "is_shared"} & set(payload_data.keys()):
+        requested_visibility = normalize_visibility(
+            visibility=payload.visibility if "visibility" in payload_data else None,
+            is_public=payload.is_public if "is_public" in payload_data else None,
+            is_shared=payload.is_shared if "is_shared" in payload_data else None,
+            default="private",
+        )
+        if requested_visibility != "private":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only private connections can be managed from this workspace",
+            )
     service = S3ConnectionsService(db)
     audit = AuditService(db)
     try:
-        payload_data = payload.model_dump(exclude_unset=True)
         if "storage_endpoint_id" in payload_data and payload.storage_endpoint_id is None and payload.endpoint_url is None:
             from app.utils.s3_connection_endpoint import resolve_connection_details
 
@@ -112,6 +136,8 @@ def update_connection(
                 "name": updated.name,
                 "endpoint_url": updated.endpoint_url,
                 "provider_hint": updated.provider_hint,
+                "visibility": updated.visibility,
+                "iam_capable": updated.iam_capable,
             },
         )
         return updated

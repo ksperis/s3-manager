@@ -519,6 +519,7 @@ const AssociationsTabs = ({
                   <div className="flex items-center gap-2">
                     <span className="ui-body font-medium text-slate-700">Linked connections</span>
                     <span className="ui-caption text-slate-500">{connections.selected.length} linked</span>
+                    <span className="ui-caption text-slate-400">(shared only)</span>
                   </div>
                   <button
                     type="button"
@@ -771,8 +772,13 @@ export default function UsersPage() {
         id: conn.id,
         label: conn.name,
         owner_user_id: conn.owner_user_id ?? null,
+        visibility: conn.visibility ?? (conn.is_shared ? "shared" : conn.is_public ? "public" : "private"),
       })),
     [s3Connections]
+  );
+  const s3SharedConnectionOptions = useMemo(
+    () => s3ConnectionOptions.filter((conn) => conn.visibility === "shared"),
+    [s3ConnectionOptions]
   );
   const s3ConnectionLabelById = useMemo(() => {
     const map = new Map<number, string>();
@@ -801,11 +807,11 @@ export default function UsersPage() {
   }, [s3UserOptions, createSelectedS3Users, createS3Search]);
   const availableCreateS3Connections = useMemo(() => {
     const query = createConnectionSearch.trim().toLowerCase();
-    return s3ConnectionOptions.filter(
+    return s3SharedConnectionOptions.filter(
       (opt) =>
         !createSelectedS3Connections.includes(opt.id) && (!query || opt.label.toLowerCase().includes(query))
     );
-  }, [s3ConnectionOptions, createSelectedS3Connections, createConnectionSearch]);
+  }, [s3SharedConnectionOptions, createSelectedS3Connections, createConnectionSearch]);
   const availableEditS3Users = useMemo(() => {
     const query = editS3Search.trim().toLowerCase();
     return s3UserOptions.filter(
@@ -814,13 +820,13 @@ export default function UsersPage() {
   }, [s3UserOptions, editSelectedS3Users, editS3Search]);
   const availableEditS3Connections = useMemo(() => {
     const query = editConnectionSearch.trim().toLowerCase();
-    return s3ConnectionOptions.filter(
+    return s3SharedConnectionOptions.filter(
       (opt) =>
         !editSelectedS3Connections.includes(opt.id) &&
         (!editingUser || opt.owner_user_id !== editingUser.id) &&
         (!query || opt.label.toLowerCase().includes(query))
     );
-  }, [s3ConnectionOptions, editSelectedS3Connections, editConnectionSearch, editingUser]);
+  }, [s3SharedConnectionOptions, editSelectedS3Connections, editConnectionSearch, editingUser]);
   const limitedOptions = <T,>(options: T[]) => options.slice(0, MAX_VISIBLE_OPTIONS);
   const visibleCreateS3Accounts = limitedOptions(availableCreateS3Accounts);
   const visibleEditS3Accounts = limitedOptions(availableEditS3Accounts);

@@ -105,12 +105,12 @@ def _build_connection_context(connection: S3Connection, *, hidden: bool = False)
             "usage": False,
             "metrics": False,
             "static_website": False,
-            "iam": False,
+            "iam": bool(connection.iam_capable),
             "sns": sns_enabled,
             "sse": False,
         },
         capabilities=ExecutionContextCapabilities(
-            iam_capable=False,
+            iam_capable=bool(connection.iam_capable),
             sts_capable=False,
             admin_api_capable=False,
         ),
@@ -157,7 +157,7 @@ def list_execution_contexts(
         .filter(
             (S3Connection.is_public.is_(True))
             | (S3Connection.owner_user_id == user.id)
-            | (S3Connection.id.in_(user_connection_ids))
+            | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(user_connection_ids)))
         )
         .filter(
             (S3Connection.is_temporary.is_(False))

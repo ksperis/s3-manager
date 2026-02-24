@@ -155,6 +155,7 @@ class S3ConnectionMatch(BaseModel):
 
 class S3ConnectionSpec(BaseModel):
     name: Optional[str] = None
+    visibility: Optional[Literal["private", "shared", "public"]] = None
     storage_endpoint_id: Optional[int] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
@@ -162,6 +163,10 @@ class S3ConnectionSpec(BaseModel):
     force_path_style: Optional[bool] = None
     verify_tls: Optional[bool] = None
     is_public: Optional[bool] = None
+    is_shared: Optional[bool] = None
+    iam_capable: Optional[bool] = None
+    credential_owner_type: Optional[str] = None
+    credential_owner_identifier: Optional[str] = None
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
 

@@ -221,7 +221,7 @@ def _resolve_connection_context(db: Session, user: User, connection_id: int, *, 
             )
             .first()
         )
-        if not link:
+        if not conn.is_shared or not link:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this connection")
 
     # Keep a minimal usage signal for UX (recently used sorting / hints).
@@ -237,7 +237,7 @@ def _resolve_connection_context(db: Session, user: User, connection_id: int, *, 
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
         can_manage_buckets=True,
         can_manage_portal_users=False,
-        can_manage_iam=False,
+        can_manage_iam=bool(conn.iam_capable),
         can_view_root_key=False,
         using_root_key=False,
     )

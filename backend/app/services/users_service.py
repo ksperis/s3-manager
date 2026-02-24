@@ -509,6 +509,12 @@ class UsersService:
             if missing:
                 missing_str = ", ".join(str(mid) for mid in sorted(missing))
                 raise ValueError(f"S3 connections not found: {missing_str}")
+            non_shared_ids = sorted(
+                conn.id for conn in connections if not bool(conn.is_shared)
+            )
+            if non_shared_ids:
+                non_shared_str = ", ".join(str(cid) for cid in non_shared_ids)
+                raise ValueError(f"Only shared S3 connections can be linked: {non_shared_str}")
             owned_ids = {conn.id for conn in connections if conn.owner_user_id == user.id}
             desired_ids -= owned_ids
         to_remove = existing_ids - desired_ids

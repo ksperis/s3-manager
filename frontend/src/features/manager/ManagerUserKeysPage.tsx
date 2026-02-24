@@ -14,11 +14,13 @@ import {
   updateIamAccessKeyStatus,
 } from "../../api/managerIamUsers";
 import { useS3AccountContext } from "./S3AccountContext";
+import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
+import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const handleCopy = () => {
@@ -41,7 +43,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 
 export default function ManagerUserKeysPage() {
   const { userName } = useParams<{ userName: string }>();
-  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
+  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode, accounts } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
@@ -62,6 +64,7 @@ export default function ManagerUserKeysPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [createdKey, setCreatedKey] = useState<AccessKey | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [showAddConnectionModal, setShowAddConnectionModal] = useState(false);
 
   const formatDate = (value?: string) => {
     if (!value) return "-";
@@ -173,6 +176,12 @@ export default function ManagerUserKeysPage() {
     }
   }, [userName]);
 
+  const selectedContext = useMemo(() => accounts.find((ctx) => ctx.id === accountIdForApi), [accountIdForApi, accounts]);
+  const addConnectionDefaults = useMemo(() => {
+    if (!createdKey) return null;
+    return buildManagerConnectionDefaults(selectedContext, pageTitle, createdKey.access_key_id);
+  }, [createdKey, pageTitle, selectedContext]);
+
   if (!userName) {
     return <div className="ui-body text-slate-600">User not specified.</div>;
   }
@@ -212,14 +221,24 @@ export default function ManagerUserKeysPage() {
 
       {createdKey && createdKey.secret_access_key && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-semibold">Key created for {pageTitle}</p>
               <p className="ui-caption text-amber-700 dark:text-amber-200">The secret is shown only once.</p>
             </div>
-            <span className="rounded-full bg-amber-100 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
-              Copy these values now
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAddConnectionModal(true)}
+                disabled={!createdKey.secret_access_key}
+                className="rounded-md border border-amber-300 bg-white/70 px-3 py-1.5 ui-caption font-semibold text-amber-700 hover:bg-amber-100/70 disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40"
+              >
+                Ajouter comme S3 Connection
+              </button>
+              <span className="rounded-full bg-amber-100 px-3 py-1 ui-caption font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/40 dark:text-amber-100">
+                Copy these values now
+              </span>
+            </div>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
@@ -291,6 +310,26 @@ export default function ManagerUserKeysPage() {
           </tbody>
         </table>
       </div>
+
+      {showAddConnectionModal && createdKey && createdKey.secret_access_key && addConnectionDefaults && (
+        <AddS3ConnectionFromKeyModal
+          isOpen={showAddConnectionModal}
+          lockEndpoint
+          accessKeyId={createdKey.access_key_id}
+          secretAccessKey={createdKey.secret_access_key}
+          defaultName={addConnectionDefaults.name}
+          defaultEndpointId={addConnectionDefaults.endpointId}
+          defaultEndpointUrl={addConnectionDefaults.endpointUrl}
+          defaultIamCapable={addConnectionDefaults.owner.iamCapable}
+          defaultOwnerType={addConnectionDefaults.owner.ownerType}
+          defaultOwnerIdentifier={addConnectionDefaults.owner.ownerIdentifier}
+          onClose={() => setShowAddConnectionModal(false)}
+          onCreated={() => {
+            setActionMessage("S3 connection created.");
+            setError(null);
+          }}
+        />
+      )}
     </div>
   );
 }

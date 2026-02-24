@@ -29,6 +29,10 @@ class S3Connection(Base):
 
     # Visibility
     is_public = Column(Boolean, nullable=False, default=False, server_default="0")
+    is_shared = Column(Boolean, nullable=False, default=False, server_default="0")
+    iam_capable = Column(Boolean, nullable=False, default=False, server_default="0")
+    credential_owner_type = Column(String, nullable=True)
+    credential_owner_identifier = Column(String, nullable=True)
 
     # S3 target
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True, index=True)
@@ -88,6 +92,3 @@ class UserS3Connection(Base):
         overlaps="users,shared_s3_connections,owner",
     )
 
-
-# If you later need sharing, introduce a link table (user_s3_connections)
-# but for now we keep connections owner-scoped.

@@ -1420,6 +1420,7 @@ export default function CephAdminUsersPage() {
       {selectedEndpointId && editingTarget && (
         <CephAdminUserEditModal
           endpointId={selectedEndpointId}
+          endpointUrl={selectedEndpoint?.endpoint_url ?? null}
           uid={editingTarget.uid}
           tenant={editingTarget.tenant}
           canViewMetrics={canViewMetrics}
@@ -1430,6 +1431,7 @@ export default function CephAdminUsersPage() {
       {selectedEndpointId && showCreateModal && (
         <CephAdminUserCreateModal
           endpointId={selectedEndpointId}
+          endpointUrl={selectedEndpoint?.endpoint_url ?? null}
           onClose={() => setShowCreateModal(false)}
           onCreated={() => {
             setReloadNonce((prev) => prev + 1);

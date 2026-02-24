@@ -16,6 +16,7 @@ import {
 } from "../../api/managerIamUsers";
 import { IAMGroup, listIamGroups } from "../../api/managerIamGroups";
 import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPolicies";
+import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import SortableHeader from "../../components/SortableHeader";
@@ -25,11 +26,12 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
+import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
 
 export default function ManagerUsersPage() {
   type SortField = keyof IAMUser;
 
-  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode } = useS3AccountContext();
+  const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, accessMode, accounts } = useS3AccountContext();
   const needsS3AccountSelection = requiresS3AccountSelection && !accountIdForApi;
   const isS3User = selectedS3AccountType === "s3_user";
   if (isS3User) {
@@ -61,6 +63,7 @@ export default function ManagerUsersPage() {
   const [inlineDraftName, setInlineDraftName] = useState("");
   const [inlinePolicyText, setInlinePolicyText] = useState("");
   const [inlineDrafts, setInlineDrafts] = useState<InlinePolicy[]>([]);
+  const [showAddConnectionModal, setShowAddConnectionModal] = useState(false);
   const [filter, setFilter] = useState("");
   const [showGroupOptions, setShowGroupOptions] = useState(false);
   const [showPolicyOptions, setShowPolicyOptions] = useState(false);
@@ -303,6 +306,12 @@ export default function ManagerUsersPage() {
     }
   };
 
+  const selectedContext = useMemo(() => accounts.find((ctx) => ctx.id === accountIdForApi), [accountIdForApi, accounts]);
+  const addConnectionDefaults = useMemo(() => {
+    if (!createdKey || !createdForUser) return null;
+    return buildManagerConnectionDefaults(selectedContext, createdForUser, createdKey.access_key_id);
+  }, [createdForUser, createdKey, selectedContext]);
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -323,19 +332,29 @@ export default function ManagerUsersPage() {
 
       {createdKey && createdForUser && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-semibold">Key created for {createdForUser}</p>
               <p className="ui-caption text-amber-700 dark:text-amber-200">
                 Copy these values now; the secret will only be shown once.
               </p>
             </div>
-            <Link
-              to={`/manager/users/${encodeURIComponent(createdForUser)}/keys`}
-              className="ui-body font-medium text-primary hover:text-sky-600 dark:text-primary-200 dark:hover:text-primary-100"
-            >
-              Manage keys
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAddConnectionModal(true)}
+                disabled={!createdKey.secret_access_key}
+                className="rounded-md border border-amber-300 bg-white/70 px-3 py-1.5 ui-caption font-semibold text-amber-700 hover:bg-amber-100/70 disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40"
+              >
+                Ajouter comme S3 Connection
+              </button>
+              <Link
+                to={`/manager/users/${encodeURIComponent(createdForUser)}/keys`}
+                className="ui-body font-medium text-primary hover:text-sky-600 dark:text-primary-200 dark:hover:text-primary-100"
+              >
+                Manage keys
+              </Link>
+            </div>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
@@ -830,6 +849,26 @@ export default function ManagerUsersPage() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {showAddConnectionModal && createdKey && createdForUser && createdKey.secret_access_key && addConnectionDefaults && (
+        <AddS3ConnectionFromKeyModal
+          isOpen={showAddConnectionModal}
+          lockEndpoint
+          accessKeyId={createdKey.access_key_id}
+          secretAccessKey={createdKey.secret_access_key}
+          defaultName={addConnectionDefaults.name}
+          defaultEndpointId={addConnectionDefaults.endpointId}
+          defaultEndpointUrl={addConnectionDefaults.endpointUrl}
+          defaultIamCapable={addConnectionDefaults.owner.iamCapable}
+          defaultOwnerType={addConnectionDefaults.owner.ownerType}
+          defaultOwnerIdentifier={addConnectionDefaults.owner.ownerIdentifier}
+          onClose={() => setShowAddConnectionModal(false)}
+          onCreated={() => {
+            setActionMessage("S3 connection created.");
+            setError(null);
+          }}
+        />
       )}
 
     </div>

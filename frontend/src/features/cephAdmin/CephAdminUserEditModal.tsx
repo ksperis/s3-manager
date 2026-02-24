@@ -17,15 +17,18 @@ import {
   updateCephAdminUserConfig,
   updateCephAdminUserKeyStatus,
 } from "../../api/cephAdmin";
+import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import UsageTile from "../../components/UsageTile";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
+import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
 
 type Props = {
   endpointId: number;
+  endpointUrl?: string | null;
   uid: string;
   tenant?: string | null;
   canViewMetrics?: boolean;
@@ -117,6 +120,7 @@ const capsTextToValues = (value: string): string[] => {
 
 export default function CephAdminUserEditModal({
   endpointId,
+  endpointUrl,
   uid,
   tenant,
   canViewMetrics = true,
@@ -142,6 +146,7 @@ export default function CephAdminUserEditModal({
   const [keysStatus, setKeysStatus] = useState<string | null>(null);
   const [keysBusy, setKeysBusy] = useState<string | null>(null);
   const [createdKey, setCreatedKey] = useState<CephAdminRgwGeneratedAccessKey | null>(null);
+  const [showAddConnectionModal, setShowAddConnectionModal] = useState(false);
 
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -621,7 +626,16 @@ export default function CephAdminUserEditModal({
 
       {createdKey && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-          <p className="font-semibold">Key created. Secret is shown only once.</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold">Key created. Secret is shown only once.</p>
+            <button
+              type="button"
+              onClick={() => setShowAddConnectionModal(true)}
+              className="rounded-md border border-amber-300 bg-white/70 px-3 py-1.5 ui-caption font-semibold text-amber-700 hover:bg-amber-100/70 disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40"
+            >
+              Ajouter comme S3 Connection
+            </button>
+          </div>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <div>
               <p className="ui-caption uppercase tracking-wide text-amber-700 dark:text-amber-200">Access key</p>
@@ -812,10 +826,39 @@ export default function CephAdminUserEditModal({
     }
     return baseTabs;
   }, [canViewMetrics, cephTab, metricsTab, overviewTab, s3Tab]);
+  const addConnectionDefaults = useMemo(() => {
+    if (!createdKey) return null;
+    return buildCephConnectionDefaults(uid, createdKey.access_key, {
+      accountId: detail?.account_id,
+      tenant,
+    });
+  }, [createdKey, detail?.account_id, tenant, uid]);
 
   return (
     <Modal title={`Configure user · ${identityLabel}`} onClose={onClose} maxWidthClass="max-w-6xl" maxBodyHeightClass="max-h-[85vh]">
       <PageTabs tabs={tabs} activeTab={activeTab} onChange={(tab) => setActiveTab(tab as TabId)} />
+      {showAddConnectionModal && createdKey && addConnectionDefaults && (
+        <AddS3ConnectionFromKeyModal
+          isOpen={showAddConnectionModal}
+          title="Ajouter cette clé comme S3 Connection"
+          zIndexClass="z-[60]"
+          lockEndpoint
+          accessKeyId={createdKey.access_key}
+          secretAccessKey={createdKey.secret_key}
+          defaultName={addConnectionDefaults.name}
+          defaultEndpointId={endpointId}
+          defaultEndpointUrl={endpointUrl ?? null}
+          defaultProviderHint="ceph"
+          defaultIamCapable={addConnectionDefaults.owner.iamCapable}
+          defaultOwnerType={addConnectionDefaults.owner.ownerType}
+          defaultOwnerIdentifier={addConnectionDefaults.owner.ownerIdentifier}
+          onClose={() => setShowAddConnectionModal(false)}
+          onCreated={() => {
+            setKeysStatus("S3 connection created.");
+            setKeysError(null);
+          }}
+        />
+      )}
     </Modal>
   );
 }

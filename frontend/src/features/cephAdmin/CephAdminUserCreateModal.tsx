@@ -10,11 +10,14 @@ import {
   CreateCephAdminUserPayload,
   listCephAdminAccounts,
 } from "../../api/cephAdmin";
+import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKeyModal";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
+import { buildCephConnectionDefaults } from "../shared/s3ConnectionFromKey";
 
 type Props = {
   endpointId: number;
+  endpointUrl?: string | null;
   onClose: () => void;
   onCreated?: (detail: CephAdminRgwUserDetail) => void;
 };
@@ -66,7 +69,7 @@ const capsTextToValues = (value: string): string[] =>
     )
   );
 
-export default function CephAdminUserCreateModal({ endpointId, onClose, onCreated }: Props) {
+export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onClose, onCreated }: Props) {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [accountsError, setAccountsError] = useState<string | null>(null);
@@ -90,6 +93,7 @@ export default function CephAdminUserCreateModal({ endpointId, onClose, onCreate
   const [capsText, setCapsText] = useState("");
 
   const [saving, setSaving] = useState(false);
+  const [showAddConnectionModal, setShowAddConnectionModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [generatedKey, setGeneratedKey] = useState<{ access_key: string; secret_key: string } | null>(null);
@@ -206,6 +210,13 @@ export default function CephAdminUserCreateModal({ endpointId, onClose, onCreate
     }
   };
 
+  const addConnectionDefaults = generatedKey
+    ? buildCephConnectionDefaults(uid, generatedKey.access_key, {
+        accountId: selectedAccountId,
+        tenant,
+      })
+    : null;
+
   return (
     <Modal title="Create user" onClose={onClose} maxWidthClass="max-w-5xl">
       <div className="space-y-4">
@@ -214,7 +225,16 @@ export default function CephAdminUserCreateModal({ endpointId, onClose, onCreate
         {accountsError && <PageBanner tone="warning">Unable to load account list: {accountsError}</PageBanner>}
         {generatedKey && (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
-            <p className="font-semibold">Access key created. Secret is shown only once.</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold">Access key created. Secret is shown only once.</p>
+              <button
+                type="button"
+                onClick={() => setShowAddConnectionModal(true)}
+                className="rounded-md border border-amber-300 bg-white/70 px-3 py-1.5 ui-caption font-semibold text-amber-700 hover:bg-amber-100/70 disabled:opacity-60 dark:border-amber-700 dark:bg-amber-950/20 dark:text-amber-100 dark:hover:bg-amber-950/40"
+              >
+                Ajouter comme S3 Connection
+              </button>
+            </div>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <div>
                 <p className="ui-caption uppercase tracking-wide text-amber-700 dark:text-amber-200">Access key</p>
@@ -427,6 +447,29 @@ export default function CephAdminUserCreateModal({ endpointId, onClose, onCreate
           </button>
         </div>
       </div>
+
+      {showAddConnectionModal && generatedKey && addConnectionDefaults && (
+        <AddS3ConnectionFromKeyModal
+          isOpen={showAddConnectionModal}
+          title="Ajouter cette clé comme S3 Connection"
+          zIndexClass="z-[60]"
+          lockEndpoint
+          accessKeyId={generatedKey.access_key}
+          secretAccessKey={generatedKey.secret_key}
+          defaultName={addConnectionDefaults.name}
+          defaultEndpointId={endpointId}
+          defaultEndpointUrl={endpointUrl ?? null}
+          defaultProviderHint="ceph"
+          defaultIamCapable={addConnectionDefaults.owner.iamCapable}
+          defaultOwnerType={addConnectionDefaults.owner.ownerType}
+          defaultOwnerIdentifier={addConnectionDefaults.owner.ownerIdentifier}
+          onClose={() => setShowAddConnectionModal(false)}
+          onCreated={() => {
+            setStatus("S3 connection created.");
+            setError(null);
+          }}
+        />
+      )}
     </Modal>
   );
 }

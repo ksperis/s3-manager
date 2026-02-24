@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,11 @@ class S3Connection(BaseModel):
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     is_public: bool = False
+    is_shared: bool = False
+    visibility: Literal["private", "shared", "public"] = "private"
+    iam_capable: bool = False
+    credential_owner_type: Optional[str] = None
+    credential_owner_identifier: Optional[str] = None
     endpoint_url: str
     region: Optional[str] = None
     access_key_id: str
@@ -28,9 +33,14 @@ class S3Connection(BaseModel):
 
 class S3ConnectionCreate(BaseModel):
     name: str
+    visibility: Optional[Literal["private", "shared", "public"]] = None
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     is_public: Optional[bool] = False
+    is_shared: Optional[bool] = False
+    iam_capable: bool = False
+    credential_owner_type: Optional[str] = None
+    credential_owner_identifier: Optional[str] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
     access_key_id: str
@@ -41,9 +51,14 @@ class S3ConnectionCreate(BaseModel):
 
 class S3ConnectionUpdate(BaseModel):
     name: Optional[str] = None
+    visibility: Optional[Literal["private", "shared", "public"]] = None
     provider_hint: Optional[str] = None
     storage_endpoint_id: Optional[int] = None
     is_public: Optional[bool] = None
+    is_shared: Optional[bool] = None
+    iam_capable: Optional[bool] = None
+    credential_owner_type: Optional[str] = None
+    credential_owner_identifier: Optional[str] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
     access_key_id: Optional[str] = None

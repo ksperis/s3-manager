@@ -62,7 +62,8 @@ export default function S3ConnectionsPage() {
   const [createForm, setCreateForm] = useState({
     name: "",
     provider_hint: "",
-    is_public: false,
+    visibility: "private" as "private" | "shared" | "public",
+    iam_capable: false,
     endpoint_url: "",
     region: "",
     access_key_id: "",
@@ -78,7 +79,10 @@ export default function S3ConnectionsPage() {
   const [editForm, setEditForm] = useState({
     name: "",
     provider_hint: "",
-    is_public: false,
+    visibility: "private" as "private" | "shared" | "public",
+    iam_capable: false,
+    credential_owner_type: "",
+    credential_owner_identifier: "",
     endpoint_url: "",
     region: "",
     force_path_style: false,
@@ -109,7 +113,8 @@ export default function S3ConnectionsPage() {
     setCreateForm({
       name: "",
       provider_hint: "",
-      is_public: false,
+      visibility: "private",
+      iam_capable: false,
       endpoint_url: "",
       region: "",
       access_key_id: "",
@@ -236,7 +241,10 @@ export default function S3ConnectionsPage() {
     setEditForm({
       name: conn.name,
       provider_hint: conn.provider_hint || "",
-      is_public: Boolean(conn.is_public),
+      visibility: (conn.visibility as "private" | "shared" | "public") || (conn.is_public ? "public" : conn.is_shared ? "shared" : "private"),
+      iam_capable: Boolean(conn.iam_capable),
+      credential_owner_type: conn.credential_owner_type || "",
+      credential_owner_identifier: conn.credential_owner_identifier || "",
       endpoint_url: conn.endpoint_url,
       region: conn.region || "",
       force_path_style: Boolean(conn.force_path_style),
@@ -283,7 +291,8 @@ export default function S3ConnectionsPage() {
           };
       await createAdminS3Connection({
         name: createForm.name,
-        is_public: createForm.is_public,
+        visibility: createForm.visibility,
+        iam_capable: createForm.iam_capable,
         access_key_id: createForm.access_key_id,
         secret_access_key: createForm.secret_access_key,
         ...endpointPayload,
@@ -331,7 +340,10 @@ export default function S3ConnectionsPage() {
           };
       await updateAdminS3Connection(editing.id, {
         name: editForm.name || undefined,
-        is_public: editForm.is_public,
+        visibility: editForm.visibility,
+        iam_capable: editForm.iam_capable,
+        credential_owner_type: editForm.credential_owner_type || null,
+        credential_owner_identifier: editForm.credential_owner_identifier || null,
         ...endpointPayload,
       });
       setEditCredentials({ access_key_id: "", secret_access_key: "" });
@@ -365,7 +377,7 @@ export default function S3ConnectionsPage() {
     <div className="space-y-4">
       <PageHeader
         title="S3 Connections"
-        description="Public connections are visible to everyone. Private connections are visible only to the owner."
+        description="Private connections are owner-only. Shared connections are owner + linked users. Public connections are visible to everyone."
         breadcrumbs={[{ label: "Admin" }, { label: "Connections" }]}
         actions={[{ label: "Add connection", onClick: openCreateModal }]}
       />
@@ -416,13 +428,15 @@ export default function S3ConnectionsPage() {
               {!loading && items.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-6 py-4">
-                    <TableEmptyState title="No connections" description="Create a public or private connection." />
+                    <TableEmptyState title="No connections" description="Create a private, shared, or public connection." />
                   </td>
                 </tr>
               )}
               {!loading &&
                 items.map((c) => {
-                  const canEdit = Boolean(c.is_public) || (currentUserId != null && c.owner_user_id === currentUserId);
+                  const visibility = c.visibility || (c.is_public ? "public" : c.is_shared ? "shared" : "private");
+                  const canManage =
+                    visibility === "public" || visibility === "shared" || (currentUserId != null && c.owner_user_id === currentUserId);
                   return (
                     <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                       <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{c.name}</td>
@@ -433,9 +447,11 @@ export default function S3ConnectionsPage() {
                           <span className="ui-mono">{c.endpoint_url || "-"}</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{c.is_public ? "Public" : "Private"}</td>
                       <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                        {c.is_public ? (
+                        {visibility === "public" ? "Public" : visibility === "shared" ? "Shared" : "Private"}
+                      </td>
+                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                        {visibility === "public" ? (
                           "—"
                         ) : (
                           <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
@@ -464,12 +480,17 @@ export default function S3ConnectionsPage() {
                           <button
                             className={tableActionButtonClasses}
                             onClick={() => openEdit(c)}
-                            disabled={!canEdit}
-                            title={canEdit ? undefined : "Only the owner can edit private connections."}
+                            disabled={!canManage}
+                            title={canManage ? undefined : "Only the owner can manage private connections."}
                           >
                             Edit
                           </button>
-                          <button className={tableDeleteActionClasses} onClick={() => setDeleteTarget(c)}>
+                          <button
+                            className={tableDeleteActionClasses}
+                            onClick={() => setDeleteTarget(c)}
+                            disabled={!canManage}
+                            title={canManage ? undefined : "Only the owner can manage private connections."}
+                          >
                             Delete
                           </button>
                         </div>
@@ -533,8 +554,8 @@ export default function S3ConnectionsPage() {
                       type="radio"
                       name="create-visibility"
                       value="private"
-                      checked={!createForm.is_public}
-                      onChange={() => setCreateForm((p) => ({ ...p, is_public: false }))}
+                      checked={createForm.visibility === "private"}
+                      onChange={() => setCreateForm((p) => ({ ...p, visibility: "private" }))}
                       className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
                     />
                     Private (owner only)
@@ -543,17 +564,40 @@ export default function S3ConnectionsPage() {
                     <input
                       type="radio"
                       name="create-visibility"
+                      value="shared"
+                      checked={createForm.visibility === "shared"}
+                      onChange={() => setCreateForm((p) => ({ ...p, visibility: "shared" }))}
+                      className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    Shared (owner + linked users)
+                  </label>
+                  <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                    <input
+                      type="radio"
+                      name="create-visibility"
                       value="public"
-                      checked={createForm.is_public}
-                      onChange={() => setCreateForm((p) => ({ ...p, is_public: true }))}
+                      checked={createForm.visibility === "public"}
+                      onChange={() => setCreateForm((p) => ({ ...p, visibility: "public" }))}
                       className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
                     />
                     Public (visible to all)
                   </label>
                 </div>
                 <p className="ui-caption text-slate-500 dark:text-slate-300">
-                  Public connections are visible to everyone and have no owner.
+                  Shared connections are configurable by UI admins only. Public connections are visible to everyone.
                 </p>
+              </div>
+              <div className="flex items-center gap-2 sm:col-span-2">
+                <input
+                  id="create-iam-capable"
+                  type="checkbox"
+                  checked={createForm.iam_capable}
+                  onChange={(e) => setCreateForm((p) => ({ ...p, iam_capable: e.target.checked }))}
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                />
+                <label htmlFor="create-iam-capable" className="ui-body text-slate-700 dark:text-slate-200">
+                  IAM-compatible credentials (enable Manager IAM features)
+                </label>
               </div>
               <div className="flex flex-col gap-1 sm:col-span-2">
                 <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Existing endpoint</label>
@@ -671,11 +715,16 @@ export default function S3ConnectionsPage() {
 
             <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
               <div className="ui-body text-slate-700 dark:text-slate-200">
-                Visibility: <span className="font-semibold">{editForm.is_public ? "Public" : "Private"}</span>
+                Visibility:{" "}
+                <span className="font-semibold">
+                  {editForm.visibility === "public" ? "Public" : editForm.visibility === "shared" ? "Shared" : "Private"}
+                </span>
               </div>
               <div className="ui-caption text-slate-500 dark:text-slate-300">
-                {editForm.is_public
+                {editForm.visibility === "public"
                   ? "Visible to all UI users. Public connections have no owner."
+                  : editForm.visibility === "shared"
+                    ? `Owner: ${editing.owner_email || editing.owner_user_id} (owner + linked users)`
                   : `Owner: ${editing.owner_email || editing.owner_user_id}`}
               </div>
             </div>
@@ -812,8 +861,8 @@ export default function S3ConnectionsPage() {
                     type="radio"
                     name="visibility"
                     value="private"
-                    checked={!editForm.is_public}
-                    onChange={() => setEditForm((p) => ({ ...p, is_public: false }))}
+                    checked={editForm.visibility === "private"}
+                    onChange={() => setEditForm((p) => ({ ...p, visibility: "private" }))}
                     className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
                   />
                   Private (owner only)
@@ -822,16 +871,65 @@ export default function S3ConnectionsPage() {
                   <input
                     type="radio"
                     name="visibility"
+                    value="shared"
+                    checked={editForm.visibility === "shared"}
+                    onChange={() => setEditForm((p) => ({ ...p, visibility: "shared" }))}
+                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                  />
+                  Shared (owner + linked users)
+                </label>
+                <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                  <input
+                    type="radio"
+                    name="visibility"
                     value="public"
-                    checked={editForm.is_public}
-                    onChange={() => setEditForm((p) => ({ ...p, is_public: true }))}
+                    checked={editForm.visibility === "public"}
+                    onChange={() => setEditForm((p) => ({ ...p, visibility: "public" }))}
                     className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
                   />
                   Public (visible to all)
                 </label>
               </div>
               <div className="ui-caption text-slate-500 dark:text-slate-300">
-                Public connections have no owner. Private connections are visible only to their owner.
+                Private is strictly owner-only. Shared can be linked to multiple UI users.
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+              <div>
+                <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Credential metadata</div>
+                <div className="ui-caption text-slate-500 dark:text-slate-300">
+                  Store owner context for keys imported from manager/ceph-admin flows.
+                </div>
+              </div>
+              <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={editForm.iam_capable}
+                  onChange={(e) => setEditForm((p) => ({ ...p, iam_capable: e.target.checked }))}
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                />
+                IAM-compatible credentials (enable Manager IAM features)
+              </label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Owner type</label>
+                  <input
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={editForm.credential_owner_type}
+                    onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_type: e.target.value }))}
+                    placeholder="iam_user | account_user | s3_user"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Owner identifier</label>
+                  <input
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    value={editForm.credential_owner_identifier}
+                    onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_identifier: e.target.value }))}
+                    placeholder="account-id / user-id"
+                  />
+                </div>
               </div>
             </div>
 

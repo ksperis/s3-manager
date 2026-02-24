@@ -158,6 +158,7 @@ export type AdminSummary = {
   total_other_endpoints: number;
   total_connections: number;
   total_public_connections: number;
+  total_shared_connections?: number;
   total_private_connections: number;
 };
 

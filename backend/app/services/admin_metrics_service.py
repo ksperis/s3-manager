@@ -111,7 +111,13 @@ class AdminMetricsService:
             .scalar()
             or 0
         )
-        total_private_connections = max(total_connections - total_public_connections, 0)
+        total_shared_connections = (
+            db.query(func.count(S3Connection.id))
+            .filter(S3Connection.is_shared.is_(True), S3Connection.is_public.is_(False))
+            .scalar()
+            or 0
+        )
+        total_private_connections = max(total_connections - total_public_connections - total_shared_connections, 0)
         return {
             "total_accounts": total_accounts,
             "total_users": total_managers,
@@ -128,6 +134,7 @@ class AdminMetricsService:
             "total_other_endpoints": total_other_endpoints,
             "total_connections": total_connections,
             "total_public_connections": total_public_connections,
+            "total_shared_connections": total_shared_connections,
             "total_private_connections": total_private_connections,
         }
 

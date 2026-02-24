@@ -95,7 +95,7 @@ def list_manager_accounts(
         .filter(
             (S3Connection.is_public.is_(True))
             | (S3Connection.owner_user_id == user.id)
-            | (S3Connection.id.in_(user_connection_ids))
+            | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(user_connection_ids)))
         )
         .filter(S3Connection.is_temporary.is_(False))
         .all()
@@ -190,7 +190,7 @@ def list_manager_accounts(
                     "usage": False,
                     "metrics": False,
                     "static_website": False,
-                    "iam": False,
+                    "iam": bool(conn.iam_capable),
                     "sns": sns_enabled,
                     "sse": False,
                 },
