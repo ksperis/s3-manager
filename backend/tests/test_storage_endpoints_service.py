@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 import json
 
-from app.db import StorageEndpoint, StorageProvider
+from app.db import S3Connection, StorageEndpoint, StorageProvider
 from app.models.storage_endpoint import StorageEndpointFeatureDetectionRequest, StorageEndpointUpdate
 from app.services.rgw_admin import RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
@@ -263,6 +263,27 @@ def test_detect_features_warns_when_usage_log_endpoint_is_unavailable(db_session
     assert result.usage_error == "RGW usage logs endpoint is unavailable."
     assert len(result.warnings) == 1
     assert "Usage logs do not appear enabled" in result.warnings[0]
+
+
+def test_delete_endpoint_blocks_when_references_exist(db_session):
+    endpoint = _create_ceph_endpoint(db_session, name="ceph-delete-blocked")
+    db_session.add(
+        S3Connection(
+            name="linked-conn",
+            storage_endpoint_id=endpoint.id,
+            access_key_id="AKIA-LINKED",
+            secret_access_key="SECRET-LINKED",
+            is_public=True,
+        )
+    )
+    db_session.commit()
+
+    service = StorageEndpointsService(db_session)
+    try:
+        service.delete_endpoint(endpoint.id)
+        assert False, "delete_endpoint should have raised when references exist"
+    except ValueError as exc:
+        assert "Unable to delete this endpoint" in str(exc)
 
 
 def test_detect_features_reuses_stored_secrets_in_edit_mode(db_session, monkeypatch):

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -73,7 +73,10 @@ class S3Connection(Base):
 
 class UserS3Connection(Base):
     __tablename__ = "user_s3_connections"
-    __table_args__ = (UniqueConstraint("user_id", "s3_connection_id", name="uq_user_s3_connection"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "s3_connection_id", name="uq_user_s3_connection"),
+        Index("ix_user_s3_connections_connection_user", "s3_connection_id", "user_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -91,4 +94,3 @@ class UserS3Connection(Base):
         back_populates="user_links",
         overlaps="users,shared_s3_connections,owner",
     )
-

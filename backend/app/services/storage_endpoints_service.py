@@ -9,7 +9,21 @@ from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db import StorageEndpoint, StorageProvider, S3Account, S3User
+from app.db import (
+    BillingAssignment,
+    BillingRateCard,
+    BillingStorageDaily,
+    BillingUsageDaily,
+    EndpointHealthCheck,
+    EndpointHealthLatest,
+    EndpointHealthRollup,
+    EndpointHealthStatusSegment,
+    S3Account,
+    S3Connection,
+    S3User,
+    StorageEndpoint,
+    StorageProvider,
+)
 from app.models.storage_endpoint import (
     StorageEndpointFeatureDetectionRequest,
     StorageEndpointFeatureDetectionResult,
@@ -719,9 +733,41 @@ class StorageEndpointsService:
             raise ValueError("This endpoint is protected and cannot be deleted.")
         linked_accounts = self.db.query(S3Account).filter(S3Account.storage_endpoint_id == endpoint.id).count()
         linked_users = self.db.query(S3User).filter(S3User.storage_endpoint_id == endpoint.id).count()
-        if linked_accounts or linked_users:
+        linked_connections = self.db.query(S3Connection).filter(S3Connection.storage_endpoint_id == endpoint.id).count()
+        health_checks = self.db.query(EndpointHealthCheck).filter(EndpointHealthCheck.storage_endpoint_id == endpoint.id).count()
+        health_latest = self.db.query(EndpointHealthLatest).filter(EndpointHealthLatest.storage_endpoint_id == endpoint.id).count()
+        health_segments = (
+            self.db.query(EndpointHealthStatusSegment)
+            .filter(EndpointHealthStatusSegment.storage_endpoint_id == endpoint.id)
+            .count()
+        )
+        health_rollups = self.db.query(EndpointHealthRollup).filter(EndpointHealthRollup.storage_endpoint_id == endpoint.id).count()
+        billing_usage = self.db.query(BillingUsageDaily).filter(BillingUsageDaily.storage_endpoint_id == endpoint.id).count()
+        billing_storage = self.db.query(BillingStorageDaily).filter(BillingStorageDaily.storage_endpoint_id == endpoint.id).count()
+        billing_rate_cards = self.db.query(BillingRateCard).filter(BillingRateCard.storage_endpoint_id == endpoint.id).count()
+        billing_assignments = self.db.query(BillingAssignment).filter(BillingAssignment.storage_endpoint_id == endpoint.id).count()
+        has_refs = any(
+            count > 0
+            for count in [
+                linked_accounts,
+                linked_users,
+                linked_connections,
+                health_checks,
+                health_latest,
+                health_segments,
+                health_rollups,
+                billing_usage,
+                billing_storage,
+                billing_rate_cards,
+                billing_assignments,
+            ]
+        )
+        if has_refs:
             raise ValueError(
-                f"Unable to delete this endpoint: {linked_accounts} account(s) and {linked_users} user(s) are linked."
+                "Unable to delete this endpoint: "
+                f"accounts={linked_accounts}, users={linked_users}, connections={linked_connections}, "
+                f"health_checks={health_checks + health_latest + health_segments + health_rollups}, "
+                f"billing={billing_usage + billing_storage + billing_rate_cards + billing_assignments}."
             )
         self.db.delete(endpoint)
         self.db.commit()

@@ -9,6 +9,9 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db import (
+    BillingAssignment,
+    BillingStorageDaily,
+    BillingUsageDaily,
     S3User as S3UserModel,
     StorageEndpoint,
     StorageProvider,
@@ -788,6 +791,21 @@ class S3UsersService:
             self.db.query(UserS3UserModel)
             .filter(UserS3UserModel.s3_user_id == s3_user.id)
             .delete(synchronize_session=False)
+        )
+        (
+            self.db.query(BillingAssignment)
+            .filter(BillingAssignment.s3_user_id == s3_user.id)
+            .update({BillingAssignment.s3_user_id: None}, synchronize_session=False)
+        )
+        (
+            self.db.query(BillingUsageDaily)
+            .filter(BillingUsageDaily.s3_user_id == s3_user.id)
+            .update({BillingUsageDaily.s3_user_id: None}, synchronize_session=False)
+        )
+        (
+            self.db.query(BillingStorageDaily)
+            .filter(BillingStorageDaily.s3_user_id == s3_user.id)
+            .update({BillingStorageDaily.s3_user_id: None}, synchronize_session=False)
         )
         self.db.delete(s3_user)
         self.db.commit()

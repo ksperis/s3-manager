@@ -29,6 +29,7 @@ class User(Base):
     auth_provider = Column(String, nullable=True)
     auth_provider_subject = Column(String, nullable=True)
     created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     last_login_at = Column(DateTime, nullable=True)
     ui_language = Column(String, nullable=True)
 

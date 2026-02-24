@@ -3,7 +3,7 @@
 from app.utils.time import utcnow
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -21,7 +21,8 @@ class S3Account(Base):
     rgw_access_key = Column(String, nullable=True)
     rgw_secret_key = Column(EncryptedString, nullable=True)
     rgw_user_uid = Column(String, nullable=True)
-    created_at = Column(DateTime, default=utcnow)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
     portal_settings_override = Column(Text, nullable=True)
 
@@ -69,7 +70,10 @@ class S3Account(Base):
 
 class UserS3Account(Base):
     __tablename__ = "user_s3_accounts"
-    __table_args__ = (UniqueConstraint("user_id", "account_id", name="uq_user_s3_account"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "account_id", name="uq_user_s3_account"),
+        Index("ix_user_s3_accounts_account_user", "account_id", "user_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)

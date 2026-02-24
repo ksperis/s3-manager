@@ -13,6 +13,8 @@ from app.core.security import get_password_hash, verify_password
 from app.db import (
     AccountIAMUser,
     AccountRole,
+    ApiToken,
+    RefreshSession,
     S3Account,
     S3Connection,
     S3User,
@@ -155,7 +157,11 @@ class UsersService:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
             raise ValueError("User not found")
-        # Remove account links first to satisfy NOT NULL constraints
+        owned_connection_ids = [
+            row[0]
+            for row in self.db.query(S3Connection.id).filter(S3Connection.owner_user_id == user.id).all()
+        ]
+        # Remove dependent links/tokens first to satisfy FK constraints on PostgreSQL.
         (
             self.db.query(AccountIAMUser)
             .filter(AccountIAMUser.user_id == user.id)
@@ -175,6 +181,37 @@ class UsersService:
             self.db.query(UserS3Connection)
             .filter(UserS3Connection.user_id == user.id)
             .delete(synchronize_session=False)
+        )
+        if owned_connection_ids:
+            (
+                self.db.query(UserS3Connection)
+                .filter(UserS3Connection.s3_connection_id.in_(owned_connection_ids))
+                .delete(synchronize_session=False)
+            )
+            (
+                self.db.query(S3Connection)
+                .filter(S3Connection.id.in_(owned_connection_ids))
+                .delete(synchronize_session=False)
+            )
+        (
+            self.db.query(ApiToken)
+            .filter(ApiToken.user_id == user.id)
+            .delete(synchronize_session=False)
+        )
+        (
+            self.db.query(ApiToken)
+            .filter(ApiToken.revoked_by_user_id == user.id)
+            .update({ApiToken.revoked_by_user_id: None}, synchronize_session=False)
+        )
+        (
+            self.db.query(RefreshSession)
+            .filter(RefreshSession.user_id == user.id)
+            .delete(synchronize_session=False)
+        )
+        (
+            self.db.query(RefreshSession)
+            .filter(RefreshSession.revoked_by_user_id == user.id)
+            .update({RefreshSession.revoked_by_user_id: None}, synchronize_session=False)
         )
         self.db.delete(user)
         self.db.commit()

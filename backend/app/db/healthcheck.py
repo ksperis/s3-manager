@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.utils.time import utcnow
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -12,6 +12,14 @@ from .base import Base
 
 class EndpointHealthCheck(Base):
     __tablename__ = "endpoint_health_checks"
+    __table_args__ = (
+        Index(
+            "ix_endpoint_health_checks_endpoint_mode_checked",
+            "storage_endpoint_id",
+            "check_mode",
+            "checked_at",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=False, index=True)
@@ -34,6 +42,13 @@ class EndpointHealthLatest(Base):
             "check_type",
             "scope",
             name="uq_endpoint_health_latest_scope",
+        ),
+        Index(
+            "ix_endpoint_health_latest_endpoint_type_scope_checked",
+            "storage_endpoint_id",
+            "check_type",
+            "scope",
+            "checked_at",
         ),
     )
 
@@ -59,6 +74,22 @@ class EndpointHealthLatest(Base):
 
 class EndpointHealthStatusSegment(Base):
     __tablename__ = "endpoint_health_status_segments"
+    __table_args__ = (
+        Index(
+            "ix_endpoint_health_segments_endpoint_type_scope_started",
+            "storage_endpoint_id",
+            "check_type",
+            "scope",
+            "started_at",
+        ),
+        Index(
+            "ix_endpoint_health_segments_endpoint_type_scope_ended",
+            "storage_endpoint_id",
+            "check_type",
+            "scope",
+            "ended_at",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=False, index=True)
@@ -89,6 +120,14 @@ class EndpointHealthRollup(Base):
             "resolution_seconds",
             "bucket_start",
             name="uq_endpoint_health_rollup_bucket",
+        ),
+        Index(
+            "ix_endpoint_health_rollups_endpoint_type_scope_res_bucket",
+            "storage_endpoint_id",
+            "check_type",
+            "scope",
+            "resolution_seconds",
+            "bucket_start",
         ),
     )
 

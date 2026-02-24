@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.utils.time import utcnow
 
-from sqlalchemy import BigInteger, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -20,6 +20,18 @@ class BillingUsageDaily(Base):
             "s3_user_id",
             "source",
             name="uq_billing_usage_daily",
+        ),
+        Index(
+            "ix_billing_usage_daily_endpoint_day_account",
+            "storage_endpoint_id",
+            "day",
+            "s3_account_id",
+        ),
+        Index(
+            "ix_billing_usage_daily_endpoint_day_user",
+            "storage_endpoint_id",
+            "day",
+            "s3_user_id",
         ),
     )
 
@@ -51,6 +63,18 @@ class BillingStorageDaily(Base):
             "source",
             name="uq_billing_storage_daily",
         ),
+        Index(
+            "ix_billing_storage_daily_endpoint_day_account",
+            "storage_endpoint_id",
+            "day",
+            "s3_account_id",
+        ),
+        Index(
+            "ix_billing_storage_daily_endpoint_day_user",
+            "storage_endpoint_id",
+            "day",
+            "s3_user_id",
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -71,7 +95,15 @@ class BillingStorageDaily(Base):
 
 class BillingRateCard(Base):
     __tablename__ = "billing_rate_cards"
-    __table_args__ = (UniqueConstraint("name", name="uq_billing_rate_cards_name"),)
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_billing_rate_cards_name"),
+        Index(
+            "ix_billing_rate_cards_endpoint_effective_window",
+            "storage_endpoint_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
@@ -91,6 +123,20 @@ class BillingRateCard(Base):
 
 class BillingAssignment(Base):
     __tablename__ = "billing_assignments"
+    __table_args__ = (
+        Index(
+            "ix_billing_assignments_endpoint_account_created",
+            "storage_endpoint_id",
+            "s3_account_id",
+            "created_at",
+        ),
+        Index(
+            "ix_billing_assignments_endpoint_user_created",
+            "storage_endpoint_id",
+            "s3_user_id",
+            "created_at",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=False, index=True)

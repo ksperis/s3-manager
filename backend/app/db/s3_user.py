@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.security import EncryptedString
@@ -20,6 +20,7 @@ class S3User(Base):
     rgw_access_key = Column(String, nullable=False)
     rgw_secret_key = Column(EncryptedString, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     storage_endpoint_id = Column(Integer, ForeignKey("storage_endpoints.id"), nullable=True)
 
     users = relationship(
@@ -38,7 +39,10 @@ class S3User(Base):
 
 class UserS3User(Base):
     __tablename__ = "user_s3_users"
-    __table_args__ = (UniqueConstraint("user_id", "s3_user_id", name="uq_user_s3_user"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "s3_user_id", name="uq_user_s3_user"),
+        Index("ix_user_s3_users_s3_user_user", "s3_user_id", "user_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)

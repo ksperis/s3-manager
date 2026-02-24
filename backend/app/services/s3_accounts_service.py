@@ -5,7 +5,20 @@ from sqlalchemy.orm import Session
 import logging
 from datetime import datetime
 
-from app.db import AccountRole, S3Account, StorageEndpoint, StorageProvider, User, UserS3Account, is_admin_ui_role
+from app.db import (
+    AccountIAMUser,
+    AccountRole,
+    AuditLog,
+    BillingAssignment,
+    BillingStorageDaily,
+    BillingUsageDaily,
+    S3Account,
+    StorageEndpoint,
+    StorageProvider,
+    User,
+    UserS3Account,
+    is_admin_ui_role,
+)
 from app.models.s3_account import (
     AccountUserLink,
     S3Account as S3AccountSchema,
@@ -986,7 +999,32 @@ class S3AccountsService:
             )
 
     def _remove_account_entry(self, account: S3Account) -> None:
+        (
+            self.db.query(AccountIAMUser)
+            .filter(AccountIAMUser.account_id == account.id)
+            .delete(synchronize_session=False)
+        )
         self.db.query(UserS3Account).filter(UserS3Account.account_id == account.id).delete()
+        (
+            self.db.query(BillingAssignment)
+            .filter(BillingAssignment.s3_account_id == account.id)
+            .update({BillingAssignment.s3_account_id: None}, synchronize_session=False)
+        )
+        (
+            self.db.query(BillingUsageDaily)
+            .filter(BillingUsageDaily.s3_account_id == account.id)
+            .update({BillingUsageDaily.s3_account_id: None}, synchronize_session=False)
+        )
+        (
+            self.db.query(BillingStorageDaily)
+            .filter(BillingStorageDaily.s3_account_id == account.id)
+            .update({BillingStorageDaily.s3_account_id: None}, synchronize_session=False)
+        )
+        (
+            self.db.query(AuditLog)
+            .filter(AuditLog.account_id == account.id)
+            .update({AuditLog.account_id: None}, synchronize_session=False)
+        )
         self.db.delete(account)
         self.db.commit()
 
