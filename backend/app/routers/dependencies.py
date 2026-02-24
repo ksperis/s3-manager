@@ -17,11 +17,13 @@ from app.db import (
     AccountRole,
     S3Account,
     S3Connection,
+    S3User,
     StorageEndpoint,
     StorageProvider,
     User,
     UserS3Account,
     UserS3Connection,
+    UserS3User,
     UserRole,
     is_admin_ui_role,
     is_superadmin_ui_role,
@@ -199,6 +201,51 @@ def _build_s3_connection_account(conn: S3Connection) -> S3Account:
     account._session_verify_tls = verify_tls  # type: ignore[attr-defined]
     account.s3_connection_id = conn.id  # type: ignore[attr-defined]
     account._session_token = conn.session_token  # type: ignore[attr-defined]
+    return account
+
+
+def _build_s3_user_account(s3_user: S3User) -> S3Account:
+    account = S3Account(
+        name=s3_user.name,
+        rgw_account_id=None,
+        email=s3_user.email,
+        rgw_user_uid=s3_user.rgw_user_uid,
+    )
+    # Keep an out-of-band negative id to avoid collisions with RGW account ids.
+    account.id = -(100_000 + s3_user.id)
+    account.rgw_access_key = s3_user.rgw_access_key
+    account.rgw_secret_key = s3_user.rgw_secret_key
+    account.storage_endpoint_id = s3_user.storage_endpoint_id
+    account.storage_endpoint = s3_user.storage_endpoint
+    account.s3_user_id = s3_user.id  # type: ignore[attr-defined]
+    return account
+
+
+def _resolve_s3_user_context(db: Session, user: User, s3_user_id: int) -> S3Account:
+    link = (
+        db.query(UserS3User)
+        .filter(
+            UserS3User.user_id == user.id,
+            UserS3User.s3_user_id == s3_user_id,
+        )
+        .first()
+    )
+    if not link:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this S3 user")
+
+    s3_user = db.query(S3User).filter(S3User.id == s3_user_id).first()
+    if not s3_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3 user not found")
+
+    account = _build_s3_user_account(s3_user)
+    account.set_session_credentials(s3_user.rgw_access_key, s3_user.rgw_secret_key)
+    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
+        can_manage_buckets=True,
+        can_manage_portal_users=False,
+        can_manage_iam=False,
+        can_view_root_key=False,
+        using_root_key=False,
+    )
     return account
 
 
@@ -482,9 +529,7 @@ def get_account_context(
         if connection_id is not None:
             return _resolve_connection_context(db, actor, connection_id, surface=surface)
         if s3_user_id is not None:
-            if surface == "browser":
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not allowed in browser workspace")
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not allowed in manager workspace")
+            return _resolve_s3_user_context(db, actor, s3_user_id)
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
         account_role, capabilities = _manager_membership_capabilities(link, requested_mode)
         if not capabilities.can_manage_buckets:

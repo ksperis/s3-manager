@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.db import AccountRole, S3Connection, StorageEndpoint, User, UserRole, UserS3Account
+from app.db import AccountRole, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
 from app.models.app_settings import AppSettings
 from app.routers import dependencies
 
@@ -78,6 +78,72 @@ def test_manager_workspace_rejects_non_iam_connection(db_session):
         )
     assert exc.value.status_code == 403
     assert "IAM-capable S3Connection is required in manager workspace" in str(exc.value.detail)
+
+
+@pytest.mark.parametrize("path", ["/api/manager/buckets", "/api/browser/buckets"])
+def test_manager_and_browser_workspace_accept_s3_user_context(db_session, path):
+    user = User(
+        email="s3-user-context-ok@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    s3_user = S3User(
+        name="legacy-s3-user",
+        rgw_user_uid="legacy-user-uid",
+        rgw_access_key="AK-S3U",
+        rgw_secret_key="SK-S3U",
+    )
+    db_session.add_all([user, s3_user])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(s3_user)
+
+    db_session.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
+    db_session.commit()
+
+    account = dependencies.get_account_context(
+        request=_request(path),
+        account_ref=f"s3u-{s3_user.id}",
+        actor=user,
+        db=db_session,
+    )
+
+    assert getattr(account, "s3_user_id", None) == s3_user.id
+    assert account.effective_rgw_credentials() == ("AK-S3U", "SK-S3U")
+    caps = getattr(account, "_manager_capabilities", None)
+    assert caps is not None
+    assert caps.can_manage_buckets is True
+    assert caps.can_manage_iam is False
+
+
+def test_workspace_rejects_unlinked_s3_user_context(db_session):
+    user = User(
+        email="s3-user-context-ko@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    s3_user = S3User(
+        name="legacy-s3-user-ko",
+        rgw_user_uid="legacy-user-ko",
+        rgw_access_key="AK-S3U-KO",
+        rgw_secret_key="SK-S3U-KO",
+    )
+    db_session.add_all([user, s3_user])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(s3_user)
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies.get_account_context(
+            request=_request("/api/manager/buckets"),
+            account_ref=f"s3u-{s3_user.id}",
+            actor=user,
+            db=db_session,
+        )
+    assert exc.value.status_code == 403
+    assert "Not authorized for this S3 user" in str(exc.value.detail)
 
 
 def test_browser_workspace_accepts_ceph_admin_selector_for_authorized_user(db_session, monkeypatch):

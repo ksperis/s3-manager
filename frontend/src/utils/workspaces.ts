@@ -26,6 +26,8 @@ export type SessionUser = {
   can_access_ceph_admin?: boolean | null;
   authType?: "password" | "s3_session" | "oidc" | null;
   account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
+  s3_users?: number[] | null;
+  s3_user_details?: { id: number; name?: string | null }[] | null;
   s3_connections?: number[] | null;
   s3_connection_details?: { id: number; name?: string | null; iam_capable?: boolean | null }[] | null;
   capabilities?: {
@@ -88,6 +90,8 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
     });
   }
   const links = user.account_links ?? [];
+  const s3UserDetails = user.s3_user_details ?? [];
+  const s3UserIds = user.s3_users ?? [];
   const connectionDetails = user.s3_connection_details ?? [];
   const connectionIds = user.s3_connections ?? [];
   const hasPortalAccess = links.some(
@@ -95,13 +99,14 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
   );
   const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
   const hasPortalManagerRole = links.some((link) => link.account_role === "portal_manager");
+  const hasS3UserAccess = s3UserDetails.length > 0 || s3UserIds.length > 0;
   const hasBrowserConnectionAccess = connectionDetails.length > 0 || connectionIds.length > 0;
   const hasManagerConnectionAccess =
     connectionDetails.length > 0
       ? connectionDetails.some((connection) => connection.iam_capable !== false)
       : connectionIds.length > 0;
-  const hasManagerAccess = hasAccountAdmin || hasManagerConnectionAccess || hasPortalManagerRole;
-  const hasBrowserAccess = hasBrowserConnectionAccess;
+  const hasManagerAccess = hasAccountAdmin || hasManagerConnectionAccess || hasPortalManagerRole || hasS3UserAccess;
+  const hasBrowserAccess = hasBrowserConnectionAccess || hasS3UserAccess;
 
   return ALL_WORKSPACES.filter((workspace) => {
     if (workspace.id === "portal") return hasPortalAccess;
@@ -125,6 +130,7 @@ export function resolveAvailableWorkspacesWithFlags(
         ? user.s3_connection_details.some((connection) => connection.iam_capable !== false)
         : Boolean(user.s3_connections && user.s3_connections.length > 0);
       if (hasIamConnections) return true;
+      if (user.s3_user_details?.length || user.s3_users?.length) return true;
       return Boolean(
         generalSettings.allow_portal_manager_workspace &&
           user.account_links?.some((link) => link.account_role === "portal_manager")
@@ -157,6 +163,8 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
     return "/unauthorized";
   }
   const links = user.account_links ?? [];
+  const s3UserDetails = user.s3_user_details ?? [];
+  const s3UserIds = user.s3_users ?? [];
   const connectionDetails = user.s3_connection_details ?? [];
   const connectionIds = user.s3_connections ?? [];
   const hasPortalAccess = links.some(
@@ -164,7 +172,8 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
   );
   const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
   const hasPortalManager = links.some((link) => link.account_role === "portal_manager");
-  const hasBrowserAccess = connectionDetails.length > 0 || connectionIds.length > 0;
+  const hasS3UserAccess = s3UserDetails.length > 0 || s3UserIds.length > 0;
+  const hasBrowserAccess = connectionDetails.length > 0 || connectionIds.length > 0 || hasS3UserAccess;
   const hasManagerConnectionAccess =
     connectionDetails.length > 0
       ? connectionDetails.some((connection) => connection.iam_capable !== false)
@@ -172,6 +181,7 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
   const hasManagerAccess =
     hasAccountAdmin ||
     hasManagerConnectionAccess ||
+    hasS3UserAccess ||
     (generalSettings.allow_portal_manager_workspace && hasPortalManager);
 
   if (generalSettings.manager_enabled && hasManagerAccess) return "/manager";

@@ -192,7 +192,7 @@ def list_execution_contexts(
         for account in accounts:
             results.append(_build_account_context(account))
 
-    if workspace is None:
+    if workspace in {None, "manager", "browser"}:
         for s3_user in s3_users:
             quota_max_size_gb, quota_max_objects = s3_users_service.get_user_quota(s3_user)
             results.append(_build_legacy_user_context(s3_user, quota_max_size_gb, quota_max_objects))

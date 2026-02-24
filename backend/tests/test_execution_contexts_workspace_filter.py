@@ -69,7 +69,7 @@ def _create_legacy_user(db_session, *, name: str, uid: str) -> S3User:
     return s3_user
 
 
-def test_manager_workspace_returns_only_allowed_contexts(db_session):
+def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_session):
     user = _create_user(db_session)
     admin_account = _create_account(db_session, name="admin-account", rgw_account_id="RGWADMIN0001")
     portal_manager_account = _create_account(db_session, name="pm-account", rgw_account_id="RGWPM0001")
@@ -103,9 +103,10 @@ def test_manager_workspace_returns_only_allowed_contexts(db_session):
 
     assert str(admin_account.id) in context_ids
     assert str(portal_manager_account.id) not in context_ids
+    assert f"s3u-{legacy_user.id}" in context_ids
     assert f"conn-{manager_connection.id}" in context_ids
     assert f"conn-{browser_only_connection.id}" not in context_ids
-    assert all(context.kind != "legacy_user" for context in contexts)
+    assert any(context.kind == "legacy_user" for context in contexts)
 
 
 def test_manager_workspace_includes_portal_manager_accounts_when_enabled(db_session, monkeypatch):
@@ -131,7 +132,7 @@ def test_manager_workspace_includes_portal_manager_accounts_when_enabled(db_sess
     assert str(portal_manager_account.id) in context_ids
 
 
-def test_browser_workspace_returns_only_connections(db_session):
+def test_browser_workspace_returns_connections_and_s3_users(db_session):
     user = _create_user(db_session)
     account = _create_account(db_session, name="browser-account", rgw_account_id="RGWBROWSER0001")
     legacy_user = _create_legacy_user(db_session, name="browser-legacy", uid="legacy-uid-2")
@@ -155,5 +156,5 @@ def test_browser_workspace_returns_only_connections(db_session):
     contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
     context_ids = {context.id for context in contexts}
 
-    assert context_ids == {f"conn-{connection_a.id}", f"conn-{connection_b.id}"}
-    assert all(context.kind == "connection" for context in contexts)
+    assert context_ids == {f"s3u-{legacy_user.id}", f"conn-{connection_a.id}", f"conn-{connection_b.id}"}
+    assert {context.kind for context in contexts} == {"legacy_user", "connection"}
