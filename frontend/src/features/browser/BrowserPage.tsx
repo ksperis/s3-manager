@@ -3,14 +3,15 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { unstable_usePrompt, useSearchParams } from "react-router-dom";
+import { unstable_usePrompt, useLocation, useSearchParams } from "react-router-dom";
 import JSZip from "jszip";
 import { ZipWriter } from "@zip.js/zip.js";
 import axios from "axios";
+import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
 import { formatBytes } from "../../utils/format";
 import { withS3AccountParam, type S3AccountSelector } from "../../api/accountParams";
-import { getBucketLogging, getBucketPolicy, getBucketProperties, getBucketWebsite, listBuckets } from "../../api/buckets";
+import { createBucket, getBucketLogging, getBucketPolicy, getBucketProperties, getBucketWebsite, listBuckets } from "../../api/buckets";
 import {
   BrowserBucket,
   BrowserObject,
@@ -62,6 +63,8 @@ import BrowserObjectVersionsModal from "./BrowserObjectVersionsModal";
 import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
 import BrowserPreviewModal from "./BrowserPreviewModal";
 import ObjectAdvancedModal from "./ObjectAdvancedModal";
+import BucketDetailPage from "../manager/BucketDetailPage";
+import { S3AccountProvider } from "../manager/S3AccountContext";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
 import {
   BucketIcon,
@@ -183,6 +186,9 @@ type BrowserPageProps = {
   accountIdForApi?: S3AccountSelector;
   hasContext?: boolean;
   storageEndpointCapabilities?: Record<string, boolean> | null;
+  contextEndpointProvider?: "ceph" | "other" | null;
+  contextQuotaMaxSizeGb?: number | null;
+  contextQuotaMaxObjects?: number | null;
   allowFoldersPanel?: boolean;
   allowInspectorPanel?: boolean;
   showPanelToggles?: boolean;
@@ -217,6 +223,7 @@ type PathDraftContext = {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
+const BYTES_PER_GIB = 1024 * 1024 * 1024;
 const PATH_SUGGESTIONS_DEBOUNCE_MS = 200;
 const PATH_SUGGESTIONS_LIMIT = 20;
 const PATH_SUGGESTIONS_API_LIMIT = 50;
@@ -396,6 +403,9 @@ export default function BrowserPage({
   accountIdForApi: accountIdOverride,
   hasContext: hasContextOverride,
   storageEndpointCapabilities,
+  contextEndpointProvider,
+  contextQuotaMaxSizeGb,
+  contextQuotaMaxObjects,
   allowFoldersPanel = true,
   allowInspectorPanel = true,
   showPanelToggles = true,
@@ -405,6 +415,7 @@ export default function BrowserPage({
   const browserContext = useBrowserContext();
   const accountIdForApi = accountIdOverride ?? browserContext.selectorForApi;
   const hasS3AccountContext = hasContextOverride ?? browserContext.hasContext;
+  const location = useLocation();
   // /browser is credential-first: no root/portal switching in step 2.
   const accessMode = null;
   const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
@@ -506,6 +517,12 @@ export default function BrowserPage({
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
+  const [configBucketName, setConfigBucketName] = useState<string | null>(null);
+  const [showCreateBucketModal, setShowCreateBucketModal] = useState(false);
+  const [createBucketNameValue, setCreateBucketNameValue] = useState("");
+  const [createBucketVersioning, setCreateBucketVersioning] = useState(false);
+  const [createBucketLoading, setCreateBucketLoading] = useState(false);
+  const [createBucketError, setCreateBucketError] = useState<string | null>(null);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderError, setNewFolderError] = useState<string | null>(null);
@@ -620,6 +637,19 @@ export default function BrowserPage({
     return (raw as { storage_endpoint_capabilities?: Record<string, boolean> | null }).storage_endpoint_capabilities ?? null;
   }, [selectedContext]);
   const effectiveCaps = storageEndpointCapabilities === undefined ? storageEndpointCaps : storageEndpointCapabilities;
+  const selectedContextEndpointProvider = selectedContext?.endpoint_provider ?? null;
+  const effectiveContextEndpointProvider =
+    contextEndpointProvider === undefined ? selectedContextEndpointProvider : contextEndpointProvider;
+  const selectedContextQuotaSizeGb = selectedContext?.quota_max_size_gb ?? null;
+  const selectedContextQuotaObjects = selectedContext?.quota_max_objects ?? null;
+  const effectiveContextQuotaSizeGb = contextQuotaMaxSizeGb === undefined ? selectedContextQuotaSizeGb : contextQuotaMaxSizeGb;
+  const effectiveContextQuotaObjects = contextQuotaMaxObjects === undefined ? selectedContextQuotaObjects : contextQuotaMaxObjects;
+  const cephContextQuotaSizeBytes =
+    effectiveContextQuotaSizeGb != null && effectiveContextQuotaSizeGb > 0 ? effectiveContextQuotaSizeGb * BYTES_PER_GIB : null;
+  const cephContextQuotaObjects = effectiveContextQuotaObjects != null && effectiveContextQuotaObjects > 0 ? effectiveContextQuotaObjects : null;
+  const isCephContext = effectiveContextEndpointProvider === "ceph";
+  const bucketManagementEnabled =
+    location.pathname.startsWith("/browser") || location.pathname.startsWith("/manager/browser");
   const contextId = typeof accountIdForApi === "string" ? accountIdForApi : null;
   const isLegacyS3UserContext = Boolean(contextId && contextId.startsWith("s3u-"));
   const isLegacyConnectionContext = Boolean(contextId && contextId.startsWith("conn-"));
@@ -1044,23 +1074,29 @@ export default function BrowserPage({
     setContextCountsLoading(false);
   }, [bucketName, prefix]);
 
-  useEffect(() => {
-    if (!hasS3AccountContext) {
-      setBuckets([]);
-      setBucketName("");
-      setPrefix("");
-      setDeletedObjects([]);
-      setDeletedPrefixes([]);
-      return;
-    }
-    let isMounted = true;
-    setLoadingBuckets(true);
-    setBucketError(null);
-    listBrowserBuckets(accountIdForApi)
-      .then((data) => {
-        if (!isMounted) return;
+  const refreshBucketList = useCallback(
+    async (options?: { preferredBucket?: string | null }) => {
+      if (!hasS3AccountContext) {
+        setBuckets([]);
+        setBucketName("");
+        setPrefix("");
+        setDeletedObjects([]);
+        setDeletedPrefixes([]);
+        return;
+      }
+      setLoadingBuckets(true);
+      setBucketError(null);
+      try {
+        const data = await listBrowserBuckets(accountIdForApi);
         setBuckets(data);
         setBucketName((prev) => {
+          const preferredBucket = options?.preferredBucket?.trim() ?? "";
+          if (preferredBucket && data.some((bucket) => bucket.name === preferredBucket)) {
+            if (preferredBucket !== prev) {
+              setPrefix("");
+            }
+            return preferredBucket;
+          }
           if (requestedBucket && data.some((bucket) => bucket.name === requestedBucket)) {
             if (requestedBucket !== prev) {
               setPrefix("");
@@ -1070,31 +1106,29 @@ export default function BrowserPage({
           if (prev && data.some((bucket) => bucket.name === prev)) {
             return prev;
           }
-          const next = data[0]?.name ?? "";
+          const next = data.length === 1 ? data[0].name : "";
           if (next !== prev) {
             setPrefix("");
           }
           return next;
         });
-      })
-      .catch(() => {
-        if (!isMounted) return;
+      } catch {
         setBucketError("Unable to list buckets for this account.");
         setBuckets([]);
         setBucketName("");
         setPrefix("");
         setDeletedObjects([]);
         setDeletedPrefixes([]);
-      })
-      .finally(() => {
-        if (isMounted) {
-          setLoadingBuckets(false);
-        }
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [accountIdForApi, hasS3AccountContext, requestedBucket, accessMode]);
+      } finally {
+        setLoadingBuckets(false);
+      }
+    },
+    [accountIdForApi, hasS3AccountContext, requestedBucket]
+  );
+
+  useEffect(() => {
+    void refreshBucketList();
+  }, [accessMode, refreshBucketList]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !accountIdForApi) {
@@ -1832,6 +1866,7 @@ export default function BrowserPage({
     () => (bucketName ? bucketInspectorByName[bucketName] ?? null : null),
     [bucketInspectorByName, bucketName]
   );
+  const cephQuotaScopeLabel = isLegacyS3UserContext ? "User quota" : "Account quota";
   const bucketInspectorFeatures = useMemo(() => {
     const featureMap = bucketInspectorData?.features ?? null;
     if (!featureMap) return [];
@@ -2656,6 +2691,65 @@ export default function BrowserPage({
     setBucketName(value);
     setPrefix("");
     setActiveItem(null);
+  };
+
+  const openBucketConfigurationModal = (targetBucket: string) => {
+    if (!bucketManagementEnabled) return;
+    const normalized = targetBucket.trim();
+    if (!normalized) return;
+    setShowBucketMenu(false);
+    setBucketFilter("");
+    setConfigBucketName(normalized);
+  };
+
+  const closeBucketConfigurationModal = () => {
+    setConfigBucketName(null);
+    if (bucketName) {
+      void loadBucketInspectorData(true);
+    }
+  };
+
+  const openCreateBucketDialog = () => {
+    if (!bucketManagementEnabled) return;
+    setShowBucketMenu(false);
+    setBucketFilter("");
+    setCreateBucketNameValue("");
+    setCreateBucketVersioning(false);
+    setCreateBucketError(null);
+    setShowCreateBucketModal(true);
+  };
+
+  const closeCreateBucketDialog = () => {
+    if (createBucketLoading) return;
+    setShowCreateBucketModal(false);
+    setCreateBucketError(null);
+  };
+
+  const handleCreateBucketSubmit = async () => {
+    if (!hasS3AccountContext || !bucketManagementEnabled || createBucketLoading) return;
+    const bucketNameInput = createBucketNameValue.trim();
+    if (!bucketNameInput) {
+      setCreateBucketError("Bucket name is required.");
+      return;
+    }
+    setCreateBucketLoading(true);
+    setCreateBucketError(null);
+    try {
+      await createBucket(bucketNameInput, accountIdForApi, { versioning: createBucketVersioning });
+      setShowCreateBucketModal(false);
+      setStatusMessage(`Bucket ${bucketNameInput} created.`);
+      await refreshBucketList({ preferredBucket: bucketNameInput });
+      void loadBucketInspectorData(true);
+    } catch (err) {
+      const message = axios.isAxiosError(err)
+        ? ((err.response?.data as { detail?: string })?.detail || err.message || "Unable to create bucket.")
+        : err instanceof Error
+          ? err.message
+          : "Unable to create bucket.";
+      setCreateBucketError(message);
+    } finally {
+      setCreateBucketLoading(false);
+    }
   };
 
   const listVersionStats = async (opts: { prefix?: string; key?: string | null }) => {
@@ -6138,7 +6232,7 @@ export default function BrowserPage({
             )}
           </div>
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-            <div ref={bucketMenuRef} className="relative">
+            <div ref={bucketMenuRef} className="relative flex items-center gap-1">
               <button
                 type="button"
                 className={bucketButtonClasses}
@@ -6152,19 +6246,45 @@ export default function BrowserPage({
                 <span className="max-w-[160px] truncate">{bucketButtonLabel}</span>
                 <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
               </button>
+              {bucketManagementEnabled && (
+                <button
+                  type="button"
+                  className={`${iconButtonClasses} h-8 w-8`}
+                  onClick={() => openBucketConfigurationModal(bucketName)}
+                  disabled={!bucketName || !hasS3AccountContext}
+                  aria-label="Configure selected bucket"
+                  title="Configure selected bucket"
+                >
+                  <SettingsIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
               {showBucketMenu && (
                 <div className="absolute left-0 z-30 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900">
                   <div className="flex items-center gap-2 px-2 pb-2 pt-1">
-                    <SearchIcon className="h-3.5 w-3.5 text-slate-400" />
-                    <input
-                      ref={bucketFilterRef}
-                      type="text"
-                      value={bucketFilter}
-                      onChange={(event) => setBucketFilter(event.target.value)}
-                      placeholder="Filter buckets"
-                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      spellCheck={false}
-                    />
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <SearchIcon className="h-3.5 w-3.5 text-slate-400" />
+                      <input
+                        ref={bucketFilterRef}
+                        type="text"
+                        value={bucketFilter}
+                        onChange={(event) => setBucketFilter(event.target.value)}
+                        placeholder="Filter buckets"
+                        className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        spellCheck={false}
+                      />
+                    </div>
+                    {bucketManagementEnabled && (
+                      <button
+                        type="button"
+                        onClick={openCreateBucketDialog}
+                        disabled={!hasS3AccountContext}
+                        className="shrink-0 rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                        title="Create bucket"
+                        aria-label="Create bucket"
+                      >
+                        + Bucket
+                      </button>
+                    )}
                   </div>
                   <div className="max-h-56 overflow-y-auto px-1 pb-1">
                     {loadingBuckets ? (
@@ -6181,23 +6301,38 @@ export default function BrowserPage({
                       visibleBucketOptions.map((bucket) => {
                         const isActive = bucket === bucketName;
                         return (
-                          <button
-                            key={bucket}
-                            type="button"
-                            onClick={() => handleBucketChange(bucket)}
-                            className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left font-semibold transition ${
-                              isActive
-                                ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
-                                : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                            }`}
-                          >
-                            <span className="truncate">{bucket}</span>
-                            {isActive && (
-                              <span className="ui-caption font-semibold uppercase text-primary-600 dark:text-primary-200">
-                                Active
-                              </span>
+                          <div key={bucket} className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleBucketChange(bucket)}
+                              className={`flex min-w-0 flex-1 items-center justify-between rounded-md px-2.5 py-2 text-left font-semibold transition ${
+                                isActive
+                                  ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
+                                  : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                              }`}
+                            >
+                              <span className="truncate">{bucket}</span>
+                              {isActive && (
+                                <span className="ui-caption font-semibold uppercase text-primary-600 dark:text-primary-200">
+                                  Active
+                                </span>
+                              )}
+                            </button>
+                            {bucketManagementEnabled && (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openBucketConfigurationModal(bucket);
+                                }}
+                                className={`${iconButtonClasses} h-8 w-8`}
+                                aria-label={`Configure bucket ${bucket}`}
+                                title={`Configure bucket ${bucket}`}
+                              >
+                                <SettingsIcon className="h-3.5 w-3.5" />
+                              </button>
                             )}
-                          </button>
+                          </div>
                         );
                       })
                     )}
@@ -7329,14 +7464,26 @@ export default function BrowserPage({
                                   {bucketName || "Select a bucket to inspect."}
                                 </p>
                               </div>
-                              <button
-                                type="button"
-                                className={inspectorInlineActionClasses}
-                                onClick={() => void loadBucketInspectorData(true)}
-                                disabled={!bucketName || !hasS3AccountContext || bucketInspectorLoading}
-                              >
-                                {bucketInspectorLoading ? "Loading..." : "Refresh"}
-                              </button>
+                              <div className="flex items-center gap-3">
+                                {bucketManagementEnabled && (
+                                  <button
+                                    type="button"
+                                    className={inspectorInlineActionClasses}
+                                    onClick={() => openBucketConfigurationModal(bucketName)}
+                                    disabled={!bucketName || !hasS3AccountContext}
+                                  >
+                                    Configure
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className={inspectorInlineActionClasses}
+                                  onClick={() => void loadBucketInspectorData(true)}
+                                  disabled={!bucketName || !hasS3AccountContext || bucketInspectorLoading}
+                                >
+                                  {bucketInspectorLoading ? "Loading..." : "Refresh"}
+                                </button>
+                              </div>
                             </div>
 
                             {!bucketName || !hasS3AccountContext ? (
@@ -7378,24 +7525,44 @@ export default function BrowserPage({
                                           : "-"}
                                       </span>
                                     </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-slate-500">Quota size</span>
-                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                        {(bucketInspectorData?.quota_max_size_bytes ?? 0) > 0
-                                          ? formatBytes(bucketInspectorData?.quota_max_size_bytes ?? null)
-                                          : "Not set"}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-slate-500">Quota objects</span>
-                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                        {(bucketInspectorData?.quota_max_objects ?? 0) > 0
-                                          ? (bucketInspectorData?.quota_max_objects ?? 0).toLocaleString()
-                                          : "Not set"}
-                                      </span>
-                                    </div>
                                   </div>
                                 </div>
+
+                                {isCephContext && (
+                                  <div className={inspectorSectionCardClasses}>
+                                    <p className={inspectorSectionTitleClasses}>Ceph</p>
+                                    <div className="mt-2 grid gap-2">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-slate-500">{cephQuotaScopeLabel} size</span>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                          {cephContextQuotaSizeBytes != null ? formatBytes(cephContextQuotaSizeBytes) : "Not set"}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-slate-500">{cephQuotaScopeLabel} objects</span>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                          {cephContextQuotaObjects != null ? cephContextQuotaObjects.toLocaleString() : "Not set"}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-slate-500">Bucket quota size</span>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                          {(bucketInspectorData?.quota_max_size_bytes ?? 0) > 0
+                                            ? formatBytes(bucketInspectorData?.quota_max_size_bytes ?? null)
+                                            : "Not set"}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-slate-500">Bucket quota objects</span>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                          {(bucketInspectorData?.quota_max_objects ?? 0) > 0
+                                            ? (bucketInspectorData?.quota_max_objects ?? 0).toLocaleString()
+                                            : "Not set"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
 
                                 <div className={inspectorSectionCardClasses}>
                                   <p className={inspectorSectionTitleClasses}>Features</p>

@@ -22,6 +22,8 @@ export default function PortalBrowserPage() {
           accountIdForApi={accountIdForApi}
           hasContext={hasAccountContext}
           storageEndpointCapabilities={selectedAccount?.storage_endpoint_capabilities ?? null}
+          quotaMaxSizeGb={selectedAccount?.quota_max_size_gb ?? null}
+          quotaMaxObjects={selectedAccount?.quota_max_objects ?? null}
         />
       </div>
     </>

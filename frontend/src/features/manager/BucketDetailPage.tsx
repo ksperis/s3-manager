@@ -248,9 +248,15 @@ type BucketDetailPageProps = {
   mode?: BucketDetailMode;
   bucketNameOverride?: string;
   embedded?: boolean;
+  hideObjectsTab?: boolean;
 };
 
-export default function BucketDetailPage({ mode = "manager", bucketNameOverride, embedded = false }: BucketDetailPageProps) {
+export default function BucketDetailPage({
+  mode = "manager",
+  bucketNameOverride,
+  embedded = false,
+  hideObjectsTab = false,
+}: BucketDetailPageProps) {
   const params = useParams<{ bucketName: string }>();
   const bucketName = bucketNameOverride ?? params.bucketName;
   const isCephAdmin = mode === "ceph-admin";
@@ -397,8 +403,10 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
     if (isCephAdmin) {
       return ["overview", "ceph", "properties", "permissions", "advanced", "metrics"];
     }
-    return ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
-  }, [isCephAdmin]);
+    return hideObjectsTab
+      ? ["overview", "properties", "permissions", "advanced", "metrics"]
+      : ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
+  }, [hideObjectsTab, isCephAdmin]);
 
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {
@@ -2358,7 +2366,7 @@ export default function BucketDetailPage({ mode = "manager", bucketNameOverride,
               </section>
             ),
           },
-          ...(!isCephAdmin
+          ...(!isCephAdmin && !hideObjectsTab
             ? [
                 {
                   id: "objects",

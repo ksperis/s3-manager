@@ -18,6 +18,9 @@ export default function ManagerBrowserPage() {
           accountIdForApi={accountIdForApi}
           hasContext={hasS3AccountContext}
           storageEndpointCapabilities={selected?.storage_endpoint_capabilities ?? null}
+          endpointProvider={selected?.endpoint_provider ?? null}
+          quotaMaxSizeGb={selected?.quota_max_size_gb ?? null}
+          quotaMaxObjects={selected?.quota_max_objects ?? null}
         />
       </div>
     </>

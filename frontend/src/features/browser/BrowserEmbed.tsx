@@ -9,14 +9,27 @@ type BrowserEmbedProps = {
   accountIdForApi: S3AccountSelector;
   hasContext: boolean;
   storageEndpointCapabilities?: Record<string, boolean> | null;
+  endpointProvider?: "ceph" | "other" | null;
+  quotaMaxSizeGb?: number | null;
+  quotaMaxObjects?: number | null;
 };
 
-export default function BrowserEmbed({ accountIdForApi, hasContext, storageEndpointCapabilities }: BrowserEmbedProps) {
+export default function BrowserEmbed({
+  accountIdForApi,
+  hasContext,
+  storageEndpointCapabilities,
+  endpointProvider,
+  quotaMaxSizeGb,
+  quotaMaxObjects,
+}: BrowserEmbedProps) {
   return (
     <BrowserPage
       accountIdForApi={accountIdForApi}
       hasContext={hasContext}
       storageEndpointCapabilities={storageEndpointCapabilities}
+      contextEndpointProvider={endpointProvider}
+      contextQuotaMaxSizeGb={quotaMaxSizeGb}
+      contextQuotaMaxObjects={quotaMaxObjects}
       allowFoldersPanel={false}
       allowInspectorPanel={false}
       showPanelToggles={false}
