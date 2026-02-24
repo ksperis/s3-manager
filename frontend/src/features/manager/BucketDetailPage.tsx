@@ -243,12 +243,14 @@ type BucketDetailPageProps = {
   mode?: BucketDetailMode;
   bucketNameOverride?: string;
   embedded?: boolean;
+  hideObjectsTab?: boolean;
 };
 
 export default function BucketDetailPage({
   mode = "manager",
   bucketNameOverride,
   embedded = false,
+  hideObjectsTab = false,
 }: BucketDetailPageProps) {
   const params = useParams<{ bucketName: string }>();
   const bucketName = bucketNameOverride ?? params.bucketName;
@@ -386,12 +388,16 @@ export default function BucketDetailPage({
     return null;
   }, [accounts, isCephAdmin, requiresS3AccountSelection, selectedS3AccountId]);
   const isCephEndpoint = isCephAdmin || selectedS3Account?.endpoint_provider === "ceph";
+  const showObjectsTab = !isCephAdmin && !hideObjectsTab;
   const availableTabs = useMemo(() => {
     if (isCephAdmin) {
       return ["overview", "ceph", "properties", "permissions", "advanced", "metrics"];
     }
-    return ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
-  }, [isCephAdmin]);
+    if (showObjectsTab) {
+      return ["overview", "objects", "properties", "permissions", "advanced", "metrics"];
+    }
+    return ["overview", "properties", "permissions", "advanced", "metrics"];
+  }, [isCephAdmin, showObjectsTab]);
 
   useEffect(() => {
     if (!availableTabs.includes(activeTab)) {
@@ -2264,7 +2270,7 @@ export default function BucketDetailPage({
               </section>
             ),
           },
-          ...(!isCephAdmin
+          ...(showObjectsTab
             ? [
                 {
                   id: "objects",

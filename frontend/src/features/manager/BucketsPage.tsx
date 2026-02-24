@@ -25,6 +25,12 @@ import { tableActionButtonClasses, tableDeleteActionClasses } from "../../compon
 import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { confirmAction, confirmDeletion } from "../../utils/confirm";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
+import {
+  S3_BUCKET_NAME_MAX_LENGTH,
+  isValidS3BucketName,
+  normalizeS3BucketName,
+  normalizeS3BucketNameInput,
+} from "../../utils/s3BucketName";
 
 type BucketForm = {
   name: string;
@@ -179,6 +185,7 @@ export default function BucketsPage() {
     direction: "desc",
   });
   const [enrichingColumns, setEnrichingColumns] = useState(false);
+  const invalidBucketNameMessage = "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.";
 
   const selectedS3Account = useMemo(
     () => accounts.find((a) => a.id === selectedS3AccountId),
@@ -460,12 +467,17 @@ export default function BucketsPage() {
       setActionError("Select an account before creating a bucket.");
       return;
     }
-    if (!bucketForm.name.trim()) {
+    const normalizedBucketName = normalizeS3BucketName(bucketForm.name);
+    if (!normalizedBucketName) {
       setActionError("Bucket name is required.");
       return;
     }
+    if (!isValidS3BucketName(normalizedBucketName)) {
+      setActionError(invalidBucketNameMessage);
+      return;
+    }
     const locationConstraint = useCustomLocationConstraint ? bucketForm.locationConstraint.trim() || undefined : undefined;
-    const result = await performCreate(bucketForm.name.trim(), bucketForm.versioning, locationConstraint);
+    const result = await performCreate(normalizedBucketName, bucketForm.versioning, locationConstraint);
     if (result.created) {
       setBucketForm(buildDefaultForm());
       setShowWizard(false);
@@ -633,6 +645,7 @@ export default function BucketsPage() {
   })();
 
   const stepTitles = ["General", "Protection"];
+  const isBucketNameValid = !bucketForm.name || isValidS3BucketName(bucketForm.name);
 
   const openAdvancedModal = () => {
     setBucketForm(buildDefaultForm());
@@ -826,15 +839,24 @@ export default function BucketsPage() {
                   <input
                     value={bucketForm.name}
                     onChange={(e) => {
-                      const value = e.target.value;
+                      const value = normalizeS3BucketNameInput(e.target.value);
                       setBucketForm((prev) => ({ ...prev, name: value }));
                     }}
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    maxLength={S3_BUCKET_NAME_MAX_LENGTH}
+                    title={!bucketForm.name || isBucketNameValid ? undefined : invalidBucketNameMessage}
+                    className={`rounded-md border px-3 py-2 ui-body focus:outline-none focus:ring-2 ${
+                      !bucketForm.name || isBucketNameValid
+                        ? "border-slate-200 focus:border-primary focus:ring-primary/30 dark:border-slate-700 dark:text-slate-100"
+                        : "border-rose-400 text-rose-700 focus:border-rose-500 focus:ring-rose-200 dark:border-rose-500 dark:text-rose-200 dark:focus:ring-rose-900/50"
+                    } dark:bg-slate-900`}
                     placeholder="ex: backups-prod"
                     required
                   />
+                  {bucketForm.name && !isBucketNameValid && (
+                    <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">{invalidBucketNameMessage}</p>
+                  )}
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    DNS compatible, lowercase, numbers, and hyphens. The selected account will be used.
+                    DNS compatible, lowercase, numbers, dots, and hyphens. The selected account will be used.
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -903,8 +925,18 @@ export default function BucketsPage() {
                     type="button"
                     onClick={(event) => {
                       event.preventDefault();
+                      if (!bucketForm.name.trim()) {
+                        setActionError("Bucket name is required.");
+                        return;
+                      }
+                      if (!isBucketNameValid) {
+                        setActionError(invalidBucketNameMessage);
+                        return;
+                      }
+                      setActionError(null);
                       setWizardStep((prev) => Math.min(prev + 1, stepTitles.length - 1));
                     }}
+                    disabled={!bucketForm.name.trim() || !isBucketNameValid}
                     className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600"
                   >
                     Continue

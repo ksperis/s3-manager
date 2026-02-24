@@ -283,6 +283,23 @@ export async function listBrowserBuckets(accountId: S3AccountSelector): Promise<
   return data;
 }
 
+export async function createBrowserBucket(
+  accountId: S3AccountSelector,
+  name: string,
+  options?: { versioning?: boolean }
+): Promise<void> {
+  await client.post(
+    "/browser/buckets",
+    {
+      name,
+      versioning: options?.versioning ?? false,
+    },
+    {
+      params: withS3AccountParam(undefined, accountId),
+    }
+  );
+}
+
 export async function getBucketVersioning(
   accountId: S3AccountSelector,
   bucketName: string

@@ -22,6 +22,27 @@ from pydantic import BaseModel
 
 from app.db import S3Account, User
 from app.models.app_settings import BrowserSettings
+from app.models.bucket import (
+    Bucket,
+    BucketAcl,
+    BucketAclUpdate,
+    BucketCreate,
+    BucketCorsUpdate,
+    BucketEncryptionConfiguration,
+    BucketLifecycleConfig,
+    BucketLoggingConfiguration,
+    BucketNotificationConfiguration,
+    BucketObjectLock,
+    BucketObjectLockUpdate,
+    BucketPolicyIn,
+    BucketPolicyOut,
+    BucketProperties,
+    BucketPublicAccessBlock,
+    BucketQuotaUpdate,
+    BucketTagsUpdate,
+    BucketVersioningUpdate,
+    BucketWebsiteConfiguration,
+)
 from app.models.browser import (
     BrowserBucket,
     BucketVersioningStatus,
@@ -52,10 +73,18 @@ from app.models.browser import (
     BrowserStsCredentials,
 )
 from app.models.session import ManagerSessionPrincipal
-from app.routers.dependencies import get_account_context, get_audit_logger, get_current_account_admin
+from app.routers.dependencies import (
+    get_account_context,
+    get_audit_logger,
+    get_current_account_admin,
+    get_current_super_admin,
+)
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services.browser_service import BrowserService, get_browser_service
+from app.services.buckets_service import BucketsService, get_buckets_service
+from app.services.s3_client import BucketNotEmptyError
+from app.utils.storage_endpoint_features import resolve_feature_flags
 
 
 router = APIRouter(prefix="/browser", tags=["browser"])
@@ -102,6 +131,11 @@ class CreateFolderPayload(BaseModel):
     prefix: str
 
 
+class CreateBucketPayload(BaseModel):
+    name: str
+    versioning: bool = False
+
+
 class ProxyUploadResponse(BaseModel):
     message: str
     key: str
@@ -109,6 +143,17 @@ class ProxyUploadResponse(BaseModel):
 
 class EnsureCorsPayload(BaseModel):
     origin: str
+
+
+def _require_sse_feature(account: S3Account) -> None:
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint is None:
+        return
+    if not resolve_feature_flags(endpoint).sse_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Server-side encryption is disabled for this endpoint",
+        )
 
 
 @router.get("/settings", response_model=BrowserSettings)
@@ -124,6 +169,800 @@ def list_buckets(
 ) -> list[BrowserBucket]:
     try:
         return service.list_buckets(account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/buckets", status_code=status.HTTP_201_CREATED)
+def create_bucket(
+    payload: CreateBucketPayload,
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    bucket_name = payload.name.strip()
+    if not bucket_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bucket name is required")
+    try:
+        service.create_bucket(bucket_name, account, versioning=payload.versioning)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="create_bucket",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"versioning": bool(payload.versioning)},
+        )
+        return {
+            "message": f"Bucket '{bucket_name}' created",
+            "name": bucket_name,
+            "versioning": bool(payload.versioning),
+        }
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config", response_model=list[Bucket])
+def list_bucket_configs(
+    include: list[str] = Query(default=[], description="Optional extra fields to include (e.g. tags, versioning, cors)"),
+    with_stats: bool = Query(True, description="Include usage/quota stats from admin listing"),
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> list[Bucket]:
+    try:
+        include_set: set[str] = set()
+        for item in include:
+            if not isinstance(item, str):
+                continue
+            for part in item.split(","):
+                normalized = part.strip()
+                if normalized:
+                    include_set.add(normalized)
+        return service.list_buckets(account, include=include_set, with_stats=with_stats)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/buckets/config", status_code=status.HTTP_201_CREATED)
+def create_bucket_config(
+    payload: BucketCreate,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    try:
+        versioning = payload.versioning if payload.versioning is not None else False
+        location_constraint = payload.location_constraint
+        service.create_bucket(
+            payload.name,
+            account,
+            versioning=versioning,
+            location_constraint=location_constraint,
+        )
+        audit_metadata: dict[str, Any] = {"versioning": versioning}
+        if location_constraint:
+            audit_metadata["location_constraint"] = location_constraint
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="create_bucket",
+            entity_type="bucket",
+            entity_id=payload.name,
+            account=account,
+            metadata=audit_metadata,
+        )
+        return {
+            "message": f"Bucket '{payload.name}' created",
+            "name": payload.name,
+            "versioning": versioning,
+            "location_constraint": location_constraint,
+        }
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/config/{bucket_name}")
+def delete_bucket_config(
+    bucket_name: str,
+    force: bool = Query(False, description="Set to true to delete all objects before deleting the bucket"),
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict[str, str]:
+    try:
+        service.delete_bucket(bucket_name, account, force=force)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="delete_bucket",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"force": force},
+        )
+        return {"message": f"Bucket '{bucket_name}' deleted"}
+    except BucketNotEmptyError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/quota")
+def update_bucket_quota_config(
+    bucket_name: str,
+    payload: BucketQuotaUpdate,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: User = Depends(get_current_super_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict[str, str]:
+    try:
+        service.set_bucket_quota(bucket_name, account, payload)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_quota",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata=payload.model_dump(exclude_none=True),
+        )
+        return {"message": "Bucket quota updated"}
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/properties", response_model=BucketProperties)
+def get_bucket_properties_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketProperties:
+    try:
+        return service.get_bucket_properties(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/versioning", status_code=status.HTTP_200_OK)
+def update_bucket_versioning_config(
+    bucket_name: str,
+    payload: BucketVersioningUpdate,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    try:
+        service.set_versioning(bucket_name, account, enabled=payload.enabled)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_versioning",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"enabled": payload.enabled},
+        )
+        return {"message": f"Versioning updated for {bucket_name}", "enabled": payload.enabled}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/object-lock", response_model=BucketObjectLock)
+def get_bucket_object_lock_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketObjectLock:
+    try:
+        return service.get_object_lock(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/object-lock", response_model=BucketObjectLock)
+def put_bucket_object_lock_config(
+    bucket_name: str,
+    payload: BucketObjectLockUpdate,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketObjectLock:
+    try:
+        result = service.set_object_lock(bucket_name, account, payload)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_object_lock",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata=payload.model_dump(exclude_none=True),
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
+def get_bucket_encryption_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketEncryptionConfiguration:
+    _require_sse_feature(account)
+    try:
+        return service.get_bucket_encryption(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
+def put_bucket_encryption_config(
+    bucket_name: str,
+    payload: BucketEncryptionConfiguration,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketEncryptionConfiguration:
+    _require_sse_feature(account)
+    try:
+        result = service.set_bucket_encryption(bucket_name, account, payload.rules)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_encryption",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"rules_count": len(payload.rules or [])},
+        )
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/config/{bucket_name}/encryption", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bucket_encryption_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    _require_sse_feature(account)
+    try:
+        service.delete_bucket_encryption(bucket_name, account)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="delete_bucket_encryption",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/policy", response_model=BucketPolicyOut)
+def get_bucket_policy_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketPolicyOut:
+    try:
+        policy = service.get_policy(bucket_name, account)
+        return BucketPolicyOut(policy=policy)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/policy", response_model=BucketPolicyOut)
+def put_bucket_policy_config(
+    bucket_name: str,
+    payload: BucketPolicyIn,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketPolicyOut:
+    try:
+        service.put_policy(bucket_name, account, policy=payload.policy)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="put_bucket_policy",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"policy_length": len(payload.policy or {})},
+        )
+        return BucketPolicyOut(policy=payload.policy)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/config/{bucket_name}/policy", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bucket_policy_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    try:
+        service.delete_policy(bucket_name, account)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="delete_bucket_policy",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/acl", response_model=BucketAcl)
+def get_bucket_acl_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketAcl:
+    try:
+        return service.get_bucket_acl(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/acl", response_model=BucketAcl)
+def put_bucket_acl_config(
+    bucket_name: str,
+    payload: BucketAclUpdate,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketAcl:
+    try:
+        result = service.set_bucket_acl(bucket_name, account, payload)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_acl",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"acl": payload.acl},
+        )
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/public-access-block", response_model=BucketPublicAccessBlock)
+def get_bucket_public_access_block_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketPublicAccessBlock:
+    try:
+        return service.get_public_access_block(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/public-access-block", response_model=BucketPublicAccessBlock)
+def put_bucket_public_access_block_config(
+    bucket_name: str,
+    payload: BucketPublicAccessBlock,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketPublicAccessBlock:
+    try:
+        result = service.set_public_access_block(bucket_name, account, payload)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_public_access_block",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata=payload.model_dump(exclude_none=True),
+        )
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/lifecycle", response_model=BucketLifecycleConfig)
+def get_bucket_lifecycle_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketLifecycleConfig:
+    try:
+        return service.get_lifecycle(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/lifecycle", response_model=BucketLifecycleConfig)
+def put_bucket_lifecycle_config(
+    bucket_name: str,
+    payload: BucketLifecycleConfig,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketLifecycleConfig:
+    try:
+        result = service.set_lifecycle(bucket_name, account, rules=payload.rules)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_lifecycle",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"rules_count": len(payload.rules or [])},
+        )
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/config/{bucket_name}/lifecycle", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bucket_lifecycle_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    try:
+        service.delete_lifecycle(bucket_name, account)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="delete_bucket_lifecycle",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/cors")
+def get_bucket_cors_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> dict[str, Any]:
+    try:
+        cors = service.get_bucket_properties(bucket_name, account).cors_rules
+        return {"rules": cors or []}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/cors")
+def put_bucket_cors_config(
+    bucket_name: str,
+    payload: BucketCorsUpdate,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    try:
+        service.set_cors(bucket_name, account, rules=payload.rules)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_cors",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"rules_count": len(payload.rules or [])},
+        )
+        return {"rules": payload.rules}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/config/{bucket_name}/cors", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bucket_cors_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    try:
+        service.delete_cors(bucket_name, account)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="delete_bucket_cors",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/notifications", response_model=BucketNotificationConfiguration)
+def get_bucket_notifications_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketNotificationConfiguration:
+    try:
+        return service.get_bucket_notifications(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/notifications", response_model=BucketNotificationConfiguration)
+def put_bucket_notifications_config(
+    bucket_name: str,
+    payload: BucketNotificationConfiguration,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketNotificationConfiguration:
+    try:
+        configuration = payload.configuration or {}
+        result = service.set_bucket_notifications(bucket_name, account, configuration)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_notifications",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"keys": list(configuration.keys())},
+        )
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/config/{bucket_name}/notifications", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bucket_notifications_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    try:
+        service.delete_bucket_notifications(bucket_name, account)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="delete_bucket_notifications",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
+def get_bucket_logging_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketLoggingConfiguration:
+    try:
+        return service.get_bucket_logging(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
+def put_bucket_logging_config(
+    bucket_name: str,
+    payload: BucketLoggingConfiguration,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketLoggingConfiguration:
+    try:
+        result = service.set_bucket_logging(bucket_name, account, payload)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_logging",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata=payload.model_dump(exclude_none=True),
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/config/{bucket_name}/logging", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bucket_logging_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    try:
+        service.delete_bucket_logging(bucket_name, account)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="delete_bucket_logging",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
+def get_bucket_website_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> BucketWebsiteConfiguration:
+    try:
+        return service.get_bucket_website(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
+def put_bucket_website_config(
+    bucket_name: str,
+    payload: BucketWebsiteConfiguration,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketWebsiteConfiguration:
+    try:
+        result = service.set_bucket_website(bucket_name, account, payload)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_website",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata=payload.model_dump(exclude_none=True),
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/config/{bucket_name}/website", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bucket_website_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    try:
+        service.delete_bucket_website(bucket_name, account)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="delete_bucket_website",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/config/{bucket_name}/tags")
+def get_bucket_tags_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> dict[str, Any]:
+    try:
+        tags = service.get_bucket_tags(bucket_name, account)
+        return {"tags": [tag.model_dump() for tag in tags]}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/buckets/config/{bucket_name}/tags")
+def put_bucket_tags_config(
+    bucket_name: str,
+    payload: BucketTagsUpdate,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> dict[str, Any]:
+    try:
+        service.set_bucket_tags(bucket_name, account, tags=[{"key": tag.key, "value": tag.value} for tag in payload.tags])
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="update_bucket_tags",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={
+                "tags": [{"key": tag.key, "value": tag.value} for tag in payload.tags],
+                "count": len(payload.tags or []),
+            },
+        )
+        return {"tags": payload.tags}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/buckets/config/{bucket_name}/tags", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bucket_tags_config(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    actor: BrowserActor = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    try:
+        service.delete_bucket_tags(bucket_name, account)
+        _record_browser_action(
+            audit_service,
+            actor,
+            action="delete_bucket_tags",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

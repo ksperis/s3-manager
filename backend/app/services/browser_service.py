@@ -45,7 +45,12 @@ from app.models.browser import (
     StsStatus,
     BrowserStsCredentials,
 )
-from app.services.s3_client import _delete_objects, get_s3_client
+from app.services.s3_client import (
+    _delete_objects,
+    create_bucket as s3_create_bucket,
+    get_s3_client,
+    set_bucket_versioning as s3_set_bucket_versioning,
+)
 from app.services.sts_service import get_session_token
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.storage_endpoint_features import resolve_feature_flags, resolve_sts_endpoint
@@ -503,6 +508,31 @@ class BrowserService:
                 continue
             buckets.append(BrowserBucket(name=name, creation_date=bucket.get("CreationDate")))
         return buckets
+
+    def create_bucket(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        *,
+        versioning: bool = False,
+    ) -> None:
+        access_key, secret_key, session_token = self._resolve_s3_credentials(account)
+        s3_create_bucket(
+            bucket_name,
+            access_key=access_key,
+            secret_key=secret_key,
+            session_token=session_token,
+            **self._s3_client_kwargs(account),
+        )
+        if versioning:
+            s3_set_bucket_versioning(
+                bucket_name,
+                enabled=True,
+                access_key=access_key,
+                secret_key=secret_key,
+                session_token=session_token,
+                **self._s3_client_kwargs(account),
+            )
 
     def list_objects(
         self,

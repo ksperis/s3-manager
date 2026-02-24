@@ -5,6 +5,20 @@
 import client from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 
+function isTopLevelBrowserSurface(): boolean {
+  if (typeof window === "undefined") return false;
+  const normalizedPath = window.location.pathname.replace(/\/+$/, "");
+  return normalizedPath === "/browser";
+}
+
+function bucketBasePath(): string {
+  return isTopLevelBrowserSurface() ? "/browser/buckets/config" : "/manager/buckets";
+}
+
+function bucketPath(bucketName: string): string {
+  return `${bucketBasePath()}/${encodeURIComponent(bucketName)}`;
+}
+
 export type BucketFeatureTone = "active" | "inactive" | "unknown";
 export type BucketFeatureStatus = { state: string; tone: BucketFeatureTone };
 
@@ -25,7 +39,7 @@ export async function listBuckets(
   accountId: S3AccountSelector,
   options?: { include?: string[]; with_stats?: boolean }
 ): Promise<Bucket[]> {
-  const { data } = await client.get<Bucket[]>("/manager/buckets", {
+  const { data } = await client.get<Bucket[]>(bucketBasePath(), {
     params: withS3AccountParam(
       {
         include: options?.include?.join(","),
@@ -45,7 +59,7 @@ type CreateBucketOptions = {
 export async function createBucket(name: string, accountId: S3AccountSelector, options?: CreateBucketOptions): Promise<void> {
   const locationConstraint = options?.locationConstraint?.trim();
   await client.post(
-    "/manager/buckets",
+    bucketBasePath(),
     {
       name,
       versioning: options?.versioning ?? false,
@@ -56,7 +70,7 @@ export async function createBucket(name: string, accountId: S3AccountSelector, o
 }
 
 export async function deleteBucket(name: string, accountId: S3AccountSelector, force = false): Promise<void> {
-  await client.delete(`/manager/buckets/${encodeURIComponent(name)}`, { params: withS3AccountParam({ force }, accountId) });
+  await client.delete(bucketPath(name), { params: withS3AccountParam({ force }, accountId) });
 }
 
 export type BucketLifecycleRule = {
@@ -134,14 +148,14 @@ export type BucketProperties = {
 };
 
 export async function getBucketProperties(accountId: S3AccountSelector, bucketName: string): Promise<BucketProperties> {
-  const { data } = await client.get<BucketProperties>(`/manager/buckets/${encodeURIComponent(bucketName)}/properties`, {
+  const { data } = await client.get<BucketProperties>(`${bucketPath(bucketName)}/properties`, {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
 }
 
 export async function getBucketAcl(accountId: S3AccountSelector, bucketName: string): Promise<BucketAcl> {
-  const { data } = await client.get<BucketAcl>(`/manager/buckets/${encodeURIComponent(bucketName)}/acl`, {
+  const { data } = await client.get<BucketAcl>(`${bucketPath(bucketName)}/acl`, {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
@@ -149,7 +163,7 @@ export async function getBucketAcl(accountId: S3AccountSelector, bucketName: str
 
 export async function updateBucketAcl(accountId: S3AccountSelector, bucketName: string, acl: string): Promise<BucketAcl> {
   const { data } = await client.put<BucketAcl>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/acl`,
+    `${bucketPath(bucketName)}/acl`,
     { acl },
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -161,7 +175,7 @@ export async function getBucketPublicAccessBlock(
   bucketName: string
 ): Promise<BucketPublicAccessBlock> {
   const { data } = await client.get<BucketPublicAccessBlock>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/public-access-block`,
+    `${bucketPath(bucketName)}/public-access-block`,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
@@ -173,7 +187,7 @@ export async function updateBucketPublicAccessBlock(
   payload: BucketPublicAccessBlock
 ): Promise<BucketPublicAccessBlock> {
   const { data } = await client.put<BucketPublicAccessBlock>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/public-access-block`,
+    `${bucketPath(bucketName)}/public-access-block`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -182,7 +196,7 @@ export async function updateBucketPublicAccessBlock(
 
 export async function setBucketVersioning(accountId: S3AccountSelector, bucketName: string, enabled: boolean): Promise<void> {
   await client.put(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/versioning`,
+    `${bucketPath(bucketName)}/versioning`,
     { enabled },
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -191,7 +205,7 @@ export async function setBucketVersioning(accountId: S3AccountSelector, bucketNa
 export type BucketPolicy = { policy: Record<string, unknown> | null };
 
 export async function getBucketPolicy(accountId: S3AccountSelector, bucketName: string): Promise<BucketPolicy> {
-  const { data } = await client.get<BucketPolicy>(`/manager/buckets/${encodeURIComponent(bucketName)}/policy`, {
+  const { data } = await client.get<BucketPolicy>(`${bucketPath(bucketName)}/policy`, {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
@@ -199,7 +213,7 @@ export async function getBucketPolicy(accountId: S3AccountSelector, bucketName: 
 
 export async function putBucketPolicy(accountId: S3AccountSelector, bucketName: string, policy: Record<string, unknown>): Promise<BucketPolicy> {
   const { data } = await client.put<BucketPolicy>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/policy`,
+    `${bucketPath(bucketName)}/policy`,
     { policy },
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -207,11 +221,11 @@ export async function putBucketPolicy(accountId: S3AccountSelector, bucketName: 
 }
 
 export async function deleteBucketPolicyApi(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/policy`, { params: withS3AccountParam(undefined, accountId) });
+  await client.delete(`${bucketPath(bucketName)}/policy`, { params: withS3AccountParam(undefined, accountId) });
 }
 
 export async function getBucketLifecycle(accountId: S3AccountSelector, bucketName: string): Promise<BucketLifecycleConfig> {
-  const { data } = await client.get<BucketLifecycleConfig>(`/manager/buckets/${encodeURIComponent(bucketName)}/lifecycle`, {
+  const { data } = await client.get<BucketLifecycleConfig>(`${bucketPath(bucketName)}/lifecycle`, {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
@@ -223,7 +237,7 @@ export async function putBucketLifecycle(
   rules: Record<string, unknown>[]
 ): Promise<BucketLifecycleConfig> {
   const { data } = await client.put<BucketLifecycleConfig>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/lifecycle`,
+    `${bucketPath(bucketName)}/lifecycle`,
     { rules },
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -231,14 +245,14 @@ export async function putBucketLifecycle(
 }
 
 export async function deleteBucketLifecycle(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/lifecycle`, { params: withS3AccountParam(undefined, accountId) });
+  await client.delete(`${bucketPath(bucketName)}/lifecycle`, { params: withS3AccountParam(undefined, accountId) });
 }
 
 export type BucketCors = { rules: Record<string, unknown>[] };
 export type BucketEncryptionConfiguration = { rules: Record<string, unknown>[] };
 
 export async function getBucketCors(accountId: S3AccountSelector, bucketName: string): Promise<BucketCors> {
-  const { data } = await client.get<BucketCors>(`/manager/buckets/${encodeURIComponent(bucketName)}/cors`, {
+  const { data } = await client.get<BucketCors>(`${bucketPath(bucketName)}/cors`, {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
@@ -246,7 +260,7 @@ export async function getBucketCors(accountId: S3AccountSelector, bucketName: st
 
 export async function putBucketCors(accountId: S3AccountSelector, bucketName: string, rules: Record<string, unknown>[]): Promise<BucketCors> {
   const { data } = await client.put<BucketCors>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/cors`,
+    `${bucketPath(bucketName)}/cors`,
     { rules },
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -254,7 +268,7 @@ export async function putBucketCors(accountId: S3AccountSelector, bucketName: st
 }
 
 export async function deleteBucketCors(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/cors`, { params: withS3AccountParam(undefined, accountId) });
+  await client.delete(`${bucketPath(bucketName)}/cors`, { params: withS3AccountParam(undefined, accountId) });
 }
 
 export async function getBucketEncryption(
@@ -262,7 +276,7 @@ export async function getBucketEncryption(
   bucketName: string
 ): Promise<BucketEncryptionConfiguration> {
   const { data } = await client.get<BucketEncryptionConfiguration>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/encryption`,
+    `${bucketPath(bucketName)}/encryption`,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
@@ -274,7 +288,7 @@ export async function putBucketEncryption(
   rules: Record<string, unknown>[]
 ): Promise<BucketEncryptionConfiguration> {
   const { data } = await client.put<BucketEncryptionConfiguration>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/encryption`,
+    `${bucketPath(bucketName)}/encryption`,
     { rules },
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -282,13 +296,13 @@ export async function putBucketEncryption(
 }
 
 export async function deleteBucketEncryption(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/encryption`, {
+  await client.delete(`${bucketPath(bucketName)}/encryption`, {
     params: withS3AccountParam(undefined, accountId),
   });
 }
 
 export async function getBucketTags(accountId: S3AccountSelector, bucketName: string): Promise<{ tags: BucketTag[] }> {
-  const { data } = await client.get<{ tags: BucketTag[] }>(`/manager/buckets/${encodeURIComponent(bucketName)}/tags`, {
+  const { data } = await client.get<{ tags: BucketTag[] }>(`${bucketPath(bucketName)}/tags`, {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;
@@ -296,14 +310,14 @@ export async function getBucketTags(accountId: S3AccountSelector, bucketName: st
 
 export async function putBucketTags(accountId: S3AccountSelector, bucketName: string, tags: BucketTag[]): Promise<void> {
   await client.put(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/tags`,
+    `${bucketPath(bucketName)}/tags`,
     { tags },
     { params: withS3AccountParam(undefined, accountId) }
   );
 }
 
 export async function deleteBucketTags(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/tags`, { params: withS3AccountParam(undefined, accountId) });
+  await client.delete(`${bucketPath(bucketName)}/tags`, { params: withS3AccountParam(undefined, accountId) });
 }
 
 export async function getBucketLogging(
@@ -311,7 +325,7 @@ export async function getBucketLogging(
   bucketName: string
 ): Promise<BucketLoggingConfiguration> {
   const { data } = await client.get<BucketLoggingConfiguration>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/logging`,
+    `${bucketPath(bucketName)}/logging`,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
@@ -323,7 +337,7 @@ export async function putBucketLogging(
   payload: BucketLoggingConfiguration
 ): Promise<BucketLoggingConfiguration> {
   const { data } = await client.put<BucketLoggingConfiguration>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/logging`,
+    `${bucketPath(bucketName)}/logging`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -331,7 +345,7 @@ export async function putBucketLogging(
 }
 
 export async function deleteBucketLogging(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/logging`, {
+  await client.delete(`${bucketPath(bucketName)}/logging`, {
     params: withS3AccountParam(undefined, accountId),
   });
 }
@@ -341,7 +355,7 @@ export async function getBucketNotifications(
   bucketName: string
 ): Promise<BucketNotificationConfiguration> {
   const { data } = await client.get<BucketNotificationConfiguration>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/notifications`,
+    `${bucketPath(bucketName)}/notifications`,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
@@ -353,7 +367,7 @@ export async function putBucketNotifications(
   configuration: Record<string, unknown>
 ): Promise<BucketNotificationConfiguration> {
   const { data } = await client.put<BucketNotificationConfiguration>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/notifications`,
+    `${bucketPath(bucketName)}/notifications`,
     { configuration },
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -361,14 +375,14 @@ export async function putBucketNotifications(
 }
 
 export async function deleteBucketNotifications(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/notifications`, {
+  await client.delete(`${bucketPath(bucketName)}/notifications`, {
     params: withS3AccountParam(undefined, accountId),
   });
 }
 
 export async function getBucketWebsite(accountId: S3AccountSelector, bucketName: string): Promise<BucketWebsiteConfiguration> {
   const { data } = await client.get<BucketWebsiteConfiguration>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/website`,
+    `${bucketPath(bucketName)}/website`,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
@@ -380,7 +394,7 @@ export async function putBucketWebsite(
   payload: BucketWebsiteConfiguration
 ): Promise<BucketWebsiteConfiguration> {
   const { data } = await client.put<BucketWebsiteConfiguration>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/website`,
+    `${bucketPath(bucketName)}/website`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );
@@ -388,7 +402,7 @@ export async function putBucketWebsite(
 }
 
 export async function deleteBucketWebsite(accountId: S3AccountSelector, bucketName: string): Promise<void> {
-  await client.delete(`/manager/buckets/${encodeURIComponent(bucketName)}/website`, {
+  await client.delete(`${bucketPath(bucketName)}/website`, {
     params: withS3AccountParam(undefined, accountId),
   });
 }
@@ -404,7 +418,7 @@ export async function updateBucketQuota(
   bucketName: string,
   payload: BucketQuotaUpdate
 ): Promise<void> {
-  await client.put(`/manager/buckets/${encodeURIComponent(bucketName)}/quota`, payload, {
+  await client.put(`${bucketPath(bucketName)}/quota`, payload, {
     params: withS3AccountParam(undefined, accountId),
   });
 }
@@ -421,7 +435,7 @@ export async function getBucketObjectLock(
   bucketName: string
 ): Promise<BucketObjectLockConfiguration> {
   const { data } = await client.get<BucketObjectLockConfiguration>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/object-lock`,
+    `${bucketPath(bucketName)}/object-lock`,
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
@@ -433,7 +447,7 @@ export async function updateBucketObjectLock(
   payload: BucketObjectLockUpdatePayload
 ): Promise<BucketObjectLockConfiguration> {
   const { data } = await client.put<BucketObjectLockConfiguration>(
-    `/manager/buckets/${encodeURIComponent(bucketName)}/object-lock`,
+    `${bucketPath(bucketName)}/object-lock`,
     payload,
     { params: withS3AccountParam(undefined, accountId) }
   );

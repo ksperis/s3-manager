@@ -51,6 +51,13 @@ type SessionInfo = {
   accountName: string | null;
 };
 
+type S3AccountProviderScope = "manager" | "browser";
+
+type S3AccountProviderProps = {
+  children: ReactNode;
+  scope?: S3AccountProviderScope;
+};
+
 function deriveS3AccountType(context: ExecutionContext | null | undefined): string | null {
   if (!context) return null;
   if (context.kind === "connection" || context.id.startsWith("conn-")) {
@@ -80,7 +87,7 @@ function readSessionInfo(): SessionInfo {
   }
 }
 
-export function S3AccountProvider({ children }: { children: ReactNode }) {
+export function S3AccountProvider({ children, scope = "manager" }: S3AccountProviderProps) {
   const sessionInfo = useMemo(() => readSessionInfo(), []);
   const requiresS3AccountSelection = !sessionInfo.isSession;
   const [accounts, setS3Accounts] = useState<ExecutionContext[]>([]);
@@ -100,15 +107,19 @@ export function S3AccountProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        const data = await listExecutionContexts("manager");
+        const data = await listExecutionContexts(scope);
         setS3Accounts(data);
       } catch (err) {
         setS3Accounts([]);
-        setAccessError("Access to manager is denied for this user.");
+        setAccessError(
+          scope === "browser"
+            ? "Access to browser contexts is denied for this user."
+            : "Access to manager is denied for this user."
+        );
       }
     };
     load();
-  }, [requiresS3AccountSelection]);
+  }, [requiresS3AccountSelection, scope]);
 
   useEffect(() => {
     if (!requiresS3AccountSelection) {

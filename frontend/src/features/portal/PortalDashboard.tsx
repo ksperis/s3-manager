@@ -36,38 +36,12 @@ import UiEmptyState from "../../components/ui/UiEmptyState";
 import type { UiTone } from "../../components/ui/styles";
 import PortalBucketModal from "./PortalBucketModal";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
-
-const MAX_BUCKET_NAME_LENGTH = 63;
-
-function normalizeBucketName(value: string): string {
-  const lower = value.trim().toLowerCase();
-  if (!lower) return "";
-  const sanitized = lower.replace(/[^a-z0-9.-]+/g, "-");
-  const labels = sanitized
-    .split(".")
-    .map((label) => {
-      return label.replace(/^-+/, "").replace(/-+$/, "");
-    })
-    .filter(Boolean);
-  const joined = labels.join(".");
-  return joined.replace(/^[.-]+/, "").replace(/[.-]+$/, "").slice(0, MAX_BUCKET_NAME_LENGTH);
-}
-
-function normalizeBucketInput(value: string): string {
-  const lower = value.toLowerCase();
-  if (!lower) return "";
-  return lower.replace(/[^a-z0-9.-]+/g, "-").slice(0, MAX_BUCKET_NAME_LENGTH);
-}
-
-function isValidBucketName(value: string): boolean {
-  if (value.length < 3 || value.length > MAX_BUCKET_NAME_LENGTH) return false;
-  if (!/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(value)) return false;
-  if (value.includes("..")) return false;
-  const labelPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
-  if (value.split(".").some((label) => !labelPattern.test(label))) return false;
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return false;
-  return true;
-}
+import {
+  S3_BUCKET_NAME_MAX_LENGTH as MAX_BUCKET_NAME_LENGTH,
+  isValidS3BucketName,
+  normalizeS3BucketName,
+  normalizeS3BucketNameInput,
+} from "../../utils/s3BucketName";
 
 function CopyButton({ value, label, iconOnly = false }: { value: string; label: string; iconOnly?: boolean }) {
   const handleCopy = () => {
@@ -177,7 +151,7 @@ export default function PortalDashboard() {
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const accountUsedBytes = accountUsage?.used_bytes ?? state?.used_bytes ?? null;
   const accountUsedObjects = accountUsage?.used_objects ?? state?.used_objects ?? null;
-  const isBucketNameValid = !newBucketName || isValidBucketName(newBucketName);
+  const isBucketNameValid = !newBucketName || isValidS3BucketName(newBucketName);
   const derivedBucketTotals = useMemo(() => {
     const buckets = state?.buckets ?? [];
     let bytesSum = 0;
@@ -807,8 +781,8 @@ export default function PortalDashboard() {
 
   const handleCreateBucket = async (event: FormEvent) => {
     event.preventDefault();
-    const normalizedBucketName = normalizeBucketName(newBucketName);
-    if (!accountIdForApi || !normalizedBucketName || !isValidBucketName(normalizedBucketName)) {
+    const normalizedBucketName = normalizeS3BucketName(newBucketName);
+    if (!accountIdForApi || !normalizedBucketName || !isValidS3BucketName(normalizedBucketName)) {
       setBucketActionError(
         t({
           en: "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.",
@@ -1494,7 +1468,7 @@ export default function PortalDashboard() {
                     <input
                       type="text"
                       value={newBucketName}
-                      onChange={(e) => setNewBucketName(normalizeBucketInput(e.target.value))}
+                      onChange={(e) => setNewBucketName(normalizeS3BucketNameInput(e.target.value))}
                       maxLength={MAX_BUCKET_NAME_LENGTH}
                       title={
                         isBucketNameValid

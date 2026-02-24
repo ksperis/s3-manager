@@ -25,43 +25,19 @@ import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
+import {
+  S3_BUCKET_NAME_MAX_LENGTH as MAX_BUCKET_NAME_LENGTH,
+  isValidS3BucketName,
+  normalizeS3BucketName,
+  normalizeS3BucketNameInput,
+} from "../../utils/s3BucketName";
 import { useI18n } from "../../i18n";
 import { usePortalAccountContext } from "./PortalAccountContext";
-
-const MAX_BUCKET_NAME_LENGTH = 63;
 
 type SortState = {
   field: keyof Bucket;
   direction: "asc" | "desc";
 };
-
-function normalizeBucketName(value: string): string {
-  const lower = value.trim().toLowerCase();
-  if (!lower) return "";
-  const sanitized = lower.replace(/[^a-z0-9.-]+/g, "-");
-  const labels = sanitized
-    .split(".")
-    .map((label) => label.replace(/^-+/, "").replace(/-+$/, ""))
-    .filter(Boolean);
-  const joined = labels.join(".");
-  return joined.replace(/^[.-]+/, "").replace(/[.-]+$/, "").slice(0, MAX_BUCKET_NAME_LENGTH);
-}
-
-function normalizeBucketInput(value: string): string {
-  const lower = value.toLowerCase();
-  if (!lower) return "";
-  return lower.replace(/[^a-z0-9.-]+/g, "-").slice(0, MAX_BUCKET_NAME_LENGTH);
-}
-
-function isValidBucketName(value: string): boolean {
-  if (value.length < 3 || value.length > MAX_BUCKET_NAME_LENGTH) return false;
-  if (!/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(value)) return false;
-  if (value.includes("..")) return false;
-  const labelPattern = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
-  if (value.split(".").some((label) => !labelPattern.test(label))) return false;
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return false;
-  return true;
-}
 
 const formatBytes = (value?: number | null) => {
   if (value === undefined || value === null) return "-";
@@ -385,12 +361,12 @@ export default function PortalBucketsPage() {
   const handleCreateBucket = async (event: FormEvent) => {
     event.preventDefault();
     if (!accountIdForApi || !canManageBuckets) return;
-    const normalized = normalizeBucketName(newBucketName);
+    const normalized = normalizeS3BucketName(newBucketName);
     if (!normalized) {
       setActionError(t({ en: "Bucket name is required.", fr: "Le nom du bucket est requis.", de: "Bucket-Name ist erforderlich." }));
       return;
     }
-    if (!isValidBucketName(normalized)) {
+    if (!isValidS3BucketName(normalized)) {
       setActionError(t({ en: "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.", fr: "Nom invalide. 3-63 caracteres, minuscules, chiffres, points ou tirets.", de: "Ungueltiger Name. 3-63 Zeichen, Kleinbuchstaben, Zahlen, Punkte oder Bindestriche." }));
       return;
     }
@@ -433,7 +409,7 @@ export default function PortalBucketsPage() {
     }
   };
 
-  const isBucketNameValid = !newBucketName || isValidBucketName(newBucketName);
+  const isBucketNameValid = !newBucketName || isValidS3BucketName(newBucketName);
   const userBlocked = !accountLoading && !accountError && hasAccountContext && !stateLoading && !canManageBuckets;
   const showTable = hasAccountContext && (canManageBuckets || stateLoading);
 
@@ -493,7 +469,7 @@ export default function PortalBucketsPage() {
                   <input
                     type="text"
                     value={newBucketName}
-                    onChange={(e) => setNewBucketName(normalizeBucketInput(e.target.value))}
+                    onChange={(e) => setNewBucketName(normalizeS3BucketNameInput(e.target.value))}
                     maxLength={MAX_BUCKET_NAME_LENGTH}
                     title={
                       isBucketNameValid
