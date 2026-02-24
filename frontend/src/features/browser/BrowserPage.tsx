@@ -665,6 +665,7 @@ export default function BrowserPage({
   const bucketConfigurationEnabled = bucketManagementEnabled;
   const bucketConfigContextScope = "browser";
   const contextId = typeof accountIdForApi === "string" ? accountIdForApi : null;
+  const isCephAdminContext = Boolean(contextId && contextId.startsWith("ceph-admin-"));
   const isLegacyS3UserContext = Boolean(contextId && contextId.startsWith("s3u-"));
   const isLegacyConnectionContext = Boolean(contextId && contextId.startsWith("conn-"));
   const isLegacyContext = isLegacyS3UserContext || isLegacyConnectionContext;
@@ -1111,6 +1112,12 @@ export default function BrowserPage({
             }
             return preferredBucket;
           }
+          if (isCephAdminContext && requestedBucket) {
+            if (requestedBucket !== prev) {
+              setPrefix("");
+            }
+            return requestedBucket;
+          }
           if (requestedBucket && data.some((bucket) => bucket.name === requestedBucket)) {
             if (requestedBucket !== prev) {
               setPrefix("");
@@ -1129,7 +1136,11 @@ export default function BrowserPage({
       } catch {
         setBucketError("Unable to list buckets for this account.");
         setBuckets([]);
-        setBucketName("");
+        if (isCephAdminContext && requestedBucket) {
+          setBucketName(requestedBucket);
+        } else {
+          setBucketName("");
+        }
         setPrefix("");
         setDeletedObjects([]);
         setDeletedPrefixes([]);
@@ -1137,7 +1148,7 @@ export default function BrowserPage({
         setLoadingBuckets(false);
       }
     },
-    [accountIdForApi, hasS3AccountContext, requestedBucket]
+    [accountIdForApi, hasS3AccountContext, isCephAdminContext, requestedBucket]
   );
 
   useEffect(() => {

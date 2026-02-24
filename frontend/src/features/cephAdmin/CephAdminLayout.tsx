@@ -7,9 +7,11 @@ import Layout from "../../components/Layout";
 import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import { SidebarSection } from "../../components/Sidebar";
 import PageBanner from "../../components/PageBanner";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndpointContext";
 
 function CephAdminShell() {
+  const { generalSettings } = useGeneralSettings();
   const {
     endpoints,
     selectedEndpointId,
@@ -37,6 +39,12 @@ function CephAdminShell() {
     !selectedEndpointAccessLoading &&
     canAdmin &&
     Boolean(selectedEndpointAccess?.can_accounts);
+  const canBrowser =
+    endpointSelected &&
+    !selectedEndpointAccessLoading &&
+    canAdmin &&
+    generalSettings.browser_enabled &&
+    generalSettings.browser_ceph_admin_enabled;
   const adminWarning = endpointSelected && !selectedEndpointAccessLoading ? selectedEndpointAccess?.admin_warning ?? null : null;
 
   const handleChange = (selectedValue: string) => {
@@ -55,11 +63,12 @@ function CephAdminShell() {
       ],
     },
     {
-      label: "Ceph S3",
+      label: "CEPH S3",
       links: [
         { to: "/ceph-admin/accounts", label: "RGW Accounts", disabled: !canAccounts },
         { to: "/ceph-admin/users", label: "RGW Users", disabled: !canAdmin },
         { to: "/ceph-admin/buckets", label: "Buckets", disabled: !canAdmin },
+        { to: "/ceph-admin/browser", label: "Browser", disabled: !canBrowser },
       ],
     },
   ];

@@ -61,6 +61,7 @@ import CephAdminUsersPage from "./features/cephAdmin/CephAdminUsersPage";
 import CephAdminBucketsPage from "./features/cephAdmin/CephAdminBucketsPage";
 import CephAdminBucketDetailPage from "./features/cephAdmin/CephAdminBucketDetailPage";
 import CephAdminMetricsPage from "./features/cephAdmin/CephAdminMetricsPage";
+import CephAdminBrowserPage from "./features/cephAdmin/CephAdminBrowserPage";
 import ProfilePage from "./features/shared/ProfilePage";
 import {
   isAdminLikeRole,
@@ -241,15 +242,16 @@ function RequireCephAdminFeature() {
 
 function isBrowserSurfaceEnabled(
   generalSettings: ReturnType<typeof useGeneralSettings>["generalSettings"],
-  surface: "root" | "manager" | "portal"
+  surface: "root" | "manager" | "portal" | "ceph_admin"
 ) {
   if (!generalSettings.browser_enabled) return false;
   if (surface === "root") return generalSettings.browser_root_enabled;
   if (surface === "manager") return generalSettings.browser_manager_enabled;
-  return generalSettings.browser_portal_enabled;
+  if (surface === "portal") return generalSettings.browser_portal_enabled;
+  return generalSettings.browser_ceph_admin_enabled;
 }
 
-function RequireBrowserSurface({ surface }: { surface: "root" | "manager" | "portal" }) {
+function RequireBrowserSurface({ surface }: { surface: "root" | "manager" | "portal" | "ceph_admin" }) {
   const { generalSettings } = useGeneralSettings();
   if (!isBrowserSurfaceEnabled(generalSettings, surface)) {
     return <FeatureDisabledPage feature="Browser" />;
@@ -315,6 +317,9 @@ export default function AppRouter() {
                 <Route path="users" element={<CephAdminUsersPage />} />
                 <Route path="buckets" element={<CephAdminBucketsPage />} />
                 <Route path="buckets/:bucketName" element={<CephAdminBucketDetailPage />} />
+                <Route element={<RequireBrowserSurface surface="ceph_admin" />}>
+                  <Route path="browser" element={<CephAdminBrowserPage />} />
+                </Route>
               </Route>
             </Route>
           </Route>

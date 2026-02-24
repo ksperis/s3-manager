@@ -22,6 +22,7 @@ export type GeneralSettings = {
   browser_root_enabled: boolean;
   browser_manager_enabled: boolean;
   browser_portal_enabled: boolean;
+  browser_ceph_admin_enabled: boolean;
   allow_portal_manager_workspace: boolean;
   portal_enabled: boolean;
   billing_enabled: boolean;

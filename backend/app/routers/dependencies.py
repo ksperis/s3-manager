@@ -144,26 +144,31 @@ def require_internal_cron_token(x_internal_token: Optional[str] = Header(None, a
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal token")
 
 
-def _parse_account_selector(account_ref: Optional[str]) -> tuple[Optional[int], Optional[int], Optional[int]]:
+def _parse_account_selector(account_ref: Optional[str]) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
     if account_ref is None or account_ref == "":
-        return None, None, None
+        return None, None, None, None
     if isinstance(account_ref, str) and account_ref.lower() in {"-1", "null"}:
-        return None, None, None
+        return None, None, None, None
     if isinstance(account_ref, str) and account_ref.startswith("conn-"):
         suffix = account_ref.split("conn-", 1)[1]
         if not suffix.isdigit():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid connection identifier")
-        return None, None, int(suffix)
+        return None, None, int(suffix), None
     if isinstance(account_ref, str) and account_ref.startswith("s3u-"):
         suffix = account_ref.split("s3u-", 1)[1]
         if not suffix.isdigit():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid S3 user identifier")
-        return None, int(suffix), None
+        return None, int(suffix), None, None
+    if isinstance(account_ref, str) and account_ref.startswith("ceph-admin-"):
+        suffix = account_ref.split("ceph-admin-", 1)[1]
+        if not suffix.isdigit():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Ceph Admin endpoint identifier")
+        return None, None, None, int(suffix)
     try:
         value = int(account_ref)
         if value < 0:
-            return None, abs(value), None
-        return value, None, None
+            return None, abs(value), None, None
+        return value, None, None, None
     except (TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid account identifier")
 
@@ -194,6 +199,29 @@ def _build_s3_connection_account(conn: S3Connection) -> S3Account:
     account._session_verify_tls = verify_tls  # type: ignore[attr-defined]
     account.s3_connection_id = conn.id  # type: ignore[attr-defined]
     account._session_token = conn.session_token  # type: ignore[attr-defined]
+    return account
+
+
+def _build_ceph_admin_browser_account(endpoint: StorageEndpoint) -> S3Account:
+    account = S3Account(
+        name=f"ceph-admin:{endpoint.id}",
+        rgw_account_id=None,
+        email=None,
+        rgw_user_uid=None,
+    )
+    account.id = -(2_000_000 + endpoint.id)
+    account.rgw_access_key = endpoint.ceph_admin_access_key
+    account.rgw_secret_key = endpoint.ceph_admin_secret_key
+    account.storage_endpoint_id = endpoint.id
+    account.storage_endpoint = endpoint
+    account.set_session_credentials(endpoint.ceph_admin_access_key, endpoint.ceph_admin_secret_key)
+    account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
+        can_manage_buckets=True,
+        can_manage_portal_users=False,
+        can_manage_iam=False,
+        can_view_root_key=False,
+        using_root_key=False,
+    )
     return account
 
 
@@ -242,6 +270,41 @@ def _resolve_connection_context(db: Session, user: User, connection_id: int, *, 
         using_root_key=False,
     )
     return account
+
+
+def _resolve_ceph_admin_browser_context(db: Session, actor: User, endpoint_id: int, *, surface: str) -> S3Account:
+    if surface != "browser":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ceph Admin context is only allowed in browser workspace")
+    app_settings = load_app_settings()
+    if not app_settings.general.ceph_admin_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ceph Admin feature is disabled")
+    if not app_settings.general.browser_ceph_admin_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Browser is disabled for Ceph Admin workspace")
+    if not is_admin_ui_role(actor.role) or not bool(actor.can_access_ceph_admin):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for Ceph Admin browser workspace")
+
+    endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint_id).first()
+    if not endpoint:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage endpoint not found")
+    provider = StorageProvider(str(endpoint.provider))
+    if provider != StorageProvider.CEPH:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage endpoint is not a Ceph provider")
+    if not resolve_feature_flags(endpoint).admin_enabled:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Admin operations are disabled for this endpoint")
+
+    access_key = endpoint.ceph_admin_access_key
+    secret_key = endpoint.ceph_admin_secret_key
+    if not access_key or not secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ceph Admin credentials are not configured for this storage endpoint",
+        )
+    if not normalize_s3_endpoint(getattr(endpoint, "endpoint_url", None)):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="S3 endpoint URL is not configured for this storage endpoint",
+        )
+    return _build_ceph_admin_browser_account(endpoint)
 
 
 def _normalize_access_mode(value: Optional[str]) -> Optional[str]:
@@ -404,7 +467,7 @@ def get_account_context(
     actor: ManagerActor = Depends(get_current_actor),
     db: Session = Depends(get_db),
 ) -> S3Account:
-    account_id, s3_user_id, connection_id = _parse_account_selector(account_ref)
+    account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
     surface = _resolve_workspace_surface(request)
     requested_mode = _normalize_access_mode(request.headers.get("X-Manager-Access-Mode")) if request else None
     requested_endpoint = normalize_s3_endpoint(request.headers.get("X-S3-Endpoint")) if request else None
@@ -414,6 +477,8 @@ def get_account_context(
         # UI users are bound to the endpoint configured on the selected account.
         requested_endpoint = None
     if isinstance(actor, User):
+        if ceph_admin_endpoint_id is not None:
+            return _resolve_ceph_admin_browser_context(db, actor, ceph_admin_endpoint_id, surface=surface)
         if connection_id is not None:
             return _resolve_connection_context(db, actor, connection_id, surface=surface)
         if s3_user_id is not None:
@@ -443,8 +508,8 @@ def get_account_context(
         account._manager_capabilities = capabilities  # type: ignore[attr-defined]
         return account
 
-    if s3_user_id is not None or connection_id is not None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sessions cannot assume S3 user context")
+    if s3_user_id is not None or connection_id is not None or ceph_admin_endpoint_id is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sessions cannot assume this context")
 
     account = _resolve_session_account(db, actor, account_id, requested_endpoint=requested_endpoint)
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
@@ -462,8 +527,8 @@ def get_portal_account_access(
     user: User = Depends(get_current_account_user),
     db: Session = Depends(get_db),
 ) -> AccountAccess:
-    account_id, s3_user_id, connection_id = _parse_account_selector(account_ref)
-    if s3_user_id is not None or connection_id is not None:
+    account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
+    if s3_user_id is not None or connection_id is not None or ceph_admin_endpoint_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
     account, link = _resolve_user_account_link(db, user, account_id, allow_default=False)
     # Portal is restricted to RGW accounts with IAM support.
@@ -532,8 +597,8 @@ def get_account_access(
     actor: ManagerActor = Depends(get_current_actor),
     db: Session = Depends(get_db),
 ) -> AccountAccess:
-    account_id, s3_user_id, connection_id = _parse_account_selector(account_ref)
-    if s3_user_id is not None or connection_id is not None:
+    account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
+    if s3_user_id is not None or connection_id is not None or ceph_admin_endpoint_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3 user context is not supported here")
 
     # Resolve target account

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.db import AccountRole, S3Connection, User, UserRole, UserS3Account
+from app.db import AccountRole, S3Connection, StorageEndpoint, User, UserRole, UserS3Account
 from app.models.app_settings import AppSettings
 from app.routers import dependencies
 
@@ -78,3 +78,77 @@ def test_manager_workspace_rejects_non_iam_connection(db_session):
         )
     assert exc.value.status_code == 403
     assert "IAM-capable S3Connection is required in manager workspace" in str(exc.value.detail)
+
+
+def test_browser_workspace_accepts_ceph_admin_selector_for_authorized_user(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.ceph_admin_enabled = True
+    settings.general.browser_ceph_admin_enabled = True
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+
+    user = User(
+        email="ceph-admin-browser-ok@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+        can_access_ceph_admin=True,
+    )
+    endpoint = StorageEndpoint(
+        name="ceph-endpoint-a",
+        endpoint_url="https://rgw-a.example.com",
+        provider="ceph",
+        ceph_admin_access_key="AK-CEPH-ADMIN",
+        ceph_admin_secret_key="SK-CEPH-ADMIN",
+        features_config="features:\n  admin:\n    enabled: true\n",
+    )
+    db_session.add_all([user, endpoint])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(endpoint)
+
+    account = dependencies.get_account_context(
+        request=_request("/api/browser/buckets"),
+        account_ref=f"ceph-admin-{endpoint.id}",
+        actor=user,
+        db=db_session,
+    )
+
+    assert account.storage_endpoint_id == endpoint.id
+    assert account.effective_rgw_credentials() == ("AK-CEPH-ADMIN", "SK-CEPH-ADMIN")
+
+
+def test_browser_workspace_rejects_ceph_admin_selector_for_non_admin_user(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.ceph_admin_enabled = True
+    settings.general.browser_ceph_admin_enabled = True
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+
+    user = User(
+        email="ceph-admin-browser-ko@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+        can_access_ceph_admin=False,
+    )
+    endpoint = StorageEndpoint(
+        name="ceph-endpoint-b",
+        endpoint_url="https://rgw-b.example.com",
+        provider="ceph",
+        ceph_admin_access_key="AK-CEPH-ADMIN-B",
+        ceph_admin_secret_key="SK-CEPH-ADMIN-B",
+        features_config="features:\n  admin:\n    enabled: true\n",
+    )
+    db_session.add_all([user, endpoint])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(endpoint)
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies.get_account_context(
+            request=_request("/api/browser/buckets"),
+            account_ref=f"ceph-admin-{endpoint.id}",
+            actor=user,
+            db=db_session,
+        )
+    assert exc.value.status_code == 403
+    assert "Not authorized for Ceph Admin browser workspace" in str(exc.value.detail)

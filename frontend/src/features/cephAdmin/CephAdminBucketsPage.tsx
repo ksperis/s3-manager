@@ -5,7 +5,7 @@
 import axios from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
@@ -43,6 +43,7 @@ import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 import { useCephAdminBucketListing } from "./useCephAdminBucketListing";
 import CephAdminBucketCompareModal from "./CephAdminBucketCompareModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
+import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 
 const extractError = (err: unknown): string => {
   if (axios.isAxiosError(err)) {
@@ -1620,7 +1621,10 @@ const getTagColors = (tag: string) => {
 
 export default function CephAdminBucketsPage() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { generalSettings } = useGeneralSettings();
   const { selectedEndpointId, selectedEndpoint, endpoints } = useCephAdminEndpoint();
+  const cephAdminBrowserEnabled = generalSettings.browser_enabled && generalSettings.browser_ceph_admin_enabled;
   const usageFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
   const staticWebsiteFeatureEnabled = selectedEndpoint?.capabilities?.static_website === true;
   const featureSupport = useMemo<Record<FeatureKey, boolean>>(
@@ -5807,7 +5811,29 @@ export default function CephAdminBucketsPage() {
             >
               ⋮
             </summary>
-            <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+              <button
+                type="button"
+                disabled={!selectedEndpointId || !cephAdminBrowserEnabled}
+                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
+                title={
+                  selectedEndpointId && cephAdminBrowserEnabled
+                    ? "Open this bucket in Ceph Admin Browser"
+                    : "Ceph Admin Browser is disabled in application settings"
+                }
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (!selectedEndpointId || !cephAdminBrowserEnabled) return;
+                  const params = new URLSearchParams();
+                  params.set("ep", String(selectedEndpointId));
+                  params.set("bucket", bucket.name);
+                  navigate({ pathname: "/ceph-admin/browser", search: `?${params.toString()}` });
+                  const parent = event.currentTarget.closest("details");
+                  if (parent) parent.removeAttribute("open");
+                }}
+              >
+                Open in Browser
+              </button>
               <button
                 type="button"
                 className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
