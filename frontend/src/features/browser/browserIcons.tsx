@@ -172,13 +172,12 @@ export const HistoryIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
 
 export const SettingsIcon = ({ className = "h-4 w-4", ...props }: IconProps) => (
   <svg viewBox="0 0 20 20" className={className} fill="none" aria-hidden="true" {...props}>
-    <path
-      d="M8.3 3.5h3.4l.6 1.9 2 .8 1.6-1 2.4 2.4-1 1.6.8 2 .9.3v3.4l-.9.3-.8 2 1 1.6-2.4 2.4-1.6-1-2 .8-.6 1.9H8.3l-.6-1.9-2-.8-1.6 1-2.4-2.4 1-1.6-.8-2-.9-.3V10l.9-.3.8-2-1-1.6L4.7 3.7l1.6 1 2-.8.6-1.9Z"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinejoin="round"
-    />
-    <circle cx="10" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M5 5.5h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M5 10h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M5 14.5h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <circle cx="8" cy="5.5" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="12" cy="10" r="1.6" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="9" cy="14.5" r="1.6" stroke="currentColor" strokeWidth="1.4" />
   </svg>
 );
 

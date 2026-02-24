@@ -338,8 +338,12 @@ function NavDocumentIcon(props: React.SVGProps<SVGSVGElement>) {
 function NavCogIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" {...props}>
-      <circle cx="10" cy="10" r="2.2" strokeWidth={1.7} />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M10 3.5v2m0 9v2m6.5-6.5h-2m-9 0h-2m11.4 4.6-1.4-1.4M6.9 6.9 5.5 5.5m8.9 0-1.4 1.4M6.9 13.1l-1.4 1.4" />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M4 5.5h12" />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M4 10h12" />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M4 14.5h12" />
+      <circle cx="7.2" cy="5.5" r="1.5" strokeWidth={1.7} />
+      <circle cx="12.4" cy="10" r="1.5" strokeWidth={1.7} />
+      <circle cx="9.5" cy="14.5" r="1.5" strokeWidth={1.7} />
     </svg>
   );
 }
