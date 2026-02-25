@@ -63,7 +63,8 @@ export default function S3ConnectionsPage() {
     name: "",
     provider_hint: "",
     visibility: "private" as "private" | "shared" | "public",
-    iam_capable: false,
+    access_manager: false,
+    access_browser: true,
     endpoint_url: "",
     region: "",
     access_key_id: "",
@@ -80,7 +81,8 @@ export default function S3ConnectionsPage() {
     name: "",
     provider_hint: "",
     visibility: "private" as "private" | "shared" | "public",
-    iam_capable: false,
+    access_manager: false,
+    access_browser: true,
     credential_owner_type: "",
     credential_owner_identifier: "",
     endpoint_url: "",
@@ -114,7 +116,8 @@ export default function S3ConnectionsPage() {
       name: "",
       provider_hint: "",
       visibility: "private",
-      iam_capable: false,
+      access_manager: false,
+      access_browser: true,
       endpoint_url: "",
       region: "",
       access_key_id: "",
@@ -242,7 +245,8 @@ export default function S3ConnectionsPage() {
       name: conn.name,
       provider_hint: conn.provider_hint || "",
       visibility: (conn.visibility as "private" | "shared" | "public") || (conn.is_public ? "public" : conn.is_shared ? "shared" : "private"),
-      iam_capable: Boolean(conn.iam_capable),
+      access_manager: conn.access_manager === true,
+      access_browser: conn.access_browser !== false,
       credential_owner_type: conn.credential_owner_type || "",
       credential_owner_identifier: conn.credential_owner_identifier || "",
       endpoint_url: conn.endpoint_url,
@@ -274,6 +278,10 @@ export default function S3ConnectionsPage() {
 
   const submitCreate = async (e: FormEvent) => {
     e.preventDefault();
+    if (!createForm.access_manager && !createForm.access_browser) {
+      setCreateError("Enable access to manager and/or browser.");
+      return;
+    }
     setCreating(true);
     setCreateError(null);
     try {
@@ -292,7 +300,8 @@ export default function S3ConnectionsPage() {
       await createAdminS3Connection({
         name: createForm.name,
         visibility: createForm.visibility,
-        iam_capable: createForm.iam_capable,
+        access_manager: createForm.access_manager,
+        access_browser: createForm.access_browser,
         access_key_id: createForm.access_key_id,
         secret_access_key: createForm.secret_access_key,
         ...endpointPayload,
@@ -311,6 +320,10 @@ export default function S3ConnectionsPage() {
   const submitEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editing) return;
+    if (!editForm.access_manager && !editForm.access_browser) {
+      setEditError("Enable access to manager and/or browser.");
+      return;
+    }
     const accessKeyId = editCredentials.access_key_id.trim();
     const secretAccessKey = editCredentials.secret_access_key.trim();
     if ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey)) {
@@ -341,7 +354,8 @@ export default function S3ConnectionsPage() {
       await updateAdminS3Connection(editing.id, {
         name: editForm.name || undefined,
         visibility: editForm.visibility,
-        iam_capable: editForm.iam_capable,
+        access_manager: editForm.access_manager,
+        access_browser: editForm.access_browser,
         credential_owner_type: editForm.credential_owner_type || null,
         credential_owner_identifier: editForm.credential_owner_identifier || null,
         ...endpointPayload,
@@ -587,17 +601,35 @@ export default function S3ConnectionsPage() {
                   Shared connections are configurable by UI admins only. Public connections are visible to everyone.
                 </p>
               </div>
-              <div className="flex items-center gap-2 sm:col-span-2">
-                <input
-                  id="create-iam-capable"
-                  type="checkbox"
-                  checked={createForm.iam_capable}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, iam_capable: e.target.checked }))}
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                />
-                <label htmlFor="create-iam-capable" className="ui-body text-slate-700 dark:text-slate-200">
-                  IAM-compatible credentials (enable Manager IAM features)
-                </label>
+              <div className="space-y-2 sm:col-span-2">
+                <div className="ui-body font-medium text-slate-700 dark:text-slate-200">Workspace access</div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="create-access-manager"
+                      type="checkbox"
+                      checked={createForm.access_manager}
+                      onChange={(e) => setCreateForm((p) => ({ ...p, access_manager: e.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    <label htmlFor="create-access-manager" className="ui-body text-slate-700 dark:text-slate-200">
+                      Access manager
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="create-access-browser"
+                      type="checkbox"
+                      checked={createForm.access_browser}
+                      onChange={(e) => setCreateForm((p) => ({ ...p, access_browser: e.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    <label htmlFor="create-access-browser" className="ui-body text-slate-700 dark:text-slate-200">
+                      Access browser
+                    </label>
+                  </div>
+                </div>
+                <div className="ui-caption text-slate-500 dark:text-slate-300">At least one access must be enabled.</div>
               </div>
               <div className="flex flex-col gap-1 sm:col-span-2">
                 <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Existing endpoint</label>
@@ -897,20 +929,32 @@ export default function S3ConnectionsPage() {
 
             <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
               <div>
-                <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Credential metadata</div>
+                <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access and credential metadata</div>
                 <div className="ui-caption text-slate-500 dark:text-slate-300">
                   Store owner context for keys imported from manager/ceph-admin flows.
                 </div>
               </div>
-              <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={editForm.iam_capable}
-                  onChange={(e) => setEditForm((p) => ({ ...p, iam_capable: e.target.checked }))}
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                />
-                IAM-compatible credentials (enable Manager IAM features)
-              </label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={editForm.access_manager}
+                    onChange={(e) => setEditForm((p) => ({ ...p, access_manager: e.target.checked }))}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  />
+                  Access manager
+                </label>
+                <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={editForm.access_browser}
+                    onChange={(e) => setEditForm((p) => ({ ...p, access_browser: e.target.checked }))}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  />
+                  Access browser
+                </label>
+              </div>
+              <div className="ui-caption text-slate-500 dark:text-slate-300">At least one access must be enabled.</div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1">
                   <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Owner type</label>

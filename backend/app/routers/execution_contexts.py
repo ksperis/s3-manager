@@ -12,6 +12,7 @@ from app.models.execution_context import ExecutionContext, ExecutionContextCapab
 from app.routers.dependencies import get_current_account_user
 from app.services.app_settings_service import load_app_settings
 from app.services.s3_users_service import S3UsersService
+from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import resolve_connection_details
 from app.utils.storage_endpoint_features import features_to_capabilities, normalize_features_config
 
@@ -24,6 +25,10 @@ def _provider_value(provider: object | None) -> Optional[str]:
     value = getattr(provider, "value", provider)
     text = str(value).strip().lower()
     return text or None
+
+
+def _connection_can_manage_iam(connection: S3Connection) -> bool:
+    return s3_connection_can_manage_iam(getattr(connection, "capabilities_json", None))
 
 
 def _build_account_context(account: S3Account) -> ExecutionContext:
@@ -45,7 +50,7 @@ def _build_account_context(account: S3Account) -> ExecutionContext:
         endpoint_url=endpoint.endpoint_url if endpoint else None,
         storage_endpoint_capabilities=endpoint_caps,
         capabilities=ExecutionContextCapabilities(
-            iam_capable=True,
+            can_manage_iam=True,
             sts_capable=sts_capable,
             admin_api_capable=True,
         ),
@@ -75,7 +80,7 @@ def _build_legacy_user_context(
         endpoint_url=endpoint.endpoint_url if endpoint else None,
         storage_endpoint_capabilities=endpoint_caps,
         capabilities=ExecutionContextCapabilities(
-            iam_capable=False,
+            can_manage_iam=False,
             sts_capable=False,
             admin_api_capable=False,
         ),
@@ -84,6 +89,7 @@ def _build_legacy_user_context(
 
 def _build_connection_context(connection: S3Connection, *, hidden: bool = False) -> ExecutionContext:
     details = resolve_connection_details(connection)
+    can_manage_iam = _connection_can_manage_iam(connection)
     sns_enabled = False
     if connection.storage_endpoint:
         sns_enabled = bool(
@@ -105,12 +111,12 @@ def _build_connection_context(connection: S3Connection, *, hidden: bool = False)
             "usage": False,
             "metrics": False,
             "static_website": False,
-            "iam": bool(connection.iam_capable),
+            "iam": can_manage_iam,
             "sns": sns_enabled,
             "sse": False,
         },
         capabilities=ExecutionContextCapabilities(
-            iam_capable=bool(connection.iam_capable),
+            can_manage_iam=can_manage_iam,
             sts_capable=False,
             admin_api_capable=False,
         ),
@@ -198,7 +204,9 @@ def list_execution_contexts(
             results.append(_build_legacy_user_context(s3_user, quota_max_size_gb, quota_max_objects))
 
     for connection in connections:
-        if workspace == "manager" and not bool(connection.iam_capable):
+        if workspace == "manager" and not bool(connection.access_manager):
+            continue
+        if workspace == "browser" and not bool(connection.access_browser):
             continue
         results.append(_build_connection_context(connection, hidden=bool(connection.is_temporary)))
     return results

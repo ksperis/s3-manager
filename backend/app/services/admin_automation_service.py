@@ -44,6 +44,7 @@ from app.services.s3_users_service import S3UsersService
 from app.services.storage_endpoints_service import StorageEndpointsService
 from app.services.users_service import UsersService
 from app.services.app_settings_service import load_app_settings
+from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
 from app.utils.normalize import normalize_storage_provider
 from app.utils.quota_stats import bytes_to_gb
 from app.utils.size_units import size_to_bytes
@@ -938,9 +939,12 @@ class AdminAutomationService:
                     diff["verify_tls"] = {"from": bool(details.verify_tls), "to": bool(spec.verify_tls)}
             if "provider_hint" in fields_set and spec.provider_hint is not None and spec.provider_hint != details.provider:
                 diff["provider_hint"] = {"from": details.provider, "to": spec.provider_hint}
-        if "iam_capable" in fields_set and spec.iam_capable is not None:
-            if bool(spec.iam_capable) != bool(conn.iam_capable):
-                diff["iam_capable"] = {"from": bool(conn.iam_capable), "to": bool(spec.iam_capable)}
+        if "access_manager" in fields_set and spec.access_manager is not None:
+            if bool(spec.access_manager) != bool(conn.access_manager):
+                diff["access_manager"] = {"from": bool(conn.access_manager), "to": bool(spec.access_manager)}
+        if "access_browser" in fields_set and spec.access_browser is not None:
+            if bool(spec.access_browser) != bool(conn.access_browser):
+                diff["access_browser"] = {"from": bool(conn.access_browser), "to": bool(spec.access_browser)}
         if "credential_owner_type" in fields_set and spec.credential_owner_type != conn.credential_owner_type:
             diff["credential_owner_type"] = {"from": conn.credential_owner_type, "to": spec.credential_owner_type}
         if "credential_owner_identifier" in fields_set and spec.credential_owner_identifier != conn.credential_owner_identifier:
@@ -1239,6 +1243,10 @@ class AdminAutomationService:
         is_public = visibility == "public"
         is_shared = visibility == "shared"
         owner_user_id = None if is_public else current_user.id
+        access_manager = bool(spec.access_manager) if spec.access_manager is not None else False
+        access_browser = bool(spec.access_browser) if spec.access_browser is not None else True
+        if not access_manager and not access_browser:
+            raise ValueError("At least one access flag must be enabled")
         conn = S3Connection(
             owner_user_id=owner_user_id,
             name=spec.name,
@@ -1246,13 +1254,17 @@ class AdminAutomationService:
             custom_endpoint_config=custom_endpoint_config,
             is_public=is_public,
             is_shared=is_shared,
-            iam_capable=bool(spec.iam_capable),
+            access_manager=access_manager,
+            access_browser=access_browser,
             credential_owner_type=spec.credential_owner_type,
             credential_owner_identifier=spec.credential_owner_identifier,
             access_key_id=spec.access_key_id,
             secret_access_key=spec.secret_access_key,
+            capabilities_json="{}",
         )
         self.db.add(conn)
+        self.db.flush()
+        self._refresh_detected_capabilities(conn)
         self.db.commit()
         self.db.refresh(conn)
         return conn
@@ -1262,6 +1274,7 @@ class AdminAutomationService:
         if not spec:
             return conn
         payload_data = spec.model_dump(exclude_unset=True)
+        should_probe_iam = False
         if "name" in payload_data and spec.name is not None:
             conn.name = spec.name
         if {"visibility", "is_public", "is_shared"} & set(payload_data.keys()):
@@ -1294,8 +1307,10 @@ class AdminAutomationService:
                     raise ValueError("Storage endpoint not found")
                 conn.storage_endpoint_id = storage_endpoint.id
                 conn.custom_endpoint_config = None
+                should_probe_iam = True
             else:
                 conn.storage_endpoint_id = None
+                should_probe_iam = True
         if conn.storage_endpoint_id is None:
             current = parse_custom_endpoint_config(conn.custom_endpoint_config)
             endpoint_url = current.get("endpoint_url")
@@ -1305,12 +1320,15 @@ class AdminAutomationService:
             provider = current.get("provider") or current.get("provider_hint")
             if "endpoint_url" in payload_data and spec.endpoint_url is not None:
                 endpoint_url = spec.endpoint_url.rstrip("/")
+                should_probe_iam = True
             if "region" in payload_data and spec.region is not None:
                 region = spec.region
+                should_probe_iam = True
             if "force_path_style" in payload_data and spec.force_path_style is not None:
                 force_path_style = bool(spec.force_path_style)
             if "verify_tls" in payload_data and spec.verify_tls is not None:
                 verify_tls = bool(spec.verify_tls)
+                should_probe_iam = True
             if "provider_hint" in payload_data and spec.provider_hint is not None:
                 provider = spec.provider_hint
             if not endpoint_url:
@@ -1322,8 +1340,13 @@ class AdminAutomationService:
                 verify_tls,
                 provider,
             )
-        if "iam_capable" in payload_data and spec.iam_capable is not None:
-            conn.iam_capable = bool(spec.iam_capable)
+        if "access_manager" in payload_data or "access_browser" in payload_data:
+            access_manager = bool(spec.access_manager) if "access_manager" in payload_data else bool(conn.access_manager)
+            access_browser = bool(spec.access_browser) if "access_browser" in payload_data else bool(conn.access_browser)
+            if not access_manager and not access_browser:
+                raise ValueError("At least one access flag must be enabled")
+            conn.access_manager = access_manager
+            conn.access_browser = access_browser
         if "credential_owner_type" in payload_data:
             conn.credential_owner_type = spec.credential_owner_type
         if "credential_owner_identifier" in payload_data:
@@ -1331,12 +1354,19 @@ class AdminAutomationService:
         if item.update_credentials:
             if "access_key_id" in payload_data and spec.access_key_id is not None:
                 conn.access_key_id = spec.access_key_id
+                should_probe_iam = True
             if "secret_access_key" in payload_data and spec.secret_access_key is not None:
                 conn.secret_access_key = spec.secret_access_key
+                should_probe_iam = True
+        if should_probe_iam:
+            self._refresh_detected_capabilities(conn)
         self.db.add(conn)
         self.db.commit()
         self.db.refresh(conn)
         return conn
+
+    def _refresh_detected_capabilities(self, conn: S3Connection) -> None:
+        refresh_connection_detected_capabilities(conn)
 
     def _find_storage_endpoint(self, item: StorageEndpointApply) -> Optional[StorageEndpoint]:
         match = item.match

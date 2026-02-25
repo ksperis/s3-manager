@@ -81,10 +81,6 @@ class UserS3Account(Base):
     is_root = Column(Boolean, nullable=False, default=False, server_default="0")
     account_role = Column(String, nullable=False, default=AccountRole.PORTAL_USER.value)
     account_admin = Column(Boolean, nullable=False, default=False, server_default="0")
-    can_manage_iam = Column(Boolean, nullable=False, default=False, server_default="0")
-    can_manage_buckets = Column(Boolean, nullable=False, default=True, server_default="1")
-    can_manage_portal_users = Column(Boolean, nullable=False, default=False, server_default="0")
-    can_view_root_key = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, nullable=False)
 

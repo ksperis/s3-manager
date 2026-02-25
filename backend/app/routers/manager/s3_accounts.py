@@ -12,10 +12,15 @@ from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_current_account_admin
 from app.services.s3_accounts_service import get_s3_accounts_service
 from app.services.s3_users_service import get_s3_users_service
+from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import resolve_connection_details
 from app.utils.storage_endpoint_features import features_to_capabilities, normalize_features_config
 
 router = APIRouter(prefix="/manager/accounts", tags=["manager-accounts"])
+
+
+def _connection_iam_capable(conn: S3Connection) -> bool:
+    return s3_connection_can_manage_iam(getattr(conn, "capabilities_json", None))
 
 
 @router.get("", response_model=list[S3AccountSchema])
@@ -161,7 +166,10 @@ def list_manager_accounts(
         )
 
     for conn in connections:
+        if not bool(conn.access_manager):
+            continue
         details = resolve_connection_details(conn)
+        can_manage_iam = _connection_iam_capable(conn)
         sns_enabled = False
         if conn.storage_endpoint:
             sns_enabled = bool(
@@ -190,7 +198,7 @@ def list_manager_accounts(
                     "usage": False,
                     "metrics": False,
                     "static_website": False,
-                    "iam": bool(conn.iam_capable),
+                    "iam": can_manage_iam,
                     "sns": sns_enabled,
                     "sse": False,
                 },

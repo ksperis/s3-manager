@@ -78,6 +78,7 @@ def test_login_s3_grants_iam_capability_when_iam_client_succeeds(monkeypatch, cl
     assert response.status_code == 200
     payload = response.json()
     assert payload["session"]["capabilities"]["can_manage_iam"] is True
+    assert payload["session"]["capabilities"]["access_browser"] is True
     assert payload["session"]["account_id"] == "RGW00000000000000001"
     assert payload["session"]["account_name"] == "tenant-alpha"
     assert db_session.query(S3Account).filter(S3Account.rgw_account_id == "RGW00000000000000001").first() is None
@@ -94,6 +95,7 @@ def test_login_s3_disables_iam_capability_when_iam_client_denied(monkeypatch, cl
     assert response.status_code == 200
     payload = response.json()
     assert payload["session"]["capabilities"]["can_manage_iam"] is False
+    assert payload["session"]["capabilities"]["access_browser"] is True
     assert db_session.query(S3Account).filter(S3Account.rgw_account_id == "RGW00000000000000001").first() is None
 
 

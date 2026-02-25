@@ -28,6 +28,7 @@ class SessionCapabilities(BaseModel):
     can_manage_iam: bool = False
     can_manage_buckets: bool = True
     can_view_traffic: bool = False
+    access_browser: bool = True
     endpoint_url: Optional[str] = None
 
     @field_validator("endpoint_url", mode="before")

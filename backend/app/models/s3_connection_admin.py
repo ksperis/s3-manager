@@ -6,9 +6,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class S3ConnectionAdminItem(BaseModel):
@@ -19,17 +19,19 @@ class S3ConnectionAdminItem(BaseModel):
     is_public: bool = False
     is_shared: bool = False
     visibility: Literal["private", "shared", "public"] = "private"
-    iam_capable: bool = False
+    access_manager: bool = False
+    access_browser: bool = True
     credential_owner_type: Optional[str] = None
     credential_owner_identifier: Optional[str] = None
     provider_hint: Optional[str] = None
     region: Optional[str] = None
     force_path_style: bool = False
     verify_tls: bool = True
+    capabilities: dict[str, Any] = Field(default_factory=dict)
     owner_user_id: Optional[int] = None
     owner_email: Optional[str] = None
     user_count: int = 0
-    user_ids: list[int] = []
+    user_ids: list[int] = Field(default_factory=list)
     last_used_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

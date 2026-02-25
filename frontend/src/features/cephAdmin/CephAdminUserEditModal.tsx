@@ -849,7 +849,8 @@ export default function CephAdminUserEditModal({
           defaultEndpointId={endpointId}
           defaultEndpointUrl={endpointUrl ?? null}
           defaultProviderHint="ceph"
-          defaultIamCapable={addConnectionDefaults.owner.iamCapable}
+          defaultAccessManager={false}
+          defaultAccessBrowser
           defaultOwnerType={addConnectionDefaults.owner.ownerType}
           defaultOwnerIdentifier={addConnectionDefaults.owner.ownerIdentifier}
           onClose={() => setShowAddConnectionModal(false)}

@@ -40,6 +40,8 @@ const defaultCreateConnectionForm = {
   region: "",
   access_key_id: "",
   secret_access_key: "",
+  access_manager: false,
+  access_browser: true,
   force_path_style: false,
   verify_tls: true,
 };
@@ -51,6 +53,8 @@ type ConnectionDraft = {
   provider_hint: string;
   endpoint_url: string;
   region: string;
+  access_manager: boolean;
+  access_browser: boolean;
   force_path_style: boolean;
   verify_tls: boolean;
   storage_endpoint_id?: number | null;
@@ -96,6 +100,8 @@ function buildConnectionDraft(connection: S3Connection): ConnectionDraft {
     provider_hint: connection.provider_hint ?? "",
     endpoint_url: connection.endpoint_url ?? "",
     region: connection.region ?? "",
+    access_manager: connection.access_manager === true,
+    access_browser: connection.access_browser !== false,
     force_path_style: Boolean(connection.force_path_style),
     verify_tls: connection.verify_tls !== false,
     storage_endpoint_id: connection.storage_endpoint_id ?? null,
@@ -560,6 +566,10 @@ export default function ProfilePage({
       setConnectionsError("S3 credentials are required.");
       return;
     }
+    if (!createConnectionForm.access_manager && !createConnectionForm.access_browser) {
+      setConnectionsError("Enable access to manager and/or browser.");
+      return;
+    }
     const storageEndpointId =
       createConnectionEndpointMode === "preset" && createConnectionEndpointId
         ? Number(createConnectionEndpointId)
@@ -575,6 +585,8 @@ export default function ProfilePage({
         region: storageEndpointId ? undefined : createConnectionForm.region.trim() || undefined,
         access_key_id: createConnectionForm.access_key_id.trim(),
         secret_access_key: createConnectionForm.secret_access_key,
+        access_manager: createConnectionForm.access_manager,
+        access_browser: createConnectionForm.access_browser,
         force_path_style: storageEndpointId ? undefined : createConnectionForm.force_path_style,
         verify_tls: storageEndpointId ? undefined : createConnectionForm.verify_tls,
         visibility: "private",
@@ -632,6 +644,10 @@ export default function ProfilePage({
       setConnectionsError("Endpoint URL is required.");
       return false;
     }
+    if (!draft.access_manager && !draft.access_browser) {
+      setConnectionsError("Enable access to manager and/or browser.");
+      return false;
+    }
     setSavingConnectionBusyId(connectionId);
     try {
       await updateConnection(connectionId, {
@@ -639,6 +655,8 @@ export default function ProfilePage({
         provider_hint: draft.provider_hint.trim() || undefined,
         endpoint_url: draft.storage_endpoint_id ? undefined : draft.endpoint_url.trim(),
         region: draft.region.trim() || undefined,
+        access_manager: draft.access_manager,
+        access_browser: draft.access_browser,
         force_path_style: draft.force_path_style,
         verify_tls: draft.verify_tls,
       });
@@ -1246,6 +1264,34 @@ export default function ProfilePage({
                   placeholder="********"
                 />
               </label>
+              <div className="sm:col-span-2 space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace access</p>
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={createConnectionForm.access_manager}
+                      onChange={(event) =>
+                        setCreateConnectionForm((prev) => ({ ...prev, access_manager: event.target.checked }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    Access manager
+                  </label>
+                  <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={createConnectionForm.access_browser}
+                      onChange={(event) =>
+                        setCreateConnectionForm((prev) => ({ ...prev, access_browser: event.target.checked }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    Access browser
+                  </label>
+                </div>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">At least one access must be enabled.</p>
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <button
@@ -1372,6 +1418,34 @@ export default function ProfilePage({
                       />
                       Verify TLS
                     </label>
+                  </div>
+                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace access</p>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draft.access_manager)}
+                          onChange={(event) =>
+                            handleUpdateConnectionDraft(editingConnection.id, "access_manager", event.target.checked)
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        Access manager
+                      </label>
+                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draft.access_browser)}
+                          onChange={(event) =>
+                            handleUpdateConnectionDraft(editingConnection.id, "access_browser", event.target.checked)
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        Access browser
+                      </label>
+                    </div>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">At least one access must be enabled.</p>
                   </div>
                 </>
               );

@@ -860,7 +860,8 @@ export default function ManagerUsersPage() {
           defaultName={addConnectionDefaults.name}
           defaultEndpointId={addConnectionDefaults.endpointId}
           defaultEndpointUrl={addConnectionDefaults.endpointUrl}
-          defaultIamCapable={addConnectionDefaults.owner.iamCapable}
+          defaultAccessManager={false}
+          defaultAccessBrowser
           defaultOwnerType={addConnectionDefaults.owner.ownerType}
           defaultOwnerIdentifier={addConnectionDefaults.owner.ownerIdentifier}
           onClose={() => setShowAddConnectionModal(false)}

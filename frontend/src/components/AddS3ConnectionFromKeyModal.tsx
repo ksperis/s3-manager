@@ -22,7 +22,8 @@ type Props = {
   defaultEndpointUrl?: string | null;
   defaultRegion?: string | null;
   defaultProviderHint?: string | null;
-  defaultIamCapable?: boolean;
+  defaultAccessManager?: boolean;
+  defaultAccessBrowser?: boolean;
   defaultOwnerType?: string | null;
   defaultOwnerIdentifier?: string | null;
   onClose: () => void;
@@ -67,7 +68,8 @@ export default function AddS3ConnectionFromKeyModal({
   defaultEndpointUrl,
   defaultRegion,
   defaultProviderHint,
-  defaultIamCapable = false,
+  defaultAccessManager = false,
+  defaultAccessBrowser = true,
   defaultOwnerType,
   defaultOwnerIdentifier,
   onClose,
@@ -94,7 +96,8 @@ export default function AddS3ConnectionFromKeyModal({
     provider_hint: "",
     force_path_style: false,
     verify_tls: true,
-    iam_capable: false,
+    access_manager: false,
+    access_browser: true,
   });
 
   useEffect(() => {
@@ -111,12 +114,14 @@ export default function AddS3ConnectionFromKeyModal({
       provider_hint: normalizeProviderHint(defaultProviderHint),
       force_path_style: false,
       verify_tls: true,
-      iam_capable: Boolean(defaultIamCapable),
+      access_manager: Boolean(defaultAccessManager),
+      access_browser: defaultAccessBrowser !== false,
     });
   }, [
     defaultEndpointId,
     defaultEndpointUrl,
-    defaultIamCapable,
+    defaultAccessBrowser,
+    defaultAccessManager,
     defaultName,
     defaultProviderHint,
     defaultRegion,
@@ -225,6 +230,10 @@ export default function AddS3ConnectionFromKeyModal({
       setError("Endpoint URL is required.");
       return;
     }
+    if (!form.access_manager && !form.access_browser) {
+      setError("Enable access to manager and/or browser.");
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -240,7 +249,8 @@ export default function AddS3ConnectionFromKeyModal({
         verify_tls: !resolvedStorageEndpointId ? form.verify_tls : undefined,
         access_key_id: accessKeyId.trim(),
         secret_access_key: secretAccessKey.trim(),
-        iam_capable: Boolean(form.iam_capable),
+        access_manager: Boolean(form.access_manager),
+        access_browser: Boolean(form.access_browser),
         credential_owner_type: defaultOwnerType || null,
         credential_owner_identifier: defaultOwnerIdentifier || null,
       });
@@ -398,16 +408,26 @@ export default function AddS3ConnectionFromKeyModal({
         )}
 
         <section className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-          <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Metadata</div>
+          <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access</div>
           <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
             <input
               type="checkbox"
-              checked={form.iam_capable}
-              onChange={(event) => setForm((prev) => ({ ...prev, iam_capable: event.target.checked }))}
+              checked={form.access_manager}
+              onChange={(event) => setForm((prev) => ({ ...prev, access_manager: event.target.checked }))}
               className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
             />
-            IAM-compatible credentials
+            Access manager
           </label>
+          <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+            <input
+              type="checkbox"
+              checked={form.access_browser}
+              onChange={(event) => setForm((prev) => ({ ...prev, access_browser: event.target.checked }))}
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+            Access browser
+          </label>
+          <p className="ui-caption text-slate-500 dark:text-slate-300">At least one access must be enabled.</p>
           {ownerSummary && <p className="ui-caption text-slate-500 dark:text-slate-300">Owner metadata: {ownerSummary}</p>}
         </section>
 

@@ -164,7 +164,8 @@ class S3ConnectionSpec(BaseModel):
     verify_tls: Optional[bool] = None
     is_public: Optional[bool] = None
     is_shared: Optional[bool] = None
-    iam_capable: Optional[bool] = None
+    access_manager: Optional[bool] = None
+    access_browser: Optional[bool] = None
     credential_owner_type: Optional[str] = None
     credential_owner_identifier: Optional[str] = None
     access_key_id: Optional[str] = None

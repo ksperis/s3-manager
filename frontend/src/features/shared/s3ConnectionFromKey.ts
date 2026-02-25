@@ -7,7 +7,6 @@ import type { ExecutionContext } from "../../api/executionContexts";
 export type S3ConnectionOwnerDefaults = {
   ownerType: string;
   ownerIdentifier: string;
-  iamCapable: boolean;
 };
 
 export const accessKeySuffix = (accessKey: string): string => accessKey.trim().slice(-4);
@@ -39,7 +38,6 @@ export const buildManagerConnectionDefaults = (
     owner: {
       ownerType,
       ownerIdentifier,
-      iamCapable: true,
     },
   };
 };
@@ -62,7 +60,6 @@ export const buildCephConnectionDefaults = (
     owner: {
       ownerType,
       ownerIdentifier,
-      iamCapable: Boolean(accountId),
     },
   };
 };

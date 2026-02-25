@@ -10,6 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.db.s3_connection import S3Connection as DBS3Connection, UserS3Connection
 from app.models.s3_connection import S3Connection, S3ConnectionCreate, S3ConnectionUpdate
+from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
+from app.utils.s3_connection_capabilities import (
+    parse_s3_connection_capabilities,
+    s3_connection_can_manage_iam,
+)
 from app.utils.s3_connection_visibility import normalize_visibility, visibility_from_flags
 from app.utils.s3_connection_endpoint import (
     build_custom_endpoint_config,
@@ -75,6 +80,7 @@ class S3ConnectionsService:
         row = self.get_owned(user_id, connection_id)
         row.access_key_id = access_key_id
         row.secret_access_key = secret_access_key
+        self._refresh_detected_capabilities(row)
         row.updated_at = utcnow()
         self.db.commit()
         self.db.refresh(row)
@@ -127,6 +133,8 @@ class S3ConnectionsService:
             storage_endpoint_id=storage_endpoint_id,
             custom_endpoint_config=None,
             is_public=False,
+            access_manager=False,
+            access_browser=True,
             is_temporary=True,
             access_key_id=access_key_id,
             secret_access_key=secret_access_key,
@@ -172,6 +180,10 @@ class S3ConnectionsService:
                 verify_tls,
                 payload.provider_hint,
             )
+        access_manager, access_browser = self._resolve_access_flags(
+            access_manager=payload.access_manager,
+            access_browser=payload.access_browser,
+        )
         row = DBS3Connection(
             owner_user_id=None if is_public else user_id,
             name=payload.name,
@@ -179,7 +191,8 @@ class S3ConnectionsService:
             custom_endpoint_config=custom_endpoint_config,
             is_public=is_public,
             is_shared=is_shared,
-            iam_capable=bool(payload.iam_capable),
+            access_manager=access_manager,
+            access_browser=access_browser,
             credential_owner_type=payload.credential_owner_type,
             credential_owner_identifier=payload.credential_owner_identifier,
             access_key_id=payload.access_key_id,
@@ -189,6 +202,8 @@ class S3ConnectionsService:
             updated_at=utcnow(),
         )
         self.db.add(row)
+        self.db.flush()
+        self._refresh_detected_capabilities(row)
         self.db.commit()
         self.db.refresh(row)
         return self._to_model(row)
@@ -196,6 +211,7 @@ class S3ConnectionsService:
     def update(self, user_id: int, connection_id: int, payload: S3ConnectionUpdate) -> S3Connection:
         row = self.get_owned(user_id, connection_id)
         payload_data = payload.model_dump(exclude_unset=True)
+        should_probe_iam = False
         if payload.name is not None:
             row.name = payload.name
         if {"visibility", "is_public", "is_shared"} & set(payload_data.keys()):
@@ -221,6 +237,7 @@ class S3ConnectionsService:
             row.storage_endpoint_id = payload.storage_endpoint_id
             if payload.storage_endpoint_id is not None:
                 row.custom_endpoint_config = None
+            should_probe_iam = True
         if row.storage_endpoint_id is None:
             current = parse_custom_endpoint_config(row.custom_endpoint_config)
             endpoint_url = current.get("endpoint_url")
@@ -230,12 +247,15 @@ class S3ConnectionsService:
             provider = current.get("provider") or current.get("provider_hint")
             if payload.endpoint_url is not None:
                 endpoint_url = payload.endpoint_url.rstrip("/")
+                should_probe_iam = True
             if payload.region is not None:
                 region = payload.region
+                should_probe_iam = True
             if payload.force_path_style is not None:
                 force_path_style = bool(payload.force_path_style)
             if payload.verify_tls is not None:
                 verify_tls = bool(payload.verify_tls)
+                should_probe_iam = True
             if payload.provider_hint is not None:
                 provider = payload.provider_hint
             row.custom_endpoint_config = build_custom_endpoint_config(
@@ -247,14 +267,23 @@ class S3ConnectionsService:
             )
         if payload.access_key_id is not None:
             row.access_key_id = payload.access_key_id
+            should_probe_iam = True
         if payload.secret_access_key is not None:
             row.secret_access_key = payload.secret_access_key
-        if payload.iam_capable is not None:
-            row.iam_capable = bool(payload.iam_capable)
+            should_probe_iam = True
+        if "access_manager" in payload_data or "access_browser" in payload_data:
+            access_manager, access_browser = self._resolve_access_flags(
+                access_manager=payload.access_manager if "access_manager" in payload_data else bool(row.access_manager),
+                access_browser=payload.access_browser if "access_browser" in payload_data else bool(row.access_browser),
+            )
+            row.access_manager = access_manager
+            row.access_browser = access_browser
         if "credential_owner_type" in payload_data:
             row.credential_owner_type = payload.credential_owner_type
         if "credential_owner_identifier" in payload_data:
             row.credential_owner_identifier = payload.credential_owner_identifier
+        if should_probe_iam:
+            self._refresh_detected_capabilities(row)
         row.updated_at = utcnow()
         self.db.commit()
         self.db.refresh(row)
@@ -267,7 +296,7 @@ class S3ConnectionsService:
 
     def get_capabilities(self, user_id: int, connection_id: int) -> dict[str, Any]:
         row = self.get_visible(user_id, connection_id)
-        return self._parse_capabilities(row.capabilities_json)
+        return self._capabilities(row)
 
     def set_capabilities(self, user_id: int, connection_id: int, caps: dict[str, Any]) -> None:
         row = self.get_owned(user_id, connection_id)
@@ -276,13 +305,25 @@ class S3ConnectionsService:
         self.db.commit()
 
     def _parse_capabilities(self, value: Optional[str]) -> dict[str, Any]:
-        if not value:
-            return {}
-        try:
-            parsed = json.loads(value)
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
+        return parse_s3_connection_capabilities(value)
+
+    def _resolve_access_flags(self, *, access_manager: Optional[bool], access_browser: Optional[bool]) -> tuple[bool, bool]:
+        manager = bool(access_manager)
+        browser = bool(access_browser)
+        if not manager and not browser:
+            raise ValueError("At least one access flag must be enabled")
+        return manager, browser
+
+    def _refresh_detected_capabilities(self, row: DBS3Connection) -> None:
+        refresh_connection_detected_capabilities(row)
+
+    def _can_manage_iam(self, row: DBS3Connection) -> bool:
+        return s3_connection_can_manage_iam(row.capabilities_json)
+
+    def _capabilities(self, row: DBS3Connection) -> dict[str, Any]:
+        caps = self._parse_capabilities(row.capabilities_json)
+        caps["can_manage_iam"] = self._can_manage_iam(row)
+        return caps
 
     def _to_model(self, row: DBS3Connection) -> S3Connection:
         masked_access_key = self._mask_access_key_id(row.access_key_id)
@@ -295,7 +336,8 @@ class S3ConnectionsService:
             is_public=bool(row.is_public),
             is_shared=bool(row.is_shared),
             visibility=visibility_from_flags(is_public=bool(row.is_public), is_shared=bool(row.is_shared)),
-            iam_capable=bool(row.iam_capable),
+            access_manager=bool(row.access_manager),
+            access_browser=bool(row.access_browser),
             credential_owner_type=row.credential_owner_type,
             credential_owner_identifier=row.credential_owner_identifier,
             endpoint_url=details.endpoint_url or "",
@@ -303,7 +345,7 @@ class S3ConnectionsService:
             access_key_id=masked_access_key,
             force_path_style=details.force_path_style,
             verify_tls=details.verify_tls,
-            capabilities=self._parse_capabilities(row.capabilities_json),
+            capabilities=self._capabilities(row),
             created_at=row.created_at,
             updated_at=row.updated_at,
             last_used_at=row.last_used_at,

@@ -82,11 +82,15 @@ def create_connection(
                 "endpoint_url": created.endpoint_url,
                 "provider_hint": created.provider_hint,
                 "visibility": created.visibility,
-                "iam_capable": created.iam_capable,
+                "access_manager": created.access_manager,
+                "access_browser": created.access_browser,
+                "can_manage_iam": bool((created.capabilities or {}).get("can_manage_iam", False)),
                 "access_key_id": created.access_key_id,
             },
         )
         return created
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except Exception as exc:
         # Avoid leaking internal details or sensitive hints.
         raise HTTPException(
@@ -137,12 +141,16 @@ def update_connection(
                 "endpoint_url": updated.endpoint_url,
                 "provider_hint": updated.provider_hint,
                 "visibility": updated.visibility,
-                "iam_capable": updated.iam_capable,
+                "access_manager": updated.access_manager,
+                "access_browser": updated.access_browser,
+                "can_manage_iam": bool((updated.capabilities or {}).get("can_manage_iam", False)),
             },
         )
         return updated
     except KeyError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.put("/{connection_id}/credentials", response_model=S3Connection)

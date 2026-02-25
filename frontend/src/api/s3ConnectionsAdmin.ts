@@ -13,7 +13,9 @@ export type S3ConnectionAdminItem = {
   is_public?: boolean | null;
   is_shared?: boolean | null;
   visibility?: "private" | "shared" | "public" | null;
-  iam_capable?: boolean | null;
+  access_manager?: boolean | null;
+  access_browser?: boolean | null;
+  capabilities?: Record<string, unknown> | null;
   credential_owner_type?: string | null;
   credential_owner_identifier?: string | null;
   provider_hint?: string | null;
@@ -55,7 +57,8 @@ export type CreateS3ConnectionPayload = {
   storage_endpoint_id?: number | null;
   is_public?: boolean | null;
   is_shared?: boolean | null;
-  iam_capable?: boolean | null;
+  access_manager?: boolean | null;
+  access_browser?: boolean | null;
   credential_owner_type?: string | null;
   credential_owner_identifier?: string | null;
   endpoint_url?: string | null;
@@ -73,7 +76,8 @@ export type UpdateS3ConnectionPayload = {
   storage_endpoint_id?: number | null;
   is_public?: boolean | null;
   is_shared?: boolean | null;
-  iam_capable?: boolean | null;
+  access_manager?: boolean | null;
+  access_browser?: boolean | null;
   credential_owner_type?: string | null;
   credential_owner_identifier?: string | null;
   endpoint_url?: string | null;

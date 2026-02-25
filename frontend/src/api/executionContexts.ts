@@ -7,7 +7,7 @@ import client from "./client";
 export type ExecutionContextKind = "account" | "connection" | "legacy_user";
 
 export type ExecutionContextCapabilities = {
-  iam_capable: boolean;
+  can_manage_iam: boolean;
   sts_capable: boolean;
   admin_api_capable: boolean;
 };

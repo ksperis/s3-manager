@@ -23,7 +23,12 @@ export type LoginResponse = {
     s3_users?: number[] | null;
     s3_user_details?: { id: number; name: string }[] | null;
     s3_connections?: number[] | null;
-    s3_connection_details?: { id: number; name: string; iam_capable?: boolean | null }[] | null;
+    s3_connection_details?: {
+      id: number;
+      name: string;
+      access_manager?: boolean | null;
+      access_browser?: boolean | null;
+    }[] | null;
     auth_provider?: string | null;
   };
 };
@@ -32,6 +37,7 @@ export type SessionCapabilities = {
   can_manage_iam: boolean;
   can_manage_buckets: boolean;
   can_view_traffic: boolean;
+  access_browser: boolean;
   endpoint_url?: string | null;
 };
 

@@ -2,7 +2,6 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 from dataclasses import dataclass
-from datetime import datetime
 import logging
 from typing import Optional, Union
 
@@ -36,6 +35,7 @@ from app.services.audit_service import AuditService, get_audit_service as build_
 from app.services.api_token_service import ApiTokenService
 from app.services.session_service import SessionService
 from app.services.storage_endpoints_service import get_storage_endpoints_service
+from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.rgw import has_supervision_credentials
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
 from app.utils.s3_connection_endpoint import resolve_connection_endpoint
@@ -204,6 +204,10 @@ def _build_s3_connection_account(conn: S3Connection) -> S3Account:
     return account
 
 
+def _connection_iam_capable(conn: S3Connection) -> bool:
+    return s3_connection_can_manage_iam(getattr(conn, "capabilities_json", None))
+
+
 def _build_s3_user_account(s3_user: S3User) -> S3Account:
     account = S3Account(
         name=s3_user.name,
@@ -285,8 +289,10 @@ def _resolve_connection_context(db: Session, user: User, connection_id: int, *, 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
     if conn.is_temporary and conn.expires_at and conn.expires_at <= utcnow():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Connection expired")
-    if surface == "manager" and not bool(conn.iam_capable):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IAM-capable S3Connection is required in manager workspace")
+    if surface == "manager" and not bool(conn.access_manager):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This S3Connection cannot be used in manager workspace")
+    if surface == "browser" and not bool(conn.access_browser):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This S3Connection cannot be used in browser workspace")
     if not conn.is_public and conn.owner_user_id != user.id:
         link = (
             db.query(UserS3Connection)
@@ -309,10 +315,11 @@ def _resolve_connection_context(db: Session, user: User, connection_id: int, *, 
         db.rollback()
     account = _build_s3_connection_account(conn)
     account.set_session_credentials(conn.access_key_id, conn.secret_access_key)
+    can_manage_iam = _connection_iam_capable(conn)
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
         can_manage_buckets=True,
         can_manage_portal_users=False,
-        can_manage_iam=bool(conn.iam_capable),
+        can_manage_iam=can_manage_iam,
         can_view_root_key=False,
         using_root_key=False,
     )
@@ -599,8 +606,8 @@ def _membership_capabilities(link: Optional[UserS3Account], actor: ManagerActor)
         is_account_admin = bool(link.account_admin or link.is_root)
         can_manage_portal_users = role == AccountRole.PORTAL_MANAGER.value
         can_manage_buckets = role == AccountRole.PORTAL_MANAGER.value
-        can_manage_iam = bool(role == AccountRole.PORTAL_MANAGER.value or link.can_manage_iam or is_account_admin)
-        can_view_root_key = bool(link.can_view_root_key or is_account_admin)
+        can_manage_iam = bool(can_manage_portal_users or is_account_admin)
+        can_view_root_key = is_account_admin
         return role, AccountCapabilities(
             can_manage_buckets=can_manage_buckets,
             can_manage_portal_users=can_manage_portal_users,

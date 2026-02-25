@@ -25,7 +25,12 @@ export type User = {
   s3_users?: number[];
   s3_user_details?: { id: number; name: string }[];
   s3_connections?: number[];
-  s3_connection_details?: { id: number; name: string; iam_capable?: boolean | null }[];
+  s3_connection_details?: {
+    id: number;
+    name: string;
+    access_manager?: boolean | null;
+    access_browser?: boolean | null;
+  }[];
   is_active?: boolean;
   is_root?: boolean;
   auth_provider?: string | null;

@@ -3,7 +3,6 @@
 from app.utils.time import utcnow
 from sqlalchemy.orm import Session
 import logging
-from datetime import datetime
 
 from app.db import (
     AccountIAMUser,
@@ -36,7 +35,6 @@ from app.utils.storage_endpoint_features import (
     resolve_admin_endpoint,
     resolve_feature_flags,
 )
-from app.core.security import get_password_hash
 from app.db import UserRole
 import random
 from typing import Optional, Any
@@ -898,13 +896,6 @@ class S3AccountsService:
                     )
                 db_link.account_role = account_role
                 db_link.account_admin = account_admin
-                db_link.can_manage_buckets = db_link.account_admin or account_role in {
-                    AccountRole.PORTAL_MANAGER.value,
-                    AccountRole.PORTAL_USER.value,
-                }
-                db_link.can_manage_portal_users = db_link.account_admin or account_role == AccountRole.PORTAL_MANAGER.value
-                db_link.can_manage_iam = db_link.can_manage_portal_users
-                db_link.can_view_root_key = bool(db_link.account_admin or db_link.can_manage_portal_users or db_link.can_manage_iam)
                 db_link.updated_at = utcnow()
                 self.db.add(db_link)
 

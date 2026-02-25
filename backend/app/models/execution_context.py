@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 
 class ExecutionContextCapabilities(BaseModel):
-    iam_capable: bool
+    can_manage_iam: bool
     sts_capable: bool
     admin_api_capable: bool
 

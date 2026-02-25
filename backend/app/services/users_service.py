@@ -1,7 +1,6 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
-from datetime import datetime
 from typing import Optional
 import logging
 
@@ -230,15 +229,27 @@ class UsersService:
         rows = self.db.query(S3User.id, S3User.name).filter(S3User.id.in_(ids)).all()
         return {row[0]: row[1] for row in rows}
 
-    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, tuple[str, bool]]:
+    def _load_s3_connection_names(self, ids: list[int]) -> dict[int, tuple[str, bool, bool]]:
         if not ids:
             return {}
         rows = (
-            self.db.query(S3Connection.id, S3Connection.name, S3Connection.iam_capable)
+            self.db.query(
+                S3Connection.id,
+                S3Connection.name,
+                S3Connection.access_manager,
+                S3Connection.access_browser,
+            )
             .filter(S3Connection.id.in_(ids))
             .all()
         )
-        return {row[0]: (row[1], bool(row[2])) for row in rows}
+        return {
+            row[0]: (
+                row[1],
+                bool(row[2]),
+                bool(row[3]),
+            )
+            for row in rows
+        }
 
     def paginate_users(
         self,
@@ -358,11 +369,11 @@ class UsersService:
             else:
                 desired_account_role = AccountRole.PORTAL_NONE.value
         else:
-                desired_account_role = account_role or (
-                    AccountRole.PORTAL_MANAGER.value
-                    if is_admin_ui_role(user.role)
-                    else AccountRole.PORTAL_USER.value
-                )
+            desired_account_role = account_role or (
+                AccountRole.PORTAL_MANAGER.value
+                if is_admin_ui_role(user.role)
+                else AccountRole.PORTAL_USER.value
+            )
         if desired_account_role not in {role.value for role in AccountRole}:
             raise ValueError("Invalid account role")
         # Keep platform role untouched unless explicitly overridden
@@ -380,13 +391,6 @@ class UsersService:
         link.account_role = desired_account_role
         link.is_root = bool(account_root)
         link.account_admin = bool(account_admin if account_admin is not None else link.account_admin or account_root)
-        link.can_manage_buckets = link.account_admin or desired_account_role in {
-            AccountRole.PORTAL_MANAGER.value,
-            AccountRole.PORTAL_USER.value,
-        }
-        link.can_manage_portal_users = link.account_admin or desired_account_role == AccountRole.PORTAL_MANAGER.value
-        link.can_manage_iam = link.can_manage_portal_users or link.account_admin
-        link.can_view_root_key = bool(link.account_admin or link.is_root or link.can_manage_portal_users or link.can_manage_iam)
         link.updated_at = utcnow()
         self.db.add(link)
         self.db.add(user)
@@ -409,7 +413,7 @@ class UsersService:
         *,
         s3_user_labels: Optional[dict[int, str]] = None,
         preloaded_s3_links: Optional[dict[int, list[int]]] = None,
-        s3_connection_labels: Optional[dict[int, tuple[str, bool]]] = None,
+        s3_connection_labels: Optional[dict[int, tuple[str, bool, bool]]] = None,
         preloaded_connection_links: Optional[dict[int, list[int]]] = None,
     ) -> UserOut:
         account_ids: list[int] = []
@@ -462,7 +466,7 @@ class UsersService:
             s3_user_names = s3_user_labels
         else:
             s3_user_names = self._load_s3_user_names(s3_user_ids)
-        s3_connection_names: dict[int, tuple[str, bool]]
+        s3_connection_names: dict[int, tuple[str, bool, bool]]
         if s3_connection_labels is not None:
             s3_connection_names = s3_connection_labels
         else:
@@ -476,12 +480,22 @@ class UsersService:
             connection_details = s3_connection_names.get(conn_id)
             if connection_details is None:
                 s3_connection_details.append(
-                    LinkedS3Connection(id=conn_id, name=f"Connection #{conn_id}", iam_capable=None)
+                    LinkedS3Connection(
+                        id=conn_id,
+                        name=f"Connection #{conn_id}",
+                        access_manager=None,
+                        access_browser=None,
+                    )
                 )
                 continue
-            label, iam_capable = connection_details
+            label, access_manager, access_browser = connection_details
             s3_connection_details.append(
-                LinkedS3Connection(id=conn_id, name=label or f"Connection #{conn_id}", iam_capable=iam_capable)
+                LinkedS3Connection(
+                    id=conn_id,
+                    name=label or f"Connection #{conn_id}",
+                    access_manager=access_manager,
+                    access_browser=access_browser,
+                )
             )
         return UserOut(
             id=user.id,

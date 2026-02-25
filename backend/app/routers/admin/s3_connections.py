@@ -2,8 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 
 from app.utils.time import utcnow
+import json
 import logging
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -22,6 +22,11 @@ from app.models.s3_connection_admin import (
 )
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService
+from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
+from app.utils.s3_connection_capabilities import (
+    parse_s3_connection_capabilities,
+    s3_connection_can_manage_iam,
+)
 from app.utils.s3_connection_endpoint import (
     build_custom_endpoint_config,
     parse_custom_endpoint_config,
@@ -59,6 +64,66 @@ def _linked_user_ids(db: Session, connection_id: int) -> list[int]:
         .all()
     )
     return sorted([row[0] for row in rows])
+
+
+def _parse_capabilities(value: Optional[str]) -> dict:
+    return parse_s3_connection_capabilities(value)
+
+
+def _resolve_access_flags(*, access_manager: Optional[bool], access_browser: Optional[bool]) -> tuple[bool, bool]:
+    manager = bool(access_manager)
+    browser = bool(access_browser)
+    if not manager and not browser:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one access flag must be enabled",
+        )
+    return manager, browser
+
+
+def _refresh_detected_capabilities(conn: S3Connection) -> None:
+    refresh_connection_detected_capabilities(conn)
+
+
+def _connection_iam_capable(conn: S3Connection) -> bool:
+    return s3_connection_can_manage_iam(conn.capabilities_json)
+
+
+def _to_admin_item(
+    conn: S3Connection,
+    *,
+    owner_email: Optional[str],
+    user_count: int,
+    user_ids: list[int],
+) -> S3ConnectionAdminItem:
+    details = resolve_connection_details(conn)
+    capabilities = _parse_capabilities(conn.capabilities_json)
+    capabilities["can_manage_iam"] = _connection_iam_capable(conn)
+    return S3ConnectionAdminItem(
+        id=conn.id,
+        name=conn.name,
+        storage_endpoint_id=conn.storage_endpoint_id,
+        endpoint_url=details.endpoint_url or "",
+        is_public=bool(conn.is_public),
+        is_shared=bool(conn.is_shared),
+        visibility=visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared)),
+        access_manager=bool(conn.access_manager),
+        access_browser=bool(conn.access_browser),
+        credential_owner_type=conn.credential_owner_type,
+        credential_owner_identifier=conn.credential_owner_identifier,
+        provider_hint=details.provider,
+        region=details.region,
+        force_path_style=details.force_path_style,
+        verify_tls=details.verify_tls,
+        owner_user_id=conn.owner_user_id,
+        owner_email=owner_email,
+        user_count=int(user_count),
+        user_ids=sorted(user_ids),
+        last_used_at=conn.last_used_at,
+        created_at=conn.created_at,
+        updated_at=conn.updated_at,
+        capabilities=capabilities,
+    )
 
 
 @router.get("", response_model=PaginatedS3ConnectionsResponse)
@@ -127,30 +192,12 @@ def list_s3_connections(
             user_ids_by_connection.setdefault(conn_id, []).append(user_id)
     items: list[S3ConnectionAdminItem] = []
     for conn, user_count, owner_email in rows:
-        details = resolve_connection_details(conn)
         items.append(
-            S3ConnectionAdminItem(
-                id=conn.id,
-                name=conn.name,
-                storage_endpoint_id=conn.storage_endpoint_id,
-                endpoint_url=details.endpoint_url or "",
-                is_public=bool(conn.is_public),
-                is_shared=bool(conn.is_shared),
-                visibility=visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared)),
-                iam_capable=bool(conn.iam_capable),
-                credential_owner_type=conn.credential_owner_type,
-                credential_owner_identifier=conn.credential_owner_identifier,
-                provider_hint=details.provider,
-                region=details.region,
-                force_path_style=details.force_path_style,
-                verify_tls=details.verify_tls,
-                owner_user_id=conn.owner_user_id,
+            _to_admin_item(
+                conn,
                 owner_email=owner_email,
                 user_count=int(user_count or 0),
-                user_ids=sorted(user_ids_by_connection.get(conn.id, [])),
-                last_used_at=conn.last_used_at,
-                created_at=conn.created_at,
-                updated_at=conn.updated_at,
+                user_ids=user_ids_by_connection.get(conn.id, []),
             )
         )
     has_next = page * page_size < total
@@ -231,6 +278,10 @@ def create_s3_connection(
     )
     is_public = visibility == "public"
     is_shared = visibility == "shared"
+    access_manager, access_browser = _resolve_access_flags(
+        access_manager=payload.access_manager,
+        access_browser=payload.access_browser,
+    )
     owner_user_id = None if is_public else current_user.id
     conn = S3Connection(
         owner_user_id=owner_user_id,
@@ -239,16 +290,20 @@ def create_s3_connection(
         custom_endpoint_config=custom_endpoint_config,
         is_public=is_public,
         is_shared=is_shared,
-        iam_capable=bool(payload.iam_capable),
+        access_manager=access_manager,
+        access_browser=access_browser,
         credential_owner_type=payload.credential_owner_type,
         credential_owner_identifier=payload.credential_owner_identifier,
         access_key_id=payload.access_key_id,
         secret_access_key=payload.secret_access_key,
+        capabilities_json=json.dumps({}),
         created_at=utcnow(),
         updated_at=utcnow(),
     )
-    db.add(conn)
     try:
+        db.add(conn)
+        db.flush()
+        _refresh_detected_capabilities(conn)
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -266,32 +321,17 @@ def create_s3_connection(
                 "endpoint_url": details.endpoint_url,
                 "provider_hint": details.provider,
                 "visibility": visibility,
-                "iam_capable": bool(conn.iam_capable),
+                "access_manager": bool(conn.access_manager),
+                "access_browser": bool(conn.access_browser),
+                "can_manage_iam": _connection_iam_capable(conn),
                 "access_key_id": _mask_access_key(conn.access_key_id),
             },
         )
-    return S3ConnectionAdminItem(
-        id=conn.id,
-        name=conn.name,
-        storage_endpoint_id=conn.storage_endpoint_id,
-        endpoint_url=details.endpoint_url or "",
-        is_public=bool(conn.is_public),
-        is_shared=bool(conn.is_shared),
-        visibility=visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared)),
-        iam_capable=bool(conn.iam_capable),
-        credential_owner_type=conn.credential_owner_type,
-        credential_owner_identifier=conn.credential_owner_identifier,
-        provider_hint=details.provider,
-        region=details.region,
-        force_path_style=details.force_path_style,
-        verify_tls=details.verify_tls,
-        owner_user_id=conn.owner_user_id,
+    return _to_admin_item(
+        conn,
         owner_email=None if conn.is_public else current_user.email,
         user_count=0,
         user_ids=[],
-        last_used_at=conn.last_used_at,
-        created_at=conn.created_at,
-        updated_at=conn.updated_at,
     )
 
 
@@ -310,6 +350,7 @@ def update_s3_connection(
     if payload.name is not None:
         conn.name = payload.name
     payload_data = payload.model_dump(exclude_unset=True)
+    should_probe_iam = False
     if {"visibility", "is_public", "is_shared"} & set(payload_data.keys()):
         visibility = normalize_visibility(
             visibility=payload.visibility if "visibility" in payload_data else None,
@@ -335,10 +376,12 @@ def update_s3_connection(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage endpoint not found")
         conn.storage_endpoint_id = storage_endpoint.id
         conn.custom_endpoint_config = None
+        should_probe_iam = True
     elif payload.storage_endpoint_id is None and "storage_endpoint_id" in payload_data:
         conn.storage_endpoint_id = None
         if not payload.endpoint_url and not conn.custom_endpoint_config:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Endpoint URL is required for manual connections")
+        should_probe_iam = True
     if conn.storage_endpoint_id is None:
         current = parse_custom_endpoint_config(conn.custom_endpoint_config)
         endpoint_url = current.get("endpoint_url")
@@ -348,12 +391,15 @@ def update_s3_connection(
         provider = current.get("provider") or current.get("provider_hint")
         if payload.endpoint_url is not None:
             endpoint_url = payload.endpoint_url.rstrip("/")
+            should_probe_iam = True
         if payload.region is not None:
             region = payload.region
+            should_probe_iam = True
         if payload.force_path_style is not None:
             force_path_style = bool(payload.force_path_style)
         if payload.verify_tls is not None:
             verify_tls = bool(payload.verify_tls)
+            should_probe_iam = True
         if payload.provider_hint is not None:
             provider = payload.provider_hint
         conn.custom_endpoint_config = build_custom_endpoint_config(
@@ -363,12 +409,19 @@ def update_s3_connection(
             verify_tls,
             provider,
         )
-    if "iam_capable" in payload_data and payload.iam_capable is not None:
-        conn.iam_capable = bool(payload.iam_capable)
+    if "access_manager" in payload_data or "access_browser" in payload_data:
+        access_manager, access_browser = _resolve_access_flags(
+            access_manager=payload.access_manager if "access_manager" in payload_data else bool(conn.access_manager),
+            access_browser=payload.access_browser if "access_browser" in payload_data else bool(conn.access_browser),
+        )
+        conn.access_manager = access_manager
+        conn.access_browser = access_browser
     if "credential_owner_type" in payload_data:
         conn.credential_owner_type = payload.credential_owner_type
     if "credential_owner_identifier" in payload_data:
         conn.credential_owner_identifier = payload.credential_owner_identifier
+    if should_probe_iam:
+        _refresh_detected_capabilities(conn)
     conn.updated_at = utcnow()
     db.commit()
     db.refresh(conn)
@@ -383,30 +436,7 @@ def update_s3_connection(
     owner_email = db.query(User.email).filter(User.id == conn.owner_user_id).scalar()
     user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
     user_ids = _linked_user_ids(db, conn.id)
-    details = resolve_connection_details(conn)
-    return S3ConnectionAdminItem(
-        id=conn.id,
-        name=conn.name,
-        storage_endpoint_id=conn.storage_endpoint_id,
-        endpoint_url=details.endpoint_url or "",
-        is_public=bool(conn.is_public),
-        is_shared=bool(conn.is_shared),
-        visibility=visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared)),
-        iam_capable=bool(conn.iam_capable),
-        credential_owner_type=conn.credential_owner_type,
-        credential_owner_identifier=conn.credential_owner_identifier,
-        provider_hint=details.provider,
-        region=details.region,
-        force_path_style=details.force_path_style,
-        verify_tls=details.verify_tls,
-        owner_user_id=conn.owner_user_id,
-        owner_email=owner_email,
-        user_count=int(user_count),
-        user_ids=user_ids,
-        last_used_at=conn.last_used_at,
-        created_at=conn.created_at,
-        updated_at=conn.updated_at,
-    )
+    return _to_admin_item(conn, owner_email=owner_email, user_count=int(user_count), user_ids=user_ids)
 
 
 @router.put("/{connection_id}/credentials", response_model=S3ConnectionAdminItem)
@@ -423,6 +453,7 @@ def rotate_s3_connection_credentials(
     _ensure_editable(conn, current_user)
     conn.access_key_id = payload.access_key_id
     conn.secret_access_key = payload.secret_access_key
+    _refresh_detected_capabilities(conn)
     conn.updated_at = utcnow()
     db.commit()
     db.refresh(conn)
@@ -437,30 +468,7 @@ def rotate_s3_connection_credentials(
     owner_email = db.query(User.email).filter(User.id == conn.owner_user_id).scalar()
     user_count = db.query(func.count(UserS3Connection.id)).filter(UserS3Connection.s3_connection_id == conn.id).scalar() or 0
     user_ids = _linked_user_ids(db, conn.id)
-    details = resolve_connection_details(conn)
-    return S3ConnectionAdminItem(
-        id=conn.id,
-        name=conn.name,
-        storage_endpoint_id=conn.storage_endpoint_id,
-        endpoint_url=details.endpoint_url or "",
-        is_public=bool(conn.is_public),
-        is_shared=bool(conn.is_shared),
-        visibility=visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared)),
-        iam_capable=bool(conn.iam_capable),
-        credential_owner_type=conn.credential_owner_type,
-        credential_owner_identifier=conn.credential_owner_identifier,
-        provider_hint=details.provider,
-        region=details.region,
-        force_path_style=details.force_path_style,
-        verify_tls=details.verify_tls,
-        owner_user_id=conn.owner_user_id,
-        owner_email=owner_email,
-        user_count=int(user_count),
-        user_ids=user_ids,
-        last_used_at=conn.last_used_at,
-        created_at=conn.created_at,
-        updated_at=conn.updated_at,
-    )
+    return _to_admin_item(conn, owner_email=owner_email, user_count=int(user_count), user_ids=user_ids)
 
 
 @router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)

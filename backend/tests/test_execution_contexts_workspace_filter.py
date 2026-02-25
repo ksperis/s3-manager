@@ -2,6 +2,8 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import json
+
 from app.db import (
     AccountRole,
     S3Account,
@@ -42,11 +44,21 @@ def _create_account(db_session, *, name: str, rgw_account_id: str) -> S3Account:
     return account
 
 
-def _create_connection(db_session, *, owner_user_id: int, name: str, iam_capable: bool) -> S3Connection:
+def _create_connection(
+    db_session,
+    *,
+    owner_user_id: int,
+    name: str,
+    can_manage_iam: bool,
+    access_manager: bool = False,
+    access_browser: bool = True,
+) -> S3Connection:
     connection = S3Connection(
         owner_user_id=owner_user_id,
         name=name,
-        iam_capable=iam_capable,
+        access_manager=access_manager,
+        access_browser=access_browser,
+        capabilities_json=json.dumps({"can_manage_iam": bool(can_manage_iam)}),
         access_key_id=f"CONN-AK-{name}",
         secret_access_key=f"CONN-SK-{name}",
     )
@@ -74,8 +86,20 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
     admin_account = _create_account(db_session, name="admin-account", rgw_account_id="RGWADMIN0001")
     portal_manager_account = _create_account(db_session, name="pm-account", rgw_account_id="RGWPM0001")
     legacy_user = _create_legacy_user(db_session, name="legacy-user", uid="legacy-uid-1")
-    manager_connection = _create_connection(db_session, owner_user_id=user.id, name="mgr-conn", iam_capable=True)
-    browser_only_connection = _create_connection(db_session, owner_user_id=user.id, name="browser-conn", iam_capable=False)
+    manager_connection = _create_connection(
+        db_session,
+        owner_user_id=user.id,
+        name="mgr-conn",
+        can_manage_iam=True,
+        access_manager=True,
+    )
+    browser_only_connection = _create_connection(
+        db_session,
+        owner_user_id=user.id,
+        name="browser-conn",
+        can_manage_iam=False,
+        access_manager=False,
+    )
 
     db_session.add_all(
         [
@@ -136,8 +160,8 @@ def test_browser_workspace_returns_connections_and_s3_users(db_session):
     user = _create_user(db_session)
     account = _create_account(db_session, name="browser-account", rgw_account_id="RGWBROWSER0001")
     legacy_user = _create_legacy_user(db_session, name="browser-legacy", uid="legacy-uid-2")
-    connection_a = _create_connection(db_session, owner_user_id=user.id, name="browser-conn-a", iam_capable=False)
-    connection_b = _create_connection(db_session, owner_user_id=user.id, name="browser-conn-b", iam_capable=True)
+    connection_a = _create_connection(db_session, owner_user_id=user.id, name="browser-conn-a", can_manage_iam=False)
+    connection_b = _create_connection(db_session, owner_user_id=user.id, name="browser-conn-b", can_manage_iam=True)
 
     db_session.add_all(
         [

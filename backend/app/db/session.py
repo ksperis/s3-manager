@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
 
-from sqlalchemy import Boolean, Column, DateTime, String, Text
+from sqlalchemy import Column, DateTime, String, Text
 
 from .base import Base
 from .enums import UserRole
@@ -21,8 +21,5 @@ class S3Session(Base):
     account_name = Column(String, nullable=True)
     user_uid = Column(String, nullable=True)
     capabilities = Column(Text, nullable=True)
-    can_manage_iam = Column(Boolean, default=False, nullable=False)
-    can_manage_buckets = Column(Boolean, default=True, nullable=False)
-    can_view_traffic = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
     last_used_at = Column(DateTime, default=utcnow, nullable=False)

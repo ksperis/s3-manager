@@ -17,7 +17,8 @@ class S3Connection(BaseModel):
     is_public: bool = False
     is_shared: bool = False
     visibility: Literal["private", "shared", "public"] = "private"
-    iam_capable: bool = False
+    access_manager: bool = False
+    access_browser: bool = True
     credential_owner_type: Optional[str] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: str
@@ -38,7 +39,8 @@ class S3ConnectionCreate(BaseModel):
     storage_endpoint_id: Optional[int] = None
     is_public: Optional[bool] = False
     is_shared: Optional[bool] = False
-    iam_capable: bool = False
+    access_manager: bool = False
+    access_browser: bool = True
     credential_owner_type: Optional[str] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: Optional[str] = None
@@ -56,7 +58,8 @@ class S3ConnectionUpdate(BaseModel):
     storage_endpoint_id: Optional[int] = None
     is_public: Optional[bool] = None
     is_shared: Optional[bool] = None
-    iam_capable: Optional[bool] = None
+    access_manager: Optional[bool] = None
+    access_browser: Optional[bool] = None
     credential_owner_type: Optional[str] = None
     credential_owner_identifier: Optional[str] = None
     endpoint_url: Optional[str] = None

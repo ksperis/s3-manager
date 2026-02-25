@@ -30,7 +30,8 @@ class S3Connection(Base):
     # Visibility
     is_public = Column(Boolean, nullable=False, default=False, server_default="0")
     is_shared = Column(Boolean, nullable=False, default=False, server_default="0")
-    iam_capable = Column(Boolean, nullable=False, default=False, server_default="0")
+    access_manager = Column(Boolean, nullable=False, default=False, server_default="0")
+    access_browser = Column(Boolean, nullable=False, default=True, server_default="1")
     credential_owner_type = Column(String, nullable=True)
     credential_owner_identifier = Column(String, nullable=True)
 
@@ -48,7 +49,7 @@ class S3Connection(Base):
     temp_access_key_id = Column(String, nullable=True)
 
     # Cached capability profile (JSON) computed from probes (optional)
-    capabilities_json = Column(Text, nullable=True)
+    capabilities_json = Column(Text, nullable=False, default="{}", server_default="{}")
 
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, nullable=False)

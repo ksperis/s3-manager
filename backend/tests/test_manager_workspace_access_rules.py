@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -49,7 +50,7 @@ def test_manager_membership_portal_manager_enabled_with_setting(monkeypatch):
     assert caps.can_manage_iam is True
 
 
-def test_manager_workspace_rejects_non_iam_connection(db_session):
+def test_manager_workspace_accepts_non_iam_connection_when_access_manager_enabled(db_session):
     user = User(
         email="manager-connection-check@example.com",
         hashed_password="x",
@@ -60,9 +61,44 @@ def test_manager_workspace_rejects_non_iam_connection(db_session):
         owner_user_id=None,
         is_public=True,
         name="non-iam-connection",
-        iam_capable=False,
+        access_manager=True,
+        access_browser=True,
+        capabilities_json=json.dumps({"can_manage_iam": False}),
         access_key_id="AK-CONN",
         secret_access_key="SK-CONN",
+    )
+    db_session.add_all([user, connection])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(connection)
+
+    account = dependencies.get_account_context(
+        request=_request("/api/manager/buckets"),
+        account_ref=f"conn-{connection.id}",
+        actor=user,
+        db=db_session,
+    )
+    caps = getattr(account, "_manager_capabilities", None)
+    assert caps is not None
+    assert caps.can_manage_iam is False
+
+
+def test_manager_workspace_rejects_connection_without_manager_access(db_session):
+    user = User(
+        email="manager-connection-no-access@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    connection = S3Connection(
+        owner_user_id=None,
+        is_public=True,
+        name="manager-disabled-connection",
+        access_manager=False,
+        access_browser=True,
+        capabilities_json=json.dumps({"can_manage_iam": True}),
+        access_key_id="AK-CONN2",
+        secret_access_key="SK-CONN2",
     )
     db_session.add_all([user, connection])
     db_session.commit()
@@ -77,7 +113,7 @@ def test_manager_workspace_rejects_non_iam_connection(db_session):
             db=db_session,
         )
     assert exc.value.status_code == 403
-    assert "IAM-capable S3Connection is required in manager workspace" in str(exc.value.detail)
+    assert "cannot be used in manager workspace" in str(exc.value.detail)
 
 
 @pytest.mark.parametrize("path", ["/api/manager/buckets", "/api/browser/buckets"])

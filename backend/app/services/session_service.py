@@ -5,7 +5,6 @@ import hashlib
 import json
 import logging
 import uuid
-from datetime import datetime
 from typing import Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -55,9 +54,6 @@ class SessionService:
             account_name=account_name,
             user_uid=user_uid,
             capabilities=capabilities.model_dump_json(),
-            can_manage_iam=capabilities.can_manage_iam,
-            can_manage_buckets=capabilities.can_manage_buckets,
-            can_view_traffic=capabilities.can_view_traffic,
             created_at=utcnow(),
             last_used_at=utcnow(),
         )
@@ -138,6 +134,7 @@ class SessionService:
             can_manage_iam=can_manage_iam,
             can_manage_buckets=can_manage_buckets,
             can_view_traffic=can_view_traffic,
+            access_browser=True,
         )
 
     def _to_principal(self, session: S3Session) -> ManagerSessionPrincipal:
@@ -162,20 +159,12 @@ class SessionService:
     def _capabilities_from_row(self, session: S3Session) -> SessionCapabilities:
         raw = session.capabilities
         if not raw:
-            return SessionCapabilities(
-                can_manage_iam=session.can_manage_iam,
-                can_manage_buckets=session.can_manage_buckets,
-                can_view_traffic=session.can_view_traffic,
-            )
+            return SessionCapabilities()
         try:
             data = json.loads(raw)
             return SessionCapabilities(**data)
         except (TypeError, ValueError):
-            return SessionCapabilities(
-                can_manage_iam=session.can_manage_iam,
-                can_manage_buckets=session.can_manage_buckets,
-                can_view_traffic=session.can_view_traffic,
-            )
+            return SessionCapabilities()
 
     def _hash_key(self, access_key: str) -> str:
         return hashlib.sha256(access_key.encode()).hexdigest()
