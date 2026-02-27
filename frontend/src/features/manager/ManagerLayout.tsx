@@ -18,13 +18,30 @@ type SessionCapabilities = {
   can_view_traffic?: boolean;
 };
 
+type SessionUserPayload = {
+  role?: string;
+  capabilities?: SessionCapabilities;
+};
+
 function getUserCapabilities(): SessionCapabilities | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem("user");
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as { capabilities?: SessionCapabilities };
+    const parsed = JSON.parse(raw) as SessionUserPayload;
     return parsed.capabilities ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function getUserRole(): string | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem("user");
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as SessionUserPayload;
+    return typeof parsed.role === "string" ? parsed.role : null;
   } catch {
     return null;
   }
@@ -59,6 +76,12 @@ function ManagerShell() {
   };
   const isS3User = selectedS3AccountType === "s3_user";
   const canManageBuckets = capabilities.can_manage_buckets !== false;
+  const userRole = getUserRole();
+  const canAccessMigration =
+    Boolean(generalSettings.bucket_migration_enabled) &&
+    (userRole === "ui_admin" ||
+      userRole === "ui_superadmin" ||
+      (userRole === "ui_user" && Boolean(generalSettings.allow_ui_user_bucket_migration)));
   const endpointCaps = selected?.storage_endpoint_capabilities ?? null;
   const iamFeatureEnabled = endpointCaps ? endpointCaps.iam !== false : true;
   const canManageIam = !isS3User && capabilities.can_manage_iam !== false && iamFeatureEnabled;
@@ -180,6 +203,13 @@ function ManagerShell() {
         { to: "/manager/roles", label: "Roles" },
         { to: "/manager/iam/policies", label: "Policies" },
       ],
+    });
+  }
+
+  if (canManageBuckets && canAccessMigration) {
+    navSections.push({
+      label: "Tools",
+      links: [{ to: "/manager/migrations", label: "Migration" }],
     });
   }
 

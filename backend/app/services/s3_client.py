@@ -25,12 +25,15 @@ def get_s3_client(
     region: Optional[str] = None,
     force_path_style: bool = False,
     verify_tls: bool = True,
+    user_agent_extra: Optional[str] = None,
 ):
     if not endpoint:
         raise RuntimeError("S3 endpoint is not configured")
     config_kwargs = {"signature_version": "s3v4"}
     if force_path_style:
         config_kwargs["s3"] = {"addressing_style": "path"}
+    if user_agent_extra:
+        config_kwargs["user_agent_extra"] = user_agent_extra
     client = boto3.client(
         "s3",
         endpoint_url=endpoint,

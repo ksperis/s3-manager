@@ -27,6 +27,8 @@ export type GeneralSettings = {
   portal_enabled: boolean;
   billing_enabled: boolean;
   endpoint_status_enabled: boolean;
+  bucket_migration_enabled: boolean;
+  allow_ui_user_bucket_migration: boolean;
   allow_login_access_keys: boolean;
   allow_login_endpoint_list: boolean;
   allow_login_custom_endpoint: boolean;
@@ -106,6 +108,9 @@ export type PortalSettingsOverride = {
 
 export type ManagerSettings = {
   allow_manager_user_usage_stats: boolean;
+  bucket_migration_parallelism_default: number;
+  bucket_migration_parallelism_max: number;
+  bucket_migration_max_active_per_endpoint: number;
 };
 
 export type BrowserSettings = {

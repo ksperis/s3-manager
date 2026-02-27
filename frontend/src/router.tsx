@@ -44,6 +44,7 @@ import ManagerUserPoliciesPage from "./features/manager/ManagerUserPoliciesPage"
 import ManagerGroupPoliciesPage from "./features/manager/ManagerGroupPoliciesPage";
 import ManagerMetricsPage from "./features/manager/ManagerMetricsPage";
 import TopicsPage from "./features/manager/TopicsPage";
+import ManagerMigrationsPage from "./features/manager/ManagerMigrationsPage";
 import { useS3AccountContext } from "./features/manager/S3AccountContext";
 import PortalLayout from "./features/portal/PortalLayout";
 import PortalDashboard from "./features/portal/PortalDashboard";
@@ -272,6 +273,27 @@ function RequireManagerIamFeature() {
   return <Outlet />;
 }
 
+function canAccessManagerMigration(
+  generalSettings: ReturnType<typeof useGeneralSettings>["generalSettings"],
+  user: SessionUser | null
+): boolean {
+  if (!generalSettings.bucket_migration_enabled || !user?.role) return false;
+  if (isAdminLikeRole(user.role)) return true;
+  return user.role === USER_ROLE && generalSettings.allow_ui_user_bucket_migration;
+}
+
+function RequireManagerMigrationFeature() {
+  const { generalSettings } = useGeneralSettings();
+  const user = getStoredUser();
+  if (!generalSettings.bucket_migration_enabled) {
+    return <FeatureDisabledPage feature="Bucket Migration" />;
+  }
+  if (canAccessManagerMigration(generalSettings, user)) {
+    return <Outlet />;
+  }
+  return <Navigate to="/unauthorized" replace />;
+}
+
 export default function AppRouter() {
   const router = useMemo(() => {
     const routes = createRoutesFromElements(
@@ -346,6 +368,9 @@ export default function AppRouter() {
                   <Route path="iam/policies" element={<PoliciesPage />} />
                 </Route>
                 <Route path="topics" element={<TopicsPage />} />
+                <Route element={<RequireManagerMigrationFeature />}>
+                  <Route path="migrations" element={<ManagerMigrationsPage />} />
+                </Route>
               </Route>
             </Route>
 

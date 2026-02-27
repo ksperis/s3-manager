@@ -15,6 +15,7 @@ The Manager surface is intended for account-scoped administration aligned with S
 - IAM resources:
   - users, groups, roles
   - policies and attachments
+- Bucket migration operations from **Tools > Migration**
 
 ## Implementation pointers
 
@@ -26,3 +27,7 @@ Backend routers:
 Frontend routes:
 
 - `/manager/*`
+
+## Related guides
+
+- [Bucket Migration tool](bucket-migration.md)

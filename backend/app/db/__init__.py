@@ -19,6 +19,7 @@ from .healthcheck import (
     EndpointHealthRollup,
     EndpointHealthStatusSegment,
 )
+from .bucket_migration import BucketMigration, BucketMigrationEvent, BucketMigrationItem
 
 __all__ = [
     "Base",
@@ -50,4 +51,7 @@ __all__ = [
     "EndpointHealthLatest",
     "EndpointHealthStatusSegment",
     "EndpointHealthRollup",
+    "BucketMigration",
+    "BucketMigrationItem",
+    "BucketMigrationEvent",
 ]

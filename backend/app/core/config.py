@@ -238,6 +238,29 @@ class Settings(BaseSettings):
         720,
         description="Minutes window to highlight recently ended incidents (HEALTHCHECK_INCIDENT_RECENT_MINUTES)",
     )
+    bucket_migration_worker_enabled: bool = Field(
+        True,
+        description="Enable background bucket migration worker (BUCKET_MIGRATION_WORKER_ENABLED)",
+    )
+    bucket_migration_poll_interval_seconds: float = Field(
+        2.0,
+        description="Polling interval for bucket migration worker (BUCKET_MIGRATION_POLL_INTERVAL_SECONDS)",
+    )
+    bucket_migration_parallelism_max: int = Field(
+        16,
+        description="Global maximum parallel copy/delete workers for bucket migration (BUCKET_MIGRATION_PARALLELISM_MAX)",
+    )
+    bucket_migration_max_active_per_endpoint: int = Field(
+        2,
+        description=(
+            "Maximum number of concurrently claimed bucket migrations that can use the same source or target endpoint "
+            "(BUCKET_MIGRATION_MAX_ACTIVE_PER_ENDPOINT)"
+        ),
+    )
+    bucket_migration_worker_lease_seconds: int = Field(
+        120,
+        description="Duration of worker lease on a migration before takeover is allowed (BUCKET_MIGRATION_WORKER_LEASE_SECONDS)",
+    )
 
     @field_validator("jwt_keys", "credential_keys", mode="before")
     @classmethod

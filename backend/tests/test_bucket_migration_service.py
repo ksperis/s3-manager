@@ -1,0 +1,1573 @@
+# Copyright (c) 2026 Laurent Barbe
+# Licensed under the Apache License, Version 2.0
+from __future__ import annotations
+
+from datetime import timedelta
+import io
+import json
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from botocore.exceptions import ClientError
+from app.db import BucketMigration, S3Account, S3User, StorageEndpoint, User, UserRole
+from app.models.bucket_migration import BucketMigrationBucketMapping, BucketMigrationCreateRequest
+from app.services.bucket_migration_service import BucketMigrationService
+
+
+def _create_user(db_session) -> User:
+    user = User(
+        email="admin@example.com",
+        full_name="Admin",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_SUPERADMIN.value,
+    )
+    db_session.add(user)
+    db_session.flush()
+    return user
+
+
+def _create_account(db_session, *, name: str, endpoint_url: str, account_id: str) -> S3Account:
+    endpoint = StorageEndpoint(
+        name=f"{name}-endpoint",
+        endpoint_url=endpoint_url,
+        region="us-east-1",
+        provider="ceph",
+        is_default=False,
+        is_editable=True,
+    )
+    db_session.add(endpoint)
+    db_session.flush()
+
+    account = S3Account(
+        name=name,
+        rgw_account_id=account_id,
+        rgw_access_key=f"AKIA-{name}",
+        rgw_secret_key=f"SECRET-{name}",
+        storage_endpoint_id=endpoint.id,
+    )
+    account.storage_endpoint = endpoint
+    db_session.add(account)
+    db_session.flush()
+    return account
+
+
+def _create_s3_user(db_session, *, name: str, endpoint: StorageEndpoint, uid: str) -> S3User:
+    s3_user = S3User(
+        name=name,
+        rgw_user_uid=uid,
+        email=f"{name}@example.test",
+        rgw_access_key=f"AKIA-{name}",
+        rgw_secret_key=f"SECRET-{name}",
+        storage_endpoint_id=endpoint.id,
+    )
+    s3_user.storage_endpoint = endpoint
+    db_session.add(s3_user)
+    db_session.flush()
+    return s3_user
+
+
+def _app_settings_stub(
+    *,
+    parallelism_default: int = 16,
+    parallelism_max: int = 16,
+    max_active_per_endpoint: int = 2,
+):
+    return SimpleNamespace(
+        manager=SimpleNamespace(
+            bucket_migration_parallelism_default=parallelism_default,
+            bucket_migration_parallelism_max=parallelism_max,
+            bucket_migration_max_active_per_endpoint=max_active_per_endpoint,
+        )
+    )
+
+
+def test_create_migration_creates_items_and_defaults(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mapping_prefix="mig-",
+        mode="pre_sync",
+        copy_bucket_settings=True,
+        delete_source=True,
+        auto_grant_source_read_for_copy=True,
+        buckets=[
+            BucketMigrationBucketMapping(source_bucket="bucket-a"),
+            BucketMigrationBucketMapping(source_bucket="bucket-b", target_bucket="custom-b"),
+        ],
+    )
+
+    migration = service.create_migration(payload, user)
+
+    assert migration.status == "draft"
+    assert migration.total_items == 2
+    assert migration.mode == "pre_sync"
+    assert migration.lock_target_writes is True
+    assert migration.auto_grant_source_read_for_copy is True
+    by_source = {item.source_bucket: item for item in migration.items}
+    assert by_source["bucket-a"].target_bucket == "mig-bucket-a"
+    assert by_source["bucket-b"].target_bucket == "custom-b"
+
+
+def test_create_migration_uses_admin_default_parallelism(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+
+    with patch(
+        "app.services.bucket_migration_service.load_app_settings",
+        return_value=_app_settings_stub(parallelism_default=7, parallelism_max=12),
+    ):
+        migration = service.create_migration(payload, user)
+
+    assert migration.parallelism_max == 7
+    assert migration.auto_grant_source_read_for_copy is False
+
+
+def test_create_migration_clamps_requested_parallelism_to_admin_max(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        parallelism_max=42,
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+
+    with patch(
+        "app.services.bucket_migration_service.load_app_settings",
+        return_value=_app_settings_stub(parallelism_default=7, parallelism_max=10),
+    ):
+        migration = service.create_migration(payload, user)
+
+    assert migration.parallelism_max == 10
+
+
+def test_continue_after_presync_moves_items_to_cutover_step(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="pre_sync",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+    migration = service.create_migration(payload, user)
+
+    migration.status = "awaiting_cutover"
+    migration.items[0].status = "awaiting_cutover"
+    migration.items[0].step = "awaiting_cutover"
+    db_session.commit()
+
+    updated = service.continue_after_presync(migration.id)
+
+    assert updated.status == "queued"
+    assert updated.items[0].status == "pending"
+    assert updated.items[0].step == "apply_read_only"
+
+
+def test_claim_next_runnable_migration_assigns_exclusive_lease(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "queued"
+    migration.precheck_status = "passed"
+    db_session.commit()
+
+    claimed_by_worker_1 = service.claim_next_runnable_migration_id(worker_id="worker-1", lease_seconds=120)
+    claimed_by_worker_2 = service.claim_next_runnable_migration_id(worker_id="worker-2", lease_seconds=120)
+
+    db_session.refresh(migration)
+    assert claimed_by_worker_1 == migration.id
+    assert claimed_by_worker_2 is None
+    assert migration.worker_lease_owner == "worker-1"
+    assert migration.worker_lease_until is not None
+
+
+def test_claim_next_runnable_migration_reclaims_expired_lease(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "queued"
+    migration.precheck_status = "passed"
+    db_session.commit()
+
+    first_claim = service.claim_next_runnable_migration_id(worker_id="worker-1", lease_seconds=120)
+    assert first_claim == migration.id
+    db_session.refresh(migration)
+    assert migration.worker_lease_until is not None
+    migration.worker_lease_until = migration.worker_lease_until - timedelta(minutes=10)
+    db_session.commit()
+
+    second_claim = service.claim_next_runnable_migration_id(worker_id="worker-2", lease_seconds=120)
+    db_session.refresh(migration)
+    assert second_claim == migration.id
+    assert migration.worker_lease_owner == "worker-2"
+
+
+def test_claim_next_runnable_migration_respects_max_active_per_endpoint(db_session):
+    user = _create_user(db_session)
+    source_a = _create_account(db_session, name="source-a", endpoint_url="https://shared.example.test", account_id="RGW001")
+    source_b_user = _create_s3_user(
+        db_session,
+        name="source-b-user",
+        endpoint=source_a.storage_endpoint,
+        uid="source-b-uid",
+    )
+    source_c = _create_account(db_session, name="source-c", endpoint_url="https://source-c.example.test", account_id="RGW003")
+    target_a = _create_account(db_session, name="target-a", endpoint_url="https://target-a.example.test", account_id="RGW101")
+    target_b = _create_account(db_session, name="target-b", endpoint_url="https://target-b.example.test", account_id="RGW102")
+    target_c = _create_account(db_session, name="target-c", endpoint_url="https://target-c.example.test", account_id="RGW103")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+
+    migration_a = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source_a.id),
+            target_context_id=str(target_a.id),
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+        ),
+        user,
+    )
+    migration_b = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=f"s3u-{source_b_user.id}",
+            target_context_id=str(target_b.id),
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-b")],
+        ),
+        user,
+    )
+    migration_c = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source_c.id),
+            target_context_id=str(target_c.id),
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-c")],
+        ),
+        user,
+    )
+    for migration in (migration_a, migration_b, migration_c):
+        migration.status = "queued"
+        migration.precheck_status = "passed"
+    db_session.commit()
+
+    with patch(
+        "app.services.bucket_migration_service.load_app_settings",
+        return_value=_app_settings_stub(max_active_per_endpoint=1),
+    ):
+        first_claim = service.claim_next_runnable_migration_id(worker_id="worker-1", lease_seconds=120)
+        second_claim = service.claim_next_runnable_migration_id(worker_id="worker-2", lease_seconds=120)
+
+    assert first_claim == migration_a.id
+    assert second_claim == migration_c.id
+
+def test_bucket_already_exists_error_detection(db_session):
+    service = BucketMigrationService(db_session)
+    assert service._is_bucket_already_exists_error(RuntimeError("An error occurred (BucketAlreadyExists)"))
+    assert service._is_bucket_already_exists_error(RuntimeError("An error occurred (BucketAlreadyOwnedByYou)"))
+    assert not service._is_bucket_already_exists_error(RuntimeError("An error occurred (AccessDenied)"))
+
+
+def test_create_migration_rejects_same_bucket_name_on_same_endpoint(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://same.example.test", account_id="RGW001")
+    target_user = _create_s3_user(db_session, name="target-user", endpoint=source.storage_endpoint, uid="target-user-uid")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=f"s3u-{target_user.id}",
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a")],
+    )
+
+    try:
+        service.create_migration(payload, user)
+        assert False, "Expected create_migration to fail for same-bucket mapping on same endpoint"
+    except ValueError as exc:
+        assert "target bucket must differ from source bucket" in str(exc)
+
+
+def test_apply_read_only_policy_uses_supported_actions(db_session):
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    db_session.commit()
+
+    captured: dict[str, object] = {}
+
+    class _BucketsStub:
+        def get_policy(self, *_args, **_kwargs):
+            return None
+
+        def put_policy(self, _bucket_name, _account, policy):
+            captured["policy"] = policy
+
+    service = BucketMigrationService(db_session)
+    service._buckets = _BucketsStub()  # type: ignore[assignment]
+
+    item = SimpleNamespace(source_policy_backup_json=None)
+    service._apply_read_only_policy(source, "bucket-a", item)
+
+    statement = (captured["policy"] or {}).get("Statement", [])[0]
+    actions = statement.get("Action", [])
+    assert "s3:PutObject" in actions
+    assert "s3:DeleteObject" in actions
+    assert "s3:AbortMultipartUpload" in actions
+    assert "s3:DeleteBucket" in actions
+    assert "s3:Put*" not in actions
+    assert "s3:Delete*" not in actions
+    assert "s3:ObjectOwnerOverrideToBucketOwner" not in actions
+
+
+def test_set_managed_block_policy_can_keep_put_block_without_delete_deny(db_session):
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    db_session.commit()
+
+    captured: dict[str, object] = {}
+
+    class _BucketsStub:
+        def get_policy(self, *_args, **_kwargs):
+            return None
+
+        def put_policy(self, _bucket_name, _account, policy):
+            captured["policy"] = policy
+
+    service = BucketMigrationService(db_session)
+    service._buckets = _BucketsStub()  # type: ignore[assignment]
+
+    service._set_managed_block_policy("bucket-a", source, deny_delete=False)
+
+    statement = (captured["policy"] or {}).get("Statement", [])[0]
+    actions = statement.get("Action", [])
+    assert "s3:PutObject" in actions
+    assert "s3:AbortMultipartUpload" in actions
+    assert "s3:DeleteObject" not in actions
+    assert "s3:DeleteBucket" not in actions
+
+
+def test_apply_target_write_lock_policy_uses_migration_user_agent_condition(db_session):
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    captured: dict[str, object] = {}
+
+    class _BucketsStub:
+        def get_policy(self, *_args, **_kwargs):
+            return None
+
+        def put_policy(self, _bucket_name, _account, policy):
+            captured["policy"] = policy
+
+    service = BucketMigrationService(db_session)
+    service._buckets = _BucketsStub()  # type: ignore[assignment]
+
+    item = SimpleNamespace(target_policy_backup_json=None)
+    service._validate_target_lock_worker_access = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._apply_target_write_lock_policy(SimpleNamespace(account=target), "bucket-a", item)
+
+    statement = (captured["policy"] or {}).get("Statement", [])[0]
+    actions = statement.get("Action", [])
+    condition = statement.get("Condition", {})
+    user_agent_cond = condition.get("StringNotLike", {}).get("aws:UserAgent")
+
+    assert statement.get("Sid") == "S3ManagerMigrationTargetWriteLockDeny"
+    assert "s3:PutObject" in actions
+    assert "s3:DeleteObject" in actions
+    assert isinstance(user_agent_cond, str)
+    assert "s3-manager-migration-worker" in user_agent_cond
+
+
+def test_build_source_copy_grant_policy_uses_target_principal(db_session):
+    service = BucketMigrationService(db_session)
+    policy = service._build_source_copy_grant_policy(
+        "bucket-a",
+        None,
+        principal="arn:aws:iam:::user/target-user",
+    )
+
+    statement = (policy.get("Statement") or [])[0]
+    assert statement.get("Sid") == "S3ManagerMigrationSourceCopyGrantAllow"
+    assert statement.get("Effect") == "Allow"
+    assert statement.get("Principal", {}).get("AWS") == "arn:aws:iam:::user/target-user"
+    actions = statement.get("Action", [])
+    assert "s3:GetObject" in actions
+    assert "s3:GetObjectVersion" in actions
+
+
+def test_precheck_same_endpoint_copy_source_access_can_use_temporary_auto_grant(db_session):
+    source = _create_account(db_session, name="source", endpoint_url="https://same.example.test", account_id="RGW001")
+    target_user = _create_s3_user(
+        db_session,
+        name="target-user",
+        endpoint=source.storage_endpoint,
+        uid="target-user",
+    )
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace(context_id=str(source.id), account=source)
+    target_ctx = SimpleNamespace(
+        context_id=f"s3u-{target_user.id}",
+        account=SimpleNamespace(
+            rgw_account_id=None,
+            rgw_user_uid=target_user.rgw_user_uid,
+        ),
+    )
+
+    class _SourceClient:
+        def list_objects_v2(self, **_kwargs):
+            return {"Contents": [{"Key": "object-a"}]}
+
+    class _TargetClient:
+        allow = False
+
+        def head_object(self, **_kwargs):
+            if self.allow:
+                return {"ContentLength": 12}
+            raise ClientError(
+                {
+                    "Error": {"Code": "AccessDenied", "Message": "Denied"},
+                    "ResponseMetadata": {"HTTPStatusCode": 403},
+                },
+                "HeadObject",
+            )
+
+    target_client = _TargetClient()
+
+    service._context_client = (  # type: ignore[method-assign]
+        lambda ctx: _SourceClient() if ctx is source_ctx else target_client
+    )
+
+    class _BucketsStub:
+        def get_policy(self, *_args, **_kwargs):
+            return None
+
+        def put_policy(self, *_args, **_kwargs):
+            target_client.allow = True
+
+        def delete_policy(self, *_args, **_kwargs):
+            target_client.allow = False
+
+    service._buckets = _BucketsStub()  # type: ignore[assignment]
+
+    result = service._precheck_same_endpoint_copy_source_access(
+        source_ctx,
+        target_ctx,
+        "bucket-a",
+        auto_grant=True,
+    )
+
+    assert result == "validated_with_temporary_grant"
+    assert target_client.allow is False
+
+
+def test_copy_single_object_falls_back_to_stream_copy_on_copy_source_access_denied(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace()
+    target_ctx = SimpleNamespace()
+    source_client = SimpleNamespace(get_object=lambda **_kwargs: {"Body": io.BytesIO(b"payload")})
+
+    copied: list[tuple[str, str]] = []
+
+    class _TargetClient:
+        def copy_object(self, **_kwargs):
+            raise ClientError(
+                {
+                    "Error": {"Code": "AccessDenied", "Message": "Denied"},
+                    "ResponseMetadata": {"HTTPStatusCode": 403},
+                },
+                "CopyObject",
+            )
+
+        def upload_fileobj(self, body, bucket, key):
+            copied.append((bucket, key))
+            body.read()
+
+    target_client = _TargetClient()
+    service._context_client = (  # type: ignore[method-assign]
+        lambda ctx: source_client if ctx is source_ctx else target_client
+    )
+
+    service._copy_single_object(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-src",
+        target_bucket="bucket-dst",
+        key="object-key",
+        same_endpoint=True,
+    )
+
+    assert copied == [("bucket-dst", "object-key")]
+
+
+def test_strong_verify_single_object_prefers_head_checksum(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace()
+    target_ctx = SimpleNamespace()
+
+    class _SourceClient:
+        def head_object(self, **_kwargs):
+            return {"ChecksumSHA256": "abc"}
+
+        def get_object(self, **_kwargs):
+            raise AssertionError("stream fallback should not be used when checksums are available")
+
+    class _TargetClient:
+        def head_object(self, **_kwargs):
+            return {"ChecksumSHA256": "abc"}
+
+        def get_object(self, **_kwargs):
+            raise AssertionError("stream fallback should not be used when checksums are available")
+
+    source_client = _SourceClient()
+    target_client = _TargetClient()
+    service._context_client = (  # type: ignore[method-assign]
+        lambda ctx: source_client if ctx is source_ctx else target_client
+    )
+
+    verified, method = service._strong_verify_single_object(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-src",
+        target_bucket="bucket-dst",
+        key="object-key",
+    )
+
+    assert verified is True
+    assert method == "head_checksum"
+
+
+def test_strong_verify_single_object_falls_back_to_stream_sha256(db_session):
+    service = BucketMigrationService(db_session)
+    source_ctx = SimpleNamespace()
+    target_ctx = SimpleNamespace()
+
+    class _SourceClient:
+        def head_object(self, **_kwargs):
+            return {}
+
+        def get_object(self, **_kwargs):
+            return {"Body": io.BytesIO(b"payload")}
+
+    class _TargetClient:
+        def head_object(self, **_kwargs):
+            return {}
+
+        def get_object(self, **_kwargs):
+            return {"Body": io.BytesIO(b"payload")}
+
+    source_client = _SourceClient()
+    target_client = _TargetClient()
+    service._context_client = (  # type: ignore[method-assign]
+        lambda ctx: source_client if ctx is source_ctx else target_client
+    )
+
+    verified, method = service._strong_verify_single_object(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-src",
+        target_bucket="bucket-dst",
+        key="object-key",
+    )
+
+    assert verified is True
+    assert method == "stream_sha256"
+
+
+def test_verify_blocks_delete_source_when_strong_verification_fails(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        delete_source=True,
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+    migration = service.create_migration(payload, user)
+    item = migration.items[0]
+    item.status = "running"
+    item.step = "verify"
+    db_session.commit()
+
+    service._buckets = SimpleNamespace(
+        compare_bucket_content=lambda *_args, **_kwargs: SimpleNamespace(
+            source_count=1,
+            target_count=1,
+            matched_count=1,
+            different_count=0,
+            only_source_count=0,
+            only_target_count=0,
+            only_source_sample=[],
+            only_target_sample=[],
+            different_sample=[],
+        )
+    )
+    service._list_current_objects = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+        "large-object.bin": {"size": 1024, "etag": "multipart-etag-1"}
+    }
+    service._strong_verify_size_only_objects = lambda *_args, **_kwargs: (  # type: ignore[method-assign]
+        0,
+        ["large-object.bin"],
+        {"head_checksum": 0, "stream_sha256": 0},
+    )
+    source_ctx = SimpleNamespace(account=source)
+    target_ctx = SimpleNamespace(account=target)
+
+    service._run_item(migration, item, source_ctx, target_ctx, control_check=lambda: "run")
+
+    db_session.refresh(item)
+    assert item.status == "failed"
+    assert item.step == "verify"
+    assert item.error_message
+    assert "Final strong verification failed" in item.error_message
+
+
+def test_verify_allows_delete_source_when_strong_verification_succeeds(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        delete_source=True,
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+    migration = service.create_migration(payload, user)
+    item = migration.items[0]
+    item.status = "running"
+    item.step = "verify"
+    db_session.commit()
+
+    service._buckets = SimpleNamespace(
+        compare_bucket_content=lambda *_args, **_kwargs: SimpleNamespace(
+            source_count=1,
+            target_count=1,
+            matched_count=1,
+            different_count=0,
+            only_source_count=0,
+            only_target_count=0,
+            only_source_sample=[],
+            only_target_sample=[],
+            different_sample=[],
+        )
+    )
+    service._list_current_objects = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+        "large-object.bin": {"size": 1024, "etag": "multipart-etag-1"}
+    }
+    service._strong_verify_size_only_objects = lambda *_args, **_kwargs: (  # type: ignore[method-assign]
+        1,
+        [],
+        {"head_checksum": 0, "stream_sha256": 1},
+    )
+    deleted: list[str] = []
+    service._set_managed_block_policy = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._delete_source_bucket_with_retry = lambda bucket, *_args, **_kwargs: deleted.append(bucket)  # type: ignore[method-assign]
+    source_ctx = SimpleNamespace(account=source)
+    target_ctx = SimpleNamespace(account=target)
+
+    service._run_item(migration, item, source_ctx, target_ctx, control_check=lambda: "run")
+
+    db_session.refresh(item)
+    assert item.status == "completed"
+    assert item.step == "completed"
+    assert deleted == ["bucket-a"]
+
+
+def test_apply_read_only_policy_returns_clear_message_on_access_denied(db_session):
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    db_session.commit()
+
+    class _BucketsStub:
+        def get_policy(self, *_args, **_kwargs):
+            return None
+
+        def put_policy(self, *_args, **_kwargs):
+            raise RuntimeError(
+                "Unable to set bucket policy for 'bucket-a': "
+                "An error occurred (AccessDenied) when calling the PutBucketPolicy operation: None"
+            )
+
+    service = BucketMigrationService(db_session)
+    service._buckets = _BucketsStub()  # type: ignore[assignment]
+    item = SimpleNamespace(source_policy_backup_json=None)
+
+    try:
+        service._apply_read_only_policy(source, "bucket-a", item)
+        assert False, "Expected _apply_read_only_policy to fail"
+    except RuntimeError as exc:
+        assert "set source bucket to read-only" in str(exc)
+        assert "s3:GetBucketPolicy and s3:PutBucketPolicy" in str(exc)
+
+
+def test_start_migration_requires_precheck_passed(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+    migration = service.create_migration(payload, user)
+
+    try:
+        service.start_migration(migration.id)
+        assert False, "Expected start_migration to be blocked until precheck passes"
+    except ValueError as exc:
+        assert "Precheck must pass before start" in str(exc)
+
+
+def test_run_precheck_passed_then_start_allowed(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+    migration = service.create_migration(payload, user)
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(
+            context_id=context_id,
+            account=source if context_id == str(source.id) else target,
+            endpoint="https://s3.example.test",
+            region="us-east-1",
+            force_path_style=False,
+            verify_tls=True,
+        )
+
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._count_bucket_objects = lambda *_args, **_kwargs: 12  # type: ignore[method-assign]
+    service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._precheck_same_endpoint_copy_source_access = lambda *_args, **_kwargs: "validated"  # type: ignore[method-assign]
+    service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+
+    migration = service.run_precheck(migration.id)
+
+    assert migration.precheck_status == "passed"
+    assert migration.items[0].source_count == 12
+    report = json.loads(migration.precheck_report_json or "{}")
+    assert report.get("errors") == 0
+    queued = service.start_migration(migration.id)
+    assert queued.status == "queued"
+
+
+def test_run_precheck_failed_blocks_start(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+    migration = service.create_migration(payload, user)
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(
+            context_id=context_id,
+            account=source if context_id == str(source.id) else target,
+            endpoint="https://s3.example.test",
+            region="us-east-1",
+            force_path_style=False,
+            verify_tls=True,
+        )
+
+    def _fail_policy(*_args, **_kwargs):
+        raise RuntimeError("Access denied")
+
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._count_bucket_objects = lambda *_args, **_kwargs: 9  # type: ignore[method-assign]
+    service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._precheck_same_endpoint_copy_source_access = lambda *_args, **_kwargs: "validated"  # type: ignore[method-assign]
+    service._precheck_policy_roundtrip = _fail_policy  # type: ignore[method-assign]
+
+    migration = service.run_precheck(migration.id)
+    assert migration.precheck_status == "failed"
+    report = json.loads(migration.precheck_report_json or "{}")
+    assert int(report.get("errors") or 0) > 0
+
+    try:
+        service.start_migration(migration.id)
+        assert False, "Expected start_migration to fail when precheck is failed"
+    except ValueError as exc:
+        assert "Precheck must pass before start" in str(exc)
+
+
+def test_run_precheck_fails_when_same_endpoint_copy_source_access_is_missing(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://same.example.test", account_id="RGW001")
+    target_user = _create_s3_user(db_session, name="target-user", endpoint=source.storage_endpoint, uid="target-user-uid")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=f"s3u-{target_user.id}",
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._count_bucket_objects = lambda *_args, **_kwargs: 5  # type: ignore[method-assign]
+    service._precheck_bucket_exists = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._precheck_policy_roundtrip = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+
+    def _deny_same_endpoint_copy(*_args, **_kwargs):
+        raise RuntimeError("missing s3:GetObject on source")
+
+    service._precheck_same_endpoint_copy_source_access = _deny_same_endpoint_copy  # type: ignore[method-assign]
+
+    migration = service.run_precheck(migration.id)
+    assert migration.precheck_status == "failed"
+    report = json.loads(migration.precheck_report_json or "{}")
+    item_messages = report.get("items", [])[0].get("messages", [])
+    assert any(
+        "Same-endpoint x-amz-copy-source precheck failed" in str(message.get("message", ""))
+        for message in item_messages
+        if isinstance(message, dict)
+    )
+
+
+def test_restore_source_policy_strips_managed_read_only_sid(db_session):
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    db_session.commit()
+
+    captured: dict[str, object] = {"delete_called": False}
+
+    class _BucketsStub:
+        def put_policy(self, _bucket_name, _account, policy):
+            captured["policy"] = policy
+
+        def delete_policy(self, *_args, **_kwargs):
+            captured["delete_called"] = True
+
+    service = BucketMigrationService(db_session)
+    service._buckets = _BucketsStub()  # type: ignore[assignment]
+
+    backup_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "S3ManagerMigrationReadOnlyDeny",
+                "Effect": "Deny",
+                "Principal": "*",
+                "Action": ["s3:Put*", "s3:Delete*"],
+                "Resource": ["arn:aws:s3:::bucket-a", "arn:aws:s3:::bucket-a/*"],
+            },
+            {
+                "Sid": "KeepMe",
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": ["s3:GetObject"],
+                "Resource": ["arn:aws:s3:::bucket-a/*"],
+            },
+        ],
+    }
+    item = SimpleNamespace(source_policy_backup_json=json.dumps(backup_policy))
+
+    service._restore_source_policy("bucket-a", source, item)
+
+    restored = captured.get("policy")
+    assert isinstance(restored, dict)
+    statements = restored.get("Statement", [])
+    assert isinstance(statements, list)
+    sids = {entry.get("Sid") for entry in statements if isinstance(entry, dict)}
+    assert "KeepMe" in sids
+    assert "S3ManagerMigrationReadOnlyDeny" not in sids
+    assert captured["delete_called"] is False
+
+
+def test_finalize_releases_target_lock_policy(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+    item = migration.items[0]
+    item.status = "completed"
+    item.step = "completed"
+    item.target_lock_applied = True
+    item.target_policy_backup_json = "{}"
+    db_session.commit()
+
+    restored: list[str] = []
+
+    def _restore_target_write_lock_policy(_target_account, target_bucket: str, _item):
+        restored.append(target_bucket)
+
+    service._restore_target_write_lock_policy = _restore_target_write_lock_policy  # type: ignore[method-assign]
+
+    service._finalize_or_wait_cutover(migration, target_ctx=SimpleNamespace(account=target))
+
+    assert migration.status == "completed"
+    assert restored == ["bucket-a-dst"]
+    assert item.target_lock_applied is False
+    assert item.target_policy_backup_json is None
+
+
+def test_rollback_failed_migration_rejects_non_failed_status(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+
+    try:
+        service.rollback_failed_migration(migration.id)
+        assert False, "Expected rollback to be blocked for non-failed migration status"
+    except ValueError as exc:
+        assert "Rollback is only available for failed migrations" in str(exc)
+
+
+def test_rollback_failed_migration_success_marks_migration_rolled_back(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[
+            BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst"),
+            BucketMigrationBucketMapping(source_bucket="bucket-b", target_bucket="bucket-b-dst"),
+        ],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "failed"
+    migration.items[0].status = "failed"
+    migration.items[0].step = "sync"
+    migration.items[0].read_only_applied = True
+    migration.items[0].source_policy_backup_json = "{}"
+    migration.items[0].objects_deleted = 1
+    migration.items[1].status = "skipped"
+    migration.items[1].step = "skipped"
+    migration.items[1].read_only_applied = True
+    db_session.commit()
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(account=source if context_id == str(source.id) else target)
+
+    restored: list[str] = []
+    removed: list[str] = []
+    purged: list[str] = []
+
+    def _restore_source_policy(bucket_name: str, _source_account, _item):
+        restored.append(bucket_name)
+
+    def _remove_managed_statement(bucket_name: str, _source_account):
+        removed.append(bucket_name)
+
+    def _purge_target_bucket(_target_ctx, target_bucket: str):
+        purged.append(target_bucket)
+        if target_bucket == "bucket-a-dst":
+            return 3, 2
+        raise AssertionError(f"Unexpected purge call for {target_bucket}")
+
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._restore_source_policy = _restore_source_policy  # type: ignore[method-assign]
+    service._remove_managed_read_only_statement = _remove_managed_statement  # type: ignore[method-assign]
+    service._purge_target_bucket = _purge_target_bucket  # type: ignore[method-assign]
+
+    rolled_back = service.rollback_failed_migration(migration.id)
+
+    db_session.refresh(rolled_back)
+    db_session.refresh(migration.items[0])
+    db_session.refresh(migration.items[1])
+
+    assert rolled_back.status == "rolled_back"
+    assert rolled_back.error_message is None
+    assert rolled_back.completed_items == 2
+    assert rolled_back.failed_items == 0
+    assert restored == ["bucket-a"]
+    assert removed == ["bucket-b"]
+    assert purged == ["bucket-a-dst"]
+    assert migration.items[0].status == "completed"
+    assert migration.items[0].step == "rolled_back"
+    assert migration.items[0].objects_deleted == 6
+    assert migration.items[0].read_only_applied is False
+    assert migration.items[0].source_policy_backup_json is None
+    assert migration.items[1].status == "completed"
+    assert migration.items[1].step == "rolled_back"
+    assert migration.items[1].read_only_applied is False
+
+
+def test_rollback_failed_migration_with_item_errors_reports_completed_with_errors(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "completed_with_errors"
+    migration.items[0].status = "failed"
+    migration.items[0].step = "verify"
+    migration.items[0].read_only_applied = True
+    migration.items[0].source_policy_backup_json = "{}"
+    db_session.commit()
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(account=source if context_id == str(source.id) else target)
+
+    def _restore_source_policy(_bucket_name: str, _source_account, _item):
+        raise RuntimeError("policy restore denied")
+
+    def _purge_target_bucket(_target_ctx, _target_bucket: str):
+        raise RuntimeError("target purge denied")
+
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._restore_source_policy = _restore_source_policy  # type: ignore[method-assign]
+    service._purge_target_bucket = _purge_target_bucket  # type: ignore[method-assign]
+
+    updated = service.rollback_failed_migration(migration.id)
+    item = updated.items[0]
+
+    assert updated.status == "completed_with_errors"
+    assert updated.error_message
+    assert "Rollback completed with 1 error(s)" in updated.error_message
+    assert item.status == "failed"
+    assert item.step == "rollback_failed"
+    assert item.error_message
+    assert "source policy restore failed" in item.error_message
+    assert "destination cleanup failed" in item.error_message
+
+
+def test_retry_item_queues_failed_bucket_item(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[
+            BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst"),
+            BucketMigrationBucketMapping(source_bucket="bucket-b", target_bucket="bucket-b-dst"),
+        ],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "completed_with_errors"
+    items_by_source = {item.source_bucket: item for item in migration.items}
+    failed_item = items_by_source["bucket-a"]
+    completed_item = items_by_source["bucket-b"]
+    failed_item.status = "failed"
+    failed_item.step = "verify"
+    failed_item.error_message = "diff not clean"
+    completed_item.status = "completed"
+    completed_item.step = "completed"
+    db_session.commit()
+
+    updated = service.retry_item(migration.id, failed_item.id)
+    updated_by_source = {item.source_bucket: item for item in updated.items}
+    item = updated_by_source["bucket-a"]
+
+    assert updated.status == "queued"
+    assert item.status == "pending"
+    assert item.step == "sync"
+    assert item.error_message is None
+    assert item.finished_at is None
+    assert updated_by_source["bucket-b"].status == "completed"
+
+
+def test_retry_failed_items_queues_all_failed_bucket_items(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[
+            BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst"),
+            BucketMigrationBucketMapping(source_bucket="bucket-b", target_bucket="bucket-b-dst"),
+        ],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "completed_with_errors"
+    migration.items[0].status = "failed"
+    migration.items[0].step = "sync"
+    migration.items[0].error_message = "sync denied"
+    migration.items[1].status = "failed"
+    migration.items[1].step = "rollback_failed"
+    migration.items[1].error_message = "rollback denied"
+    db_session.commit()
+
+    updated, retried_count = service.retry_failed_items(migration.id)
+
+    assert retried_count == 2
+    assert updated.status == "queued"
+    assert updated.items[0].status == "pending"
+    assert updated.items[0].step == "sync"
+    assert updated.items[1].status == "pending"
+    assert updated.items[1].step == "sync"
+
+
+def test_rollback_item_rolls_back_single_failed_bucket_item(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+    item = migration.items[0]
+    migration.status = "completed_with_errors"
+    item.status = "failed"
+    item.step = "sync"
+    item.read_only_applied = True
+    item.source_policy_backup_json = "{}"
+    item.target_lock_applied = True
+    item.target_policy_backup_json = "{}"
+    item.objects_deleted = 4
+    db_session.commit()
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(account=source if context_id == str(source.id) else target)
+
+    restored_source: list[str] = []
+    restored_target: list[str] = []
+
+    def _restore_source_policy(bucket_name: str, _source_account, _item):
+        restored_source.append(bucket_name)
+
+    def _restore_target_lock(_target_account, target_bucket: str, _item):
+        restored_target.append(target_bucket)
+
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._restore_source_policy = _restore_source_policy  # type: ignore[method-assign]
+    service._restore_target_write_lock_policy = _restore_target_lock  # type: ignore[method-assign]
+    service._purge_target_bucket = lambda *_args, **_kwargs: (2, 1)  # type: ignore[method-assign]
+
+    updated = service.rollback_item(migration.id, item.id)
+    updated_item = updated.items[0]
+
+    assert updated.status == "completed"
+    assert restored_source == ["bucket-a"]
+    assert restored_target == ["bucket-a-dst"]
+    assert updated_item.status == "completed"
+    assert updated_item.step == "rolled_back"
+    assert updated_item.objects_deleted == 7
+    assert updated_item.read_only_applied is False
+    assert updated_item.source_policy_backup_json is None
+    assert updated_item.target_lock_applied is False
+    assert updated_item.target_policy_backup_json is None
+
+
+def test_rollback_failed_items_keeps_completed_with_errors_when_one_item_fails(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[
+            BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst"),
+            BucketMigrationBucketMapping(source_bucket="bucket-b", target_bucket="bucket-b-dst"),
+        ],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "completed_with_errors"
+    migration.items[0].status = "failed"
+    migration.items[0].step = "sync"
+    migration.items[1].status = "failed"
+    migration.items[1].step = "sync"
+    db_session.commit()
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(account=source if context_id == str(source.id) else target)
+
+    def _purge_target_bucket(_target_ctx, target_bucket: str):
+        if target_bucket == "bucket-a-dst":
+            return 1, 0
+        raise RuntimeError("purge denied")
+
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._purge_target_bucket = _purge_target_bucket  # type: ignore[method-assign]
+
+    updated, rolled_back_count = service.rollback_failed_items(migration.id)
+
+    assert rolled_back_count == 2
+    assert updated.status == "completed_with_errors"
+    assert updated.items[0].status == "completed"
+    assert updated.items[0].step == "rolled_back"
+    assert updated.items[1].status == "failed"
+    assert updated.items[1].step == "rollback_failed"
+
+
+def test_rollback_failed_migration_blocks_when_delete_source_already_completed(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        delete_source=True,
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "completed_with_errors"
+    migration.items[0].status = "completed"
+    migration.items[0].step = "completed"
+    db_session.commit()
+
+    service._resolve_context = lambda *_args, **_kwargs: SimpleNamespace(account=source)  # type: ignore[method-assign]
+
+    try:
+        service.rollback_failed_migration(migration.id)
+        assert False, "Expected rollback to be blocked when source deletion may be completed"
+    except ValueError as exc:
+        assert "prevent data loss" in str(exc)
+        assert "source data may have been deleted" in str(exc)
+
+
+def test_rollback_item_blocks_when_delete_source_step_failed(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        delete_source=True,
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "completed_with_errors"
+    item = migration.items[0]
+    item.status = "failed"
+    item.step = "delete_source"
+    db_session.commit()
+
+    service._resolve_context = lambda *_args, **_kwargs: SimpleNamespace(account=source)  # type: ignore[method-assign]
+
+    try:
+        service.rollback_item(migration.id, item.id)
+        assert False, "Expected rollback to be blocked when delete_source step failed"
+    except ValueError as exc:
+        assert "prevent data loss" in str(exc)
+        assert "source data may have been deleted" in str(exc)
+
+
+def test_rollback_item_blocks_when_source_access_cannot_be_verified(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        delete_source=False,
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "completed_with_errors"
+    item = migration.items[0]
+    item.status = "failed"
+    item.step = "sync"
+    db_session.commit()
+
+    service._resolve_context = lambda *_args, **_kwargs: SimpleNamespace(account=source)  # type: ignore[method-assign]
+
+    def _fail_source_access(*_args, **_kwargs):
+        raise RuntimeError("NoSuchBucket")
+
+    service._precheck_can_list_bucket = _fail_source_access  # type: ignore[method-assign]
+
+    try:
+        service.rollback_item(migration.id, item.id)
+        assert False, "Expected rollback to be blocked when source accessibility cannot be verified"
+    except ValueError as exc:
+        assert "prevent data loss" in str(exc)
+        assert "unable to verify source bucket accessibility" in str(exc)
+
+
+def test_rollback_failed_items_blocks_when_any_source_may_be_deleted(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        delete_source=True,
+        buckets=[
+            BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst"),
+            BucketMigrationBucketMapping(source_bucket="bucket-b", target_bucket="bucket-b-dst"),
+        ],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "completed_with_errors"
+    by_source = {item.source_bucket: item for item in migration.items}
+    by_source["bucket-a"].status = "failed"
+    by_source["bucket-a"].step = "sync"
+    by_source["bucket-b"].status = "failed"
+    by_source["bucket-b"].step = "delete_source"
+    db_session.commit()
+
+    service._resolve_context = lambda *_args, **_kwargs: SimpleNamespace(account=source)  # type: ignore[method-assign]
+
+    try:
+        service.rollback_failed_items(migration.id)
+        assert False, "Expected bulk rollback to be blocked when one source bucket may be deleted"
+    except ValueError as exc:
+        assert "prevent data loss" in str(exc)
+        assert "source data may have been deleted" in str(exc)
+
+
+def test_create_migration_rejects_invalid_webhook_url(db_session):
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    try:
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            mode="one_shot",
+            webhook_url="ftp://invalid.example.test/hook",
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+        )
+        assert False, "Expected payload validation to fail when webhook_url is invalid"
+    except Exception as exc:  # noqa: BLE001
+        assert "webhook_url must be a valid http(s) URL" in str(exc)
+
+
+def test_add_event_notifies_webhook_when_configured(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+    migration.webhook_url = "https://hooks.example.test/migration"
+    item = migration.items[0]
+
+    with patch("app.services.bucket_migration_service.requests.post") as mocked_post:
+        mocked_post.return_value = SimpleNamespace(status_code=202)
+        service._add_event(
+            migration,
+            item=item,
+            level="info",
+            message="Sync batch completed.",
+            metadata={"copied": 12, "deleted": 1},
+        )
+
+    assert mocked_post.call_count == 1
+    args, kwargs = mocked_post.call_args
+    assert args[0] == "https://hooks.example.test/migration"
+    assert kwargs["timeout"] == 3.0
+
+    payload = kwargs["json"]
+    assert payload["type"] == "bucket_migration.event"
+    assert payload["migration"]["id"] == migration.id
+    assert payload["migration"]["status"] == migration.status
+    assert payload["item"]["id"] == item.id
+    assert payload["item"]["source_bucket"] == item.source_bucket
+    assert payload["item"]["target_bucket"] == item.target_bucket
+    assert payload["event"]["message"] == "Sync batch completed."
+    assert payload["event"]["metadata"]["copied"] == 12
+
+
+def test_add_event_webhook_failure_does_not_break_migration_events(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+    migration.webhook_url = "https://hooks.example.test/migration"
+
+    with patch("app.services.bucket_migration_service.requests.post", side_effect=RuntimeError("network down")):
+        service._add_event(
+            migration,
+            level="warning",
+            message="Webhook failure must be ignored.",
+            metadata={"reason": "test"},
+        )
+    db_session.flush()
+
+
+def test_delete_migration_allows_final_statuses(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "completed"
+    db_session.commit()
+
+    service.delete_migration(migration.id)
+
+    deleted = db_session.query(BucketMigration).filter(BucketMigration.id == migration.id).first()
+    assert deleted is None
+
+
+def test_delete_migration_rejects_non_final_status(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+
+    try:
+        service.delete_migration(migration.id)
+        assert False, "Expected delete_migration to be blocked for non-final status"
+    except ValueError as exc:
+        assert "can only be deleted from a final status" in str(exc)

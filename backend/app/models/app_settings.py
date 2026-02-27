@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.config import get_settings
 from app.models.storage_endpoint import StorageEndpointPublic
@@ -131,6 +131,8 @@ class GeneralSettings(BaseModel):
     portal_enabled: bool = False
     billing_enabled: bool = False
     endpoint_status_enabled: bool = False
+    bucket_migration_enabled: bool = True
+    allow_ui_user_bucket_migration: bool = False
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False
     allow_login_custom_endpoint: bool = False
@@ -182,6 +184,27 @@ class PortalSettings(BaseModel):
 
 class ManagerSettings(BaseModel):
     allow_manager_user_usage_stats: bool = True
+    bucket_migration_parallelism_default: int = Field(
+        default=_settings.bucket_migration_parallelism_max,
+        ge=1,
+        le=128,
+    )
+    bucket_migration_parallelism_max: int = Field(
+        default=_settings.bucket_migration_parallelism_max,
+        ge=1,
+        le=128,
+    )
+    bucket_migration_max_active_per_endpoint: int = Field(
+        default=_settings.bucket_migration_max_active_per_endpoint,
+        ge=1,
+        le=64,
+    )
+
+    @model_validator(mode="after")
+    def validate_bucket_migration_limits(self):
+        if self.bucket_migration_parallelism_default > self.bucket_migration_parallelism_max:
+            raise ValueError("bucket_migration_parallelism_default must be <= bucket_migration_parallelism_max")
+        return self
 
 
 class BrowserSettings(BaseModel):

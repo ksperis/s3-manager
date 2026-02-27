@@ -765,6 +765,22 @@ def require_metrics_capable_manager(
     )
 
 
+def _ensure_bucket_migration_allowed(user: User) -> None:
+    app_settings = load_app_settings()
+    if not app_settings.general.bucket_migration_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket migration feature is disabled")
+    if is_admin_ui_role(user.role):
+        return
+    if user.role == UserRole.UI_USER.value and bool(app_settings.general.allow_ui_user_bucket_migration):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+
+def get_current_bucket_migration_user(user: User = Depends(get_current_user)) -> User:
+    _ensure_bucket_migration_allowed(user)
+    return user
+
+
 def require_manager_enabled() -> None:
     settings = load_app_settings()
     if not settings.general.manager_enabled:

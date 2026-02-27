@@ -46,6 +46,8 @@ from app.routers.manager import objects as manager_objects
 from app.routers.manager import iam_policies as manager_iam_policies
 from app.routers.manager import topics as manager_topics
 from app.routers.manager import stats as manager_stats
+from app.routers.manager import migrations as manager_migrations
+from app.services.bucket_migration_service import get_bucket_migration_worker
 from app.routers.dependencies import (
     require_browser_enabled,
     require_ceph_admin_enabled,
@@ -68,7 +70,15 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db(engine, SessionLocal)
-    yield
+    worker = None
+    if settings.bucket_migration_worker_enabled:
+        worker = get_bucket_migration_worker(SessionLocal)
+        worker.start()
+    try:
+        yield
+    finally:
+        if worker:
+            worker.stop()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -177,6 +187,11 @@ app.include_router(
 )
 app.include_router(
     manager_stats.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
+)
+app.include_router(
+    manager_migrations.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_manager_enabled)],
 )

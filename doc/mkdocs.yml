@@ -83,6 +83,7 @@ nav:
       - Admin: features/admin.md
       - Ceph Admin: features/ceph-admin.md
       - Manager: features/manager.md
+      - Bucket Migration (Manager): features/bucket-migration.md
       - Browser: features/browser.md
       - Portal: features/portal.md
   - Backends:

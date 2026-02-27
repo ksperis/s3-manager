@@ -1,0 +1,3481 @@
+# Copyright (c) 2026 Laurent Barbe
+# Licensed under the Apache License, Version 2.0
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import re
+import socket
+import threading
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor, wait
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import timedelta
+from typing import Any, Callable, Optional
+
+import requests
+from botocore.exceptions import BotoCoreError, ClientError
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.core.config import get_settings
+from app.db import (
+    BucketMigration,
+    BucketMigrationEvent,
+    BucketMigrationItem,
+    S3Account,
+    S3Connection,
+    S3User,
+    User,
+)
+from app.models.bucket_migration import BucketMigrationCreateRequest
+from app.services.app_settings_service import load_app_settings
+from app.services.buckets_service import BucketsService
+from app.services.s3_client import get_s3_client
+from app.utils.rgw import resolve_admin_uid
+from app.utils.s3_connection_endpoint import resolve_connection_endpoint
+from app.utils.s3_endpoint import normalize_s3_endpoint, resolve_s3_client_options
+from app.utils.time import utcnow
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+_READ_ONLY_POLICY_SID = "S3ManagerMigrationReadOnlyDeny"
+_TARGET_WRITE_LOCK_POLICY_SID = "S3ManagerMigrationTargetWriteLockDeny"
+_SOURCE_COPY_GRANT_POLICY_SID = "S3ManagerMigrationSourceCopyGrantAllow"
+_MIGRATION_USER_AGENT_MARKER = "s3-manager-migration-worker"
+_WEBHOOK_TIMEOUT_SECONDS = 3.0
+_RUNNABLE_MIGRATION_STATUSES = ("queued", "running", "pause_requested", "cancel_requested")
+_FINAL_MIGRATION_STATUSES = (
+    "completed",
+    "completed_with_errors",
+    "failed",
+    "canceled",
+    "rolled_back",
+)
+
+
+class _WorkerLeaseLostError(RuntimeError):
+    """Raised when a worker loses ownership of a migration lease."""
+
+
+@dataclass
+class _ResolvedContext:
+    context_id: str
+    account: S3Account
+    endpoint: Optional[str]
+    region: Optional[str]
+    force_path_style: bool
+    verify_tls: bool
+
+
+@dataclass
+class _SyncDiff:
+    copy_keys: list[str]
+    delete_keys: list[str]
+    source_count: int
+    target_count: int
+    matched_count: int
+    different_count: int
+    only_source_count: int
+    only_target_count: int
+    sample: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class _MigrationRuntimeLimits:
+    parallelism_default: int
+    parallelism_max: int
+    max_active_per_endpoint: int
+
+
+def _chunked(items: list[str], size: int) -> list[list[str]]:
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def _json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=True, sort_keys=True, default=str)
+
+
+def _json_loads(value: Optional[str]) -> Any:
+    if value is None:
+        return None
+    try:
+        return json.loads(value)
+    except Exception:
+        return None
+
+
+class BucketMigrationService:
+    def __init__(self, db: Session) -> None:
+        self.db = db
+        self._buckets = BucketsService()
+
+    def create_migration(self, payload: BucketMigrationCreateRequest, user: User) -> BucketMigration:
+        mappings: list[tuple[str, str]] = []
+        seen_targets: set[str] = set()
+        for entry in payload.buckets:
+            source_bucket = (entry.source_bucket or "").strip()
+            target_bucket = ((entry.target_bucket or "").strip() or f"{payload.mapping_prefix}{source_bucket}").strip()
+            if not source_bucket:
+                raise ValueError("source bucket is required")
+            if not target_bucket:
+                raise ValueError(f"target bucket is required for source '{source_bucket}'")
+            if target_bucket in seen_targets:
+                raise ValueError(f"Duplicate target bucket mapping: {target_bucket}")
+            seen_targets.add(target_bucket)
+            mappings.append((source_bucket, target_bucket))
+
+        source_ctx = self._resolve_context(payload.source_context_id)
+        target_ctx = self._resolve_context(payload.target_context_id)
+        if not source_ctx.endpoint:
+            raise ValueError("Source context endpoint is not configured")
+        if not target_ctx.endpoint:
+            raise ValueError("Target context endpoint is not configured")
+        same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
+        if same_endpoint:
+            for source_bucket, target_bucket in mappings:
+                if source_bucket == target_bucket:
+                    raise ValueError(
+                        "When source and target contexts use the same endpoint, "
+                        "target bucket must differ from source bucket. "
+                        "Use a prefix or explicit mapping override."
+                    )
+
+        limits = self._load_runtime_limits()
+        requested_parallelism = (
+            int(payload.parallelism_max)
+            if payload.parallelism_max is not None
+            else int(limits.parallelism_default)
+        )
+        parallelism = max(1, min(requested_parallelism, int(limits.parallelism_max)))
+
+        migration = BucketMigration(
+            created_by_user_id=user.id,
+            source_context_id=payload.source_context_id,
+            target_context_id=payload.target_context_id,
+            mode=payload.mode,
+            copy_bucket_settings=bool(payload.copy_bucket_settings),
+            delete_source=bool(payload.delete_source),
+            lock_target_writes=bool(payload.lock_target_writes),
+            auto_grant_source_read_for_copy=bool(payload.auto_grant_source_read_for_copy),
+            webhook_url=(payload.webhook_url or None),
+            mapping_prefix=payload.mapping_prefix or None,
+            status="draft",
+            precheck_status="pending",
+            precheck_report_json=None,
+            precheck_checked_at=None,
+            parallelism_max=parallelism,
+            total_items=len(mappings),
+            completed_items=0,
+            failed_items=0,
+            skipped_items=0,
+            awaiting_items=0,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+        self.db.add(migration)
+        self.db.flush()
+
+        for source_bucket, target_bucket in mappings:
+            self.db.add(
+                BucketMigrationItem(
+                    migration_id=migration.id,
+                    source_bucket=source_bucket,
+                    target_bucket=target_bucket,
+                    status="pending",
+                    step="create_bucket",
+                    created_at=utcnow(),
+                    updated_at=utcnow(),
+                )
+            )
+
+        self._add_event(
+            migration,
+            level="info",
+            message="Migration created.",
+            metadata={
+                "source_context_id": payload.source_context_id,
+                "target_context_id": payload.target_context_id,
+                "mode": payload.mode,
+                "copy_bucket_settings": bool(payload.copy_bucket_settings),
+                "delete_source": bool(payload.delete_source),
+                "lock_target_writes": bool(payload.lock_target_writes),
+                "auto_grant_source_read_for_copy": bool(payload.auto_grant_source_read_for_copy),
+                "webhook_enabled": bool(payload.webhook_url),
+                "parallelism_max": parallelism,
+                "items": len(mappings),
+            },
+        )
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def list_migrations(self, limit: int = 100, *, context_id: Optional[str] = None) -> list[BucketMigration]:
+        query = self.db.query(BucketMigration)
+        normalized_context_id = (context_id or "").strip()
+        if normalized_context_id:
+            query = query.filter(
+                or_(
+                    BucketMigration.source_context_id == normalized_context_id,
+                    BucketMigration.target_context_id == normalized_context_id,
+                )
+            )
+        return query.order_by(BucketMigration.created_at.desc()).limit(max(1, min(int(limit), 500))).all()
+
+    def get_migration(self, migration_id: int) -> BucketMigration:
+        migration = self.db.query(BucketMigration).filter(BucketMigration.id == migration_id).first()
+        if not migration:
+            raise ValueError("Migration not found")
+        return migration
+
+    def delete_migration(self, migration_id: int) -> None:
+        migration = self.get_migration(migration_id)
+        if migration.status not in _FINAL_MIGRATION_STATUSES:
+            raise ValueError("Migration can only be deleted from a final status")
+        self.db.delete(migration)
+        self.db.commit()
+
+    def run_precheck(self, migration_id: int) -> BucketMigration:
+        migration = self.get_migration(migration_id)
+        if migration.status in {"running", "queued", "pause_requested", "cancel_requested"}:
+            raise ValueError("Precheck cannot run while migration is active")
+
+        checked_at = utcnow()
+        report: dict[str, Any] = {
+            "status": "passed",
+            "checked_at": checked_at.isoformat(),
+            "contexts": {},
+            "items": [],
+            "errors": 0,
+            "warnings": 0,
+        }
+        errors = 0
+        warnings = 0
+
+        source_ctx: Optional[_ResolvedContext] = None
+        target_ctx: Optional[_ResolvedContext] = None
+        try:
+            source_ctx = self._resolve_context(migration.source_context_id)
+            target_ctx = self._resolve_context(migration.target_context_id)
+            report["contexts"] = {
+                "source": {
+                    "context_id": source_ctx.context_id,
+                    "endpoint": source_ctx.endpoint,
+                    "region": source_ctx.region,
+                },
+                "target": {
+                    "context_id": target_ctx.context_id,
+                    "endpoint": target_ctx.endpoint,
+                    "region": target_ctx.region,
+                },
+            }
+            if not source_ctx.endpoint:
+                raise ValueError("Source context endpoint is not configured")
+            if not target_ctx.endpoint:
+                raise ValueError("Target context endpoint is not configured")
+        except Exception as exc:  # noqa: BLE001
+            errors += 1
+            report["contexts_error"] = str(exc)
+            source_ctx = None
+            target_ctx = None
+
+        if source_ctx and target_ctx:
+            same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
+            report["same_endpoint"] = bool(same_endpoint)
+
+            for item in sorted(migration.items, key=lambda entry: entry.id):
+                item_result: dict[str, Any] = {
+                    "item_id": item.id,
+                    "source_bucket": item.source_bucket,
+                    "target_bucket": item.target_bucket,
+                    "messages": [],
+                }
+                item_errors = 0
+                item_warnings = 0
+                source_access_ok = False
+                source_object_count: Optional[int] = None
+                target_object_count: Optional[int] = None
+
+                def add_msg(level: str, message: str) -> None:
+                    nonlocal item_errors, item_warnings
+                    if level == "error":
+                        item_errors += 1
+                    elif level == "warning":
+                        item_warnings += 1
+                    item_result["messages"].append({"level": level, "message": message})
+
+                try:
+                    self._precheck_can_list_bucket(source_ctx, item.source_bucket)
+                    source_access_ok = True
+                    add_msg("info", "Source bucket is reachable for list/read operations.")
+                except Exception as exc:  # noqa: BLE001
+                    add_msg("error", f"Source bucket read/list check failed: {exc}")
+
+                if source_access_ok:
+                    try:
+                        source_object_count = self._count_bucket_objects(source_ctx, item.source_bucket)
+                        item.source_count = int(source_object_count)
+                        add_msg("info", f"Source bucket object count: {source_object_count}.")
+                    except Exception as exc:  # noqa: BLE001
+                        item.source_count = None
+                        add_msg("warning", f"Unable to count source bucket objects: {exc}")
+                else:
+                    item.source_count = None
+
+                target_exists: Optional[bool] = None
+                try:
+                    target_exists = self._precheck_bucket_exists(target_ctx, item.target_bucket)
+                    if target_exists is True:
+                        add_msg("warning", "Target bucket already exists; this item will be skipped.")
+                    elif target_exists is False:
+                        add_msg("info", "Target bucket does not exist.")
+                    else:
+                        add_msg(
+                            "warning",
+                            "Unable to verify whether target bucket exists (insufficient head/list rights).",
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    add_msg("error", f"Target bucket existence check failed: {exc}")
+
+                if target_exists is True:
+                    try:
+                        target_object_count = self._count_bucket_objects(target_ctx, item.target_bucket)
+                        item.target_count = int(target_object_count)
+                        add_msg("info", f"Target bucket object count: {target_object_count}.")
+                    except Exception as exc:  # noqa: BLE001
+                        item.target_count = None
+                        add_msg("warning", f"Unable to count target bucket objects: {exc}")
+                elif target_exists is False:
+                    item.target_count = 0
+                else:
+                    item.target_count = None
+
+                if same_endpoint and target_exists is not True and source_access_ok:
+                    try:
+                        probe = self._precheck_same_endpoint_copy_source_access(
+                            source_ctx,
+                            target_ctx,
+                            item.source_bucket,
+                            auto_grant=bool(migration.auto_grant_source_read_for_copy),
+                        )
+                        if probe == "source_empty":
+                            add_msg(
+                                "warning",
+                                "Source bucket is currently empty; same-endpoint x-amz-copy-source permissions "
+                                "cannot be fully validated.",
+                            )
+                        elif probe == "validated_with_temporary_grant":
+                            add_msg(
+                                "info",
+                                "Same-endpoint x-amz-copy-source permissions were validated by applying "
+                                "a temporary source-read grant for the target context.",
+                            )
+                        else:
+                            add_msg(
+                                "info",
+                                "Same-endpoint x-amz-copy-source permissions are valid with the target context.",
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        add_msg("error", f"Same-endpoint x-amz-copy-source precheck failed: {exc}")
+
+                if migration.lock_target_writes and target_exists is not True:
+                    if target_exists is False:
+                        add_msg(
+                            "info",
+                            "Target bucket lock is enabled and will be applied right after destination bucket creation.",
+                        )
+                    else:
+                        add_msg(
+                            "warning",
+                            "Target write-lock check could not be fully validated because destination bucket visibility is limited.",
+                        )
+
+                requires_cutover = bool(target_exists is not True)
+                if requires_cutover:
+                    try:
+                        self._precheck_policy_roundtrip(source_ctx.account, item.source_bucket)
+                        add_msg("info", "Read-only cutover policy can be applied on source bucket.")
+                    except Exception as exc:  # noqa: BLE001
+                        add_msg("error", f"Read-only policy precheck failed: {exc}")
+
+                item_result["errors"] = item_errors
+                item_result["warnings"] = item_warnings
+                item_result["source_object_count"] = source_object_count
+                item_result["target_object_count"] = target_object_count
+                item.source_count = source_object_count
+                item.target_count = target_object_count if target_exists is True else item.target_count
+                item.updated_at = checked_at
+                errors += item_errors
+                warnings += item_warnings
+                report["items"].append(item_result)
+
+        report["errors"] = errors
+        report["warnings"] = warnings
+        report["status"] = "failed" if errors > 0 else "passed"
+
+        migration.precheck_status = "failed" if errors > 0 else "passed"
+        migration.precheck_report_json = _json_dumps(report)
+        migration.precheck_checked_at = checked_at
+        migration.updated_at = checked_at
+        if errors > 0:
+            self._add_event(
+                migration,
+                level="warning",
+                message="Precheck failed.",
+                metadata={"errors": errors, "warnings": warnings},
+            )
+        else:
+            self._add_event(
+                migration,
+                level="info",
+                message="Precheck passed.",
+                metadata={"errors": 0, "warnings": warnings},
+            )
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def start_migration(self, migration_id: int) -> BucketMigration:
+        migration = self.get_migration(migration_id)
+        if migration.status not in {"draft", "paused"}:
+            raise ValueError("Migration cannot be started from current status")
+        if migration.precheck_status != "passed":
+            raise ValueError("Precheck must pass before start. Run /precheck first.")
+        migration.status = "queued"
+        migration.pause_requested = False
+        migration.cancel_requested = False
+        migration.worker_lease_owner = None
+        migration.worker_lease_until = None
+        migration.error_message = None
+        migration.updated_at = utcnow()
+        if migration.started_at is None:
+            migration.started_at = utcnow()
+        for item in migration.items:
+            if item.status == "paused":
+                item.status = "pending"
+            if item.status == "awaiting_cutover" and migration.mode != "pre_sync":
+                item.status = "pending"
+                item.step = "apply_read_only"
+            item.updated_at = utcnow()
+        self._add_event(migration, level="info", message="Migration queued.")
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def request_pause(self, migration_id: int) -> BucketMigration:
+        migration = self.get_migration(migration_id)
+        if migration.status not in {"queued", "running", "pause_requested"}:
+            raise ValueError("Pause is only available while migration is queued or running")
+        migration.pause_requested = True
+        migration.status = "pause_requested"
+        migration.updated_at = utcnow()
+        self._add_event(migration, level="info", message="Pause requested.")
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def resume_migration(self, migration_id: int) -> BucketMigration:
+        migration = self.get_migration(migration_id)
+        if migration.status not in {"paused"}:
+            raise ValueError("Resume is only available from paused status")
+        migration.pause_requested = False
+        migration.cancel_requested = False
+        migration.status = "queued"
+        migration.worker_lease_owner = None
+        migration.worker_lease_until = None
+        migration.updated_at = utcnow()
+        for item in migration.items:
+            if item.status == "paused":
+                item.status = "pending"
+                item.updated_at = utcnow()
+        self._add_event(migration, level="info", message="Migration resumed.")
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def stop_migration(self, migration_id: int) -> BucketMigration:
+        migration = self.get_migration(migration_id)
+        if migration.status in {"completed", "completed_with_errors", "failed", "canceled", "rolled_back"}:
+            raise ValueError("Migration is already finished")
+        if migration.status in {"paused", "awaiting_cutover", "draft"}:
+            target_ctx: Optional[_ResolvedContext] = None
+            if migration.lock_target_writes:
+                try:
+                    target_ctx = self._resolve_context(migration.target_context_id)
+                except Exception as exc:  # noqa: BLE001
+                    self._add_event(
+                        migration,
+                        level="warning",
+                        message="Unable to resolve target context while stopping migration; target lock cleanup was skipped.",
+                        metadata={"error": str(exc)},
+                    )
+            self._mark_canceled(migration, target_ctx=target_ctx)
+        else:
+            migration.cancel_requested = True
+            migration.status = "cancel_requested"
+        migration.updated_at = utcnow()
+        self._add_event(migration, level="info", message="Stop requested.")
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def continue_after_presync(self, migration_id: int) -> BucketMigration:
+        migration = self.get_migration(migration_id)
+        if migration.status != "awaiting_cutover":
+            raise ValueError("Continue is only available when migration is awaiting cutover")
+        migration.status = "queued"
+        migration.pause_requested = False
+        migration.cancel_requested = False
+        migration.worker_lease_owner = None
+        migration.worker_lease_until = None
+        migration.updated_at = utcnow()
+        for item in migration.items:
+            if item.status == "awaiting_cutover":
+                item.status = "pending"
+                item.step = "apply_read_only"
+                item.updated_at = utcnow()
+        self._add_event(migration, level="info", message="Cutover requested after pre-sync.")
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def retry_item(self, migration_id: int, item_id: int) -> BucketMigration:
+        migration = self.get_migration(migration_id)
+        item = self._find_migration_item(migration, item_id)
+        self._ensure_manual_item_operation_allowed(migration)
+        if item.status != "failed":
+            raise ValueError("Retry is only available for failed bucket items")
+
+        self._prepare_item_retry(migration, item)
+        self._queue_migration_for_retry(migration, message=f"Retry requested for bucket '{item.source_bucket}'.")
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def retry_failed_items(self, migration_id: int) -> tuple[BucketMigration, int]:
+        migration = self.get_migration(migration_id)
+        self._ensure_manual_item_operation_allowed(migration)
+        failed_items = [item for item in migration.items if item.status == "failed"]
+        if not failed_items:
+            raise ValueError("No failed bucket items to retry")
+
+        for item in failed_items:
+            self._prepare_item_retry(migration, item)
+
+        self._queue_migration_for_retry(
+            migration,
+            message=f"Retry requested for {len(failed_items)} failed bucket item(s).",
+        )
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration, len(failed_items)
+
+    def rollback_item(self, migration_id: int, item_id: int) -> BucketMigration:
+        migration = self.get_migration(migration_id)
+        item = self._find_migration_item(migration, item_id)
+        self._ensure_manual_item_operation_allowed(migration)
+        if item.status != "failed":
+            raise ValueError("Rollback is only available for failed bucket items")
+
+        source_ctx = self._resolve_context(migration.source_context_id)
+        target_ctx = self._resolve_context(migration.target_context_id)
+        self._ensure_rollback_safe(migration, [item], source_ctx=source_ctx)
+        self._rollback_single_item(migration, item, source_ctx, target_ctx)
+        self._refresh_status_after_manual_item_operations(migration)
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def rollback_failed_items(self, migration_id: int) -> tuple[BucketMigration, int]:
+        migration = self.get_migration(migration_id)
+        self._ensure_manual_item_operation_allowed(migration)
+        failed_items = [item for item in migration.items if item.status == "failed"]
+        if not failed_items:
+            raise ValueError("No failed bucket items to rollback")
+
+        source_ctx = self._resolve_context(migration.source_context_id)
+        target_ctx = self._resolve_context(migration.target_context_id)
+        self._ensure_rollback_safe(migration, failed_items, source_ctx=source_ctx)
+        for item in failed_items:
+            self._rollback_single_item(migration, item, source_ctx, target_ctx)
+
+        self._refresh_status_after_manual_item_operations(migration)
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration, len(failed_items)
+
+    def rollback_failed_migration(self, migration_id: int) -> BucketMigration:
+        migration = self.get_migration(migration_id)
+        if migration.status not in {"failed", "completed_with_errors"}:
+            raise ValueError("Rollback is only available for failed migrations")
+
+        source_ctx = self._resolve_context(migration.source_context_id)
+        target_ctx = self._resolve_context(migration.target_context_id)
+        actionable_items = [item for item in migration.items if item.status != "skipped"]
+        self._ensure_rollback_safe(migration, actionable_items, source_ctx=source_ctx)
+
+        item_errors: list[str] = []
+        total_purged_objects = 0
+        rollback_started_at = utcnow()
+
+        for item in migration.items:
+            rollback_issues: list[str] = []
+
+            if item.read_only_applied or item.source_policy_backup_json:
+                try:
+                    if item.source_policy_backup_json:
+                        self._restore_source_policy(item.source_bucket, source_ctx.account, item)
+                    else:
+                        self._remove_managed_read_only_statement(item.source_bucket, source_ctx.account)
+                    item.read_only_applied = False
+                    item.source_policy_backup_json = None
+                except Exception as exc:  # noqa: BLE001
+                    rollback_issues.append(f"source policy restore failed: {exc}")
+
+            if item.target_lock_applied or item.target_policy_backup_json:
+                try:
+                    if item.target_policy_backup_json:
+                        self._restore_target_write_lock_policy(target_ctx.account, item.target_bucket, item)
+                    else:
+                        self._remove_managed_target_write_lock_statement(item.target_bucket, target_ctx.account)
+                    item.target_lock_applied = False
+                    item.target_policy_backup_json = None
+                except Exception as exc:  # noqa: BLE001
+                    rollback_issues.append(f"target lock restore failed: {exc}")
+
+            if item.status != "skipped":
+                try:
+                    purged_current, purged_versions = self._purge_target_bucket(target_ctx, item.target_bucket)
+                    purged_count = purged_current + purged_versions
+                    total_purged_objects += purged_count
+                    item.objects_deleted = int(item.objects_deleted or 0) + purged_count
+                except Exception as exc:  # noqa: BLE001
+                    rollback_issues.append(f"destination cleanup failed: {exc}")
+
+            if rollback_issues:
+                item.status = "failed"
+                item.step = "rollback_failed"
+                item.error_message = "Rollback failed: " + "; ".join(rollback_issues)
+                item.finished_at = utcnow()
+                item.updated_at = utcnow()
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="error",
+                    message="Rollback failed for item.",
+                    metadata={"issues": rollback_issues},
+                )
+                item_errors.append(f"{item.source_bucket}: {'; '.join(rollback_issues)}")
+                continue
+
+            item.status = "completed"
+            item.step = "rolled_back"
+            item.error_message = None
+            item.finished_at = utcnow()
+            item.updated_at = utcnow()
+            self._add_event(
+                migration,
+                item=item,
+                level="info",
+                message="Rollback completed for item.",
+                metadata={"target_bucket": item.target_bucket},
+            )
+
+        migration.pause_requested = False
+        migration.cancel_requested = False
+        migration.worker_lease_owner = None
+        migration.worker_lease_until = None
+        migration.updated_at = utcnow()
+        migration.finished_at = rollback_started_at
+
+        if item_errors:
+            migration.status = "completed_with_errors"
+            migration.error_message = (
+                f"Rollback completed with {len(item_errors)} error(s): " + " | ".join(item_errors[:3])
+            )
+            self._add_event(
+                migration,
+                level="warning",
+                message="Rollback completed with errors.",
+                metadata={
+                    "errors": len(item_errors),
+                    "purged_objects": total_purged_objects,
+                    "sample": item_errors[:3],
+                },
+            )
+        else:
+            migration.status = "rolled_back"
+            migration.error_message = None
+            self._add_event(
+                migration,
+                level="info",
+                message="Rollback completed successfully.",
+                metadata={"purged_objects": total_purged_objects},
+            )
+
+        self._recompute_counters(migration)
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def claim_next_runnable_migration_id(self, *, worker_id: str, lease_seconds: int) -> Optional[int]:
+        if not worker_id:
+            raise ValueError("worker_id is required to claim a migration lease")
+        now = utcnow()
+        lease_duration = max(15, int(lease_seconds))
+        lease_until = now + timedelta(seconds=lease_duration)
+        limits = self._load_runtime_limits()
+        max_active_per_endpoint = max(1, int(limits.max_active_per_endpoint))
+        endpoint_usage = self._active_endpoint_usage(now=now)
+        endpoint_cache: dict[str, str] = {}
+        candidate_rows = [
+            row
+            for row in (
+                self.db.query(
+                    BucketMigration.id,
+                    BucketMigration.source_context_id,
+                    BucketMigration.target_context_id,
+                )
+                .filter(
+                    BucketMigration.status.in_(_RUNNABLE_MIGRATION_STATUSES),
+                    or_(
+                        BucketMigration.worker_lease_until.is_(None),
+                        BucketMigration.worker_lease_until < now,
+                    ),
+                )
+                .order_by(BucketMigration.created_at.asc())
+                .limit(50)
+                .all()
+            )
+        ]
+        for row in candidate_rows:
+            migration_id = int(row.id)
+            endpoint_keys = self._endpoint_keys_for_contexts(
+                row.source_context_id,
+                row.target_context_id,
+                cache=endpoint_cache,
+            )
+            if any(endpoint_usage.get(key, 0) >= max_active_per_endpoint for key in endpoint_keys):
+                continue
+            updated = (
+                self.db.query(BucketMigration)
+                .filter(
+                    BucketMigration.id == migration_id,
+                    BucketMigration.status.in_(_RUNNABLE_MIGRATION_STATUSES),
+                    or_(
+                        BucketMigration.worker_lease_until.is_(None),
+                        BucketMigration.worker_lease_until < now,
+                    ),
+                )
+                .update(
+                    {
+                        BucketMigration.worker_lease_owner: worker_id,
+                        BucketMigration.worker_lease_until: lease_until,
+                        BucketMigration.updated_at: now,
+                    },
+                    synchronize_session=False,
+                )
+            )
+            if updated == 1:
+                self.db.commit()
+                return migration_id
+            self.db.rollback()
+        return None
+
+    def find_next_runnable_migration_id(self) -> Optional[int]:
+        now = utcnow()
+        row = (
+            self.db.query(BucketMigration)
+            .filter(
+                BucketMigration.status.in_(_RUNNABLE_MIGRATION_STATUSES),
+                or_(
+                    BucketMigration.worker_lease_until.is_(None),
+                    BucketMigration.worker_lease_until < now,
+                ),
+            )
+            .order_by(BucketMigration.created_at.asc())
+            .first()
+        )
+        return int(row.id) if row else None
+
+    def run_migration(
+        self,
+        migration_id: int,
+        *,
+        worker_id: Optional[str] = None,
+        lease_seconds: Optional[int] = None,
+    ) -> None:
+        effective_lease_seconds = max(15, int(lease_seconds or settings.bucket_migration_worker_lease_seconds))
+        migration = self.get_migration(migration_id)
+
+        if worker_id:
+            if migration.worker_lease_owner != worker_id:
+                return
+            if not self._renew_migration_lease(migration.id, worker_id=worker_id, lease_seconds=effective_lease_seconds):
+                return
+            migration = self.get_migration(migration_id)
+
+        if migration.status in {"completed", "completed_with_errors", "failed", "canceled", "rolled_back", "awaiting_cutover"}:
+            if worker_id and migration.worker_lease_owner == worker_id:
+                migration.worker_lease_owner = None
+                migration.worker_lease_until = None
+                self.db.commit()
+            return
+
+        if migration.status in _RUNNABLE_MIGRATION_STATUSES:
+            migration.status = "running" if migration.status not in {"pause_requested", "cancel_requested"} else migration.status
+            if migration.started_at is None:
+                migration.started_at = utcnow()
+            migration.updated_at = utcnow()
+            migration.last_heartbeat_at = utcnow()
+            self.db.commit()
+
+        source_ctx = self._resolve_context(migration.source_context_id)
+        target_ctx = self._resolve_context(migration.target_context_id)
+        control_check = lambda: self._control_state(
+            migration.id,
+            worker_id=worker_id,
+            lease_seconds=effective_lease_seconds,
+        )
+
+        for item in migration.items:
+            self.db.refresh(migration)
+            state = control_check()
+            if state == "lost_lease":
+                return
+            if state == "cancel":
+                self._mark_canceled(migration, target_ctx=target_ctx)
+                self.db.commit()
+                return
+            if state == "pause":
+                self._mark_paused(migration)
+                self.db.commit()
+                return
+
+            if item.status in {"completed", "skipped", "failed", "canceled"}:
+                continue
+            if migration.mode == "pre_sync" and migration.status == "awaiting_cutover":
+                if worker_id and migration.worker_lease_owner == worker_id:
+                    migration.worker_lease_owner = None
+                    migration.worker_lease_until = None
+                    self.db.commit()
+                return
+
+            try:
+                item.status = "running"
+                if item.started_at is None:
+                    item.started_at = utcnow()
+                item.updated_at = utcnow()
+                self.db.commit()
+                self._run_item(migration, item, source_ctx, target_ctx, control_check=control_check)
+            except _WorkerLeaseLostError:
+                self.db.rollback()
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Bucket migration item failed: migration=%s item=%s", migration.id, item.id)
+                item.status = "failed"
+                item.error_message = str(exc)
+                item.finished_at = utcnow()
+                item.updated_at = utcnow()
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="error",
+                    message="Item failed.",
+                    metadata={"error": str(exc), "step": item.step},
+                )
+                self.db.commit()
+
+        self.db.refresh(migration)
+        self._finalize_or_wait_cutover(migration, target_ctx=target_ctx)
+        if worker_id and migration.worker_lease_owner == worker_id and migration.status not in _RUNNABLE_MIGRATION_STATUSES:
+            migration.worker_lease_owner = None
+            migration.worker_lease_until = None
+        self.db.commit()
+
+    def _run_item(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        control_check: Callable[[], str],
+    ) -> None:
+        while True:
+            self.db.refresh(migration)
+            self.db.refresh(item)
+            migration.last_heartbeat_at = utcnow()
+            migration.updated_at = utcnow()
+            item.updated_at = utcnow()
+            self.db.commit()
+
+            state = control_check()
+            if state == "lost_lease":
+                raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
+            if state == "cancel":
+                item.status = "canceled"
+                item.finished_at = utcnow()
+                item.updated_at = utcnow()
+                self.db.commit()
+                return
+            if state == "pause":
+                item.status = "paused"
+                item.updated_at = utcnow()
+                self.db.commit()
+                return
+
+            if item.step == "create_bucket":
+                object_lock_enabled = False
+                if migration.copy_bucket_settings:
+                    object_lock = self._buckets.get_bucket_object_lock(item.source_bucket, source_ctx.account)
+                    object_lock_enabled = bool(object_lock and object_lock.enabled)
+                try:
+                    self._buckets.create_bucket(
+                        item.target_bucket,
+                        target_ctx.account,
+                        versioning=False,
+                        location_constraint=target_ctx.region,
+                        object_lock_enabled=object_lock_enabled,
+                    )
+                except RuntimeError as exc:
+                    if self._is_bucket_already_exists_error(exc):
+                        item.target_bucket_exists = True
+                        item.status = "skipped"
+                        item.step = "skipped"
+                        item.error_message = "Target bucket already exists; item skipped."
+                        item.finished_at = utcnow()
+                        self._add_event(
+                            migration,
+                            item=item,
+                            level="info",
+                            message="Target bucket already exists; item skipped.",
+                            metadata={"target_bucket": item.target_bucket},
+                        )
+                        self.db.commit()
+                        return
+                    raise
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="info",
+                    message="Target bucket created.",
+                    metadata={"target_bucket": item.target_bucket, "object_lock_enabled": object_lock_enabled},
+                )
+                if migration.copy_bucket_settings:
+                    item.step = "copy_bucket_settings"
+                else:
+                    item.step = self._next_step_after_target_setup(migration, item)
+                self.db.commit()
+                continue
+
+            if item.step == "copy_bucket_settings":
+                self._copy_bucket_settings(source_ctx.account, item.source_bucket, target_ctx.account, item.target_bucket, migration, item)
+                item.step = self._next_step_after_target_setup(migration, item)
+                self.db.commit()
+                continue
+
+            if item.step == "apply_target_lock":
+                self._apply_target_write_lock_policy(target_ctx, item.target_bucket, item)
+                item.target_lock_applied = True
+                item.step = "pre_sync" if migration.mode == "pre_sync" and not item.pre_sync_done else "apply_read_only"
+                item.updated_at = utcnow()
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="info",
+                    message="Target write-lock policy applied.",
+                )
+                self.db.commit()
+                continue
+
+            if item.step == "pre_sync":
+                copied, deleted, diff = self._sync_bucket(
+                    source_ctx,
+                    target_ctx,
+                    source_bucket=item.source_bucket,
+                    target_bucket=item.target_bucket,
+                    allow_delete=False,
+                    parallelism_max=migration.parallelism_max,
+                    migration=migration,
+                    item=item,
+                    control_check=control_check,
+                )
+                if copied < 0 or deleted < 0:
+                    state = control_check()
+                    if state == "lost_lease":
+                        raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
+                    if state == "cancel":
+                        item.status = "canceled"
+                        item.finished_at = utcnow()
+                    else:
+                        item.status = "paused"
+                    item.updated_at = utcnow()
+                    self.db.commit()
+                    return
+                item.objects_copied += copied
+                item.objects_deleted += deleted
+                item.source_count = diff.source_count
+                item.target_count = diff.target_count
+                item.matched_count = diff.matched_count
+                item.different_count = diff.different_count
+                item.only_source_count = diff.only_source_count
+                item.only_target_count = diff.only_target_count
+                item.diff_sample_json = _json_dumps(diff.sample)
+                item.pre_sync_done = True
+                item.status = "awaiting_cutover"
+                item.step = "awaiting_cutover"
+                item.updated_at = utcnow()
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="info",
+                    message="Pre-sync completed; waiting for cutover.",
+                    metadata={"copied": copied},
+                )
+                self.db.commit()
+                return
+
+            if item.step == "awaiting_cutover":
+                item.status = "awaiting_cutover"
+                item.updated_at = utcnow()
+                self.db.commit()
+                return
+
+            if item.step == "apply_read_only":
+                self._apply_read_only_policy(source_ctx.account, item.source_bucket, item)
+                item.read_only_applied = True
+                item.step = "sync"
+                item.updated_at = utcnow()
+                self._add_event(migration, item=item, level="info", message="Read-only policy applied on source bucket.")
+                self.db.commit()
+                continue
+
+            if item.step == "sync":
+                copied, deleted, diff = self._sync_bucket(
+                    source_ctx,
+                    target_ctx,
+                    source_bucket=item.source_bucket,
+                    target_bucket=item.target_bucket,
+                    allow_delete=True,
+                    parallelism_max=migration.parallelism_max,
+                    migration=migration,
+                    item=item,
+                    control_check=control_check,
+                )
+                if copied < 0 or deleted < 0:
+                    state = control_check()
+                    if state == "lost_lease":
+                        raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
+                    if state == "cancel":
+                        item.status = "canceled"
+                        item.finished_at = utcnow()
+                    else:
+                        item.status = "paused"
+                    item.updated_at = utcnow()
+                    self.db.commit()
+                    return
+                item.objects_copied += copied
+                item.objects_deleted += deleted
+                item.source_count = diff.source_count
+                item.target_count = diff.target_count
+                item.matched_count = diff.matched_count
+                item.different_count = diff.different_count
+                item.only_source_count = diff.only_source_count
+                item.only_target_count = diff.only_target_count
+                item.diff_sample_json = _json_dumps(diff.sample)
+                item.step = "verify"
+                item.updated_at = utcnow()
+                self.db.commit()
+                continue
+
+            if item.step == "verify":
+                content_diff = self._buckets.compare_bucket_content(
+                    item.source_bucket,
+                    source_ctx.account,
+                    item.target_bucket,
+                    target_ctx.account,
+                    size_only=False,
+                    diff_sample_limit=200,
+                )
+                item.source_count = content_diff.source_count
+                item.target_count = content_diff.target_count
+                item.matched_count = content_diff.matched_count
+                item.different_count = content_diff.different_count
+                item.only_source_count = content_diff.only_source_count
+                item.only_target_count = content_diff.only_target_count
+                item.diff_sample_json = _json_dumps(
+                    {
+                        "only_source_sample": content_diff.only_source_sample,
+                        "only_target_sample": content_diff.only_target_sample,
+                        "different_sample": [entry.model_dump() for entry in content_diff.different_sample],
+                    }
+                )
+
+                has_diff = bool(
+                    content_diff.different_count
+                    or content_diff.only_source_count
+                    or content_diff.only_target_count
+                )
+                if has_diff:
+                    item.status = "failed"
+                    item.error_message = "Final diff is not clean"
+                    item.finished_at = utcnow()
+                    item.updated_at = utcnow()
+                    self._add_event(
+                        migration,
+                        item=item,
+                        level="error",
+                        message="Final diff detected differences.",
+                        metadata={
+                            "different_count": content_diff.different_count,
+                            "only_source_count": content_diff.only_source_count,
+                            "only_target_count": content_diff.only_target_count,
+                        },
+                    )
+                    self.db.commit()
+                    return
+
+                if migration.delete_source:
+                    source_objects = self._list_current_objects(source_ctx, item.source_bucket)
+                    target_objects = self._list_current_objects(target_ctx, item.target_bucket)
+                    size_only_keys = self._size_only_common_key_list(source_objects, target_objects)
+                    if size_only_keys:
+                        verified_count, failed_keys, method_counts = self._strong_verify_size_only_objects(
+                            source_ctx,
+                            target_ctx,
+                            source_bucket=item.source_bucket,
+                            target_bucket=item.target_bucket,
+                            keys=size_only_keys,
+                            parallelism_max=max(1, min(int(migration.parallelism_max), 4)),
+                            control_check=control_check,
+                        )
+                        if verified_count < 0:
+                            state = control_check()
+                            if state == "lost_lease":
+                                raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
+                            if state == "cancel":
+                                item.status = "canceled"
+                                item.finished_at = utcnow()
+                            else:
+                                item.status = "paused"
+                            item.updated_at = utcnow()
+                            self.db.commit()
+                            return
+
+                        if failed_keys:
+                            failed_sample = failed_keys[:20]
+                            item.status = "failed"
+                            item.error_message = (
+                                "Final strong verification failed for "
+                                f"{len(failed_keys)} object(s) out of {len(size_only_keys)} size-only candidate(s); "
+                                "automatic source deletion is blocked to prevent data loss."
+                            )
+                            item.finished_at = utcnow()
+                            item.updated_at = utcnow()
+                            self._add_event(
+                                migration,
+                                item=item,
+                                level="error",
+                                message="Source deletion blocked due to strong verification failures.",
+                                metadata={
+                                    "size_only_count": len(size_only_keys),
+                                    "verified_count": verified_count,
+                                    "failed_count": len(failed_keys),
+                                    "failed_sample": failed_sample,
+                                    "method_counts": method_counts,
+                                },
+                            )
+                            self.db.commit()
+                            return
+
+                        self._add_event(
+                            migration,
+                            item=item,
+                            level="info",
+                            message="Strong verification completed for size-only candidates.",
+                            metadata={
+                                "size_only_count": len(size_only_keys),
+                                "verified_count": verified_count,
+                                "method_counts": method_counts,
+                            },
+                        )
+
+                    item.step = "delete_source"
+                    item.updated_at = utcnow()
+                    self.db.commit()
+                    continue
+
+                item.status = "completed"
+                item.step = "completed"
+                item.finished_at = utcnow()
+                item.updated_at = utcnow()
+                self._add_event(migration, item=item, level="info", message="Item completed with clean diff.")
+                self.db.commit()
+                return
+
+            if item.step == "delete_source":
+                self._set_managed_block_policy(item.source_bucket, source_ctx.account, deny_delete=False)
+                self._delete_source_bucket_with_retry(item.source_bucket, source_ctx.account)
+                item.status = "completed"
+                item.step = "completed"
+                item.finished_at = utcnow()
+                item.updated_at = utcnow()
+                self._add_event(migration, item=item, level="info", message="Source bucket deleted after clean diff.")
+                self.db.commit()
+                return
+
+            if item.step in {"completed", "skipped"}:
+                if item.status == "running":
+                    item.status = "completed"
+                if item.finished_at is None:
+                    item.finished_at = utcnow()
+                item.updated_at = utcnow()
+                self.db.commit()
+                return
+
+            raise RuntimeError(f"Unsupported item step: {item.step}")
+
+    def _copy_bucket_settings(
+        self,
+        source_account: S3Account,
+        source_bucket: str,
+        target_account: S3Account,
+        target_bucket: str,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+    ) -> None:
+        # Best-effort copy. Unsupported settings are logged and ignored.
+        try:
+            src_props = self._buckets.get_bucket_properties(source_bucket, source_account)
+            versioning_enabled = str(src_props.versioning_status or "").strip().lower() == "enabled"
+            self._buckets.set_versioning(target_bucket, target_account, enabled=versioning_enabled)
+        except Exception as exc:  # noqa: BLE001
+            self._add_event(migration, item=item, level="warning", message="Versioning copy failed.", metadata={"error": str(exc)})
+
+        try:
+            src_object_lock = self._buckets.get_bucket_object_lock(source_bucket, source_account)
+            if src_object_lock and (
+                src_object_lock.enabled is not None
+                or src_object_lock.mode is not None
+                or src_object_lock.days is not None
+                or src_object_lock.years is not None
+            ):
+                self._buckets.set_object_lock(target_bucket, target_account, src_object_lock)
+        except Exception as exc:  # noqa: BLE001
+            self._add_event(migration, item=item, level="warning", message="Object lock copy failed.", metadata={"error": str(exc)})
+
+        try:
+            pab = self._buckets.get_public_access_block(source_bucket, source_account)
+            self._buckets.set_public_access_block(target_bucket, target_account, pab)
+        except Exception as exc:  # noqa: BLE001
+            self._add_event(migration, item=item, level="warning", message="Public access block copy failed.", metadata={"error": str(exc)})
+
+        try:
+            lifecycle = self._buckets.get_lifecycle(source_bucket, source_account)
+            rules = lifecycle.rules or []
+            if rules:
+                self._buckets.set_lifecycle(target_bucket, target_account, rules)
+            else:
+                self._buckets.delete_lifecycle(target_bucket, target_account)
+        except Exception as exc:  # noqa: BLE001
+            self._add_event(migration, item=item, level="warning", message="Lifecycle copy failed.", metadata={"error": str(exc)})
+
+        try:
+            cors = self._buckets.get_bucket_cors(source_bucket, source_account)
+            if cors:
+                self._buckets.set_cors(target_bucket, target_account, cors)
+            else:
+                self._buckets.delete_cors(target_bucket, target_account)
+        except Exception as exc:  # noqa: BLE001
+            self._add_event(migration, item=item, level="warning", message="CORS copy failed.", metadata={"error": str(exc)})
+
+        try:
+            policy = self._buckets.get_policy(source_bucket, source_account)
+            if policy:
+                self._buckets.put_policy(target_bucket, target_account, policy)
+            else:
+                self._buckets.delete_policy(target_bucket, target_account)
+        except Exception as exc:  # noqa: BLE001
+            self._add_event(migration, item=item, level="warning", message="Policy copy failed.", metadata={"error": str(exc)})
+
+        try:
+            tags = self._buckets.get_bucket_tags(source_bucket, source_account)
+            if tags:
+                self._buckets.set_bucket_tags(
+                    target_bucket,
+                    target_account,
+                    [{"key": tag.key, "value": tag.value} for tag in tags],
+                )
+            else:
+                self._buckets.delete_bucket_tags(target_bucket, target_account)
+        except Exception as exc:  # noqa: BLE001
+            self._add_event(migration, item=item, level="warning", message="Tags copy failed.", metadata={"error": str(exc)})
+
+        try:
+            logging_cfg = self._buckets.get_bucket_logging(source_bucket, source_account)
+            self._buckets.set_bucket_logging(target_bucket, target_account, logging_cfg)
+        except Exception as exc:  # noqa: BLE001
+            self._add_event(migration, item=item, level="warning", message="Access logging copy failed.", metadata={"error": str(exc)})
+
+        self._add_event(migration, item=item, level="info", message="Bucket settings copied (best-effort).")
+
+    def _precheck_can_list_bucket(self, source_ctx: _ResolvedContext, source_bucket: str) -> None:
+        client = self._context_client(source_ctx)
+        try:
+            page = client.list_objects_v2(Bucket=source_bucket, MaxKeys=1)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to list source bucket '{source_bucket}': {exc}") from exc
+
+        contents = page.get("Contents", []) or []
+        sample_key = contents[0].get("Key") if contents and isinstance(contents[0], dict) else None
+        if not isinstance(sample_key, str) or not sample_key:
+            return
+        try:
+            client.head_object(Bucket=source_bucket, Key=sample_key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to read sample object '{sample_key}' in source bucket '{source_bucket}': {exc}"
+            ) from exc
+
+    def _count_bucket_objects(self, ctx: _ResolvedContext, bucket_name: str) -> int:
+        client = self._context_client(ctx)
+        continuation_token: Optional[str] = None
+        total = 0
+        while True:
+            kwargs: dict[str, Any] = {"Bucket": bucket_name, "MaxKeys": 1000}
+            if continuation_token:
+                kwargs["ContinuationToken"] = continuation_token
+            try:
+                page = client.list_objects_v2(**kwargs)
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(f"Unable to count objects in bucket '{bucket_name}': {exc}") from exc
+            contents = page.get("Contents", []) if isinstance(page, dict) else []
+            if isinstance(contents, list):
+                total += len(contents)
+            continuation_token = page.get("NextContinuationToken") if isinstance(page, dict) else None
+            if not continuation_token:
+                break
+        return total
+
+    def _precheck_same_endpoint_copy_source_access(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        source_bucket: str,
+        *,
+        auto_grant: bool,
+    ) -> str:
+        source_client = self._context_client(source_ctx)
+        target_client = self._context_client(target_ctx)
+
+        try:
+            page = source_client.list_objects_v2(Bucket=source_bucket, MaxKeys=1)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(
+                f"Unable to list source bucket '{source_bucket}' to validate x-amz-copy-source access: {exc}"
+            ) from exc
+
+        contents = page.get("Contents", []) if isinstance(page, dict) else []
+        sample_key = contents[0].get("Key") if contents and isinstance(contents[0], dict) else None
+        if not isinstance(sample_key, str) or not sample_key:
+            return "source_empty"
+
+        try:
+            target_client.head_object(Bucket=source_bucket, Key=sample_key)
+            return "validated"
+        except (ClientError, BotoCoreError) as exc:
+            if self._is_access_denied_error(exc):
+                if not auto_grant:
+                    raise RuntimeError(
+                        "Target context cannot read source objects required for x-amz-copy-source. "
+                        f"Grant s3:GetObject on source bucket '{source_bucket}'."
+                    ) from exc
+                try:
+                    with self._temporary_source_copy_grant(
+                        source_ctx,
+                        target_ctx,
+                        source_bucket=source_bucket,
+                        sample_key=sample_key,
+                    ):
+                        target_client.head_object(Bucket=source_bucket, Key=sample_key)
+                except Exception as grant_exc:  # noqa: BLE001
+                    raise RuntimeError(
+                        "Unable to validate temporary same-endpoint source-read grant for x-amz-copy-source: "
+                        f"{grant_exc}"
+                    ) from grant_exc
+                return "validated_with_temporary_grant"
+            raise RuntimeError(
+                f"Unable to validate target access to sample source object '{sample_key}' in bucket "
+                f"'{source_bucket}' for x-amz-copy-source: {exc}"
+            ) from exc
+
+    def _source_copy_grant_principal_candidates(self, target_ctx: _ResolvedContext) -> list[str]:
+        context_id = (target_ctx.context_id or "").strip()
+        if context_id.startswith("conn-"):
+            return []
+
+        account = target_ctx.account
+        account_id = (getattr(account, "rgw_account_id", None) or "").strip()
+        explicit_uid = (getattr(account, "rgw_user_uid", None) or "").strip()
+        resolved_uid = (resolve_admin_uid(account_id or None, explicit_uid or None) or "").strip()
+
+        candidates: list[str] = []
+        seen: set[str] = set()
+
+        def push(value: Optional[str]) -> None:
+            normalized = (value or "").strip()
+            if not normalized or normalized in seen:
+                return
+            seen.add(normalized)
+            candidates.append(normalized)
+
+        for uid in (explicit_uid, resolved_uid):
+            if not uid:
+                continue
+            push(uid)
+            push(f"arn:aws:iam:::user/{uid}")
+            if account_id:
+                push(f"arn:aws:iam::{account_id}:user/{uid}")
+
+        if account_id:
+            push(account_id)
+            push(f"arn:aws:iam::{account_id}:root")
+
+        return candidates
+
+    def _without_managed_source_copy_grant_statement(self, policy: Any) -> Optional[dict[str, Any]]:
+        if not isinstance(policy, dict):
+            return None
+
+        policy_doc: dict[str, Any] = json.loads(_json_dumps(policy))
+        statements = policy_doc.get("Statement")
+        if isinstance(statements, dict):
+            statements = [statements]
+        if not isinstance(statements, list):
+            statements = []
+
+        filtered_statements = [
+            statement
+            for statement in statements
+            if not (isinstance(statement, dict) and statement.get("Sid") == _SOURCE_COPY_GRANT_POLICY_SID)
+        ]
+        if not filtered_statements:
+            return None
+
+        policy_doc["Statement"] = filtered_statements
+        if "Version" not in policy_doc:
+            policy_doc["Version"] = "2012-10-17"
+        return policy_doc
+
+    def _build_source_copy_grant_policy(
+        self,
+        source_bucket: str,
+        existing_policy: Optional[dict[str, Any]],
+        *,
+        principal: str,
+    ) -> dict[str, Any]:
+        base_policy = self._without_managed_source_copy_grant_statement(existing_policy)
+        if isinstance(base_policy, dict):
+            policy_doc: dict[str, Any] = json.loads(_json_dumps(base_policy))
+        else:
+            policy_doc = {"Version": "2012-10-17", "Statement": []}
+
+        statements = policy_doc.get("Statement")
+        if isinstance(statements, dict):
+            statements = [statements]
+        if not isinstance(statements, list):
+            statements = []
+
+        statements.append(
+            {
+                "Sid": _SOURCE_COPY_GRANT_POLICY_SID,
+                "Effect": "Allow",
+                "Principal": {"AWS": principal},
+                "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectVersion",
+                ],
+                "Resource": [f"arn:aws:s3:::{source_bucket}/*"],
+            }
+        )
+        policy_doc["Statement"] = statements
+        if "Version" not in policy_doc:
+            policy_doc["Version"] = "2012-10-17"
+        return policy_doc
+
+    def _restore_source_copy_grant_policy(
+        self,
+        source_bucket: str,
+        source_account: S3Account,
+        backup_policy: Optional[dict[str, Any]],
+    ) -> None:
+        restored = self._without_managed_source_copy_grant_statement(backup_policy)
+        if isinstance(restored, dict):
+            self._buckets.put_policy(source_bucket, source_account, restored)
+            return
+        self._buckets.delete_policy(source_bucket, source_account)
+
+    @contextmanager
+    def _temporary_source_copy_grant(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        sample_key: Optional[str] = None,
+    ):
+        source_account = source_ctx.account
+        target_client = self._context_client(target_ctx)
+        try:
+            backup_policy = self._buckets.get_policy(source_bucket, source_account)
+        except RuntimeError as exc:
+            if self._is_access_denied_error(exc):
+                raise RuntimeError(
+                    "Unable to read source bucket policy for temporary source-read grant. "
+                    f"Required permissions on '{source_bucket}': s3:GetBucketPolicy and s3:PutBucketPolicy."
+                ) from exc
+            raise
+        candidates = self._source_copy_grant_principal_candidates(target_ctx)
+        if not candidates:
+            raise RuntimeError(
+                "Target context identity is not supported for temporary source-read grant. "
+                "Use an account/s3_user target context or grant source read permissions manually."
+            )
+
+        selected_principal: Optional[str] = None
+        last_access_error: Optional[Exception] = None
+        for candidate in candidates:
+            policy_doc = self._build_source_copy_grant_policy(
+                source_bucket,
+                backup_policy if isinstance(backup_policy, dict) else None,
+                principal=candidate,
+            )
+            try:
+                self._buckets.put_policy(source_bucket, source_account, policy_doc)
+            except RuntimeError as exc:
+                if self._is_access_denied_error(exc):
+                    raise RuntimeError(
+                        "Unable to apply temporary source-read grant: access denied on source bucket policy update. "
+                        f"Required permissions on '{source_bucket}': s3:GetBucketPolicy and s3:PutBucketPolicy."
+                    ) from exc
+                raise
+            if not sample_key:
+                selected_principal = candidate
+                break
+            try:
+                target_client.head_object(Bucket=source_bucket, Key=sample_key)
+                selected_principal = candidate
+                break
+            except (ClientError, BotoCoreError) as exc:
+                if self._is_access_denied_error(exc):
+                    last_access_error = exc
+                    continue
+                raise RuntimeError(
+                    f"Unable to validate temporary source-read grant on sample object '{sample_key}': {exc}"
+                ) from exc
+
+        if selected_principal is None:
+            try:
+                self._restore_source_copy_grant_policy(source_bucket, source_account, backup_policy)
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "Unable to restore source policy after unsuccessful temporary source-read grant attempts: bucket=%s",
+                    source_bucket,
+                )
+            if last_access_error is not None:
+                raise RuntimeError(
+                    f"Temporary source-read grant could not be validated for bucket '{source_bucket}': {last_access_error}"
+                ) from last_access_error
+            raise RuntimeError(
+                "Unable to determine a compatible target principal for temporary source-read grant."
+            )
+
+        try:
+            yield selected_principal
+        finally:
+            try:
+                self._restore_source_copy_grant_policy(source_bucket, source_account, backup_policy)
+            except RuntimeError as exc:
+                if self._is_access_denied_error(exc):
+                    raise RuntimeError(
+                        "Unable to restore source bucket policy after temporary source-read grant. "
+                        f"Required permissions on '{source_bucket}': s3:GetBucketPolicy and s3:PutBucketPolicy."
+                    ) from exc
+                raise
+
+    def _precheck_bucket_exists(self, target_ctx: _ResolvedContext, target_bucket: str) -> Optional[bool]:
+        client = self._context_client(target_ctx)
+        try:
+            client.head_bucket(Bucket=target_bucket)
+            return True
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", "")).strip().lower() if hasattr(exc, "response") else ""
+            status_code = (
+                int(exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") or 0)
+                if hasattr(exc, "response")
+                else 0
+            )
+            if code in {"nosuchbucket", "notfound"} or status_code == 404:
+                return False
+            if code in {"forbidden", "accessdenied"} or status_code == 403:
+                # Some S3 implementations deny HeadBucket even for owned buckets.
+                try:
+                    listing = client.list_buckets()
+                    buckets = listing.get("Buckets", []) or []
+                    names = {entry.get("Name") for entry in buckets if isinstance(entry, dict)}
+                    if target_bucket in names:
+                        return True
+                except (ClientError, BotoCoreError):
+                    return None
+                return False
+            raise RuntimeError(f"Unable to check bucket '{target_bucket}': {exc}") from exc
+        except BotoCoreError as exc:
+            raise RuntimeError(f"Unable to check bucket '{target_bucket}': {exc}") from exc
+
+    def _next_step_after_target_setup(self, migration: BucketMigration, item: BucketMigrationItem) -> str:
+        if migration.lock_target_writes and not item.target_lock_applied:
+            return "apply_target_lock"
+        if migration.mode == "pre_sync" and not item.pre_sync_done:
+            return "pre_sync"
+        return "apply_read_only"
+
+    def _precheck_target_lock_roundtrip(self, target_ctx: _ResolvedContext, target_bucket: str) -> None:
+        try:
+            existing_policy = self._buckets.get_policy(target_bucket, target_ctx.account)
+        except RuntimeError as exc:
+            if self._is_access_denied_error(exc):
+                raise RuntimeError(
+                    "Unable to read destination bucket policy during precheck. "
+                    f"Required permissions on '{target_bucket}': s3:GetBucketPolicy and s3:PutBucketPolicy."
+                ) from exc
+            raise
+
+        lock_policy_doc = self._build_target_write_lock_policy(
+            target_bucket,
+            existing_policy if isinstance(existing_policy, dict) else None,
+        )
+        try:
+            self._buckets.put_policy(target_bucket, target_ctx.account, lock_policy_doc)
+        except RuntimeError as exc:
+            if self._is_access_denied_error(exc):
+                raise RuntimeError(
+                    "Unable to apply destination write-lock policy during precheck. "
+                    f"Required permissions on '{target_bucket}': s3:GetBucketPolicy and s3:PutBucketPolicy."
+                ) from exc
+            raise
+
+        lock_test_error: Optional[Exception] = None
+        try:
+            self._validate_target_lock_worker_access(target_ctx, target_bucket)
+        except Exception as exc:  # noqa: BLE001
+            lock_test_error = exc
+
+        restore_error: Optional[Exception] = None
+        try:
+            restored = self._without_managed_target_write_lock_statement(existing_policy)
+            if isinstance(restored, dict):
+                self._buckets.put_policy(target_bucket, target_ctx.account, restored)
+            else:
+                self._buckets.delete_policy(target_bucket, target_ctx.account)
+        except Exception as exc:  # noqa: BLE001
+            restore_error = exc
+
+        if lock_test_error is not None:
+            raise RuntimeError(
+                "Destination write-lock policy denied migration write/delete operations. "
+                "Use a dedicated migration context or disable destination lock. "
+                f"Underlying error: {lock_test_error}"
+            ) from lock_test_error
+        if restore_error is not None:
+            raise RuntimeError(
+                f"Unable to restore destination bucket policy after write-lock precheck on '{target_bucket}': {restore_error}"
+            ) from restore_error
+
+    def _build_read_only_policy(
+        self,
+        source_bucket: str,
+        existing_policy: Optional[dict[str, Any]],
+        *,
+        deny_delete: bool = True,
+    ) -> dict[str, Any]:
+        base_policy = self._without_managed_read_only_statement(existing_policy)
+        if isinstance(base_policy, dict):
+            policy_doc: dict[str, Any] = json.loads(_json_dumps(base_policy))
+        else:
+            policy_doc = {"Version": "2012-10-17", "Statement": []}
+
+        statements = policy_doc.get("Statement")
+        if isinstance(statements, dict):
+            statements = [statements]
+        if not isinstance(statements, list):
+            statements = []
+
+        filtered_statements = [
+            statement
+            for statement in statements
+            if not (isinstance(statement, dict) and statement.get("Sid") == _READ_ONLY_POLICY_SID)
+        ]
+        actions = [
+            # Object write operations that can introduce source/target drift.
+            "s3:PutObject",
+            "s3:PutObjectAcl",
+            "s3:PutObjectTagging",
+            "s3:PutObjectVersionAcl",
+            "s3:PutObjectVersionTagging",
+            "s3:PutObjectLegalHold",
+            "s3:PutObjectRetention",
+            "s3:AbortMultipartUpload",
+            "s3:RestoreObject",
+        ]
+        resources: list[str] = [f"arn:aws:s3:::{source_bucket}/*"]
+
+        if deny_delete:
+            actions.extend(
+                [
+                    "s3:DeleteObject",
+                    "s3:DeleteObjectVersion",
+                    "s3:DeleteObjectTagging",
+                    "s3:DeleteObjectVersionTagging",
+                    "s3:DeleteBucket",
+                ]
+            )
+            resources.append(f"arn:aws:s3:::{source_bucket}")
+
+        filtered_statements.append(
+            {
+                "Sid": _READ_ONLY_POLICY_SID,
+                "Effect": "Deny",
+                "Principal": "*",
+                "Action": actions,
+                "Resource": resources,
+            }
+        )
+        policy_doc["Statement"] = filtered_statements
+        if "Version" not in policy_doc:
+            policy_doc["Version"] = "2012-10-17"
+        return policy_doc
+
+    def _build_target_write_lock_policy(
+        self,
+        target_bucket: str,
+        existing_policy: Optional[dict[str, Any]],
+    ) -> dict[str, Any]:
+        base_policy = self._without_managed_target_write_lock_statement(existing_policy)
+        if isinstance(base_policy, dict):
+            policy_doc: dict[str, Any] = json.loads(_json_dumps(base_policy))
+        else:
+            policy_doc = {"Version": "2012-10-17", "Statement": []}
+
+        statements = policy_doc.get("Statement")
+        if isinstance(statements, dict):
+            statements = [statements]
+        if not isinstance(statements, list):
+            statements = []
+
+        filtered_statements = [
+            statement
+            for statement in statements
+            if not (isinstance(statement, dict) and statement.get("Sid") == _TARGET_WRITE_LOCK_POLICY_SID)
+        ]
+        filtered_statements.append(
+            {
+                "Sid": _TARGET_WRITE_LOCK_POLICY_SID,
+                "Effect": "Deny",
+                "Principal": "*",
+                "Action": [
+                    "s3:PutObject",
+                    "s3:PutObjectAcl",
+                    "s3:PutObjectTagging",
+                    "s3:PutObjectVersionAcl",
+                    "s3:PutObjectVersionTagging",
+                    "s3:PutObjectLegalHold",
+                    "s3:PutObjectRetention",
+                    "s3:AbortMultipartUpload",
+                    "s3:RestoreObject",
+                    "s3:DeleteObject",
+                    "s3:DeleteObjectVersion",
+                    "s3:DeleteObjectTagging",
+                    "s3:DeleteObjectVersionTagging",
+                    "s3:DeleteBucket",
+                ],
+                "Resource": [
+                    f"arn:aws:s3:::{target_bucket}/*",
+                    f"arn:aws:s3:::{target_bucket}",
+                ],
+                "Condition": {
+                    "StringNotLike": {
+                        "aws:UserAgent": f"*{_MIGRATION_USER_AGENT_MARKER}*",
+                    }
+                },
+            }
+        )
+        policy_doc["Statement"] = filtered_statements
+        if "Version" not in policy_doc:
+            policy_doc["Version"] = "2012-10-17"
+        return policy_doc
+
+    def _size_only_common_keys(
+        self,
+        source_objects: dict[str, dict[str, Any]],
+        target_objects: dict[str, dict[str, Any]],
+        *,
+        limit: int = 20,
+    ) -> tuple[int, list[str]]:
+        keys = self._size_only_common_key_list(source_objects, target_objects)
+        return len(keys), keys[:limit]
+
+    def _size_only_common_key_list(
+        self,
+        source_objects: dict[str, dict[str, Any]],
+        target_objects: dict[str, dict[str, Any]],
+    ) -> list[str]:
+        keys: list[str] = []
+        for key in sorted(set(source_objects.keys()) & set(target_objects.keys())):
+            src = source_objects[key]
+            dst = target_objects[key]
+            src_md5 = self._etag_md5(src.get("etag") if isinstance(src.get("etag"), str) else None)
+            dst_md5 = self._etag_md5(dst.get("etag") if isinstance(dst.get("etag"), str) else None)
+            if src_md5 and dst_md5:
+                continue
+            src_size = int(src.get("size") or 0)
+            dst_size = int(dst.get("size") or 0)
+            if src_size != dst_size:
+                continue
+            keys.append(key)
+        return keys
+
+    def _strong_verify_size_only_objects(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        keys: list[str],
+        parallelism_max: int,
+        control_check: Callable[[], str],
+    ) -> tuple[int, list[str], dict[str, int]]:
+        if not keys:
+            return 0, [], {"head_checksum": 0, "stream_sha256": 0}
+
+        verified_count = 0
+        failed_keys: list[str] = []
+        method_counts: dict[str, int] = {"head_checksum": 0, "stream_sha256": 0}
+        worker_count = max(1, min(int(parallelism_max), len(keys)))
+
+        for chunk in _chunked(keys, worker_count):
+            state = control_check()
+            if state == "lost_lease":
+                raise _WorkerLeaseLostError("Worker lease lost while strong-verifying objects")
+            if state in {"pause", "cancel"}:
+                return -1, [], method_counts
+
+            with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-strong-verify") as executor:
+                futures = {
+                    executor.submit(
+                        self._strong_verify_single_object,
+                        source_ctx,
+                        target_ctx,
+                        source_bucket,
+                        target_bucket,
+                        key,
+                    ): key
+                    for key in chunk
+                }
+                interrupted_state: Optional[str] = None
+                pending = set(futures.keys())
+                while pending:
+                    done, pending = wait(pending, timeout=1.0)
+                    state = control_check()
+                    if state == "lost_lease":
+                        interrupted_state = "lost_lease"
+                    elif state in {"pause", "cancel"} and interrupted_state is None:
+                        interrupted_state = state
+
+                    for future in done:
+                        key = futures[future]
+                        try:
+                            verified, method = future.result()
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning("Strong verification failed for '%s': %s", key, exc)
+                            failed_keys.append(key)
+                            continue
+                        method_counts[method] = method_counts.get(method, 0) + 1
+                        if verified:
+                            verified_count += 1
+                        else:
+                            failed_keys.append(key)
+
+                if interrupted_state == "lost_lease":
+                    raise _WorkerLeaseLostError("Worker lease lost while strong-verifying objects")
+                if interrupted_state in {"pause", "cancel"}:
+                    return -1, [], method_counts
+        return verified_count, failed_keys, method_counts
+
+    def _strong_verify_single_object(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        source_bucket: str,
+        target_bucket: str,
+        key: str,
+    ) -> tuple[bool, str]:
+        source_client = self._context_client(source_ctx)
+        target_client = self._context_client(target_ctx)
+
+        source_checksums = self._head_object_checksums(source_client, source_bucket, key)
+        target_checksums = self._head_object_checksums(target_client, target_bucket, key)
+        shared_checksum_fields = (
+            "ChecksumSHA256",
+            "ChecksumCRC32C",
+            "ChecksumCRC32",
+            "ChecksumSHA1",
+        )
+        for field in shared_checksum_fields:
+            source_value = source_checksums.get(field)
+            target_value = target_checksums.get(field)
+            if source_value and target_value:
+                return source_value == target_value, "head_checksum"
+
+        source_sha256 = self._stream_object_sha256(source_client, source_bucket, key)
+        target_sha256 = self._stream_object_sha256(target_client, target_bucket, key)
+        return source_sha256 == target_sha256, "stream_sha256"
+
+    def _head_object_checksums(self, client: Any, bucket_name: str, key: str) -> dict[str, str]:
+        try:
+            response = client.head_object(Bucket=bucket_name, Key=key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to read object metadata for '{key}' in bucket '{bucket_name}': {exc}") from exc
+
+        result: dict[str, str] = {}
+        for field in ("ChecksumSHA256", "ChecksumCRC32C", "ChecksumCRC32", "ChecksumSHA1"):
+            value = response.get(field) if isinstance(response, dict) else None
+            if isinstance(value, str) and value.strip():
+                result[field] = value.strip()
+        return result
+
+    def _stream_object_sha256(self, client: Any, bucket_name: str, key: str) -> str:
+        body = None
+        hasher = hashlib.sha256()
+        try:
+            response = client.get_object(Bucket=bucket_name, Key=key)
+            body = response.get("Body")
+            if body is None:
+                raise RuntimeError("response body is empty")
+            while True:
+                chunk = body.read(8 * 1024 * 1024)
+                if not chunk:
+                    break
+                hasher.update(chunk)
+        except (ClientError, BotoCoreError, RuntimeError) as exc:
+            raise RuntimeError(f"Unable to compute SHA-256 for '{key}' in bucket '{bucket_name}': {exc}") from exc
+        finally:
+            if body is not None:
+                try:
+                    body.close()
+                except Exception:  # noqa: BLE001
+                    pass
+        return hasher.hexdigest()
+
+    def _without_managed_read_only_statement(self, policy: Any) -> Optional[dict[str, Any]]:
+        if not isinstance(policy, dict):
+            return None
+
+        policy_doc: dict[str, Any] = json.loads(_json_dumps(policy))
+        statements = policy_doc.get("Statement")
+        if isinstance(statements, dict):
+            statements = [statements]
+        if not isinstance(statements, list):
+            statements = []
+
+        filtered_statements = [
+            statement
+            for statement in statements
+            if not (isinstance(statement, dict) and statement.get("Sid") == _READ_ONLY_POLICY_SID)
+        ]
+        if not filtered_statements:
+            return None
+
+        policy_doc["Statement"] = filtered_statements
+        if "Version" not in policy_doc:
+            policy_doc["Version"] = "2012-10-17"
+        return policy_doc
+
+    def _without_managed_target_write_lock_statement(self, policy: Any) -> Optional[dict[str, Any]]:
+        if not isinstance(policy, dict):
+            return None
+
+        policy_doc: dict[str, Any] = json.loads(_json_dumps(policy))
+        statements = policy_doc.get("Statement")
+        if isinstance(statements, dict):
+            statements = [statements]
+        if not isinstance(statements, list):
+            statements = []
+
+        filtered_statements = [
+            statement
+            for statement in statements
+            if not (isinstance(statement, dict) and statement.get("Sid") == _TARGET_WRITE_LOCK_POLICY_SID)
+        ]
+        if not filtered_statements:
+            return None
+
+        policy_doc["Statement"] = filtered_statements
+        if "Version" not in policy_doc:
+            policy_doc["Version"] = "2012-10-17"
+        return policy_doc
+
+    def _remove_managed_read_only_statement(self, source_bucket: str, source_account: S3Account) -> None:
+        existing_policy = self._buckets.get_policy(source_bucket, source_account)
+        cleaned = self._without_managed_read_only_statement(existing_policy)
+        if isinstance(cleaned, dict):
+            self._buckets.put_policy(source_bucket, source_account, cleaned)
+            return
+        self._buckets.delete_policy(source_bucket, source_account)
+
+    def _remove_managed_target_write_lock_statement(self, target_bucket: str, target_account: S3Account) -> None:
+        existing_policy = self._buckets.get_policy(target_bucket, target_account)
+        cleaned = self._without_managed_target_write_lock_statement(existing_policy)
+        if isinstance(cleaned, dict):
+            self._buckets.put_policy(target_bucket, target_account, cleaned)
+            return
+        self._buckets.delete_policy(target_bucket, target_account)
+
+    def _set_managed_block_policy(self, source_bucket: str, source_account: S3Account, *, deny_delete: bool) -> None:
+        try:
+            existing_policy = self._buckets.get_policy(source_bucket, source_account)
+            policy_doc = self._build_read_only_policy(
+                source_bucket,
+                existing_policy if isinstance(existing_policy, dict) else None,
+                deny_delete=deny_delete,
+            )
+            self._buckets.put_policy(source_bucket, source_account, policy_doc)
+        except RuntimeError as exc:
+            if self._is_access_denied_error(exc):
+                mode = "read-only" if deny_delete else "write-block"
+                raise RuntimeError(
+                    f"Unable to set source bucket to {mode}: access denied on bucket policy update. "
+                    f"Required permissions on '{source_bucket}': s3:GetBucketPolicy and s3:PutBucketPolicy."
+                ) from exc
+            raise
+
+    def _delete_source_bucket_with_retry(self, source_bucket: str, source_account: S3Account) -> None:
+        last_exc: Optional[RuntimeError] = None
+        for attempt in range(1, 4):
+            try:
+                self._buckets.delete_bucket(source_bucket, source_account, force=True)
+                return
+            except RuntimeError as exc:
+                last_exc = exc
+                if not self._is_access_denied_error(exc) or attempt == 3:
+                    raise
+                logger.warning(
+                    "Delete source bucket got AccessDenied (bucket=%s, attempt=%s/3), retrying.",
+                    source_bucket,
+                    attempt,
+                )
+                # Policy propagation may lag briefly on some S3 implementations.
+                time.sleep(0.8 * attempt)
+        if last_exc is not None:
+            raise last_exc
+
+    def _precheck_policy_roundtrip(self, source_account: S3Account, source_bucket: str) -> None:
+        try:
+            existing_policy = self._buckets.get_policy(source_bucket, source_account)
+        except RuntimeError as exc:
+            if self._is_access_denied_error(exc):
+                raise RuntimeError(
+                    "Unable to read source bucket policy during precheck. "
+                    f"Required permissions on '{source_bucket}': s3:GetBucketPolicy and s3:PutBucketPolicy."
+                ) from exc
+            raise
+
+        policy_doc = self._build_read_only_policy(
+            source_bucket,
+            existing_policy if isinstance(existing_policy, dict) else None,
+        )
+
+        try:
+            self._buckets.put_policy(source_bucket, source_account, policy_doc)
+        except RuntimeError as exc:
+            if self._is_access_denied_error(exc):
+                raise RuntimeError(
+                    "Unable to apply read-only policy during precheck. "
+                    f"Required permissions on '{source_bucket}': s3:GetBucketPolicy and s3:PutBucketPolicy."
+                ) from exc
+            raise
+
+        try:
+            restored = self._without_managed_read_only_statement(existing_policy)
+            if isinstance(restored, dict):
+                self._buckets.put_policy(source_bucket, source_account, restored)
+            else:
+                self._buckets.delete_policy(source_bucket, source_account)
+        except RuntimeError as exc:
+            raise RuntimeError(
+                f"Unable to restore source bucket policy after precheck on '{source_bucket}': {exc}"
+            ) from exc
+
+    def _apply_read_only_policy(self, source_account: S3Account, source_bucket: str, item: BucketMigrationItem) -> None:
+        existing_policy = self._buckets.get_policy(source_bucket, source_account)
+        item.source_policy_backup_json = _json_dumps(existing_policy)
+        policy_doc = self._build_read_only_policy(
+            source_bucket,
+            existing_policy if isinstance(existing_policy, dict) else None,
+        )
+        try:
+            self._buckets.put_policy(source_bucket, source_account, policy_doc)
+        except RuntimeError as exc:
+            if self._is_access_denied_error(exc):
+                raise RuntimeError(
+                    "Unable to set source bucket to read-only: access denied on PutBucketPolicy. "
+                    f"Required permissions on '{source_bucket}': s3:GetBucketPolicy and s3:PutBucketPolicy."
+                ) from exc
+            raise
+
+    def _validate_target_lock_worker_access(self, target_ctx: _ResolvedContext, target_bucket: str) -> None:
+        client = self._context_client(target_ctx)
+        test_key = f"__s3-manager-migration-lock-check/{uuid.uuid4().hex}"
+        try:
+            client.put_object(Bucket=target_bucket, Key=test_key, Body=b"lock-check")
+            client.delete_object(Bucket=target_bucket, Key=test_key)
+        except (ClientError, BotoCoreError, RuntimeError) as exc:
+            raise RuntimeError(
+                "Destination write-lock blocks migration worker write/delete operations. "
+                "Use a dedicated migration context or disable destination lock."
+            ) from exc
+
+    def _apply_target_write_lock_policy(self, target_ctx: _ResolvedContext, target_bucket: str, item: BucketMigrationItem) -> None:
+        existing_policy = self._buckets.get_policy(target_bucket, target_ctx.account)
+        item.target_policy_backup_json = _json_dumps(existing_policy)
+        lock_policy_doc = self._build_target_write_lock_policy(
+            target_bucket,
+            existing_policy if isinstance(existing_policy, dict) else None,
+        )
+        try:
+            self._buckets.put_policy(target_bucket, target_ctx.account, lock_policy_doc)
+        except RuntimeError as exc:
+            if self._is_access_denied_error(exc):
+                raise RuntimeError(
+                    "Unable to set destination bucket write-lock: access denied on PutBucketPolicy. "
+                    f"Required permissions on '{target_bucket}': s3:GetBucketPolicy and s3:PutBucketPolicy."
+                ) from exc
+            raise
+        self._validate_target_lock_worker_access(target_ctx, target_bucket)
+
+    def _restore_target_write_lock_policy(self, target_account: S3Account, target_bucket: str, item: BucketMigrationItem) -> None:
+        backup = _json_loads(item.target_policy_backup_json)
+        restored = self._without_managed_target_write_lock_statement(backup)
+        if isinstance(restored, dict):
+            self._buckets.put_policy(target_bucket, target_account, restored)
+            return
+        self._buckets.delete_policy(target_bucket, target_account)
+
+    def _restore_source_policy(self, source_bucket: str, source_account: S3Account, item: BucketMigrationItem) -> None:
+        backup = _json_loads(item.source_policy_backup_json)
+        restored = self._without_managed_read_only_statement(backup)
+        if isinstance(restored, dict):
+            self._buckets.put_policy(source_bucket, source_account, restored)
+            return
+        self._buckets.delete_policy(source_bucket, source_account)
+
+    def _sync_bucket(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        allow_delete: bool,
+        parallelism_max: int,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        control_check: Callable[[], str],
+    ) -> tuple[int, int, _SyncDiff]:
+        source_objects = self._list_current_objects(source_ctx, source_bucket)
+        target_objects = self._list_current_objects(target_ctx, target_bucket)
+        diff = self._compute_sync_diff(source_objects, target_objects, allow_delete=allow_delete)
+        if not diff.copy_keys and not diff.delete_keys:
+            return 0, 0, diff
+
+        same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
+        copied = 0
+        if diff.copy_keys:
+            if same_endpoint and bool(migration.auto_grant_source_read_for_copy):
+                sample_key = diff.copy_keys[0]
+                with self._temporary_source_copy_grant(
+                    source_ctx,
+                    target_ctx,
+                    source_bucket=source_bucket,
+                    sample_key=sample_key,
+                ):
+                    copied = self._run_copy_actions(
+                        source_ctx,
+                        target_ctx,
+                        source_bucket,
+                        target_bucket,
+                        diff.copy_keys,
+                        parallelism_max=parallelism_max,
+                        same_endpoint=same_endpoint,
+                        control_check=control_check,
+                    )
+            else:
+                copied = self._run_copy_actions(
+                    source_ctx,
+                    target_ctx,
+                    source_bucket,
+                    target_bucket,
+                    diff.copy_keys,
+                    parallelism_max=parallelism_max,
+                    same_endpoint=same_endpoint,
+                    control_check=control_check,
+                )
+        if copied < 0:
+            return -1, -1, diff
+
+        deleted = 0
+        if diff.delete_keys:
+            deleted = self._run_delete_actions(
+                target_ctx,
+                target_bucket,
+                diff.delete_keys,
+                parallelism_max=parallelism_max,
+                control_check=control_check,
+            )
+            if deleted < 0:
+                return -1, -1, diff
+
+        self._add_event(
+            migration,
+            item=item,
+            level="info",
+            message="Sync batch completed.",
+            metadata={
+                "copied": copied,
+                "deleted": deleted,
+                "allow_delete": allow_delete,
+                "same_endpoint_copy": same_endpoint,
+            },
+        )
+        self.db.commit()
+        return copied, deleted, diff
+
+    def _run_copy_actions(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        source_bucket: str,
+        target_bucket: str,
+        keys: list[str],
+        *,
+        parallelism_max: int,
+        same_endpoint: bool,
+        control_check: Callable[[], str],
+    ) -> int:
+        if not keys:
+            return 0
+        copied = 0
+        worker_count = max(1, min(int(parallelism_max), len(keys)))
+
+        for chunk in _chunked(keys, worker_count):
+            state = control_check()
+            if state == "lost_lease":
+                raise _WorkerLeaseLostError("Worker lease lost while copying objects")
+            if state in {"pause", "cancel"}:
+                return -1
+            with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-copy") as executor:
+                futures = {
+                    executor.submit(
+                        self._copy_single_object,
+                        source_ctx,
+                        target_ctx,
+                        source_bucket,
+                        target_bucket,
+                        key,
+                        same_endpoint,
+                    )
+                    for key in chunk
+                }
+                interrupted_state: Optional[str] = None
+                pending = set(futures)
+                while pending:
+                    done, pending = wait(pending, timeout=1.0)
+                    state = control_check()
+                    if state == "lost_lease":
+                        interrupted_state = "lost_lease"
+                    elif state in {"pause", "cancel"} and interrupted_state is None:
+                        interrupted_state = state
+                    for future in done:
+                        future.result()
+                        copied += 1
+                if interrupted_state == "lost_lease":
+                    raise _WorkerLeaseLostError("Worker lease lost while copying objects")
+                if interrupted_state in {"pause", "cancel"}:
+                    return -1
+        return copied
+
+    def _run_delete_actions(
+        self,
+        target_ctx: _ResolvedContext,
+        target_bucket: str,
+        keys: list[str],
+        *,
+        parallelism_max: int,
+        control_check: Callable[[], str],
+    ) -> int:
+        if not keys:
+            return 0
+        deleted = 0
+        worker_count = max(1, min(int(parallelism_max), len(keys)))
+
+        for chunk in _chunked(keys, worker_count):
+            state = control_check()
+            if state == "lost_lease":
+                raise _WorkerLeaseLostError("Worker lease lost while deleting objects")
+            if state in {"pause", "cancel"}:
+                return -1
+            with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-delete") as executor:
+                futures = {
+                    executor.submit(self._delete_single_object, target_ctx, target_bucket, key)
+                    for key in chunk
+                }
+                interrupted_state: Optional[str] = None
+                pending = set(futures)
+                while pending:
+                    done, pending = wait(pending, timeout=1.0)
+                    state = control_check()
+                    if state == "lost_lease":
+                        interrupted_state = "lost_lease"
+                    elif state in {"pause", "cancel"} and interrupted_state is None:
+                        interrupted_state = state
+                    for future in done:
+                        future.result()
+                        deleted += 1
+                if interrupted_state == "lost_lease":
+                    raise _WorkerLeaseLostError("Worker lease lost while deleting objects")
+                if interrupted_state in {"pause", "cancel"}:
+                    return -1
+        return deleted
+
+    def _copy_single_object(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        source_bucket: str,
+        target_bucket: str,
+        key: str,
+        same_endpoint: bool,
+    ) -> None:
+        if same_endpoint:
+            target_client = self._context_client(target_ctx)
+            copy_source = {"Bucket": source_bucket, "Key": key}
+            try:
+                target_client.copy_object(Bucket=target_bucket, Key=key, CopySource=copy_source)
+                return
+            except (ClientError, BotoCoreError) as exc:
+                if not self._is_access_denied_error(exc):
+                    raise RuntimeError(f"Unable to copy object '{key}' with x-amz-copy-source: {exc}") from exc
+                logger.warning(
+                    "CopyObject with x-amz-copy-source denied for '%s' (%s), falling back to stream-copy.",
+                    key,
+                    exc,
+                )
+                self._stream_copy_single_object(
+                    source_ctx,
+                    target_ctx,
+                    source_bucket=source_bucket,
+                    target_bucket=target_bucket,
+                    key=key,
+                    target_client=target_client,
+                )
+                return
+
+        self._stream_copy_single_object(
+            source_ctx,
+            target_ctx,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            key=key,
+        )
+
+    def _stream_copy_single_object(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        key: str,
+        target_client: Any | None = None,
+    ) -> None:
+        source_client = self._context_client(source_ctx)
+        resolved_target_client = target_client or self._context_client(target_ctx)
+        body = None
+        try:
+            response = source_client.get_object(Bucket=source_bucket, Key=key)
+            body = response.get("Body")
+            resolved_target_client.upload_fileobj(body, target_bucket, key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to stream-copy object '{key}': {exc}") from exc
+        finally:
+            if body is not None:
+                try:
+                    body.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    def _delete_single_object(self, target_ctx: _ResolvedContext, target_bucket: str, key: str) -> None:
+        client = self._context_client(target_ctx)
+        try:
+            client.delete_object(Bucket=target_bucket, Key=key)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to delete target object '{key}': {exc}") from exc
+
+    def _delete_objects_batch(self, client: Any, bucket_name: str, objects: list[dict[str, str]]) -> int:
+        if not objects:
+            return 0
+        deleted = 0
+        for index in range(0, len(objects), 1000):
+            chunk = objects[index : index + 1000]
+            try:
+                response = client.delete_objects(Bucket=bucket_name, Delete={"Objects": chunk})
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(f"Unable to delete objects in bucket '{bucket_name}': {exc}") from exc
+            errors = response.get("Errors", []) if isinstance(response, dict) else []
+            if errors:
+                sample = []
+                for err in errors[:3]:
+                    key = err.get("Key", "unknown")
+                    code = err.get("Code", "Error")
+                    message = err.get("Message", "")
+                    sample.append(f"{code} for {key}{f' ({message})' if message else ''}")
+                extra = f" (+{len(errors) - 3} more)" if len(errors) > 3 else ""
+                raise RuntimeError(
+                    f"Unable to delete {len(errors)} object(s) in bucket '{bucket_name}': {', '.join(sample)}{extra}"
+                )
+            deleted += len(chunk)
+        return deleted
+
+    def _purge_target_bucket(self, target_ctx: _ResolvedContext, target_bucket: str) -> tuple[int, int]:
+        client = self._context_client(target_ctx)
+        deleted_current = 0
+        continuation_token: Optional[str] = None
+        while True:
+            kwargs: dict[str, Any] = {"Bucket": target_bucket, "MaxKeys": 1000}
+            if continuation_token:
+                kwargs["ContinuationToken"] = continuation_token
+            try:
+                page = client.list_objects_v2(**kwargs)
+            except ClientError as exc:
+                code = str(exc.response.get("Error", {}).get("Code", "")).strip().lower() if hasattr(exc, "response") else ""
+                if code in {"nosuchbucket", "notfound"}:
+                    return deleted_current, 0
+                raise RuntimeError(f"Unable to list target bucket '{target_bucket}' for rollback: {exc}") from exc
+            except BotoCoreError as exc:
+                raise RuntimeError(f"Unable to list target bucket '{target_bucket}' for rollback: {exc}") from exc
+            objects = [{"Key": entry.get("Key")} for entry in (page.get("Contents", []) or []) if entry.get("Key")]
+            deleted_current += self._delete_objects_batch(client, target_bucket, objects)
+            continuation_token = page.get("NextContinuationToken")
+            if not continuation_token:
+                break
+
+        deleted_versions = 0
+        key_marker: Optional[str] = None
+        version_marker: Optional[str] = None
+        while True:
+            list_kwargs: dict[str, Any] = {"Bucket": target_bucket}
+            if key_marker:
+                list_kwargs["KeyMarker"] = key_marker
+            if version_marker:
+                list_kwargs["VersionIdMarker"] = version_marker
+            try:
+                page = client.list_object_versions(**list_kwargs)
+            except ClientError as exc:
+                code = str(exc.response.get("Error", {}).get("Code", "")).strip().lower() if hasattr(exc, "response") else ""
+                if code in {"nosuchbucket", "nosuchversion", "notfound"}:
+                    break
+                raise RuntimeError(f"Unable to list target versions in bucket '{target_bucket}' for rollback: {exc}") from exc
+            except BotoCoreError as exc:
+                raise RuntimeError(f"Unable to list target versions in bucket '{target_bucket}' for rollback: {exc}") from exc
+            version_objects: list[dict[str, str]] = []
+            for entry in page.get("Versions", []) or []:
+                key = entry.get("Key")
+                version_id = entry.get("VersionId")
+                if key and version_id:
+                    version_objects.append({"Key": key, "VersionId": version_id})
+            for entry in page.get("DeleteMarkers", []) or []:
+                key = entry.get("Key")
+                version_id = entry.get("VersionId")
+                if key and version_id:
+                    version_objects.append({"Key": key, "VersionId": version_id})
+            deleted_versions += self._delete_objects_batch(client, target_bucket, version_objects)
+            key_marker = page.get("NextKeyMarker")
+            version_marker = page.get("NextVersionIdMarker")
+            if not key_marker and not version_marker:
+                break
+
+        return deleted_current, deleted_versions
+
+    def _is_bucket_already_exists_error(self, exc: Exception) -> bool:
+        text = str(exc).strip().lower()
+        return any(
+            marker in text
+            for marker in (
+                "bucketalreadyexists",
+                "bucketalreadyownedbyyou",
+                "bucket already exists",
+                "already owned by you",
+            )
+        )
+
+    def _is_access_denied_error(self, exc: Exception) -> bool:
+        text = str(exc).strip().lower()
+        return "accessdenied" in text or "access denied" in text or "403" in text
+
+    def _context_client(self, ctx: _ResolvedContext):
+        access_key, secret_key = ctx.account.effective_rgw_credentials()
+        if not access_key or not secret_key:
+            raise RuntimeError(f"Context '{ctx.context_id}' has no credentials")
+        token = ctx.account.session_token()
+        return get_s3_client(
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=ctx.endpoint,
+            session_token=token,
+            region=ctx.region,
+            force_path_style=ctx.force_path_style,
+            verify_tls=ctx.verify_tls,
+            user_agent_extra=_MIGRATION_USER_AGENT_MARKER,
+        )
+
+    def _load_runtime_limits(self) -> _MigrationRuntimeLimits:
+        env_parallelism_max = max(1, min(int(settings.bucket_migration_parallelism_max or 1), 128))
+        env_parallelism_default = env_parallelism_max
+        env_max_active = max(1, min(int(settings.bucket_migration_max_active_per_endpoint or 1), 64))
+
+        try:
+            manager = load_app_settings().manager
+            parallelism_max = max(
+                1,
+                min(int(manager.bucket_migration_parallelism_max or env_parallelism_max), 128),
+            )
+            parallelism_default = max(
+                1,
+                min(int(manager.bucket_migration_parallelism_default or parallelism_max), parallelism_max),
+            )
+            max_active = max(
+                1,
+                min(int(manager.bucket_migration_max_active_per_endpoint or env_max_active), 64),
+            )
+            return _MigrationRuntimeLimits(
+                parallelism_default=parallelism_default,
+                parallelism_max=parallelism_max,
+                max_active_per_endpoint=max_active,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "Unable to load app settings for bucket migration runtime limits, falling back to environment values."
+            )
+            return _MigrationRuntimeLimits(
+                parallelism_default=env_parallelism_default,
+                parallelism_max=env_parallelism_max,
+                max_active_per_endpoint=env_max_active,
+            )
+
+    def _resolve_context(self, context_id: str) -> _ResolvedContext:
+        account = self._context_to_account(context_id)
+        endpoint, region, force_path_style, verify_tls = resolve_s3_client_options(account)
+        endpoint = normalize_s3_endpoint(endpoint)
+        return _ResolvedContext(
+            context_id=context_id,
+            account=account,
+            endpoint=endpoint,
+            region=region,
+            force_path_style=force_path_style,
+            verify_tls=verify_tls,
+        )
+
+    def _context_to_account(self, context_id: str) -> S3Account:
+        value = (context_id or "").strip()
+        if not value:
+            raise ValueError("Invalid context id")
+
+        if value.startswith("conn-"):
+            suffix = value.split("conn-", 1)[1]
+            if not suffix.isdigit():
+                raise ValueError("Invalid connection context id")
+            conn = self.db.query(S3Connection).filter(S3Connection.id == int(suffix)).first()
+            if not conn:
+                raise ValueError("S3Connection not found")
+            account = S3Account(
+                name=conn.name,
+                rgw_account_id=None,
+                email=None,
+                rgw_user_uid=None,
+            )
+            account.id = -(1_000_000 + conn.id)
+            account.rgw_access_key = conn.access_key_id
+            account.rgw_secret_key = conn.secret_access_key
+            account.storage_endpoint_id = conn.storage_endpoint_id
+            endpoint_url, region, force_path_style, verify_tls = resolve_connection_endpoint(conn)
+            account.storage_endpoint_url = endpoint_url  # type: ignore[attr-defined]
+            account._session_region = region  # type: ignore[attr-defined]
+            account._session_force_path_style = force_path_style  # type: ignore[attr-defined]
+            account._session_verify_tls = verify_tls  # type: ignore[attr-defined]
+            account._session_token = conn.session_token  # type: ignore[attr-defined]
+            if conn.storage_endpoint is not None:
+                account.storage_endpoint = conn.storage_endpoint
+            return account
+
+        if value.startswith("s3u-"):
+            suffix = value.split("s3u-", 1)[1]
+            if not suffix.isdigit():
+                raise ValueError("Invalid S3 user context id")
+            s3_user = self.db.query(S3User).filter(S3User.id == int(suffix)).first()
+            if not s3_user:
+                raise ValueError("S3 user not found")
+            account = S3Account(
+                name=s3_user.name,
+                rgw_account_id=None,
+                email=s3_user.email,
+                rgw_user_uid=s3_user.rgw_user_uid,
+            )
+            account.id = -(100_000 + s3_user.id)
+            account.rgw_access_key = s3_user.rgw_access_key
+            account.rgw_secret_key = s3_user.rgw_secret_key
+            account.storage_endpoint_id = s3_user.storage_endpoint_id
+            account.storage_endpoint = s3_user.storage_endpoint
+            account.set_session_credentials(s3_user.rgw_access_key, s3_user.rgw_secret_key)
+            return account
+
+        if not value.isdigit():
+            raise ValueError("Invalid account context id")
+        account = self.db.query(S3Account).filter(S3Account.id == int(value)).first()
+        if not account:
+            raise ValueError("S3 account not found")
+        return account
+
+    def _list_current_objects(self, ctx: _ResolvedContext, bucket_name: str) -> dict[str, dict[str, Any]]:
+        client = self._context_client(ctx)
+        continuation_token: Optional[str] = None
+        objects_by_key: dict[str, dict[str, Any]] = {}
+        while True:
+            kwargs: dict[str, Any] = {"Bucket": bucket_name, "MaxKeys": 1000}
+            if continuation_token:
+                kwargs["ContinuationToken"] = continuation_token
+            try:
+                page = client.list_objects_v2(**kwargs)
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(f"Unable to list objects in bucket '{bucket_name}': {exc}") from exc
+            for entry in page.get("Contents", []) or []:
+                key = entry.get("Key")
+                if not isinstance(key, str) or not key:
+                    continue
+                etag_raw = entry.get("ETag")
+                etag = etag_raw.strip().strip('"') if isinstance(etag_raw, str) else None
+                objects_by_key[key] = {
+                    "size": int(entry.get("Size") or 0),
+                    "etag": etag or None,
+                }
+            continuation_token = page.get("NextContinuationToken")
+            if not continuation_token:
+                break
+        return objects_by_key
+
+    def _compute_sync_diff(
+        self,
+        source_objects: dict[str, dict[str, Any]],
+        target_objects: dict[str, dict[str, Any]],
+        *,
+        allow_delete: bool,
+    ) -> _SyncDiff:
+        source_keys = set(source_objects.keys())
+        target_keys = set(target_objects.keys())
+        only_source = sorted(source_keys - target_keys)
+        only_target = sorted(target_keys - source_keys)
+        common_keys = sorted(source_keys & target_keys)
+
+        copy_keys: list[str] = list(only_source)
+        matched_count = 0
+        different_count = 0
+
+        different_sample: list[dict[str, Any]] = []
+        for key in common_keys:
+            src = source_objects[key]
+            dst = target_objects[key]
+            src_size = int(src.get("size") or 0)
+            dst_size = int(dst.get("size") or 0)
+            src_etag = src.get("etag")
+            dst_etag = dst.get("etag")
+
+            src_md5 = self._etag_md5(src_etag if isinstance(src_etag, str) else None)
+            dst_md5 = self._etag_md5(dst_etag if isinstance(dst_etag, str) else None)
+            if src_md5 and dst_md5:
+                equal = src_md5 == dst_md5
+                compare_by = "md5"
+            else:
+                equal = src_size == dst_size
+                compare_by = "size"
+
+            if equal:
+                matched_count += 1
+                continue
+
+            different_count += 1
+            copy_keys.append(key)
+            if len(different_sample) < 200:
+                different_sample.append(
+                    {
+                        "key": key,
+                        "source_size": src_size,
+                        "target_size": dst_size,
+                        "source_etag": src_etag,
+                        "target_etag": dst_etag,
+                        "compare_by": compare_by,
+                    }
+                )
+
+        delete_keys = sorted(only_target) if allow_delete else []
+        sample = {
+            "only_source_sample": only_source[:200],
+            "only_target_sample": only_target[:200],
+            "different_sample": different_sample,
+        }
+
+        return _SyncDiff(
+            copy_keys=sorted(copy_keys),
+            delete_keys=delete_keys,
+            source_count=len(source_keys),
+            target_count=len(target_keys),
+            matched_count=matched_count,
+            different_count=different_count,
+            only_source_count=len(only_source),
+            only_target_count=len(only_target),
+            sample=sample,
+        )
+
+    def _etag_md5(self, etag: Optional[str]) -> Optional[str]:
+        if not etag:
+            return None
+        value = etag.strip().strip('"')
+        if not value:
+            return None
+        if re.fullmatch(r"[0-9a-fA-F]{32}", value):
+            return value.lower()
+        return None
+
+    def _is_same_endpoint(self, source_ctx: _ResolvedContext, target_ctx: _ResolvedContext) -> bool:
+        source_endpoint = normalize_s3_endpoint(source_ctx.endpoint)
+        target_endpoint = normalize_s3_endpoint(target_ctx.endpoint)
+        return bool(source_endpoint and target_endpoint and source_endpoint == target_endpoint)
+
+    def _active_endpoint_usage(self, *, now) -> dict[str, int]:
+        usage: dict[str, int] = {}
+        cache: dict[str, str] = {}
+        rows = (
+            self.db.query(BucketMigration.source_context_id, BucketMigration.target_context_id)
+            .filter(
+                BucketMigration.status.in_(_RUNNABLE_MIGRATION_STATUSES),
+                BucketMigration.worker_lease_until.isnot(None),
+                BucketMigration.worker_lease_until >= now,
+            )
+            .all()
+        )
+        for row in rows:
+            for key in self._endpoint_keys_for_contexts(
+                row.source_context_id,
+                row.target_context_id,
+                cache=cache,
+            ):
+                usage[key] = usage.get(key, 0) + 1
+        return usage
+
+    def _endpoint_keys_for_contexts(
+        self,
+        source_context_id: str,
+        target_context_id: str,
+        *,
+        cache: dict[str, str],
+    ) -> set[str]:
+        source_key = self._context_endpoint_capacity_key(source_context_id, cache=cache)
+        target_key = self._context_endpoint_capacity_key(target_context_id, cache=cache)
+        keys = {source_key, target_key}
+        return {key for key in keys if key}
+
+    def _context_endpoint_capacity_key(self, context_id: str, *, cache: dict[str, str]) -> str:
+        normalized_context_id = (context_id or "").strip()
+        if not normalized_context_id:
+            return "context:unknown"
+        cached = cache.get(normalized_context_id)
+        if cached is not None:
+            return cached
+        endpoint_key = f"context:{normalized_context_id}"
+        try:
+            ctx = self._resolve_context(normalized_context_id)
+            endpoint = normalize_s3_endpoint(ctx.endpoint)
+            if endpoint:
+                endpoint_key = f"endpoint:{endpoint}"
+        except Exception:
+            logger.debug(
+                "Unable to resolve endpoint for migration context '%s' while evaluating endpoint limits.",
+                normalized_context_id,
+                exc_info=True,
+            )
+        cache[normalized_context_id] = endpoint_key
+        return endpoint_key
+
+    def _find_migration_item(self, migration: BucketMigration, item_id: int) -> BucketMigrationItem:
+        for item in migration.items:
+            if item.id == item_id:
+                return item
+        raise ValueError("Migration item not found")
+
+    def _ensure_manual_item_operation_allowed(self, migration: BucketMigration) -> None:
+        if migration.status in _RUNNABLE_MIGRATION_STATUSES:
+            raise ValueError("Bucket-level actions are not available while migration is active")
+
+    def _retry_step_for_failed_item(self, item: BucketMigrationItem) -> str:
+        if item.step in {"verify", "rollback_failed"}:
+            return "sync"
+        return item.step or "create_bucket"
+
+    def _prepare_item_retry(self, migration: BucketMigration, item: BucketMigrationItem) -> None:
+        item.status = "pending"
+        item.step = self._retry_step_for_failed_item(item)
+        item.error_message = None
+        item.finished_at = None
+        item.updated_at = utcnow()
+        self._add_event(
+            migration,
+            item=item,
+            level="info",
+            message="Retry requested for bucket item.",
+            metadata={"retry_step": item.step},
+        )
+
+    def _queue_migration_for_retry(self, migration: BucketMigration, *, message: str) -> None:
+        migration.status = "queued"
+        migration.pause_requested = False
+        migration.cancel_requested = False
+        migration.worker_lease_owner = None
+        migration.worker_lease_until = None
+        migration.error_message = None
+        migration.finished_at = None
+        migration.updated_at = utcnow()
+        if migration.started_at is None:
+            migration.started_at = utcnow()
+        self._recompute_counters(migration)
+        self._add_event(
+            migration,
+            level="info",
+            message=message,
+        )
+
+    def _rollback_single_item(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+    ) -> None:
+        rollback_issues: list[str] = []
+
+        if item.read_only_applied or item.source_policy_backup_json:
+            try:
+                if item.source_policy_backup_json:
+                    self._restore_source_policy(item.source_bucket, source_ctx.account, item)
+                else:
+                    self._remove_managed_read_only_statement(item.source_bucket, source_ctx.account)
+                item.read_only_applied = False
+                item.source_policy_backup_json = None
+            except Exception as exc:  # noqa: BLE001
+                rollback_issues.append(f"source policy restore failed: {exc}")
+
+        if item.target_lock_applied or item.target_policy_backup_json:
+            try:
+                if item.target_policy_backup_json:
+                    self._restore_target_write_lock_policy(target_ctx.account, item.target_bucket, item)
+                else:
+                    self._remove_managed_target_write_lock_statement(item.target_bucket, target_ctx.account)
+                item.target_lock_applied = False
+                item.target_policy_backup_json = None
+            except Exception as exc:  # noqa: BLE001
+                rollback_issues.append(f"target lock restore failed: {exc}")
+
+        try:
+            purged_current, purged_versions = self._purge_target_bucket(target_ctx, item.target_bucket)
+            purged_count = purged_current + purged_versions
+            item.objects_deleted = int(item.objects_deleted or 0) + purged_count
+        except Exception as exc:  # noqa: BLE001
+            rollback_issues.append(f"destination cleanup failed: {exc}")
+
+        if rollback_issues:
+            item.status = "failed"
+            item.step = "rollback_failed"
+            item.error_message = "Rollback failed: " + "; ".join(rollback_issues)
+            item.finished_at = utcnow()
+            item.updated_at = utcnow()
+            self._add_event(
+                migration,
+                item=item,
+                level="error",
+                message="Rollback failed for bucket item.",
+                metadata={"issues": rollback_issues},
+            )
+            return
+
+        item.status = "completed"
+        item.step = "rolled_back"
+        item.error_message = None
+        item.finished_at = utcnow()
+        item.updated_at = utcnow()
+        self._add_event(
+            migration,
+            item=item,
+            level="info",
+            message="Rollback completed for bucket item.",
+            metadata={"target_bucket": item.target_bucket},
+        )
+
+    def _refresh_status_after_manual_item_operations(self, migration: BucketMigration) -> None:
+        self._recompute_counters(migration)
+        pending_count = len([item for item in migration.items if item.status in {"pending", "running", "paused"}])
+        awaiting_count = len([item for item in migration.items if item.status == "awaiting_cutover"])
+
+        if pending_count > 0:
+            migration.status = "queued"
+            migration.pause_requested = False
+            migration.cancel_requested = False
+            migration.worker_lease_owner = None
+            migration.worker_lease_until = None
+            migration.error_message = None
+            migration.finished_at = None
+            migration.updated_at = utcnow()
+            return
+
+        if migration.failed_items > 0:
+            migration.status = "completed_with_errors"
+            migration.updated_at = utcnow()
+            return
+
+        if migration.mode == "pre_sync" and awaiting_count > 0:
+            migration.status = "awaiting_cutover"
+            migration.pause_requested = False
+            migration.cancel_requested = False
+            migration.worker_lease_owner = None
+            migration.worker_lease_until = None
+            migration.error_message = None
+            migration.finished_at = None
+            migration.updated_at = utcnow()
+            return
+
+        if migration.status == "canceled":
+            migration.error_message = None
+            migration.updated_at = utcnow()
+            return
+
+        migration.status = "completed"
+        migration.error_message = None
+        migration.pause_requested = False
+        migration.cancel_requested = False
+        migration.worker_lease_owner = None
+        migration.worker_lease_until = None
+        migration.finished_at = utcnow()
+        migration.updated_at = utcnow()
+
+    def _rollback_source_data_risk_reason(
+        self,
+        migration: BucketMigration,
+        item: BucketMigrationItem,
+    ) -> Optional[str]:
+        if item.status == "skipped":
+            return None
+        if bool(getattr(item, "source_deleted", False)):
+            return "source deletion already completed"
+        if not migration.delete_source:
+            return None
+        if item.status == "completed":
+            return "item completed with delete-source enabled"
+        if item.step in {"delete_source", "completed"}:
+            return f"item is at step '{item.step}' with delete-source enabled"
+        return None
+
+    def _ensure_source_accessible_for_rollback(
+        self,
+        source_ctx: _ResolvedContext,
+        items: list[BucketMigrationItem],
+    ) -> None:
+        errors: list[str] = []
+        checked_buckets: set[str] = set()
+        for item in items:
+            if item.status == "skipped":
+                continue
+            bucket_name = (item.source_bucket or "").strip()
+            if not bucket_name or bucket_name in checked_buckets:
+                continue
+            checked_buckets.add(bucket_name)
+            try:
+                self._precheck_can_list_bucket(source_ctx, bucket_name)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{bucket_name}: {exc}")
+
+        if errors:
+            sample = "; ".join(errors[:3])
+            suffix = f" (+{len(errors) - 3} more)" if len(errors) > 3 else ""
+            raise ValueError(
+                "Rollback blocked to prevent data loss: unable to verify source bucket accessibility for "
+                f"{len(errors)} bucket(s): {sample}{suffix}"
+            )
+
+    def _ensure_rollback_safe(
+        self,
+        migration: BucketMigration,
+        items: list[BucketMigrationItem],
+        *,
+        source_ctx: _ResolvedContext,
+    ) -> None:
+        risks: list[str] = []
+        for item in items:
+            reason = self._rollback_source_data_risk_reason(migration, item)
+            if reason:
+                risks.append(f"{item.source_bucket}: {reason}")
+        if risks:
+            sample = "; ".join(risks[:3])
+            suffix = f" (+{len(risks) - 3} more)" if len(risks) > 3 else ""
+            raise ValueError(
+                "Rollback blocked to prevent data loss: source data may have been deleted for "
+                f"{len(risks)} bucket(s): {sample}{suffix}"
+            )
+        self._ensure_source_accessible_for_rollback(source_ctx, items)
+
+    def _renew_migration_lease(self, migration_id: int, *, worker_id: str, lease_seconds: int) -> bool:
+        now = utcnow()
+        lease_duration = max(15, int(lease_seconds))
+        lease_until = now + timedelta(seconds=lease_duration)
+        updated = (
+            self.db.query(BucketMigration)
+            .filter(
+                BucketMigration.id == migration_id,
+                BucketMigration.worker_lease_owner == worker_id,
+                BucketMigration.status.in_(_RUNNABLE_MIGRATION_STATUSES),
+            )
+            .update(
+                {
+                    BucketMigration.worker_lease_until: lease_until,
+                    BucketMigration.updated_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+        if updated == 1:
+            self.db.commit()
+            return True
+        self.db.rollback()
+        return False
+
+    def _release_migration_lease(self, migration_id: int, *, worker_id: Optional[str] = None) -> None:
+        query = self.db.query(BucketMigration).filter(BucketMigration.id == migration_id)
+        if worker_id:
+            query = query.filter(BucketMigration.worker_lease_owner == worker_id)
+        query.update(
+            {
+                BucketMigration.worker_lease_owner: None,
+                BucketMigration.worker_lease_until: None,
+            },
+            synchronize_session=False,
+        )
+
+    def _control_state(
+        self,
+        migration_id: int,
+        *,
+        worker_id: Optional[str] = None,
+        lease_seconds: Optional[int] = None,
+    ) -> str:
+        migration = self.get_migration(migration_id)
+        if worker_id:
+            if migration.worker_lease_owner != worker_id:
+                return "lost_lease"
+            effective_lease_seconds = max(15, int(lease_seconds or settings.bucket_migration_worker_lease_seconds))
+            lease_until = migration.worker_lease_until
+            refresh_window_seconds = max(5, effective_lease_seconds // 3)
+            should_refresh = (
+                lease_until is None
+                or (lease_until - utcnow()).total_seconds() <= refresh_window_seconds
+            )
+            if should_refresh:
+                if not self._renew_migration_lease(migration_id, worker_id=worker_id, lease_seconds=effective_lease_seconds):
+                    return "lost_lease"
+                migration = self.get_migration(migration_id)
+        if migration.cancel_requested or migration.status == "cancel_requested":
+            return "cancel"
+        if migration.pause_requested or migration.status == "pause_requested":
+            return "pause"
+        return "run"
+
+    def _mark_paused(self, migration: BucketMigration) -> None:
+        migration.status = "paused"
+        migration.pause_requested = False
+        migration.worker_lease_owner = None
+        migration.worker_lease_until = None
+        migration.updated_at = utcnow()
+        for item in migration.items:
+            if item.status == "running":
+                item.status = "paused"
+                item.updated_at = utcnow()
+        self._add_event(migration, level="info", message="Migration paused.")
+        self._recompute_counters(migration)
+
+    def _release_target_write_locks(
+        self,
+        migration: BucketMigration,
+        target_ctx: Optional[_ResolvedContext],
+    ) -> list[str]:
+        if not migration.lock_target_writes:
+            return []
+        if target_ctx is None:
+            return ["target context is not available"]
+
+        errors: list[str] = []
+        for item in migration.items:
+            if not (item.target_lock_applied or item.target_policy_backup_json):
+                continue
+            try:
+                if item.target_policy_backup_json:
+                    self._restore_target_write_lock_policy(target_ctx.account, item.target_bucket, item)
+                else:
+                    self._remove_managed_target_write_lock_statement(item.target_bucket, target_ctx.account)
+                item.target_lock_applied = False
+                item.target_policy_backup_json = None
+                item.updated_at = utcnow()
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="info",
+                    message="Target write-lock policy released.",
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{item.target_bucket}: {exc}")
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="warning",
+                    message="Unable to release target write-lock policy.",
+                    metadata={"error": str(exc)},
+                )
+        return errors
+
+    def _mark_canceled(self, migration: BucketMigration, *, target_ctx: Optional[_ResolvedContext] = None) -> None:
+        migration.status = "canceled"
+        migration.pause_requested = False
+        migration.cancel_requested = False
+        migration.worker_lease_owner = None
+        migration.worker_lease_until = None
+        migration.finished_at = utcnow()
+        migration.updated_at = utcnow()
+        for item in migration.items:
+            if item.status in {"pending", "running", "paused", "awaiting_cutover"}:
+                item.status = "canceled"
+                item.finished_at = utcnow()
+                item.updated_at = utcnow()
+        release_errors = self._release_target_write_locks(migration, target_ctx)
+        if release_errors:
+            migration.error_message = (
+                f"Migration canceled, but {len(release_errors)} target lock cleanup error(s): "
+                + " | ".join(release_errors[:3])
+            )
+        self._add_event(migration, level="info", message="Migration canceled.")
+        self._recompute_counters(migration)
+
+    def _finalize_or_wait_cutover(self, migration: BucketMigration, *, target_ctx: Optional[_ResolvedContext] = None) -> None:
+        self._recompute_counters(migration)
+        if migration.cancel_requested or migration.status == "cancel_requested":
+            self._mark_canceled(migration, target_ctx=target_ctx)
+            return
+
+        total_actionable = len([item for item in migration.items if item.status not in {"skipped"}])
+        awaiting_count = len([item for item in migration.items if item.status == "awaiting_cutover"])
+        pending_count = len([item for item in migration.items if item.status in {"pending", "running", "paused"}])
+
+        if migration.mode == "pre_sync" and total_actionable > 0 and awaiting_count == total_actionable:
+            migration.status = "awaiting_cutover"
+            migration.worker_lease_owner = None
+            migration.worker_lease_until = None
+            migration.updated_at = utcnow()
+            self._add_event(migration, level="info", message="All items pre-synced; waiting for cutover.")
+            return
+
+        if pending_count > 0:
+            migration.status = "running"
+            migration.updated_at = utcnow()
+            return
+
+        if migration.failed_items > 0:
+            migration.status = "completed_with_errors"
+        else:
+            migration.status = "completed"
+        migration.worker_lease_owner = None
+        migration.worker_lease_until = None
+        migration.finished_at = utcnow()
+        migration.updated_at = utcnow()
+        release_errors = self._release_target_write_locks(migration, target_ctx)
+        if release_errors:
+            if migration.status == "completed":
+                migration.status = "completed_with_errors"
+            migration.error_message = (
+                f"Migration finished with {len(release_errors)} target lock cleanup error(s): "
+                + " | ".join(release_errors[:3])
+            )
+        self._add_event(migration, level="info", message=f"Migration finished with status '{migration.status}'.")
+
+    def _recompute_counters(self, migration: BucketMigration) -> None:
+        completed = 0
+        failed = 0
+        skipped = 0
+        awaiting = 0
+        for item in migration.items:
+            if item.status == "completed":
+                completed += 1
+            elif item.status == "failed":
+                failed += 1
+            elif item.status == "skipped":
+                skipped += 1
+            elif item.status == "awaiting_cutover":
+                awaiting += 1
+        migration.total_items = len(migration.items)
+        migration.completed_items = completed
+        migration.failed_items = failed
+        migration.skipped_items = skipped
+        migration.awaiting_items = awaiting
+
+    def _add_event(
+        self,
+        migration: BucketMigration,
+        *,
+        item: Optional[BucketMigrationItem] = None,
+        level: str,
+        message: str,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
+        created_at = utcnow()
+        entry = BucketMigrationEvent(
+            migration_id=migration.id,
+            item_id=item.id if item else None,
+            level=level,
+            message=message,
+            metadata_json=_json_dumps(metadata) if metadata is not None else None,
+            created_at=created_at,
+        )
+        self.db.add(entry)
+        self._notify_migration_webhook(
+            migration,
+            item=item,
+            level=level,
+            message=message,
+            metadata=metadata,
+            created_at=created_at,
+        )
+
+    def _notify_migration_webhook(
+        self,
+        migration: BucketMigration,
+        *,
+        item: Optional[BucketMigrationItem],
+        level: str,
+        message: str,
+        metadata: Optional[dict[str, Any]],
+        created_at: Any,
+    ) -> None:
+        webhook_url = (migration.webhook_url or "").strip()
+        if not webhook_url:
+            return
+
+        payload = self._build_migration_webhook_payload(
+            migration,
+            item=item,
+            level=level,
+            message=message,
+            metadata=metadata,
+            created_at=created_at,
+        )
+        try:
+            response = requests.post(
+                webhook_url,
+                json=payload,
+                timeout=_WEBHOOK_TIMEOUT_SECONDS,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "s3-manager-migration-webhook/1.0",
+                },
+            )
+            if int(getattr(response, "status_code", 0) or 0) >= 400:
+                logger.warning(
+                    "Bucket migration webhook returned non-success status: migration=%s item=%s status=%s",
+                    migration.id,
+                    item.id if item else None,
+                    getattr(response, "status_code", "unknown"),
+                )
+        except requests.RequestException as exc:
+            logger.warning(
+                "Bucket migration webhook delivery failed: migration=%s item=%s error=%s",
+                migration.id,
+                item.id if item else None,
+                exc,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Bucket migration webhook delivery raised unexpected error: migration=%s item=%s error=%s",
+                migration.id,
+                item.id if item else None,
+                exc,
+            )
+
+    def _build_migration_webhook_payload(
+        self,
+        migration: BucketMigration,
+        *,
+        item: Optional[BucketMigrationItem],
+        level: str,
+        message: str,
+        metadata: Optional[dict[str, Any]],
+        created_at: Any,
+    ) -> dict[str, Any]:
+        safe_metadata: Optional[dict[str, Any]] = None
+        if metadata is not None:
+            normalized_metadata = _json_loads(_json_dumps(metadata))
+            if isinstance(normalized_metadata, dict):
+                safe_metadata = normalized_metadata
+            else:
+                safe_metadata = {"value": normalized_metadata}
+
+        created_iso = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+
+        payload: dict[str, Any] = {
+            "type": "bucket_migration.event",
+            "occurred_at": created_iso,
+            "migration": {
+                "id": migration.id,
+                "status": migration.status,
+                "mode": migration.mode,
+                "source_context_id": migration.source_context_id,
+                "target_context_id": migration.target_context_id,
+                "copy_bucket_settings": bool(migration.copy_bucket_settings),
+                "delete_source": bool(migration.delete_source),
+                "lock_target_writes": bool(migration.lock_target_writes),
+                "auto_grant_source_read_for_copy": bool(migration.auto_grant_source_read_for_copy),
+                "parallelism_max": int(migration.parallelism_max or 1),
+                "total_items": int(migration.total_items or 0),
+                "completed_items": int(migration.completed_items or 0),
+                "failed_items": int(migration.failed_items or 0),
+                "skipped_items": int(migration.skipped_items or 0),
+                "awaiting_items": int(migration.awaiting_items or 0),
+            },
+            "event": {
+                "level": level,
+                "message": message,
+                "metadata": safe_metadata,
+            },
+            "item": None,
+        }
+        if item is not None:
+            payload["item"] = {
+                "id": item.id,
+                "source_bucket": item.source_bucket,
+                "target_bucket": item.target_bucket,
+                "status": item.status,
+                "step": item.step,
+                "objects_copied": int(item.objects_copied or 0),
+                "objects_deleted": int(item.objects_deleted or 0),
+                "error_message": item.error_message,
+            }
+        return payload
+
+
+class BucketMigrationWorker:
+    def __init__(
+        self,
+        session_factory: sessionmaker,
+        *,
+        poll_interval_seconds: float,
+        lease_seconds: int,
+    ) -> None:
+        self._session_factory = session_factory
+        self._poll_interval_seconds = max(0.2, float(poll_interval_seconds))
+        self._lease_seconds = max(15, int(lease_seconds))
+        self._worker_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._wake_event = threading.Event()
+        self._lock = threading.Lock()
+
+    def start(self) -> None:
+        with self._lock:
+            if self._thread and self._thread.is_alive():
+                return
+            self._stop_event.clear()
+            self._wake_event.clear()
+            self._thread = threading.Thread(
+                target=self._run_loop,
+                name="bucket-migration-worker",
+                daemon=True,
+            )
+            self._thread.start()
+
+    def stop(self, timeout: float = 10.0) -> None:
+        with self._lock:
+            self._stop_event.set()
+            self._wake_event.set()
+            thread = self._thread
+        if thread and thread.is_alive():
+            thread.join(timeout=timeout)
+
+    def wake_up(self) -> None:
+        self._wake_event.set()
+
+    def _run_loop(self) -> None:
+        while not self._stop_event.is_set():
+            processed = False
+            try:
+                with self._session_factory() as db:
+                    service = BucketMigrationService(db)
+                    migration_id = service.claim_next_runnable_migration_id(
+                        worker_id=self._worker_id,
+                        lease_seconds=self._lease_seconds,
+                    )
+                if migration_id is not None:
+                    processed = True
+                    with self._session_factory() as db:
+                        service = BucketMigrationService(db)
+                        service.run_migration(
+                            migration_id,
+                            worker_id=self._worker_id,
+                            lease_seconds=self._lease_seconds,
+                        )
+            except Exception:  # noqa: BLE001
+                logger.exception("Bucket migration worker iteration failed")
+            finally:
+                wait_seconds = 0.05 if processed else self._poll_interval_seconds
+                self._wake_event.wait(timeout=wait_seconds)
+                self._wake_event.clear()
+
+
+_worker_singleton: Optional[BucketMigrationWorker] = None
+_worker_lock = threading.Lock()
+
+
+def get_bucket_migration_worker(session_factory: sessionmaker) -> BucketMigrationWorker:
+    global _worker_singleton
+    with _worker_lock:
+        if _worker_singleton is None:
+            _worker_singleton = BucketMigrationWorker(
+                session_factory,
+                poll_interval_seconds=settings.bucket_migration_poll_interval_seconds,
+                lease_seconds=settings.bucket_migration_worker_lease_seconds,
+            )
+        return _worker_singleton
