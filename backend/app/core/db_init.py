@@ -30,6 +30,11 @@ def _alembic_config() -> Config:
 
 def init_db(engine, session_factory) -> None:
     command.upgrade(_alembic_config(), "head")
+    if (settings.seed_super_admin_password or "").strip().lower() in {"changeme", "change-me", "admin", "password"}:
+        logger.warning(
+            "SEED_SUPER_ADMIN_PASSWORD is using a default/weak value. "
+            "Change it before exposing this environment."
+        )
     # Seed super-admin if missing
     db: Session = session_factory()
     try:
@@ -44,6 +49,11 @@ def init_db(engine, session_factory) -> None:
             )
             db.add(admin_user)
             db.commit()
+            if (settings.seed_super_admin_password or "").strip().lower() in {"changeme", "change-me", "admin", "password"}:
+                logger.warning(
+                    "Seeded super-admin user '%s' with a default/weak password. Rotate immediately.",
+                    settings.seed_super_admin_email,
+                )
         elif admin.role != UserRole.UI_SUPERADMIN.value:
             # Backward compatibility: historical seed user role was ui_admin.
             admin.role = UserRole.UI_SUPERADMIN.value

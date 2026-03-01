@@ -14,6 +14,8 @@ The backend uses SQLite by default (`app.db`) and auto-seeds a super-admin:
 - email: `admin@example.com`
 - password: `changeme`
 
+Important: defaults are for local development only. Replace all default secrets/passwords before exposing the service.
+
 ## Migrations (Alembic)
 
 Schema migrations are managed by Alembic and are applied automatically at startup.
@@ -66,6 +68,9 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `CREDENTIAL_KEYS` (optional JSON list or comma-separated; overrides `CREDENTIAL_KEY`)
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default: `60`)
 - `REFRESH_TOKEN_EXPIRE_MINUTES` (default: `20160`)
+- `LOG_LEVEL` (default: `INFO`)
+- `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (default: `300`)
+- `LOGIN_RATE_LIMIT_MAX_ATTEMPTS` (default: `10`)
 - `API_TOKEN_DEFAULT_EXPIRE_DAYS` (default: `90`)
 - `API_TOKEN_MAX_EXPIRE_DAYS` (default: `365`)
 - `REFRESH_TOKEN_COOKIE_NAME` (default: `refresh_token`)
@@ -88,6 +93,11 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `OIDC_PROVIDERS__<key>__*` to configure OpenID Connect providers (see below)
 
 JWT signing uses the first key in `JWT_KEYS` and validates against the full list.
+
+Security notes:
+- Production environments should set strong non-default values for `FERNET_KEY`/`JWT_KEYS` and `CREDENTIAL_KEY`/`CREDENTIAL_KEYS` (>=32 chars, high entropy).
+- Production environments should set `REFRESH_TOKEN_COOKIE_SECURE=true` when using non-local origins.
+- Keep `SEED_SUPER_ADMIN_PASSWORD` as a bootstrap credential only and rotate it immediately.
 
 ### Credential key rotation (manual)
 

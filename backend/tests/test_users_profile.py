@@ -112,3 +112,18 @@ def test_update_users_me_rejects_password_change_without_local_password(client, 
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Password change is unavailable for this account"
+
+
+def test_update_users_me_rejects_short_new_password(client, db_session):
+    user = _seed_user(db_session, hashed_password=get_password_hash("old-password"))
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+
+    response = client.put(
+        "/api/users/me",
+        json={
+            "current_password": "old-password",
+            "new_password": "short123",
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Password must be at least 12 characters long"

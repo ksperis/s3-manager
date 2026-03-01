@@ -3,6 +3,7 @@
 import re
 import secrets
 from datetime import datetime, timezone
+from time import perf_counter
 from typing import Any, Dict, Optional, Tuple
 
 import requests
@@ -52,13 +53,13 @@ class RGWAdminClient:
         allow_not_implemented: bool = False,
     ) -> Dict[str, Any]:
         url = f"{self.endpoint}{path}"
+        start = perf_counter()
         try:
             headers = None
             if method.upper() in {"POST", "PUT", "DELETE"}:
                 headers = {"Content-Type": "application/x-www-form-urlencoded"}
                 if data:
                     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-            logger.debug("RGW request %s %s params=%s data=%s", method, url, params, data)
             resp = self.session.request(
                 method,
                 url,
@@ -68,8 +69,21 @@ class RGWAdminClient:
                 auth=self.auth,
                 timeout=10,
             )
-            logger.debug("RGW response %s %s -> %s", method, url, resp.status_code)
+            logger.debug(
+                "RGW request method=%s path=%s status=%s duration_ms=%.2f",
+                method.upper(),
+                path,
+                resp.status_code,
+                (perf_counter() - start) * 1000,
+            )
         except requests.RequestException as exc:
+            logger.warning(
+                "RGW request failed method=%s path=%s duration_ms=%.2f error=%s",
+                method.upper(),
+                path,
+                (perf_counter() - start) * 1000,
+                exc,
+            )
             raise RGWAdminError(f"RGW admin request failed: {exc}") from exc
         if resp.status_code == 409 and allow_conflict:
             # Return minimal info; caller should handle fetching details

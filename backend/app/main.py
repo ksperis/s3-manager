@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from botocore.exceptions import ClientError
 
-from app.core.config import get_settings
+from app.core.config import collect_secret_warnings, get_settings, has_non_local_cors_origins
 from app.core.database import engine, SessionLocal
 from app.core.db_init import init_db
 from app.routers import auth, users, portal, settings as public_settings, browser as user_browser
@@ -59,7 +59,7 @@ from app.routers.dependencies import (
 settings = get_settings()
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=settings.log_level,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 for noisy_logger in ("boto3", "botocore", "s3transfer", "urllib3"):
@@ -67,9 +67,21 @@ for noisy_logger in ("boto3", "botocore", "s3transfer", "urllib3"):
 logger = logging.getLogger(__name__)
 
 
+def _startup_security_warnings() -> list[str]:
+    warnings = collect_secret_warnings(settings)
+    if not settings.refresh_token_cookie_secure and has_non_local_cors_origins(settings.cors_origins):
+        warnings.append(
+            "REFRESH_TOKEN_COOKIE_SECURE=false while non-local CORS origins are configured. "
+            "Production deployments should enable secure refresh cookies."
+        )
+    return warnings
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db(engine, SessionLocal)
+    for warning_message in _startup_security_warnings():
+        logger.warning(warning_message)
     worker = None
     if settings.bucket_migration_worker_enabled:
         worker = get_bucket_migration_worker(SessionLocal)

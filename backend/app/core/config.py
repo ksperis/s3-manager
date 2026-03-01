@@ -4,6 +4,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
@@ -40,6 +41,15 @@ class OIDCProviderSettings(BaseModel):
         return value
 
 ENV_FILE_PATH = Path(__file__).resolve().parents[2] / ".env"
+MIN_SECRET_LENGTH = 32
+DEFAULT_INSECURE_SECRET_VALUES = {
+    "",
+    "change-me",
+    "changeme",
+    "default",
+    "password",
+    "secret",
+}
 
 class Settings(BaseSettings):
     model_config = ConfigDict(
@@ -65,6 +75,17 @@ class Settings(BaseSettings):
     )
     access_token_expire_minutes: int = 60
     refresh_token_expire_minutes: int = Field(60 * 24 * 14, description="Refresh token expiry (minutes)")
+    log_level: str = Field("INFO", description="Root log level")
+    login_rate_limit_window_seconds: int = Field(
+        300,
+        ge=1,
+        description="Sliding window for login failure rate limiting (seconds)",
+    )
+    login_rate_limit_max_attempts: int = Field(
+        10,
+        ge=1,
+        description="Maximum failed login attempts allowed in rate-limit window",
+    )
     api_token_default_expire_days: int = Field(
         90,
         description="Default API token expiry (days)",
@@ -279,6 +300,15 @@ class Settings(BaseSettings):
             return [item.strip() for item in text.split(",") if item.strip()]
         return value
 
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def normalize_log_level(cls, value):
+        text = str(value or "INFO").strip().upper()
+        allowed = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}
+        if text not in allowed:
+            raise ValueError(f"log_level must be one of: {', '.join(sorted(allowed))}")
+        return text
+
     @model_validator(mode="after")
     def ensure_key_defaults(self):
         if not self.jwt_keys:
@@ -292,6 +322,55 @@ class Settings(BaseSettings):
         if self.api_token_default_expire_days > self.api_token_max_expire_days:
             raise ValueError("api_token_default_expire_days must be <= api_token_max_expire_days")
         return self
+
+
+def is_weak_secret_value(value: Optional[str]) -> bool:
+    if value is None:
+        return True
+    normalized = str(value).strip()
+    if normalized.lower() in DEFAULT_INSECURE_SECRET_VALUES:
+        return True
+    return len(normalized) < MIN_SECRET_LENGTH
+
+
+def collect_secret_warnings(settings: Settings) -> list[str]:
+    warnings: list[str] = []
+    weak_jwt = [key for key in settings.jwt_keys if is_weak_secret_value(key)]
+    if weak_jwt:
+        warnings.append(
+            "Weak/default JWT key detected (FERNET_KEY/JWT_KEYS). "
+            "Use high-entropy values with at least 32 characters."
+        )
+    weak_credential = [key for key in settings.credential_keys if is_weak_secret_value(key)]
+    if weak_credential:
+        warnings.append(
+            "Weak/default credential encryption key detected (CREDENTIAL_KEY/CREDENTIAL_KEYS). "
+            "Use high-entropy values with at least 32 characters."
+        )
+    if (settings.seed_super_admin_password or "").strip().lower() in {"changeme", "change-me", "admin", "password"}:
+        warnings.append(
+            "Default SEED_SUPER_ADMIN_PASSWORD detected. "
+            "Change it immediately before exposing this environment."
+        )
+    return warnings
+
+
+def is_local_origin(origin: str) -> bool:
+    text = str(origin or "").strip()
+    if not text:
+        return True
+    if text == "*":
+        return False
+    parsed = urlparse(text)
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
+def has_non_local_cors_origins(origins: list[str]) -> bool:
+    return any(not is_local_origin(origin) for origin in (origins or []))
+
 
 @lru_cache
 def get_settings() -> Settings:

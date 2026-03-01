@@ -2,7 +2,8 @@
 
 This suite exercises the FastAPI backend against a *real* Ceph RGW cluster to validate
 critical account, bucket, IAM and object workflows after Ceph upgrades. The tests are
-run manually and are not part of the CI pipeline.
+run manually and are not part of the CI pipeline. They are marked `ceph_functional`
+and excluded from the default `pytest` run (`-m "not ceph_functional"`).
 
 ## Prerequisites
 

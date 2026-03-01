@@ -5,7 +5,7 @@ from botocore.client import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from typing import Iterable, Callable, Any, Optional
 import logging
-import json
+from time import perf_counter
 
 from app.core.config import get_settings
 
@@ -57,8 +57,28 @@ class LoggedS3Client:
             return attr
 
         def wrapper(*args: Any, **kwargs: Any):
-            logger.debug("S3 API call %s args=%s kwargs=%s", name, args, kwargs)
-            return attr(*args, **kwargs)
+            endpoint = getattr(getattr(self._client, "_endpoint", None), "host", "unknown")
+            start = perf_counter()
+            try:
+                result = attr(*args, **kwargs)
+            except Exception as exc:
+                duration_ms = (perf_counter() - start) * 1000
+                logger.warning(
+                    "S3 API call failed method=%s endpoint=%s duration_ms=%.2f error=%s",
+                    name,
+                    endpoint,
+                    duration_ms,
+                    exc,
+                )
+                raise
+            duration_ms = (perf_counter() - start) * 1000
+            logger.debug(
+                "S3 API call method=%s endpoint=%s duration_ms=%.2f status=ok",
+                name,
+                endpoint,
+                duration_ms,
+            )
+            return result
 
         return wrapper
 

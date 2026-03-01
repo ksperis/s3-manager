@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import String, cast, or_
+from sqlalchemy import String, cast, func, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -35,6 +36,9 @@ class AuditService:
         message: Optional[str] = None,
         user_email: Optional[str] = None,
         user_role: Optional[str] = None,
+        request_id: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> None:
         resolved_account_id = account.id if account else account_id
         resolved_account_name = account.name if account else account_name
@@ -54,6 +58,9 @@ class AuditService:
             status=status,
             message=message,
             metadata_json=self._serialize_metadata(metadata),
+            request_id=request_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
         self.db.add(payload)
         try:
@@ -106,6 +113,27 @@ class AuditService:
             .limit(sliced_limit)
             .all()
         )
+
+    def count_recent_actions(
+        self,
+        *,
+        action: str,
+        since: datetime,
+        user_email: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> int:
+        query = self.db.query(func.count(AuditLog.id)).filter(
+            AuditLog.action == action,
+            AuditLog.created_at >= since,
+        )
+        if user_email is not None:
+            query = query.filter(AuditLog.user_email == user_email)
+        if ip_address is not None:
+            query = query.filter(AuditLog.ip_address == ip_address)
+        if status is not None:
+            query = query.filter(AuditLog.status == status)
+        return int(query.scalar() or 0)
 
     def serialize_log(self, log: AuditLog) -> dict[str, Any]:
         return {

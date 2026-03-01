@@ -7,6 +7,14 @@ from pydantic import BaseModel, EmailStr
 from app.models.pagination import PaginatedResponse
 
 UiLanguage = Literal["en", "fr", "de"]
+MIN_PASSWORD_LENGTH = 12
+PASSWORD_POLICY_ERROR = f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
+
+
+def validate_password_policy(password: str) -> None:
+    value = str(password or "")
+    if len(value) < MIN_PASSWORD_LENGTH or not value.strip():
+        raise ValueError(PASSWORD_POLICY_ERROR)
 
 
 class LinkedS3User(BaseModel):

@@ -28,6 +28,8 @@ const CEPH_ADMIN_WARNING_MESSAGE =
 const PORTAL_EXPERIMENTAL_WARNING_MESSAGE = "Portal is an experimental feature.";
 const BILLING_CRON_REMINDER_MESSAGE =
   "Billing feature enabled. Think about enabling the billing collection cron job.";
+const CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE =
+  "Warning: custom endpoints are intended for trusted/local environments. Enabling this may expose users to malicious endpoints if misconfigured.";
 const BRANDING_PRESET_COLORS = [
   "#0ea5e9",
   "#2563eb",
@@ -421,7 +423,13 @@ export default function GeneralSettingsPage() {
                       ariaLabel="Custom login endpoint"
                     />
                   }
-                />
+                >
+                  {settings.general.allow_login_custom_endpoint && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {CUSTOM_LOGIN_ENDPOINT_WARNING_MESSAGE}
+                    </p>
+                  )}
+                </PortalSettingsItem>
                 <PortalSettingsItem
                   title="Private S3 connections for UI users"
                   description="Allow standard UI users to create and manage their own private S3 connections."

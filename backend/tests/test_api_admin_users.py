@@ -51,7 +51,7 @@ def test_admin_cannot_create_superadmin_or_grant_ceph_admin(client: TestClient):
         "/api/admin/users",
         json={
             "email": "new-superadmin@example.com",
-            "password": "secret",
+            "password": "secret-pass-01",
             "role": UserRole.UI_SUPERADMIN.value,
         },
     )
@@ -61,7 +61,7 @@ def test_admin_cannot_create_superadmin_or_grant_ceph_admin(client: TestClient):
         "/api/admin/users",
         json={
             "email": "new-admin@example.com",
-            "password": "secret",
+            "password": "secret-pass-02",
             "role": UserRole.UI_ADMIN.value,
             "can_access_ceph_admin": True,
         },
@@ -84,7 +84,7 @@ def test_superadmin_can_create_superadmin_and_grant_ceph_admin(client: TestClien
         "/api/admin/users",
         json={
             "email": "new-superadmin@example.com",
-            "password": "secret",
+            "password": "secret-pass-03",
             "role": UserRole.UI_SUPERADMIN.value,
         },
     )
@@ -95,7 +95,7 @@ def test_superadmin_can_create_superadmin_and_grant_ceph_admin(client: TestClien
         "/api/admin/users",
         json={
             "email": "new-admin@example.com",
-            "password": "secret",
+            "password": "secret-pass-04",
             "role": UserRole.UI_ADMIN.value,
             "can_access_ceph_admin": True,
         },
@@ -176,3 +176,35 @@ def test_superadmin_can_promote_and_grant_ceph_admin_on_update(client: TestClien
     payload = grant_resp.json()
     assert payload["role"] == UserRole.UI_ADMIN.value
     assert payload["can_access_ceph_admin"] is True
+
+
+def test_admin_create_user_rejects_short_password(client: TestClient):
+    response = client.post(
+        "/api/admin/users",
+        json={
+            "email": "short-password@example.com",
+            "password": "short123",
+            "role": UserRole.UI_USER.value,
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Password must be at least 12 characters long"
+
+
+def test_admin_update_user_rejects_short_password(client: TestClient, db_session):
+    target = User(
+        email="update-short-password@example.com",
+        full_name="Target",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    db_session.add(target)
+    db_session.commit()
+
+    response = client.put(
+        f"/api/admin/users/{target.id}",
+        json={"password": "short123"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Password must be at least 12 characters long"

@@ -1,11 +1,13 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import logging
+import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -494,6 +496,53 @@ class BrowserService:
             return client.get_object(Bucket=bucket_name, Key=key)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to download '{key}': {exc}") from exc
+
+    def _filename_from_content_disposition(self, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        extended_match = re.search(r"filename\*\s*=\s*([^;]+)", value, re.IGNORECASE)
+        if extended_match:
+            raw = extended_match.group(1).strip().strip('"')
+            if "''" in raw:
+                _, encoded = raw.split("''", 1)
+            else:
+                encoded = raw
+            resolved = unquote(encoded)
+            candidate = os.path.basename(resolved)
+            if candidate:
+                return candidate
+        basic_match = re.search(r"filename\s*=\s*\"?([^\";]+)\"?", value, re.IGNORECASE)
+        if basic_match:
+            candidate = os.path.basename(basic_match.group(1).strip())
+            if candidate:
+                return candidate
+        return None
+
+    def download_object(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        key: str,
+        *,
+        version_id: Optional[str] = None,
+    ):
+        client = self._client(account)
+        kwargs = {"Bucket": bucket_name, "Key": key}
+        if version_id:
+            kwargs["VersionId"] = version_id
+        try:
+            resp = client.get_object(**kwargs)
+        except (ClientError, BotoCoreError) as exc:
+            raise RuntimeError(f"Unable to download '{key}': {exc}") from exc
+        body = resp.get("Body")
+        if not body:
+            raise RuntimeError(f"Unable to download '{key}': empty response body")
+        stream = body.iter_chunks(chunk_size=1024 * 1024) if hasattr(body, "iter_chunks") else body
+        content_type = resp.get("ContentType")
+        filename = self._filename_from_content_disposition(resp.get("ContentDisposition"))
+        if not filename:
+            filename = os.path.basename(key) or key or "download"
+        return stream, content_type, filename
 
     def list_buckets(self, account: S3Account) -> list[BrowserBucket]:
         client = self._client(account)

@@ -24,7 +24,16 @@ from app.db import (
     UserS3User,
     is_admin_ui_role,
 )
-from app.models.user import AccountMembership, LinkedS3Connection, LinkedS3User, UserCreate, UserOut, UserUpdate, UserSummary
+from app.models.user import (
+    AccountMembership,
+    LinkedS3Connection,
+    LinkedS3User,
+    UserCreate,
+    UserOut,
+    UserSummary,
+    UserUpdate,
+    validate_password_policy,
+)
 from app.services.app_settings_service import load_app_settings
 
 logger = logging.getLogger(__name__)
@@ -44,6 +53,7 @@ class UsersService:
         existing = self.get_by_email(payload.email)
         if existing:
             raise ValueError("User already exists")
+        validate_password_policy(payload.password)
         user = User(
             email=payload.email,
             full_name=payload.full_name,
@@ -63,6 +73,7 @@ class UsersService:
         existing = self.get_by_email(payload.email)
         if existing:
             raise ValueError("User already exists")
+        validate_password_policy(payload.password)
         role = payload.role or UserRole.UI_USER.value
         if role not in {entry.value for entry in UserRole}:
             raise ValueError("Invalid role")
@@ -94,6 +105,7 @@ class UsersService:
                 raise ValueError("Email already in use")
             user.email = payload.email
         if payload.password:
+            validate_password_policy(payload.password)
             user.hashed_password = get_password_hash(payload.password)
         next_role = payload.role or user.role
         if payload.role and payload.role not in {entry.value for entry in UserRole}:
@@ -142,8 +154,7 @@ class UsersService:
                 raise ValueError("Password change is unavailable for this account")
             if not verify_password(current_password, user.hashed_password):
                 raise ValueError("Current password is incorrect")
-            if not new_password.strip():
-                raise ValueError("New password cannot be empty")
+            validate_password_policy(new_password)
             user.hashed_password = get_password_hash(new_password)
 
         self.db.add(user)

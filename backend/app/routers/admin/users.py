@@ -125,7 +125,7 @@ def update_user(
         return users_service.user_to_out(user)
     except ValueError as exc:
         detail = str(exc)
-        status_code = status.HTTP_400_BAD_REQUEST if "already in use" in detail.lower() else status.HTTP_404_NOT_FOUND
+        status_code = status.HTTP_404_NOT_FOUND if detail.lower() == "user not found" else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
 

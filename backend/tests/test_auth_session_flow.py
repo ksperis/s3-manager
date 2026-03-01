@@ -6,17 +6,23 @@ import pytest
 from botocore.exceptions import ClientError
 
 from app.core.security import get_password_hash
-from app.db import S3Account, UserS3Account, User, UserRole
+from app.db import AuditLog, S3Account, UserS3Account, User, UserRole
 from app.main import app
 from app.routers import dependencies
+from app.routers import auth as auth_router
 from app.services import session_service as session_module
 
 
-def _enable_access_key_login(monkeypatch) -> None:
+def _enable_access_key_login(
+    monkeypatch,
+    *,
+    allow_endpoint_list: bool = False,
+    allow_custom_endpoint: bool = True,
+) -> None:
     general = SimpleNamespace(
         allow_login_access_keys=True,
-        allow_login_endpoint_list=False,
-        allow_login_custom_endpoint=True,
+        allow_login_endpoint_list=allow_endpoint_list,
+        allow_login_custom_endpoint=allow_custom_endpoint,
     )
     monkeypatch.setattr(
         "app.routers.auth.load_app_settings",
@@ -99,6 +105,50 @@ def test_login_s3_disables_iam_capability_when_iam_client_denied(monkeypatch, cl
     assert db_session.query(S3Account).filter(S3Account.rgw_account_id == "RGW00000000000000001").first() is None
 
 
+@pytest.mark.parametrize(
+    "endpoint_url",
+    [
+        "ftp://s3.example.test",
+        "https://user:pass@s3.example.test",
+        "https://s3.example.test?foo=1",
+        "https://s3.example.test#fragment",
+    ],
+)
+def test_login_s3_rejects_invalid_custom_endpoint(monkeypatch, client, endpoint_url):
+    _enable_access_key_login(monkeypatch, allow_custom_endpoint=True)
+
+    response = client.post(
+        "/api/auth/login-s3",
+        json={"access_key": "AKIA", "secret_key": "SECRET", "endpoint_url": endpoint_url},
+    )
+
+    assert response.status_code == 400
+    assert "Custom endpoint URL" in response.json()["detail"]
+
+
+def test_login_s3_records_custom_endpoint_audit_event(monkeypatch, client, db_session):
+    _enable_access_key_login(monkeypatch, allow_custom_endpoint=True)
+    _mock_external(monkeypatch, iam_allowed=True)
+
+    response = client.post(
+        "/api/auth/login-s3",
+        json={"access_key": "AKIA", "secret_key": "SECRET", "endpoint_url": "http://localhost:9000/"},
+        headers={"X-Forwarded-For": "198.51.100.20", "User-Agent": "pytest-agent"},
+    )
+    assert response.status_code == 200, response.text
+
+    event = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "login_s3_custom_endpoint")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert event is not None
+    assert event.ip_address == "198.51.100.20"
+    assert event.user_agent == "pytest-agent"
+    assert "localhost:9000" in (event.metadata_json or "")
+
+
 def _setup_account(db_session) -> S3Account:
     manager = db_session.query(User).filter(User.id == 1000).first()
     if not manager:
@@ -144,7 +194,7 @@ def _setup_account(db_session) -> S3Account:
 
 
 def test_ui_login_updates_last_login_timestamp(client, db_session):
-    password = "supersecret"
+    password = "supersecret123"
     user = User(
         email="ui-admin@example.com",
         full_name="UI Admin",
@@ -165,6 +215,56 @@ def test_ui_login_updates_last_login_timestamp(client, db_session):
     assert payload["user"]["last_login_at"] is not None
     db_session.refresh(user)
     assert user.last_login_at is not None
+
+
+def test_login_rate_limit_returns_429_after_max_failed_attempts(monkeypatch, client, db_session):
+    user = User(
+        email="ratelimit@example.com",
+        full_name="Rate Limited",
+        hashed_password=get_password_hash("valid-password-123"),
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    monkeypatch.setattr(auth_router.settings, "login_rate_limit_max_attempts", 2)
+    monkeypatch.setattr(auth_router.settings, "login_rate_limit_window_seconds", 3600)
+
+    common_headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Forwarded-For": "198.51.100.25",
+        "User-Agent": "pytest-rate-limit",
+    }
+
+    first = client.post(
+        "/api/auth/login",
+        data={"username": user.email, "password": "wrong-password"},
+        headers=common_headers,
+    )
+    second = client.post(
+        "/api/auth/login",
+        data={"username": user.email, "password": "wrong-password"},
+        headers=common_headers,
+    )
+    third = client.post(
+        "/api/auth/login",
+        data={"username": user.email, "password": "wrong-password"},
+        headers=common_headers,
+    )
+    assert first.status_code == 401
+    assert second.status_code == 401
+    assert third.status_code == 429
+
+    event = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "login_rate_limited")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert event is not None
+    assert event.ip_address == "198.51.100.25"
+    assert event.user_agent == "pytest-rate-limit"
 
 
 def test_iam_overview_success(monkeypatch, client, db_session):

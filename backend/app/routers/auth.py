@@ -3,7 +3,7 @@
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -37,6 +37,8 @@ from app.services.refresh_session_service import RefreshSessionService
 from app.services.users_service import UsersService, get_users_service
 from app.services.app_settings_service import load_app_settings
 from app.services.storage_endpoints_service import get_storage_endpoints_service
+from app.utils.s3_endpoint import validate_custom_login_s3_endpoint
+from app.utils.time import utcnow
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -74,6 +76,29 @@ def _to_api_token_info(payload) -> ApiTokenInfo:
         expires_at=payload.expires_at,
         revoked_at=payload.revoked_at,
     )
+
+
+def _request_audit_context(request: Request) -> tuple[str, Optional[str], Optional[str]]:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        ip_address = forwarded_for.split(",", 1)[0].strip() or "unknown"
+    else:
+        ip_address = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent")
+    request_id = request.headers.get("x-request-id")
+    return ip_address, user_agent, request_id
+
+
+def _is_login_rate_limited(audit_service: AuditService, username: str, ip_address: str) -> bool:
+    window_start = utcnow() - timedelta(seconds=settings.login_rate_limit_window_seconds)
+    failures = audit_service.count_recent_actions(
+        action="login_failure",
+        since=window_start,
+        user_email=username,
+        ip_address=ip_address,
+        status="failure",
+    )
+    return failures >= settings.login_rate_limit_max_attempts
 
 
 class Token(BaseModel):
@@ -171,24 +196,56 @@ def register_admin(
 
 @router.post("/login", response_model=LoginResponse)
 def login(
+    request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     users_service: UsersService = Depends(lambda db=Depends(get_db): get_users_service(db)),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> LoginResponse:
-    user = users_service.authenticate(form_data.username, form_data.password)
-    if not user:
-        existing_user = users_service.get_by_email(form_data.username)
+    username = (form_data.username or "").strip()
+    rate_limit_key = username.lower()
+    ip_address, user_agent, request_id = _request_audit_context(request)
+
+    existing_user = users_service.get_by_email(username) if username else None
+    if _is_login_rate_limited(audit_service, rate_limit_key, ip_address):
         audit_service.record_action(
             user=existing_user,
-            user_email=form_data.username,
+            user_email=rate_limit_key or form_data.username,
+            user_role=existing_user.role if existing_user else None,
+            scope="auth",
+            action="login_rate_limited",
+            entity_type="ui_session",
+            status="failure",
+            message="Too many failed login attempts",
+            metadata={
+                "username": username or form_data.username,
+                "window_seconds": settings.login_rate_limit_window_seconds,
+                "max_attempts": settings.login_rate_limit_max_attempts,
+            },
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Please try again later.",
+        )
+
+    user = users_service.authenticate(username, form_data.password)
+    if not user:
+        audit_service.record_action(
+            user=existing_user,
+            user_email=rate_limit_key or form_data.username,
             user_role=existing_user.role if existing_user else None,
             scope="auth",
             action="login_failure",
             entity_type="ui_session",
             status="failure",
             message="Invalid credentials",
-            metadata={"username": form_data.username},
+            metadata={"username": username or form_data.username},
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
@@ -206,12 +263,16 @@ def login(
         action="login_success",
         entity_type="ui_session",
         metadata={"role": user.role, "username": user.email},
+        ip_address=ip_address,
+        user_agent=user_agent,
+        request_id=request_id,
     )
     return LoginResponse(access_token=token, user=users_service.user_to_out(user))
 
 
 @router.post("/login-s3", response_model=SessionLoginResponse)
 def login_with_s3_keys(
+    request: Request,
     response: Response,
     payload: S3KeyLogin,
     db: Session = Depends(get_db),
@@ -223,9 +284,14 @@ def login_with_s3_keys(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access-key login is disabled")
     endpoint_url = payload.endpoint_url
     endpoint_provided = bool(endpoint_url)
+    custom_endpoint_used = False
     if endpoint_url:
         if general.allow_login_custom_endpoint:
-            pass
+            try:
+                endpoint_url = validate_custom_login_s3_endpoint(endpoint_url)
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+            custom_endpoint_used = True
         elif general.allow_login_endpoint_list:
             service = get_storage_endpoints_service(db)
             if not any(endpoint.endpoint_url == endpoint_url for endpoint in service.list_endpoints()):
@@ -270,6 +336,7 @@ def login_with_s3_keys(
         capabilities=principal.capabilities,
     )
     email, role = principal.audit_fallbacks()
+    ip_address, user_agent, request_id = _request_audit_context(request)
     audit_service.record_action(
         user=None,
         user_email=email,
@@ -280,8 +347,26 @@ def login_with_s3_keys(
         metadata={
             "actor_type": principal.actor_type,
             "account_id": principal.account_id,
+            "endpoint_url": endpoint_url,
+            "custom_endpoint": custom_endpoint_used,
         },
+        ip_address=ip_address,
+        user_agent=user_agent,
+        request_id=request_id,
     )
+    if custom_endpoint_used and endpoint_url:
+        audit_service.record_action(
+            user=None,
+            user_email=email,
+            user_role=role,
+            scope="auth",
+            action="login_s3_custom_endpoint",
+            entity_type="s3_session",
+            metadata={"endpoint_url": endpoint_url},
+            ip_address=ip_address,
+            user_agent=user_agent,
+            request_id=request_id,
+        )
     return SessionLoginResponse(access_token=token, session=descriptor)
 
 

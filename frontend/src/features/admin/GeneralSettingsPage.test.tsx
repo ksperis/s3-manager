@@ -164,4 +164,14 @@ describe("GeneralSettingsPage branding", () => {
     expect(payload.branding.primary_color).toBe("#0057b8");
     expect(applyBrandingMock).toHaveBeenCalledWith("#0057b8");
   });
+
+  it("shows custom endpoint warning only when option is enabled", async () => {
+    const user = userEvent.setup();
+    render(<GeneralSettingsPage />);
+
+    expect(screen.queryByText(/custom endpoints are intended for trusted\/local environments/i)).not.toBeInTheDocument();
+
+    await user.click(await screen.findByLabelText("Custom login endpoint"));
+    expect(screen.getByText(/custom endpoints are intended for trusted\/local environments/i)).toBeInTheDocument();
+  });
 });
