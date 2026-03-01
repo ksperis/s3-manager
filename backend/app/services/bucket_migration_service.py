@@ -13,6 +13,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Callable, Optional
@@ -115,7 +116,7 @@ class BucketMigrationService:
         self.db = db
         self._buckets = BucketsService()
 
-    def create_migration(self, payload: BucketMigrationCreateRequest, user: User) -> BucketMigration:
+    def _build_bucket_mappings(self, payload: BucketMigrationCreateRequest) -> list[tuple[str, str]]:
         mappings: list[tuple[str, str]] = []
         seen_targets: set[str] = set()
         for entry in payload.buckets:
@@ -129,6 +130,10 @@ class BucketMigrationService:
                 raise ValueError(f"Duplicate target bucket mapping: {target_bucket}")
             seen_targets.add(target_bucket)
             mappings.append((source_bucket, target_bucket))
+        return mappings
+
+    def create_migration(self, payload: BucketMigrationCreateRequest, user: User) -> BucketMigration:
+        mappings = self._build_bucket_mappings(payload)
 
         source_ctx = self._resolve_context(payload.source_context_id)
         target_ctx = self._resolve_context(payload.target_context_id)
@@ -198,6 +203,134 @@ class BucketMigrationService:
             migration,
             level="info",
             message="Migration created.",
+            metadata={
+                "source_context_id": payload.source_context_id,
+                "target_context_id": payload.target_context_id,
+                "mode": payload.mode,
+                "copy_bucket_settings": bool(payload.copy_bucket_settings),
+                "delete_source": bool(payload.delete_source),
+                "lock_target_writes": bool(payload.lock_target_writes),
+                "auto_grant_source_read_for_copy": bool(payload.auto_grant_source_read_for_copy),
+                "webhook_enabled": bool(payload.webhook_url),
+                "parallelism_max": parallelism,
+                "items": len(mappings),
+            },
+        )
+        self.db.commit()
+        self.db.refresh(migration)
+        return migration
+
+    def update_draft_migration(self, migration_id: int, payload: BucketMigrationCreateRequest) -> BucketMigration:
+        migration = self.get_migration(migration_id)
+        if migration.status != "draft":
+            raise ValueError("Only draft migrations can be updated")
+
+        mappings = self._build_bucket_mappings(payload)
+
+        source_ctx = self._resolve_context(payload.source_context_id)
+        target_ctx = self._resolve_context(payload.target_context_id)
+        if not source_ctx.endpoint:
+            raise ValueError("Source context endpoint is not configured")
+        if not target_ctx.endpoint:
+            raise ValueError("Target context endpoint is not configured")
+        same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
+        if same_endpoint:
+            for source_bucket, target_bucket in mappings:
+                if source_bucket == target_bucket:
+                    raise ValueError(
+                        "When source and target contexts use the same endpoint, "
+                        "target bucket must differ from source bucket. "
+                        "Use a prefix or explicit mapping override."
+                    )
+
+        limits = self._load_runtime_limits()
+        requested_parallelism = (
+            int(payload.parallelism_max)
+            if payload.parallelism_max is not None
+            else int(limits.parallelism_default)
+        )
+        parallelism = max(1, min(requested_parallelism, int(limits.parallelism_max)))
+
+        migration.source_context_id = payload.source_context_id
+        migration.target_context_id = payload.target_context_id
+        migration.mode = payload.mode
+        migration.copy_bucket_settings = bool(payload.copy_bucket_settings)
+        migration.delete_source = bool(payload.delete_source)
+        migration.lock_target_writes = bool(payload.lock_target_writes)
+        migration.auto_grant_source_read_for_copy = bool(payload.auto_grant_source_read_for_copy)
+        migration.webhook_url = payload.webhook_url or None
+        migration.mapping_prefix = payload.mapping_prefix or None
+        migration.parallelism_max = parallelism
+        migration.status = "draft"
+        migration.pause_requested = False
+        migration.cancel_requested = False
+        migration.worker_lease_owner = None
+        migration.worker_lease_until = None
+        migration.precheck_status = "pending"
+        migration.precheck_report_json = None
+        migration.precheck_checked_at = None
+        migration.error_message = None
+        migration.started_at = None
+        migration.finished_at = None
+        migration.last_heartbeat_at = None
+        migration.updated_at = utcnow()
+
+        item_by_source = {item.source_bucket: item for item in migration.items}
+        mapping_by_source = {source_bucket: target_bucket for source_bucket, target_bucket in mappings}
+
+        for source_bucket in list(item_by_source.keys()):
+            if source_bucket not in mapping_by_source:
+                self.db.delete(item_by_source[source_bucket])
+
+        now = utcnow()
+        for source_bucket, target_bucket in mappings:
+            item = item_by_source.get(source_bucket)
+            if item is None:
+                self.db.add(
+                    BucketMigrationItem(
+                        migration_id=migration.id,
+                        source_bucket=source_bucket,
+                        target_bucket=target_bucket,
+                        status="pending",
+                        step="create_bucket",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+                continue
+
+            item.target_bucket = target_bucket
+            item.status = "pending"
+            item.step = "create_bucket"
+            item.pre_sync_done = False
+            item.read_only_applied = False
+            item.target_lock_applied = False
+            item.target_bucket_exists = False
+            item.objects_copied = 0
+            item.objects_deleted = 0
+            item.source_count = None
+            item.target_count = None
+            item.matched_count = None
+            item.different_count = None
+            item.only_source_count = None
+            item.only_target_count = None
+            item.diff_sample_json = None
+            item.source_policy_backup_json = None
+            item.target_policy_backup_json = None
+            item.error_message = None
+            item.started_at = None
+            item.finished_at = None
+            item.updated_at = now
+
+        self.db.flush()
+        self.db.refresh(migration)
+        self._recompute_counters(migration)
+        migration.updated_at = utcnow()
+
+        self._add_event(
+            migration,
+            level="info",
+            message="Migration configuration updated.",
             metadata={
                 "source_context_id": payload.source_context_id,
                 "target_context_id": payload.target_context_id,
@@ -503,8 +636,21 @@ class BucketMigrationService:
         if migration.status in {"completed", "completed_with_errors", "failed", "canceled", "rolled_back"}:
             raise ValueError("Migration is already finished")
         if migration.status in {"paused", "awaiting_cutover", "draft"}:
+            source_ctx: Optional[_ResolvedContext] = None
             target_ctx: Optional[_ResolvedContext] = None
-            if migration.lock_target_writes:
+            needs_source_cleanup = any(item.read_only_applied or item.source_policy_backup_json for item in migration.items)
+            needs_target_cleanup = any(item.target_lock_applied or item.target_policy_backup_json for item in migration.items)
+            if needs_source_cleanup:
+                try:
+                    source_ctx = self._resolve_context(migration.source_context_id)
+                except Exception as exc:  # noqa: BLE001
+                    self._add_event(
+                        migration,
+                        level="warning",
+                        message="Unable to resolve source context while stopping migration; source policy cleanup was skipped.",
+                        metadata={"error": str(exc)},
+                    )
+            if needs_target_cleanup:
                 try:
                     target_ctx = self._resolve_context(migration.target_context_id)
                 except Exception as exc:  # noqa: BLE001
@@ -514,7 +660,7 @@ class BucketMigrationService:
                         message="Unable to resolve target context while stopping migration; target lock cleanup was skipped.",
                         metadata={"error": str(exc)},
                     )
-            self._mark_canceled(migration, target_ctx=target_ctx)
+            self._mark_canceled(migration, source_ctx=source_ctx, target_ctx=target_ctx)
         else:
             migration.cancel_requested = True
             migration.status = "cancel_requested"
@@ -849,7 +995,7 @@ class BucketMigrationService:
             if state == "lost_lease":
                 return
             if state == "cancel":
-                self._mark_canceled(migration, target_ctx=target_ctx)
+                self._mark_canceled(migration, source_ctx=source_ctx, target_ctx=target_ctx)
                 self.db.commit()
                 return
             if state == "pause":
@@ -892,7 +1038,7 @@ class BucketMigrationService:
                 self.db.commit()
 
         self.db.refresh(migration)
-        self._finalize_or_wait_cutover(migration, target_ctx=target_ctx)
+        self._finalize_or_wait_cutover(migration, source_ctx=source_ctx, target_ctx=target_ctx)
         if worker_id and migration.worker_lease_owner == worker_id and migration.status not in _RUNNABLE_MIGRATION_STATUSES:
             migration.worker_lease_owner = None
             migration.worker_lease_until = None
@@ -1453,7 +1599,7 @@ class BucketMigrationService:
         if not isinstance(policy, dict):
             return None
 
-        policy_doc: dict[str, Any] = json.loads(_json_dumps(policy))
+        policy_doc: dict[str, Any] = deepcopy(policy)
         statements = policy_doc.get("Statement")
         if isinstance(statements, dict):
             statements = [statements]
@@ -1482,7 +1628,7 @@ class BucketMigrationService:
     ) -> dict[str, Any]:
         base_policy = self._without_managed_source_copy_grant_statement(existing_policy)
         if isinstance(base_policy, dict):
-            policy_doc: dict[str, Any] = json.loads(_json_dumps(base_policy))
+            policy_doc: dict[str, Any] = deepcopy(base_policy)
         else:
             policy_doc = {"Version": "2012-10-17", "Statement": []}
 
@@ -1706,7 +1852,7 @@ class BucketMigrationService:
     ) -> dict[str, Any]:
         base_policy = self._without_managed_read_only_statement(existing_policy)
         if isinstance(base_policy, dict):
-            policy_doc: dict[str, Any] = json.loads(_json_dumps(base_policy))
+            policy_doc: dict[str, Any] = deepcopy(base_policy)
         else:
             policy_doc = {"Version": "2012-10-17", "Statement": []}
 
@@ -1768,7 +1914,7 @@ class BucketMigrationService:
     ) -> dict[str, Any]:
         base_policy = self._without_managed_target_write_lock_statement(existing_policy)
         if isinstance(base_policy, dict):
-            policy_doc: dict[str, Any] = json.loads(_json_dumps(base_policy))
+            policy_doc: dict[str, Any] = deepcopy(base_policy)
         else:
             policy_doc = {"Version": "2012-10-17", "Statement": []}
 
@@ -1987,7 +2133,7 @@ class BucketMigrationService:
         if not isinstance(policy, dict):
             return None
 
-        policy_doc: dict[str, Any] = json.loads(_json_dumps(policy))
+        policy_doc: dict[str, Any] = deepcopy(policy)
         statements = policy_doc.get("Statement")
         if isinstance(statements, dict):
             statements = [statements]
@@ -2011,7 +2157,7 @@ class BucketMigrationService:
         if not isinstance(policy, dict):
             return None
 
-        policy_doc: dict[str, Any] = json.loads(_json_dumps(policy))
+        policy_doc: dict[str, Any] = deepcopy(policy)
         statements = policy_doc.get("Statement")
         if isinstance(statements, dict):
             statements = [statements]
@@ -2171,17 +2317,15 @@ class BucketMigrationService:
 
     def _restore_target_write_lock_policy(self, target_account: S3Account, target_bucket: str, item: BucketMigrationItem) -> None:
         backup = _json_loads(item.target_policy_backup_json)
-        restored = self._without_managed_target_write_lock_statement(backup)
-        if isinstance(restored, dict):
-            self._buckets.put_policy(target_bucket, target_account, restored)
+        if isinstance(backup, dict):
+            self._buckets.put_policy(target_bucket, target_account, backup)
             return
         self._buckets.delete_policy(target_bucket, target_account)
 
     def _restore_source_policy(self, source_bucket: str, source_account: S3Account, item: BucketMigrationItem) -> None:
         backup = _json_loads(item.source_policy_backup_json)
-        restored = self._without_managed_read_only_statement(backup)
-        if isinstance(restored, dict):
-            self._buckets.put_policy(source_bucket, source_account, restored)
+        if isinstance(backup, dict):
+            self._buckets.put_policy(source_bucket, source_account, backup)
             return
         self._buckets.delete_policy(source_bucket, source_account)
 
@@ -3136,8 +3280,10 @@ class BucketMigrationService:
         self,
         migration: BucketMigration,
         target_ctx: Optional[_ResolvedContext],
+        *,
+        verify_restored: bool = False,
     ) -> list[str]:
-        if not migration.lock_target_writes:
+        if not any(item.target_lock_applied or item.target_policy_backup_json for item in migration.items):
             return []
         if target_ctx is None:
             return ["target context is not available"]
@@ -3147,10 +3293,17 @@ class BucketMigrationService:
             if not (item.target_lock_applied or item.target_policy_backup_json):
                 continue
             try:
+                expected_policy = _json_loads(item.target_policy_backup_json)
                 if item.target_policy_backup_json:
                     self._restore_target_write_lock_policy(target_ctx.account, item.target_bucket, item)
                 else:
                     self._remove_managed_target_write_lock_statement(item.target_bucket, target_ctx.account)
+                if verify_restored:
+                    self._verify_restored_bucket_policy(
+                        target_ctx.account,
+                        item.target_bucket,
+                        expected_policy,
+                    )
                 item.target_lock_applied = False
                 item.target_policy_backup_json = None
                 item.updated_at = utcnow()
@@ -3171,7 +3324,79 @@ class BucketMigrationService:
                 )
         return errors
 
-    def _mark_canceled(self, migration: BucketMigration, *, target_ctx: Optional[_ResolvedContext] = None) -> None:
+    def _release_source_read_only_policies(
+        self,
+        migration: BucketMigration,
+        source_ctx: Optional[_ResolvedContext],
+        *,
+        verify_restored: bool = False,
+    ) -> list[str]:
+        if not any(item.read_only_applied or item.source_policy_backup_json for item in migration.items):
+            return []
+        if source_ctx is None:
+            return ["source context is not available"]
+
+        errors: list[str] = []
+        for item in migration.items:
+            if not (item.read_only_applied or item.source_policy_backup_json):
+                continue
+            try:
+                expected_policy = _json_loads(item.source_policy_backup_json)
+                if item.source_policy_backup_json:
+                    self._restore_source_policy(item.source_bucket, source_ctx.account, item)
+                else:
+                    self._remove_managed_read_only_statement(item.source_bucket, source_ctx.account)
+                if verify_restored:
+                    self._verify_restored_bucket_policy(
+                        source_ctx.account,
+                        item.source_bucket,
+                        expected_policy,
+                    )
+                item.read_only_applied = False
+                item.source_policy_backup_json = None
+                item.updated_at = utcnow()
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="info",
+                    message="Source read-only policy restored.",
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{item.source_bucket}: {exc}")
+                self._add_event(
+                    migration,
+                    item=item,
+                    level="warning",
+                    message="Unable to restore source read-only policy.",
+                    metadata={"error": str(exc)},
+                )
+        return errors
+
+    def _verify_restored_bucket_policy(
+        self,
+        account: S3Account,
+        bucket_name: str,
+        expected_policy: Any,
+    ) -> None:
+        current_policy = self._buckets.get_policy(bucket_name, account)
+        expected = expected_policy if isinstance(expected_policy, dict) else None
+        current = current_policy if isinstance(current_policy, dict) else None
+        if _json_dumps(expected) == _json_dumps(current):
+            return
+        expected_state = "present" if isinstance(expected, dict) else "absent"
+        current_state = "present" if isinstance(current, dict) else "absent"
+        raise RuntimeError(
+            f"Policy verification mismatch after restore on bucket '{bucket_name}' "
+            f"(expected={expected_state}, current={current_state})"
+        )
+
+    def _mark_canceled(
+        self,
+        migration: BucketMigration,
+        *,
+        source_ctx: Optional[_ResolvedContext] = None,
+        target_ctx: Optional[_ResolvedContext] = None,
+    ) -> None:
         migration.status = "canceled"
         migration.pause_requested = False
         migration.cancel_requested = False
@@ -3184,19 +3409,29 @@ class BucketMigrationService:
                 item.status = "canceled"
                 item.finished_at = utcnow()
                 item.updated_at = utcnow()
-        release_errors = self._release_target_write_locks(migration, target_ctx)
+        source_release_errors = self._release_source_read_only_policies(migration, source_ctx, verify_restored=True)
+        target_release_errors = self._release_target_write_locks(migration, target_ctx, verify_restored=True)
+        release_errors = source_release_errors + target_release_errors
         if release_errors:
             migration.error_message = (
-                f"Migration canceled, but {len(release_errors)} target lock cleanup error(s): "
+                f"Migration canceled, but {len(release_errors)} authorization restore error(s): "
                 + " | ".join(release_errors[:3])
             )
+        else:
+            migration.error_message = None
         self._add_event(migration, level="info", message="Migration canceled.")
         self._recompute_counters(migration)
 
-    def _finalize_or_wait_cutover(self, migration: BucketMigration, *, target_ctx: Optional[_ResolvedContext] = None) -> None:
+    def _finalize_or_wait_cutover(
+        self,
+        migration: BucketMigration,
+        *,
+        source_ctx: Optional[_ResolvedContext] = None,
+        target_ctx: Optional[_ResolvedContext] = None,
+    ) -> None:
         self._recompute_counters(migration)
         if migration.cancel_requested or migration.status == "cancel_requested":
-            self._mark_canceled(migration, target_ctx=target_ctx)
+            self._mark_canceled(migration, source_ctx=source_ctx, target_ctx=target_ctx)
             return
 
         total_actionable = len([item for item in migration.items if item.status not in {"skipped"}])

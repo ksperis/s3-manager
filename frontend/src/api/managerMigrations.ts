@@ -156,6 +156,14 @@ export async function createManagerMigration(payload: BucketMigrationCreateReque
   return data;
 }
 
+export async function updateManagerMigration(
+  migrationId: number,
+  payload: BucketMigrationCreateRequest
+): Promise<BucketMigrationDetail> {
+  const { data } = await client.patch<BucketMigrationDetail>(`/manager/migrations/${migrationId}`, payload);
+  return data;
+}
+
 export async function runManagerMigrationPrecheck(migrationId: number): Promise<BucketMigrationDetail> {
   const { data } = await client.post<BucketMigrationDetail>(`/manager/migrations/${migrationId}/precheck`);
   return data;

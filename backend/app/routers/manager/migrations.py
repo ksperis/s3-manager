@@ -209,6 +209,41 @@ def create_migration(
     return _migration_to_detail(migration, events_limit=200)
 
 
+@router.patch("/{migration_id}", response_model=BucketMigrationDetail)
+def update_migration(
+    migration_id: int,
+    payload: BucketMigrationCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_bucket_migration_user),
+    audit: AuditService = Depends(get_audit_logger),
+) -> BucketMigrationDetail:
+    service = BucketMigrationService(db)
+    try:
+        migration = service.update_draft_migration(migration_id, payload)
+    except ValueError as exc:
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
+
+    audit.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_migration",
+        entity_type="bucket_migration",
+        entity_id=str(migration.id),
+        metadata={
+            "source_context_id": payload.source_context_id,
+            "target_context_id": payload.target_context_id,
+            "mode": payload.mode,
+            "lock_target_writes": bool(payload.lock_target_writes),
+            "auto_grant_source_read_for_copy": bool(payload.auto_grant_source_read_for_copy),
+            "webhook_enabled": bool((payload.webhook_url or "").strip()),
+            "items": len(payload.buckets),
+        },
+    )
+    return _migration_to_detail(migration, events_limit=200)
+
+
 @router.post("/{migration_id}/precheck", response_model=BucketMigrationDetail)
 def run_migration_precheck(
     migration_id: int,

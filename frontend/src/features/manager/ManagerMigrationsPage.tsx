@@ -23,6 +23,7 @@ import {
   runManagerMigrationPrecheck,
   startManagerMigration,
   stopManagerMigration,
+  updateManagerMigration,
   type BucketMigrationDetail,
   type BucketMigrationPrecheckStatus,
   type BucketMigrationStatus,
@@ -372,6 +373,7 @@ export default function ManagerMigrationsPage() {
 
   const [selectedBuckets, setSelectedBuckets] = useState<string[]>([]);
   const [mappingPrefix, setMappingPrefix] = useState<string>("");
+  const [mappingSuffix, setMappingSuffix] = useState<string>("");
   const [targetOverrides, setTargetOverrides] = useState<Record<string, string>>({});
 
   const [mode, setMode] = useState<"one_shot" | "pre_sync">("one_shot");
@@ -596,6 +598,7 @@ export default function ManagerMigrationsPage() {
     setCreateError(null);
     setCreateSuccess(null);
     setReconfigureSourceMigrationId(null);
+    setMappingSuffix("");
     setWebhookUrl("");
     setShowAdvancedOptions(false);
     setIsCreateModalOpen(true);
@@ -608,9 +611,30 @@ export default function ManagerMigrationsPage() {
     }
 
     const configuredBuckets = detail.items.map((item) => item.source_bucket);
+    const declaredMappingPrefix = detail.mapping_prefix ?? "";
+    const firstItem = detail.items[0] ?? null;
+    let inferredMappingPrefix = declaredMappingPrefix;
+    let inferredMappingSuffix = "";
+    if (firstItem) {
+      const idx = firstItem.target_bucket.indexOf(firstItem.source_bucket);
+      if (idx >= 0) {
+        const candidatePrefix = firstItem.target_bucket.slice(0, idx);
+        const candidateSuffix = firstItem.target_bucket.slice(idx + firstItem.source_bucket.length);
+        const consistent = detail.items.every(
+          (item) => item.target_bucket === `${candidatePrefix}${item.source_bucket}${candidateSuffix}`
+        );
+        if (consistent) {
+          inferredMappingPrefix = candidatePrefix;
+          inferredMappingSuffix = candidateSuffix;
+        }
+      }
+    }
     const configuredOverrides: Record<string, string> = {};
     detail.items.forEach((item) => {
-      configuredOverrides[item.source_bucket] = item.target_bucket;
+      const defaultTarget = `${inferredMappingPrefix}${item.source_bucket}${inferredMappingSuffix}`;
+      if (item.target_bucket !== defaultTarget) {
+        configuredOverrides[item.source_bucket] = item.target_bucket;
+      }
     });
 
     setCreateError(null);
@@ -618,7 +642,8 @@ export default function ManagerMigrationsPage() {
     setTargetContextId(detail.target_context_id);
     setSelectedBuckets(configuredBuckets);
     setTargetOverrides(configuredOverrides);
-    setMappingPrefix(detail.mapping_prefix ?? "");
+    setMappingPrefix(inferredMappingPrefix);
+    setMappingSuffix(inferredMappingSuffix);
     setMode(detail.mode);
     setCopyBucketSettings(detail.copy_bucket_settings);
     setDeleteSource(detail.delete_source);
@@ -689,9 +714,11 @@ export default function ManagerMigrationsPage() {
       const sourceMigrationId = reconfigureSourceMigrationId;
       const buckets = selectedBuckets.map((source_bucket) => ({
         source_bucket,
-        target_bucket: (targetOverrides[source_bucket] || "").trim() || undefined,
+        target_bucket:
+          (targetOverrides[source_bucket] || "").trim() ||
+          (mappingSuffix ? `${mappingPrefix}${source_bucket}${mappingSuffix}` : undefined),
       }));
-      const detail = await createManagerMigration({
+      const payload = {
         source_context_id: sourceContextId,
         target_context_id: targetContextId,
         buckets,
@@ -702,15 +729,20 @@ export default function ManagerMigrationsPage() {
         lock_target_writes: lockTargetWrites,
         auto_grant_source_read_for_copy: autoGrantSourceReadForCopy,
         webhook_url: webhookUrl.trim() || undefined,
-      });
+      };
+      const detail =
+        sourceMigrationId == null
+          ? await createManagerMigration(payload)
+          : await updateManagerMigration(sourceMigrationId, payload);
       setSelectedMigrationId(detail.id);
       await loadMigrations();
       setMigrationDetail(detail);
       setCreateSuccess(
         sourceMigrationId == null
           ? `Migration #${detail.id} was created. Review is running in background.`
-          : `Migration #${detail.id} was created from migration #${sourceMigrationId}. Review is running in background.`
+          : `Migration #${detail.id} was updated. Review is running in background.`
       );
+      setMappingSuffix("");
       setWebhookUrl("");
       setShowAdvancedOptions(false);
       setReconfigureSourceMigrationId(null);
@@ -1035,7 +1067,7 @@ export default function ManagerMigrationsPage() {
                 >
                   <button type="button" onClick={() => setSelectedMigrationId(migration.id)} className="w-full text-left">
                     <div className="flex items-center justify-between gap-2 pr-8">
-                      <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">#{migration.id}</p>
+                      <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">Migration #{migration.id}</p>
                       <span
                         className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusChipClasses(migration.status)}`}
                       >
@@ -1149,6 +1181,15 @@ export default function ManagerMigrationsPage() {
               )}
 
               <div className="flex flex-wrap gap-2">
+                {migrationDetail.status === "draft" && migrationDetail.precheck_status !== "passed" && (
+                  <button
+                    type="button"
+                    onClick={() => setShowTechnicalDetails(true)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 ui-caption font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    Open review details
+                  </button>
+                )}
                 {migrationDetail.status === "draft" && (
                   <button
                     type="button"
@@ -1264,69 +1305,6 @@ export default function ManagerMigrationsPage() {
                 )}
               </div>
 
-              <div className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                <div className="flex items-center justify-between">
-                  <h3 className="ui-caption font-semibold text-slate-800 dark:text-slate-100">Bucket execution</h3>
-                  <span className="ui-caption text-slate-500 dark:text-slate-400">{sortedItems.length} item(s)</span>
-                </div>
-                <div className="max-h-80 space-y-2 overflow-auto">
-                  {sortedItems.map((item) => {
-                    const itemCopyProgress = computeItemCopyProgressPercent(item);
-                    const showItemCopyProgress =
-                      itemCopyProgress != null && ["pending", "running", "paused", "awaiting_cutover"].includes(item.status);
-                    return (
-                      <div key={item.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                            {item.source_bucket} {"->"} {item.target_bucket}
-                          </p>
-                          <span className="ui-caption rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                            {item.status}
-                          </span>
-                        </div>
-                        <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">
-                          {stepLabel(item.step)} | copied: {item.objects_copied} | deleted: {item.objects_deleted}
-                          {typeof item.source_count === "number" && item.source_count >= 0
-                            ? ` | source objects: ${item.source_count}`
-                            : ""}
-                        </p>
-                        {showItemCopyProgress && (
-                          <div className="mt-2">
-                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-                              <div className="h-full rounded-full bg-sky-500" style={{ width: `${itemCopyProgress}%` }} />
-                            </div>
-                            <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                              Copy progress: {item.objects_copied}/{item.source_count} ({itemCopyProgress}%)
-                            </p>
-                          </div>
-                        )}
-                        {item.error_message && <p className="mt-1 ui-caption text-rose-600 dark:text-rose-300">{item.error_message}</p>}
-                        {item.status === "failed" && canManageFailedItems && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => runItemAction(item.id, "retry")}
-                              disabled={actionLoading != null}
-                              className="rounded-md border border-sky-300 px-2 py-1 text-[11px] font-semibold text-sky-700 disabled:opacity-50 dark:border-sky-700 dark:text-sky-200"
-                            >
-                              {actionLoading === `retry-item-${item.id}` ? "Retrying..." : "Retry bucket"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => runItemAction(item.id, "rollback")}
-                              disabled={actionLoading != null}
-                              className="rounded-md border border-amber-300 px-2 py-1 text-[11px] font-semibold text-amber-800 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200"
-                            >
-                              {actionLoading === `rollback-item-${item.id}` ? "Rolling back..." : "Rollback bucket"}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
               <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                 <button
                   type="button"
@@ -1427,6 +1405,69 @@ export default function ManagerMigrationsPage() {
                   </div>
                 )}
               </div>
+
+              <div className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <h3 className="ui-caption font-semibold text-slate-800 dark:text-slate-100">Bucket execution</h3>
+                  <span className="ui-caption text-slate-500 dark:text-slate-400">{sortedItems.length} item(s)</span>
+                </div>
+                <div className="max-h-80 space-y-2 overflow-auto">
+                  {sortedItems.map((item) => {
+                    const itemCopyProgress = computeItemCopyProgressPercent(item);
+                    const showItemCopyProgress =
+                      itemCopyProgress != null && ["pending", "running", "paused", "awaiting_cutover"].includes(item.status);
+                    return (
+                      <div key={item.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
+                            {item.source_bucket} {"->"} {item.target_bucket}
+                          </p>
+                          <span className="ui-caption rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            {item.status}
+                          </span>
+                        </div>
+                        <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">
+                          {stepLabel(item.step)} | copied: {item.objects_copied} | deleted: {item.objects_deleted}
+                          {typeof item.source_count === "number" && item.source_count >= 0
+                            ? ` | source objects: ${item.source_count}`
+                            : ""}
+                        </p>
+                        {showItemCopyProgress && (
+                          <div className="mt-2">
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                              <div className="h-full rounded-full bg-sky-500" style={{ width: `${itemCopyProgress}%` }} />
+                            </div>
+                            <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                              Copy progress: {item.objects_copied}/{item.source_count} ({itemCopyProgress}%)
+                            </p>
+                          </div>
+                        )}
+                        {item.error_message && <p className="mt-1 ui-caption text-rose-600 dark:text-rose-300">{item.error_message}</p>}
+                        {item.status === "failed" && canManageFailedItems && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => runItemAction(item.id, "retry")}
+                              disabled={actionLoading != null}
+                              className="rounded-md border border-sky-300 px-2 py-1 text-[11px] font-semibold text-sky-700 disabled:opacity-50 dark:border-sky-700 dark:text-sky-200"
+                            >
+                              {actionLoading === `retry-item-${item.id}` ? "Retrying..." : "Retry bucket"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => runItemAction(item.id, "rollback")}
+                              disabled={actionLoading != null}
+                              className="rounded-md border border-amber-300 px-2 py-1 text-[11px] font-semibold text-amber-800 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200"
+                            >
+                              {actionLoading === `rollback-item-${item.id}` ? "Rolling back..." : "Rollback bucket"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </section>
@@ -1450,7 +1491,7 @@ export default function ManagerMigrationsPage() {
             <p className="ui-caption text-slate-500 dark:text-slate-400">
               {reconfigureSourceMigrationId == null
                 ? "Create a draft, run review automatically, then launch from the operator view."
-                : `Adjust settings for migration #${reconfigureSourceMigrationId}, then create a revised draft and run review automatically.`}
+                : `Adjust settings for migration #${reconfigureSourceMigrationId}, then update this draft and run review automatically.`}
             </p>
               {contextsLoading && <p className="ui-caption text-slate-500 dark:text-slate-400">Loading contexts...</p>}
               {contextsError && <p className="ui-caption text-rose-600 dark:text-rose-300">{contextsError}</p>}
@@ -1494,19 +1535,6 @@ export default function ManagerMigrationsPage() {
                 )}
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/50">
-                <label className="space-y-1 ui-caption">
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">Target prefix mapping</span>
-                  <input
-                    type="text"
-                    value={mappingPrefix}
-                    onChange={(event) => setMappingPrefix(event.target.value)}
-                    placeholder="Optional prefix"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
-                  />
-                </label>
-              </div>
-
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -1541,6 +1569,32 @@ export default function ManagerMigrationsPage() {
                     </div>
 
                     <div className="space-y-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900/60">
+                      <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Target prefix/suffix mapping</p>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <label className="space-y-1 ui-caption">
+                          <span className="text-slate-600 dark:text-slate-300">Prefix</span>
+                          <input
+                            type="text"
+                            value={mappingPrefix}
+                            onChange={(event) => setMappingPrefix(event.target.value)}
+                            placeholder="Optional prefix"
+                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+                          />
+                        </label>
+                        <label className="space-y-1 ui-caption">
+                          <span className="text-slate-600 dark:text-slate-300">Suffix</span>
+                          <input
+                            type="text"
+                            value={mappingSuffix}
+                            onChange={(event) => setMappingSuffix(event.target.value)}
+                            placeholder="Optional suffix"
+                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900/60">
                       <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Safety and behavior</p>
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="inline-flex items-center gap-2 ui-caption text-slate-700 dark:text-slate-200">
@@ -1570,15 +1624,6 @@ export default function ManagerMigrationsPage() {
                           />
                           Auto-grant temporary source read for same-endpoint copy
                         </label>
-                        <label className="inline-flex items-center gap-2 ui-caption text-slate-700 dark:text-slate-200 md:col-span-2">
-                          <input
-                            type="checkbox"
-                            checked={deleteSource}
-                            onChange={(event) => setDeleteSource(event.target.checked)}
-                            className="h-4 w-4"
-                          />
-                          Delete source if diff is clean
-                        </label>
                       </div>
                     </div>
 
@@ -1599,6 +1644,19 @@ export default function ManagerMigrationsPage() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+                <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Cutover behavior</p>
+                <label className="mt-2 inline-flex items-center gap-2 ui-caption text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={deleteSource}
+                    onChange={(event) => setDeleteSource(event.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  Delete source if diff is clean
+                </label>
               </div>
 
               <div className="space-y-2">
@@ -1634,7 +1692,7 @@ export default function ManagerMigrationsPage() {
                             <input
                               type="text"
                               value={targetOverrides[bucket.name] ?? ""}
-                              placeholder={`Target bucket (default: ${mappingPrefix}${bucket.name})`}
+                              placeholder={`Target bucket (default: ${mappingPrefix}${bucket.name}${mappingSuffix})`}
                               onChange={(event) =>
                                 setTargetOverrides((current) => ({
                                   ...current,
@@ -1673,10 +1731,10 @@ export default function ManagerMigrationsPage() {
                   {createLoading
                     ? reconfigureSourceMigrationId == null
                       ? "Creating and reviewing..."
-                      : "Creating revised migration..."
+                      : "Updating and reviewing..."
                     : reconfigureSourceMigrationId == null
                       ? "Create migration"
-                      : "Create revised migration"}
+                      : "Update migration"}
                 </button>
               </div>
           </form>
