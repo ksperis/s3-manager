@@ -5,9 +5,16 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchOidcProviders, login, loginWithKeys, startOidcLogin, type OidcProviderInfo } from "../../api/auth";
-import { fetchGeneralSettings, fetchLoginSettings, type GeneralSettings, type LoginSettings } from "../../api/appSettings";
+import {
+  fetchBrandingSettings,
+  fetchGeneralSettings,
+  fetchLoginSettings,
+  type GeneralSettings,
+  type LoginSettings,
+} from "../../api/appSettings";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
+import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
 
 export default function LoginPage() {
@@ -29,6 +36,8 @@ export default function LoginPage() {
   const [endpointLoading, setEndpointLoading] = useState(false);
   const [selectedEndpoint, setSelectedEndpoint] = useState("");
   const [customEndpoint, setCustomEndpoint] = useState("");
+  const [loginBrandingLogoUrl, setLoginBrandingLogoUrl] = useState<string | null>(null);
+  const [loginBrandingLogoFailed, setLoginBrandingLogoFailed] = useState(false);
   const loadGeneralSettings = async (): Promise<GeneralSettings> => {
     try {
       const settings = await fetchGeneralSettings();
@@ -92,6 +101,24 @@ export default function LoginPage() {
     }
   }, [loginSettings, selectedEndpoint, customEndpoint]);
 
+  useEffect(() => {
+    let isMounted = true;
+    fetchBrandingSettings()
+      .then((branding) => {
+        if (!isMounted) return;
+        setLoginBrandingLogoUrl(branding.login_logo_url);
+        setLoginBrandingLogoFailed(false);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setLoginBrandingLogoUrl(null);
+        setLoginBrandingLogoFailed(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handlePasswordLogin = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -105,6 +132,7 @@ export default function LoginPage() {
       localStorage.removeItem("s3SessionEndpoint");
       const settings = await loadGeneralSettings();
       const destination = resolvePostLoginPath(sessionUser, settings);
+      prefetchWorkspaceBranch(destination);
       navigate(destination, { replace: true });
     } catch (err) {
       console.error(err);
@@ -134,7 +162,7 @@ export default function LoginPage() {
       } else {
         localStorage.removeItem("s3SessionEndpoint");
       }
-      const userPayload = {
+      const userPayload: SessionUser = {
         email: res.session.account_id ? `${res.session.account_id}@s3-session` : "s3-session",
         role: "ui_user",
         authType: "s3_session",
@@ -147,6 +175,7 @@ export default function LoginPage() {
       setLanguagePreference("auto");
       const settings = await loadGeneralSettings();
       const destination = resolvePostLoginPath(userPayload, settings);
+      prefetchWorkspaceBranch(destination);
       navigate(destination, { replace: true });
     } catch (err) {
       console.error(err);
@@ -185,10 +214,11 @@ export default function LoginPage() {
   const allowEndpointList = Boolean(loginSettings?.allow_login_endpoint_list);
   const allowCustomEndpoint = Boolean(loginSettings?.allow_login_custom_endpoint);
   const endpointOptions = loginSettings?.endpoints ?? [];
+  const shouldShowLeftLogo = Boolean(loginBrandingLogoUrl && !loginBrandingLogoFailed);
   const inputClasses =
     "mt-1 w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2.5 ui-body text-slate-800 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";
   const buttonClasses =
-    "w-full rounded-xl bg-primary px-4 py-2.5 ui-body font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60";
+    "w-full rounded-xl bg-primary px-4 py-2.5 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60";
   const providerButtonClasses =
     "flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 ui-body font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -223,20 +253,33 @@ export default function LoginPage() {
                 Sign in to continue.
               </p>
             </div>
-            <div className="grid gap-3">
-              <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Need help?</p>
-                <p className="mt-1 ui-body text-slate-200">
-                  Contact your platform admin if you can&apos;t sign in.
-                </p>
+            {shouldShowLeftLogo ? (
+              <div className="flex h-full items-end">
+                <div className="w-full rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-5">
+                  <img
+                    src={loginBrandingLogoUrl ?? ""}
+                    alt="Company logo"
+                    className="mx-auto max-h-28 w-auto object-contain"
+                    onError={() => setLoginBrandingLogoFailed(true)}
+                  />
+                </div>
               </div>
-              <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Security note</p>
-                <p className="mt-1 ui-body text-slate-200">
-                  Never share your password, secret key, or session token.
-                </p>
+            ) : (
+              <div className="grid gap-3">
+                <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Need help?</p>
+                  <p className="mt-1 ui-body text-slate-200">
+                    Contact your platform admin if you can&apos;t sign in.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Security note</p>
+                  <p className="mt-1 ui-body text-slate-200">
+                    Never share your password, secret key, or session token.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
           </section>
 
           <section className="rounded-3xl border border-white/70 bg-white/95 p-6 shadow-2xl sm:p-8">

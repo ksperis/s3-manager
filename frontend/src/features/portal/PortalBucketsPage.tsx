@@ -486,7 +486,7 @@ export default function PortalBucketsPage() {
                   <button
                     type="submit"
                     disabled={creating || !newBucketName.trim() || !isBucketNameValid}
-                    className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                    className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                   >
                     {creating
                       ? t({ en: "Creating...", fr: "Creation...", de: "Erstellung..." })

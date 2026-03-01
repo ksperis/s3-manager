@@ -9,8 +9,10 @@ import "./index.css";
 import { ThemeProvider } from "./components/theme";
 import { GeneralSettingsProvider } from "./components/GeneralSettingsContext";
 import { LanguageProvider } from "./components/language";
+import { bootstrapBranding } from "./components/ui/brandingRuntime";
 
 const root = document.getElementById("root");
+void bootstrapBranding();
 
 ReactDOM.createRoot(root as HTMLElement).render(
   <React.StrictMode>

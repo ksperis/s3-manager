@@ -8,6 +8,7 @@ import { logout as logoutRequest } from "../api/auth";
 import Header from "./Header";
 import Sidebar, { SidebarLink, SidebarSection } from "./Sidebar";
 import Topbar from "./Topbar";
+import type { TopbarControlDescriptor } from "./topbarControlsLayout";
 
 type LayoutProps = {
   navLinks?: SidebarLink[];
@@ -18,6 +19,8 @@ type LayoutProps = {
   sidebarTitle?: string;
   headerInlineAction?: ReactNode;
   topbarContent?: ReactNode;
+  topbarControls?: ReactNode;
+  topbarControlDescriptors?: TopbarControlDescriptor[];
   projectName?: string;
   hideHeader?: boolean;
   hideTopbar?: boolean;
@@ -55,6 +58,8 @@ export default function Layout({
   sidebarTitle,
   headerInlineAction,
   topbarContent,
+  topbarControls,
+  topbarControlDescriptors,
   projectName,
   hideHeader = false,
   hideTopbar = false,
@@ -80,7 +85,9 @@ export default function Layout({
     localStorage.removeItem("s3SessionEndpoint");
     window.location.href = "/login";
   };
-  const heroInlineAction = topbarContent ? undefined : headerInlineAction;
+  const hasTopbarControls = Boolean(topbarControls) || Boolean(topbarControlDescriptors?.length);
+  const heroInlineAction = topbarContent || hasTopbarControls ? undefined : headerInlineAction;
+  const resolvedInlineTopbarContent = topbarContent ?? (hasTopbarControls ? undefined : headerInlineAction);
   const mainOverflowClass = disableMainScroll ? "overflow-hidden" : "overflow-y-auto";
   const mainClasses = `flex min-h-0 flex-1 flex-col ${mainOverflowClass} bg-surface px-3 pb-8 pt-3 sm:px-6 dark:bg-slate-950${
     mainClassName ? ` ${mainClassName}` : ""
@@ -139,7 +146,9 @@ export default function Layout({
         <Topbar
           projectName={projectName}
           section={headerTitle}
-          inlineContent={topbarContent ?? headerInlineAction}
+          inlineContent={resolvedInlineTopbarContent}
+          controlsContent={topbarControls}
+          controlDescriptors={topbarControlDescriptors}
           userEmail={userEmail}
           onLogout={logout}
           contextAction={topbarAction}

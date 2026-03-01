@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"]
+  },
+  "include": [
+    "src/components/EnvironmentSwitcher.tsx",
+    "src/components/Modal.tsx",
+    "src/components/Topbar.tsx",
+    "src/components/TopbarDropdownSelect.tsx",
+    "src/components/TopbarContextAccountSelector.tsx",
+    "src/components/ui/focusTrap.ts",
+    "src/components/__tests__/**/*.test.ts",
+    "src/components/__tests__/**/*.test.tsx",
+    "src/test/**/*.ts",
+    "src/test/**/*.d.ts"
+  ]
+}

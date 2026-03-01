@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import axios from "axios";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { listBuckets, type Bucket } from "../../api/buckets";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
@@ -28,6 +28,7 @@ import {
   type BucketMigrationStatus,
   type BucketMigrationView,
 } from "../../api/managerMigrations";
+import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import { useS3AccountContext } from "./S3AccountContext";
 
@@ -493,7 +494,7 @@ export default function ManagerMigrationsPage() {
     };
   }, [sourceContextId]);
 
-  const loadMigrations = async () => {
+  const loadMigrations = useCallback(async () => {
     setMigrationsError(null);
     if (!sourceContextId) {
       setMigrations([]);
@@ -513,7 +514,7 @@ export default function ManagerMigrationsPage() {
     } catch (error) {
       setMigrationsError(extractError(error));
     }
-  };
+  }, [selectedMigrationId, sourceContextId]);
 
   useEffect(() => {
     setMigrationsLoading(true);
@@ -522,7 +523,7 @@ export default function ManagerMigrationsPage() {
       loadMigrations().catch(() => {});
     }, 5000);
     return () => window.clearInterval(interval);
-  }, [selectedMigrationId, sourceContextId]);
+  }, [loadMigrations]);
 
   useEffect(() => {
     if (!selectedMigrationId) {
@@ -1381,40 +1382,20 @@ export default function ManagerMigrationsPage() {
       </div>
 
       {isCreateModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 p-4"
-          role="presentation"
-          onClick={() => {
+        <Modal
+          title="Create migration"
+          onClose={() => {
             if (!createLoading) setIsCreateModalOpen(false);
           }}
+          maxWidthClass="max-w-3xl"
+          maxBodyHeightClass="max-h-[78vh]"
+          closeOnEscape={!createLoading}
+          closeOnBackdropClick={!createLoading}
         >
-          <div
-            className="w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-migration-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-6 py-4 dark:border-slate-700 dark:bg-slate-900/70">
-              <div>
-                <h2 id="create-migration-title" className="ui-body text-base font-semibold text-slate-900 dark:text-slate-100">
-                  Create migration
-                </h2>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Create a draft, run review automatically, then launch from the operator view.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                disabled={createLoading}
-                className="rounded-lg border border-slate-300 px-3 py-1 ui-caption font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
-              >
-                Close
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="max-h-[78vh] space-y-5 overflow-auto p-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
+              Create a draft, run review automatically, then launch from the operator view.
+            </p>
               {contextsLoading && <p className="ui-caption text-slate-500 dark:text-slate-400">Loading contexts...</p>}
               {contextsError && <p className="ui-caption text-rose-600 dark:text-rose-300">{contextsError}</p>}
 
@@ -1633,9 +1614,8 @@ export default function ManagerMigrationsPage() {
                   {createLoading ? "Creating and reviewing..." : "Create migration"}
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

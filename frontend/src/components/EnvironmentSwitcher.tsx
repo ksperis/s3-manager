@@ -17,10 +17,25 @@ import {
   resolveWorkspaceFromPath,
 } from "../utils/workspaces";
 
-export default function EnvironmentSwitcher() {
+type EnvironmentSwitcherProps = {
+  triggerMode?: "icon" | "icon_label";
+  openInPortal?: boolean;
+  widthClassName?: string;
+  menuMinWidthClassName?: string;
+  compactOnNarrow?: boolean;
+};
+
+export type WorkspaceSwitcherModel = {
+  currentWorkspaceId: WorkspaceId;
+  currentWorkspaceLabel: string;
+  options: TopbarDropdownOption[];
+  onChange: (nextWorkspaceId: string) => void;
+};
+
+export function useWorkspaceSwitcherModel(): WorkspaceSwitcherModel | null {
   const navigate = useNavigate();
   const location = useLocation();
-  const user = useMemo(() => readStoredUser(), [location.pathname]);
+  const user = readStoredUser();
   const [workspaceContextAvailability, setWorkspaceContextAvailability] = useState<{
     manager: boolean | null;
     browser: boolean | null;
@@ -66,17 +81,21 @@ export default function EnvironmentSwitcher() {
     };
   }, [user?.authType, user?.role]);
 
+  const currentWorkspaceId = current?.id ?? null;
+
   useEffect(() => {
-    if (!current) {
+    if (!currentWorkspaceId) {
       return;
     }
     const stored = readStoredWorkspaceId();
-    if (stored !== current.id) {
-      localStorage.setItem(WORKSPACE_STORAGE_KEY, current.id);
+    if (stored !== currentWorkspaceId) {
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, currentWorkspaceId);
     }
-  }, [current?.id]);
+  }, [currentWorkspaceId]);
 
-  if (environments.length <= 1 || !current) return null;
+  if (environments.length <= 1 || !current) {
+    return null;
+  }
 
   const options: TopbarDropdownOption[] = environments.map((env) => ({
     value: env.id,
@@ -92,14 +111,39 @@ export default function EnvironmentSwitcher() {
     navigate(next.path);
   };
 
+  return {
+    currentWorkspaceId: current.id,
+    currentWorkspaceLabel: current.label,
+    options,
+    onChange: handleChange,
+  };
+}
+
+export default function EnvironmentSwitcher({
+  triggerMode = "icon_label",
+  openInPortal = true,
+  widthClassName,
+  menuMinWidthClassName = "min-w-48",
+  compactOnNarrow,
+}: EnvironmentSwitcherProps) {
+  const model = useWorkspaceSwitcherModel();
+  if (!model) return null;
+  const iconOnly = triggerMode === "icon";
+
   return (
     <TopbarDropdownSelect
-      value={current.id}
-      options={options}
-      onChange={handleChange}
+      value={model.currentWorkspaceId}
+      options={model.options}
+      onChange={model.onChange}
       ariaLabel="Changer de workspace"
+      triggerLabel="Workspace"
       title="Changer de workspace"
-      widthClassName="w-56"
+      align="right"
+      widthClassName={widthClassName ?? (iconOnly ? "w-9" : "w-44 xl:w-56")}
+      menuMinWidthClassName={menuMinWidthClassName}
+      compactOnNarrow={compactOnNarrow ?? !iconOnly}
+      triggerMode={triggerMode}
+      openInPortal={openInPortal}
       icon={<WorkspaceIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
     />
   );
@@ -114,7 +158,7 @@ function WorkspaceIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function workspaceIconById(id: WorkspaceId): React.ReactNode {
+export function workspaceIconById(id: WorkspaceId): React.ReactNode {
   if (id === "admin") return <AdminIcon className="h-4 w-4" />;
   if (id === "ceph-admin") return <CephIcon className="h-4 w-4" />;
   if (id === "manager") return <ManagerIcon className="h-4 w-4" />;

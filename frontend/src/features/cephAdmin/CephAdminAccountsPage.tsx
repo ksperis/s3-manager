@@ -16,6 +16,7 @@ import { tableActionMenuItemClasses } from "../../components/tableActionClasses"
 import CephAdminAccountCreateModal from "./CephAdminAccountCreateModal";
 import CephAdminAccountEditModal from "./CephAdminAccountEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   FILTER_COST_LABEL,
   buildTextFieldRules,
@@ -887,7 +888,7 @@ export default function CephAdminAccountsPage() {
                               type="checkbox"
                               checked={visibleColumns.includes(opt.id)}
                               onChange={() => toggleColumn(opt.id)}
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                              className={uiCheckboxClass}
                             />
                           </label>
                         ))}
@@ -909,7 +910,7 @@ export default function CephAdminAccountsPage() {
                               type="checkbox"
                               checked={visibleColumns.includes(opt.id)}
                               onChange={() => toggleColumn(opt.id)}
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                              className={uiCheckboxClass}
                             />
                           </label>
                         ))}
@@ -927,7 +928,7 @@ export default function CephAdminAccountsPage() {
                               type="checkbox"
                               checked={visibleColumns.includes(opt.id)}
                               onChange={() => toggleColumn(opt.id)}
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                              className={uiCheckboxClass}
                             />
                           </label>
                         ))}

@@ -4,6 +4,7 @@
  */
 import axios from "axios";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   createTopic,
   deleteTopic,
@@ -579,7 +580,7 @@ export default function TopicsPage() {
               <label className="inline-flex items-center gap-2 ui-body font-semibold text-slate-700 dark:text-slate-100">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                  className={uiCheckboxClass}
                   checked={verifySslValue}
                   onChange={(e) => {
                     setAttributesStatus(null);

@@ -13,6 +13,8 @@ import TableEmptyState from "../../components/TableEmptyState";
 import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   BucketProperties,
   CephAdminBucket,
@@ -5607,7 +5609,7 @@ export default function CephAdminBucketsPage() {
               void setSelectionForFilteredResults(e.target.checked);
             }}
             disabled={loading || selectAllLoading || !selectedEndpointId || total === 0}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+            className={uiCheckboxClass}
           />
         ),
         align: "left",
@@ -5616,7 +5618,7 @@ export default function CephAdminBucketsPage() {
             type="checkbox"
             checked={selectedBuckets.has(bucket.name)}
             onChange={() => toggleSelection(bucket.name)}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+            className={uiCheckboxClass}
           />
         ),
       },
@@ -5933,30 +5935,30 @@ export default function CephAdminBucketsPage() {
                             { id: "quota_status" as const, label: "Quota status" },
                             { id: "tags" as const, label: "S3 Tags" },
                           ].map((opt) => (
-                            <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
+                            <UiCheckboxField
+                              key={opt.id}
+                              checked={visibleColumns.includes(opt.id)}
+                              onChange={() => toggleColumn(opt.id)}
+                              className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200"
+                              inputPosition="end"
+                            >
                               <span>{opt.label}</span>
-                              <input
-                                type="checkbox"
-                                checked={visibleColumns.includes(opt.id)}
-                                onChange={() => toggleColumn(opt.id)}
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                              />
-                            </label>
+                            </UiCheckboxField>
                           ))}
                         </div>
 
                         <div className="space-y-2">
                           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
                           {featureColumnOptions.map((opt) => (
-                            <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
+                            <UiCheckboxField
+                              key={opt.id}
+                              checked={visibleColumns.includes(opt.id)}
+                              onChange={() => toggleColumn(opt.id)}
+                              className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200"
+                              inputPosition="end"
+                            >
                               <span>{opt.label}</span>
-                              <input
-                                type="checkbox"
-                                checked={visibleColumns.includes(opt.id)}
-                                onChange={() => toggleColumn(opt.id)}
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                              />
-                            </label>
+                            </UiCheckboxField>
                           ))}
                           <p className="ui-caption text-slate-500 dark:text-slate-400">
                             Feature checks run only when their column is enabled.
@@ -6930,20 +6932,16 @@ export default function CephAdminBucketsPage() {
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {(Object.keys(BULK_COPY_FEATURE_LABELS) as BulkCopyFeatureKey[]).map((feature) => (
-                      <label
+                      <UiCheckboxField
                         key={feature}
+                        checked={bulkCopyFeatures[feature]}
+                        onChange={(event) =>
+                          setBulkCopyFeatures((prev) => ({ ...prev, [feature]: event.target.checked }))
+                        }
                         className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
                       >
-                        <input
-                          type="checkbox"
-                          checked={bulkCopyFeatures[feature]}
-                          onChange={(event) =>
-                            setBulkCopyFeatures((prev) => ({ ...prev, [feature]: event.target.checked }))
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                        />
                         {BULK_COPY_FEATURE_LABELS[feature]}
-                      </label>
+                      </UiCheckboxField>
                     ))}
                   </div>
                 </div>
@@ -7079,24 +7077,20 @@ export default function CephAdminBucketsPage() {
             {bulkOperation === "set_quota" && (
               <div className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <label className="flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={bulkQuotaApplySize}
-                      onChange={(event) => setBulkQuotaApplySize(event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                    />
+                  <UiCheckboxField
+                    checked={bulkQuotaApplySize}
+                    onChange={(event) => setBulkQuotaApplySize(event.target.checked)}
+                    className="ui-caption text-slate-600 dark:text-slate-300"
+                  >
                     Update storage quota
-                  </label>
-                  <label className="flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={bulkQuotaApplyObjects}
-                      onChange={(event) => setBulkQuotaApplyObjects(event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                    />
+                  </UiCheckboxField>
+                  <UiCheckboxField
+                    checked={bulkQuotaApplyObjects}
+                    onChange={(event) => setBulkQuotaApplyObjects(event.target.checked)}
+                    className="ui-caption text-slate-600 dark:text-slate-300"
+                  >
                     Update object quota
-                  </label>
+                  </UiCheckboxField>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
                   <div className="space-y-1">
@@ -7145,15 +7139,13 @@ export default function CephAdminBucketsPage() {
                     className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   />
                 </div>
-                <label className="flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={bulkQuotaSkipConfigured}
-                    onChange={(event) => setBulkQuotaSkipConfigured(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
+                <UiCheckboxField
+                  checked={bulkQuotaSkipConfigured}
+                  onChange={(event) => setBulkQuotaSkipConfigured(event.target.checked)}
+                  className="ui-caption text-slate-600 dark:text-slate-300"
+                >
                   Do not change buckets that already have a quota.
-                </label>
+                </UiCheckboxField>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
                   Leave both fields empty to remove quotas from the selected buckets.
                 </p>
@@ -7166,20 +7158,16 @@ export default function CephAdminBucketsPage() {
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {PUBLIC_ACCESS_BLOCK_OPTIONS.map((option) => (
-                    <label
+                    <UiCheckboxField
                       key={option.key}
+                      checked={bulkPublicAccessBlockTargets[option.key]}
+                      onChange={(event) =>
+                        setBulkPublicAccessBlockTargets((prev) => ({ ...prev, [option.key]: event.target.checked }))
+                      }
                       className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
                     >
-                      <input
-                        type="checkbox"
-                        checked={bulkPublicAccessBlockTargets[option.key]}
-                        onChange={(event) =>
-                          setBulkPublicAccessBlockTargets((prev) => ({ ...prev, [option.key]: event.target.checked }))
-                        }
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                      />
                       {option.label}
-                    </label>
+                    </UiCheckboxField>
                   ))}
                 </div>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
@@ -7202,15 +7190,13 @@ export default function CephAdminBucketsPage() {
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
                   Provide a JSON object or array. Rules will be appended, or will replace existing rules with the same ID.
                 </p>
-                <label className="flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={bulkLifecycleUpdateOnlyExisting}
-                    onChange={(event) => setBulkLifecycleUpdateOnlyExisting(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
+                <UiCheckboxField
+                  checked={bulkLifecycleUpdateOnlyExisting}
+                  onChange={(event) => setBulkLifecycleUpdateOnlyExisting(event.target.checked)}
+                  className="ui-caption text-slate-600 dark:text-slate-300"
+                >
                   Only update rules that already exist (do not add new rules).
-                </label>
+                </UiCheckboxField>
               </div>
             )}
             {bulkOperation === "delete_lifecycle" && (
@@ -7233,20 +7219,16 @@ export default function CephAdminBucketsPage() {
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {LIFECYCLE_TYPE_OPTIONS.map((option) => (
-                      <label
+                      <UiCheckboxField
                         key={option.key}
+                        checked={bulkLifecycleDeleteTypes[option.key]}
+                        onChange={(event) =>
+                          setBulkLifecycleDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
+                        }
                         className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
                       >
-                        <input
-                          type="checkbox"
-                          checked={bulkLifecycleDeleteTypes[option.key]}
-                          onChange={(event) =>
-                            setBulkLifecycleDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                        />
                         {option.label}
-                      </label>
+                      </UiCheckboxField>
                     ))}
                   </div>
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
@@ -7271,15 +7253,13 @@ export default function CephAdminBucketsPage() {
                   Provide a JSON object or array. Rules are merged by rule ID (if present) or by AllowedOrigins +
                   AllowedMethods.
                 </p>
-                <label className="flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={bulkCorsUpdateOnlyExisting}
-                    onChange={(event) => setBulkCorsUpdateOnlyExisting(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
+                <UiCheckboxField
+                  checked={bulkCorsUpdateOnlyExisting}
+                  onChange={(event) => setBulkCorsUpdateOnlyExisting(event.target.checked)}
+                  className="ui-caption text-slate-600 dark:text-slate-300"
+                >
                   Only update rules that already exist (do not add new rules).
-                </label>
+                </UiCheckboxField>
               </div>
             )}
             {bulkOperation === "delete_cors" && (
@@ -7302,20 +7282,16 @@ export default function CephAdminBucketsPage() {
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {CORS_TYPE_OPTIONS.map((option) => (
-                      <label
+                      <UiCheckboxField
                         key={option.key}
+                        checked={bulkCorsDeleteTypes[option.key]}
+                        onChange={(event) =>
+                          setBulkCorsDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
+                        }
                         className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
                       >
-                        <input
-                          type="checkbox"
-                          checked={bulkCorsDeleteTypes[option.key]}
-                          onChange={(event) =>
-                            setBulkCorsDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                        />
                         {option.label}
-                      </label>
+                      </UiCheckboxField>
                     ))}
                   </div>
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
@@ -7340,15 +7316,13 @@ export default function CephAdminBucketsPage() {
                   Provide a policy object, a statement array, or a single statement. Statements are merged by Sid or by
                   Effect/Action/Principal/Resource.
                 </p>
-                <label className="flex items-center gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={bulkPolicyUpdateOnlyExisting}
-                    onChange={(event) => setBulkPolicyUpdateOnlyExisting(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
+                <UiCheckboxField
+                  checked={bulkPolicyUpdateOnlyExisting}
+                  onChange={(event) => setBulkPolicyUpdateOnlyExisting(event.target.checked)}
+                  className="ui-caption text-slate-600 dark:text-slate-300"
+                >
                   Only update statements that already exist (do not add new statements).
-                </label>
+                </UiCheckboxField>
               </div>
             )}
             {bulkOperation === "delete_policy" && (
@@ -7371,20 +7345,16 @@ export default function CephAdminBucketsPage() {
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {POLICY_TYPE_OPTIONS.map((option) => (
-                      <label
+                      <UiCheckboxField
                         key={option.key}
+                        checked={bulkPolicyDeleteTypes[option.key]}
+                        onChange={(event) =>
+                          setBulkPolicyDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
+                        }
                         className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
                       >
-                        <input
-                          type="checkbox"
-                          checked={bulkPolicyDeleteTypes[option.key]}
-                          onChange={(event) =>
-                            setBulkPolicyDeleteTypes((prev) => ({ ...prev, [option.key]: event.target.checked }))
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                        />
                         {option.label}
-                      </label>
+                      </UiCheckboxField>
                     ))}
                   </div>
                   <p className="ui-caption text-slate-500 dark:text-slate-400">

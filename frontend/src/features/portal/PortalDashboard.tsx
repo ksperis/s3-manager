@@ -1046,7 +1046,7 @@ export default function PortalDashboard() {
                     <button
                       type="button"
                       onClick={() => navigator?.clipboard?.writeText?.(state.s3_endpoint ?? "").catch(() => {})}
-                      className="flex h-6 w-6 items-center justify-center rounded-full ui-caption text-primary opacity-30 transition hover:opacity-80 hover:bg-slate-200/70 hover:text-sky-600 dark:hover:bg-slate-800/60"
+                      className="flex h-6 w-6 items-center justify-center rounded-full ui-caption text-primary opacity-30 transition hover:opacity-80 hover:bg-slate-200/70 hover:text-primary-600 dark:hover:bg-slate-800/60"
                       aria-label={t({ en: "Copy S3 endpoint", fr: "Copier l'endpoint S3", de: "S3-Endpunkt kopieren" })}
                     >
                       <span aria-hidden>📋</span>
@@ -1489,7 +1489,7 @@ export default function PortalDashboard() {
                     <button
                       type="submit"
                       disabled={creatingBucket || !newBucketName.trim() || !isBucketNameValid}
-                      className="rounded-full bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                      className="rounded-full bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                     >
                       {creatingBucket
                         ? t({ en: "Creating...", fr: "Creation...", de: "Erstellung..." })

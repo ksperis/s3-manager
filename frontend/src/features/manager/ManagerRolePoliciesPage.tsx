@@ -230,7 +230,7 @@ export default function ManagerRolePoliciesPage() {
               <button
                 type="submit"
                 disabled={busy !== null || !selectedArn}
-                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {busy === "attach" ? "Attaching..." : "Attach"}
               </button>

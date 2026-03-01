@@ -4,6 +4,7 @@
  */
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   CephAdminEntityMetrics,
   CephAdminRgwAccessKey,
@@ -495,7 +496,7 @@ export default function CephAdminUserEditModal({
             type="checkbox"
             checked={suspended}
             onChange={(event) => setSuspended(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+            className={uiCheckboxClass}
           />
           Suspended
         </label>
@@ -504,7 +505,7 @@ export default function CephAdminUserEditModal({
             type="checkbox"
             checked={adminFlag}
             onChange={(event) => setAdminFlag(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+            className={uiCheckboxClass}
           />
           Admin
         </label>
@@ -513,7 +514,7 @@ export default function CephAdminUserEditModal({
             type="checkbox"
             checked={systemFlag}
             onChange={(event) => setSystemFlag(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+            className={uiCheckboxClass}
           />
           System
         </label>
@@ -525,7 +526,7 @@ export default function CephAdminUserEditModal({
             type="checkbox"
             checked={quotaEnabled}
             onChange={(event) => setQuotaEnabled(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+            className={uiCheckboxClass}
           />
           Enable user quota
         </label>

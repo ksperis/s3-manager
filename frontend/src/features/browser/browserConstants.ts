@@ -6,16 +6,6 @@ export const iconButtonClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200";
 export const iconButtonDangerClasses =
   "inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500 disabled:opacity-40 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-900/30 dark:hover:text-rose-100";
-export const gridQuickActionClasses =
-  `${iconButtonClasses} h-auto w-auto flex-1 min-w-0 justify-center gap-1 px-1.5 py-1 ui-caption font-semibold leading-tight`;
-export const gridQuickActionDangerClasses =
-  `${iconButtonDangerClasses} h-auto w-auto flex-1 min-w-0 justify-center gap-1 px-1.5 py-1 ui-caption font-semibold leading-tight`;
-export const gridTitleClampStyle = {
-  display: "-webkit-box",
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: "vertical",
-  overflow: "hidden",
-} as const;
 export const bulkActionClasses =
   "inline-flex items-center gap-2 rounded-full border border-slate-200 px-2.5 py-1 ui-caption font-semibold text-slate-700 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100";
 export const bulkDangerClasses =

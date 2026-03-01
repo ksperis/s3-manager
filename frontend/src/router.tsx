@@ -2,68 +2,11 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useMemo } from "react";
+import { Suspense, lazy, useEffect, useMemo } from "react";
 import { Navigate, Outlet, Route, RouterProvider, createBrowserRouter, createRoutesFromElements } from "react-router-dom";
 import Layout from "./components/Layout";
-import LoginPage from "./features/auth/LoginPage";
-import OidcCallbackPage from "./features/auth/OidcCallbackPage";
-import UnauthorizedPage from "./features/auth/UnauthorizedPage";
-import S3AccountsPage from "./features/admin/AccountsPage";
-import AuditLogsPage from "./features/admin/AuditLogsPage";
-import UsersPage from "./features/admin/UsersPage";
-import AdminDashboard from "./features/admin/AdminDashboard";
-import AdminMetricsPage from "./features/admin/AdminMetricsPage";
-import BillingPage from "./features/admin/BillingPage";
-import S3UsersPage from "./features/admin/S3UsersPage";
-import S3UserKeysPage from "./features/admin/S3UserKeysPage";
-import S3ConnectionsPage from "./features/admin/S3ConnectionsPage";
-import GeneralSettingsPage from "./features/admin/GeneralSettingsPage";
-import ManagerSettingsPage from "./features/admin/ManagerSettingsPage";
-import AdminPortalSettingsPage from "./features/admin/PortalSettingsPage";
-import BrowserSettingsPage from "./features/admin/BrowserSettingsPage";
-import KeyRotationPage from "./features/admin/KeyRotationPage";
-import ApiTokensPage from "./features/admin/ApiTokensPage";
-import FeatureDisabledPage from "./features/shared/FeatureDisabledPage";
-import BucketsPage from "./features/manager/BucketsPage";
-import ManagerDashboard from "./features/manager/ManagerDashboard";
-import PoliciesPage from "./features/manager/PoliciesPage";
-import ManagerLayout from "./features/manager/ManagerLayout";
-import StorageEndpointsPage from "./features/admin/StorageEndpointsPage";
-import EndpointStatusPage from "./features/admin/EndpointStatusPage";
-import EndpointStatusDetailPage from "./features/admin/EndpointStatusDetailPage";
-import ManagerUsersPage from "./features/manager/ManagerUsersPage";
-import ManagerUserKeysPage from "./features/manager/ManagerUserKeysPage";
-import BucketDetailPage from "./features/manager/BucketDetailPage";
-import BrowserPage from "./features/browser/BrowserPage";
-import ManagerBrowserPage from "./features/manager/ManagerBrowserPage";
-import ManagerGroupsPage from "./features/manager/ManagerGroupsPage";
-import ManagerGroupUsersPage from "./features/manager/ManagerGroupUsersPage";
-import ManagerRolesPage from "./features/manager/ManagerRolesPage";
-import ManagerRolePoliciesPage from "./features/manager/ManagerRolePoliciesPage";
-import ManagerUserPoliciesPage from "./features/manager/ManagerUserPoliciesPage";
-import ManagerGroupPoliciesPage from "./features/manager/ManagerGroupPoliciesPage";
-import ManagerMetricsPage from "./features/manager/ManagerMetricsPage";
-import TopicsPage from "./features/manager/TopicsPage";
-import ManagerMigrationsPage from "./features/manager/ManagerMigrationsPage";
 import { useS3AccountContext } from "./features/manager/S3AccountContext";
-import PortalLayout from "./features/portal/PortalLayout";
-import PortalDashboard from "./features/portal/PortalDashboard";
-import PortalBucketsPage from "./features/portal/PortalBucketsPage";
-import PortalBrowserPage from "./features/portal/PortalBrowserPage";
-import PortalManagePage from "./features/portal/PortalManagePage";
-import PortalSettingsPage from "./features/portal/PortalSettingsPage";
-import PortalBillingPage from "./features/portal/BillingPage";
-import BrowserLayout from "./features/browser/BrowserLayout";
 import { useGeneralSettings } from "./components/GeneralSettingsContext";
-import CephAdminLayout from "./features/cephAdmin/CephAdminLayout";
-import CephAdminDashboard from "./features/cephAdmin/CephAdminDashboard";
-import CephAdminAccountsPage from "./features/cephAdmin/CephAdminAccountsPage";
-import CephAdminUsersPage from "./features/cephAdmin/CephAdminUsersPage";
-import CephAdminBucketsPage from "./features/cephAdmin/CephAdminBucketsPage";
-import CephAdminBucketDetailPage from "./features/cephAdmin/CephAdminBucketDetailPage";
-import CephAdminMetricsPage from "./features/cephAdmin/CephAdminMetricsPage";
-import CephAdminBrowserPage from "./features/cephAdmin/CephAdminBrowserPage";
-import ProfilePage from "./features/shared/ProfilePage";
 import {
   isAdminLikeRole,
   isSuperAdminRole,
@@ -71,10 +14,137 @@ import {
   resolvePostLoginPath,
   type SessionUser,
 } from "./utils/workspaces";
+import { prefetchWorkspaceBranch } from "./utils/routePrefetch";
+
+const loadLoginPage = () => import("./features/auth/LoginPage");
+const loadOidcCallbackPage = () => import("./features/auth/OidcCallbackPage");
+const loadUnauthorizedPage = () => import("./features/auth/UnauthorizedPage");
+const loadS3AccountsPage = () => import("./features/admin/AccountsPage");
+const loadAuditLogsPage = () => import("./features/admin/AuditLogsPage");
+const loadUsersPage = () => import("./features/admin/UsersPage");
+const loadAdminDashboard = () => import("./features/admin/AdminDashboard");
+const loadAdminMetricsPage = () => import("./features/admin/AdminMetricsPage");
+const loadBillingPage = () => import("./features/admin/BillingPage");
+const loadS3UsersPage = () => import("./features/admin/S3UsersPage");
+const loadS3UserKeysPage = () => import("./features/admin/S3UserKeysPage");
+const loadS3ConnectionsPage = () => import("./features/admin/S3ConnectionsPage");
+const loadGeneralSettingsPage = () => import("./features/admin/GeneralSettingsPage");
+const loadManagerSettingsPage = () => import("./features/admin/ManagerSettingsPage");
+const loadAdminPortalSettingsPage = () => import("./features/admin/PortalSettingsPage");
+const loadBrowserSettingsPage = () => import("./features/admin/BrowserSettingsPage");
+const loadKeyRotationPage = () => import("./features/admin/KeyRotationPage");
+const loadApiTokensPage = () => import("./features/admin/ApiTokensPage");
+const loadFeatureDisabledPage = () => import("./features/shared/FeatureDisabledPage");
+const loadBucketsPage = () => import("./features/manager/BucketsPage");
+const loadManagerDashboard = () => import("./features/manager/ManagerDashboard");
+const loadPoliciesPage = () => import("./features/manager/PoliciesPage");
+const loadManagerLayout = () => import("./features/manager/ManagerLayout");
+const loadStorageEndpointsPage = () => import("./features/admin/StorageEndpointsPage");
+const loadEndpointStatusPage = () => import("./features/admin/EndpointStatusPage");
+const loadEndpointStatusDetailPage = () => import("./features/admin/EndpointStatusDetailPage");
+const loadManagerUsersPage = () => import("./features/manager/ManagerUsersPage");
+const loadManagerUserKeysPage = () => import("./features/manager/ManagerUserKeysPage");
+const loadBucketDetailPage = () => import("./features/manager/BucketDetailPage");
+const loadBrowserPage = () => import("./features/browser/BrowserPage");
+const loadManagerBrowserPage = () => import("./features/manager/ManagerBrowserPage");
+const loadManagerGroupsPage = () => import("./features/manager/ManagerGroupsPage");
+const loadManagerGroupUsersPage = () => import("./features/manager/ManagerGroupUsersPage");
+const loadManagerRolesPage = () => import("./features/manager/ManagerRolesPage");
+const loadManagerRolePoliciesPage = () => import("./features/manager/ManagerRolePoliciesPage");
+const loadManagerUserPoliciesPage = () => import("./features/manager/ManagerUserPoliciesPage");
+const loadManagerGroupPoliciesPage = () => import("./features/manager/ManagerGroupPoliciesPage");
+const loadManagerMetricsPage = () => import("./features/manager/ManagerMetricsPage");
+const loadTopicsPage = () => import("./features/manager/TopicsPage");
+const loadManagerMigrationsPage = () => import("./features/manager/ManagerMigrationsPage");
+const loadPortalLayout = () => import("./features/portal/PortalLayout");
+const loadPortalDashboard = () => import("./features/portal/PortalDashboard");
+const loadPortalBucketsPage = () => import("./features/portal/PortalBucketsPage");
+const loadPortalBrowserPage = () => import("./features/portal/PortalBrowserPage");
+const loadPortalManagePage = () => import("./features/portal/PortalManagePage");
+const loadPortalSettingsPage = () => import("./features/portal/PortalSettingsPage");
+const loadPortalBillingPage = () => import("./features/portal/BillingPage");
+const loadBrowserLayout = () => import("./features/browser/BrowserLayout");
+const loadCephAdminLayout = () => import("./features/cephAdmin/CephAdminLayout");
+const loadCephAdminDashboard = () => import("./features/cephAdmin/CephAdminDashboard");
+const loadCephAdminAccountsPage = () => import("./features/cephAdmin/CephAdminAccountsPage");
+const loadCephAdminUsersPage = () => import("./features/cephAdmin/CephAdminUsersPage");
+const loadCephAdminBucketsPage = () => import("./features/cephAdmin/CephAdminBucketsPage");
+const loadCephAdminBucketDetailPage = () => import("./features/cephAdmin/CephAdminBucketDetailPage");
+const loadCephAdminMetricsPage = () => import("./features/cephAdmin/CephAdminMetricsPage");
+const loadCephAdminBrowserPage = () => import("./features/cephAdmin/CephAdminBrowserPage");
+const loadProfilePage = () => import("./features/shared/ProfilePage");
+
+const LoginPage = lazy(loadLoginPage);
+const OidcCallbackPage = lazy(loadOidcCallbackPage);
+const UnauthorizedPage = lazy(loadUnauthorizedPage);
+const S3AccountsPage = lazy(loadS3AccountsPage);
+const AuditLogsPage = lazy(loadAuditLogsPage);
+const UsersPage = lazy(loadUsersPage);
+const AdminDashboard = lazy(loadAdminDashboard);
+const AdminMetricsPage = lazy(loadAdminMetricsPage);
+const BillingPage = lazy(loadBillingPage);
+const S3UsersPage = lazy(loadS3UsersPage);
+const S3UserKeysPage = lazy(loadS3UserKeysPage);
+const S3ConnectionsPage = lazy(loadS3ConnectionsPage);
+const GeneralSettingsPage = lazy(loadGeneralSettingsPage);
+const ManagerSettingsPage = lazy(loadManagerSettingsPage);
+const AdminPortalSettingsPage = lazy(loadAdminPortalSettingsPage);
+const BrowserSettingsPage = lazy(loadBrowserSettingsPage);
+const KeyRotationPage = lazy(loadKeyRotationPage);
+const ApiTokensPage = lazy(loadApiTokensPage);
+const FeatureDisabledPage = lazy(loadFeatureDisabledPage);
+const BucketsPage = lazy(loadBucketsPage);
+const ManagerDashboard = lazy(loadManagerDashboard);
+const PoliciesPage = lazy(loadPoliciesPage);
+const ManagerLayout = lazy(loadManagerLayout);
+const StorageEndpointsPage = lazy(loadStorageEndpointsPage);
+const EndpointStatusPage = lazy(loadEndpointStatusPage);
+const EndpointStatusDetailPage = lazy(loadEndpointStatusDetailPage);
+const ManagerUsersPage = lazy(loadManagerUsersPage);
+const ManagerUserKeysPage = lazy(loadManagerUserKeysPage);
+const BucketDetailPage = lazy(loadBucketDetailPage);
+const BrowserPage = lazy(loadBrowserPage);
+const ManagerBrowserPage = lazy(loadManagerBrowserPage);
+const ManagerGroupsPage = lazy(loadManagerGroupsPage);
+const ManagerGroupUsersPage = lazy(loadManagerGroupUsersPage);
+const ManagerRolesPage = lazy(loadManagerRolesPage);
+const ManagerRolePoliciesPage = lazy(loadManagerRolePoliciesPage);
+const ManagerUserPoliciesPage = lazy(loadManagerUserPoliciesPage);
+const ManagerGroupPoliciesPage = lazy(loadManagerGroupPoliciesPage);
+const ManagerMetricsPage = lazy(loadManagerMetricsPage);
+const TopicsPage = lazy(loadTopicsPage);
+const ManagerMigrationsPage = lazy(loadManagerMigrationsPage);
+const PortalLayout = lazy(loadPortalLayout);
+const PortalDashboard = lazy(loadPortalDashboard);
+const PortalBucketsPage = lazy(loadPortalBucketsPage);
+const PortalBrowserPage = lazy(loadPortalBrowserPage);
+const PortalManagePage = lazy(loadPortalManagePage);
+const PortalSettingsPage = lazy(loadPortalSettingsPage);
+const PortalBillingPage = lazy(loadPortalBillingPage);
+const BrowserLayout = lazy(loadBrowserLayout);
+const CephAdminLayout = lazy(loadCephAdminLayout);
+const CephAdminDashboard = lazy(loadCephAdminDashboard);
+const CephAdminAccountsPage = lazy(loadCephAdminAccountsPage);
+const CephAdminUsersPage = lazy(loadCephAdminUsersPage);
+const CephAdminBucketsPage = lazy(loadCephAdminBucketsPage);
+const CephAdminBucketDetailPage = lazy(loadCephAdminBucketDetailPage);
+const CephAdminMetricsPage = lazy(loadCephAdminMetricsPage);
+const CephAdminBrowserPage = lazy(loadCephAdminBrowserPage);
+const ProfilePage = lazy(loadProfilePage);
 
 const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 ui-body font-semibold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+        Loading workspace...
+      </div>
+    </div>
+  );
+}
 
 const buildAdminNav = (
   portalEnabled: boolean,
@@ -164,9 +234,9 @@ function AdminLayoutShell() {
   return (
     <Layout
       navSections={adminNav}
+      headerTitle="Administration"
       sidebarTitle="ADMIN"
       hideHeader
-      topbarContent={<span className="ui-body text-slate-500 dark:text-slate-300">Administration globale</span>}
     />
   );
 }
@@ -211,6 +281,9 @@ function RoleRedirect() {
   const user = getStoredUser();
   const { generalSettings } = useGeneralSettings();
   const destination = resolvePostLoginPath(user, generalSettings);
+  useEffect(() => {
+    prefetchWorkspaceBranch(destination);
+  }, [destination]);
   return <Navigate to={destination} replace />;
 }
 
@@ -404,8 +477,12 @@ export default function AppRouter() {
       </>
     );
     return createBrowserRouter(routes, {
-      future: { v7_startTransition: true, v7_relativeSplatPath: true },
+      future: { v7_relativeSplatPath: true },
     });
   }, []);
-  return <RouterProvider router={router} />;
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      <RouterProvider router={router} />
+    </Suspense>
+  );
 }

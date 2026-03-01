@@ -19,6 +19,7 @@ import {
   updateAppSettings,
 } from "../../api/appSettings";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { applyBranding } from "../../components/ui/brandingRuntime";
 import { confirmAction } from "../../utils/confirm";
 
 const CEPH_ADMIN_WARNING_MESSAGE =
@@ -27,6 +28,16 @@ const CEPH_ADMIN_WARNING_MESSAGE =
 const PORTAL_EXPERIMENTAL_WARNING_MESSAGE = "Portal is an experimental feature.";
 const BILLING_CRON_REMINDER_MESSAGE =
   "Billing feature enabled. Think about enabling the billing collection cron job.";
+const BRANDING_PRESET_COLORS = [
+  "#0ea5e9",
+  "#2563eb",
+  "#0f766e",
+  "#16a34a",
+  "#d97706",
+  "#dc2626",
+  "#be123c",
+  "#7c3aed",
+] as const;
 const FEATURE_FIELDS = [
   "manager_enabled",
   "ceph_admin_enabled",
@@ -49,6 +60,19 @@ function isFeatureField(field: ToggleField): field is FeatureField {
   return FEATURE_FIELDS.includes(field as FeatureField);
 }
 
+function isValidLoginLogoUrl(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized) return true;
+  if (normalized.startsWith("/")) return true;
+  if (normalized.startsWith("data:image/")) return true;
+  try {
+    const parsed = new URL(normalized);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export default function GeneralSettingsPage() {
   const { setGeneralSettings } = useGeneralSettings();
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -58,6 +82,7 @@ export default function GeneralSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [loginLogoUrlDraft, setLoginLogoUrlDraft] = useState("");
 
   useEffect(() => {
     Promise.all([fetchAppSettings(), fetchGeneralFeatureLocks()])
@@ -65,9 +90,12 @@ export default function GeneralSettingsPage() {
         setSettings(data);
         setFeatureLocks(locks);
         setGeneralSettings(data.general);
+        setLoginLogoUrlDraft(data.branding.login_logo_url ?? "");
+        applyBranding(data.branding.primary_color);
       })
       .catch(() => setError("Unable to load settings."));
   }, [setGeneralSettings]);
+  const isLogoUrlValid = isValidLoginLogoUrl(loginLogoUrlDraft);
 
   const isFeatureLocked = (field: FeatureField): boolean => Boolean(featureLocks?.[field]?.forced);
   const getFeatureLockHint = (field: FeatureField): string | null => {
@@ -93,6 +121,29 @@ export default function GeneralSettingsPage() {
     setSettings((prev) => (prev ? { ...prev, general: { ...prev.general, [field]: value } } : prev));
   };
 
+  const handleBrandingColorChange = (value: string) => {
+    const normalized = value.trim().toLowerCase();
+    applyBranding(normalized);
+    setSettings((prev) => (prev ? { ...prev, branding: { ...prev.branding, primary_color: normalized } } : prev));
+  };
+
+  const handleLoginLogoUrlChange = (value: string) => {
+    setLoginLogoUrlDraft(value);
+    if (!isValidLoginLogoUrl(value)) return;
+    const normalized = value.trim();
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            branding: {
+              ...prev.branding,
+              login_logo_url: normalized || null,
+            },
+          }
+        : prev
+    );
+  };
+
   const handleSave = async (event?: React.FormEvent | React.MouseEvent) => {
     event?.preventDefault();
     if (!settings) return;
@@ -102,6 +153,8 @@ export default function GeneralSettingsPage() {
       const saved = await updateAppSettings(settings);
       setSettings(saved);
       setGeneralSettings(saved.general);
+      setLoginLogoUrlDraft(saved.branding.login_logo_url ?? "");
+      applyBranding(saved.branding.primary_color);
       if (!saved.general.billing_enabled) {
         setBillingReminder(null);
       }
@@ -117,13 +170,19 @@ export default function GeneralSettingsPage() {
 
   const handleResetDefaults = async () => {
     if (!settings) return;
-    if (!confirmAction("Reset general settings to defaults? Save changes to apply.")) return;
+    if (!confirmAction("Reset general and branding settings to defaults? Save changes to apply.")) return;
     setResetting(true);
     setError(null);
     setSavedMessage(null);
     try {
       const defaults = await fetchDefaultAppSettings();
-      setSettings((prev) => (prev ? { ...prev, general: defaults.general } : defaults));
+      setSettings((prev) =>
+        prev
+          ? { ...prev, general: defaults.general, branding: defaults.branding }
+          : defaults
+      );
+      setLoginLogoUrlDraft(defaults.branding.login_logo_url ?? "");
+      applyBranding(defaults.branding.primary_color);
     } catch (err) {
       console.error(err);
       setError("Unable to load default settings.");
@@ -155,7 +214,7 @@ export default function GeneralSettingsPage() {
             <button
               type="button"
               onClick={handleSave}
-              disabled={!settings || saving || resetting}
+              disabled={!settings || saving || resetting || !isLogoUrlValid}
               className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:pointer-events-none disabled:opacity-60"
             >
               {saving ? "Saving..." : "Save changes"}
@@ -374,6 +433,96 @@ export default function GeneralSettingsPage() {
                     />
                   }
                 />
+              </PortalSettingsSection>
+            </div>
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <PortalSettingsSection
+                title="BRANDING"
+                description="Customize the primary accent color used across the application."
+                layout="grid"
+                columns={1}
+              >
+                <PortalSettingsItem
+                  title="Primary accent color"
+                  description="Used for primary buttons, links, focus states and selected elements."
+                >
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {BRANDING_PRESET_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        aria-label={`Use preset color ${color}`}
+                        onClick={() => handleBrandingColorChange(color)}
+                        className={`h-7 w-7 rounded-full border shadow-sm transition hover:scale-105 ${
+                          settings.branding.primary_color === color
+                            ? "border-slate-900 ring-2 ring-primary/50 dark:border-slate-100"
+                            : "border-slate-300 dark:border-slate-600"
+                        }`}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                    <div className="relative ml-1">
+                      <label
+                        htmlFor="branding-primary-picker"
+                        className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      >
+                        <span
+                          className="inline-block h-3.5 w-3.5 rounded-full border border-slate-300 dark:border-slate-600"
+                          style={{ backgroundColor: settings.branding.primary_color }}
+                        />
+                        Couleur personnalisée
+                      </label>
+                      <input
+                        id="branding-primary-picker"
+                        aria-label="Primary color picker"
+                        type="color"
+                        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        value={settings.branding.primary_color}
+                        onChange={(event) => handleBrandingColorChange(event.target.value)}
+                      />
+                    </div>
+                    <span className="ui-caption font-semibold text-slate-700 dark:text-slate-100">
+                      {settings.branding.primary_color}
+                    </span>
+                  </div>
+                  <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                    Save changes to apply this color across the whole UI, including the login page.
+                  </p>
+                  <div className="mt-3 space-y-1.5">
+                    <label
+                      htmlFor="branding-login-logo-url"
+                      className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                    >
+                      Login logo URL
+                    </label>
+                    <input
+                      id="branding-login-logo-url"
+                      aria-label="Login logo URL"
+                      type="url"
+                      value={loginLogoUrlDraft}
+                      onChange={(event) => handleLoginLogoUrlChange(event.target.value)}
+                      placeholder="https://cdn.example.com/logo.svg"
+                      className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    />
+                    {!isLogoUrlValid && (
+                      <p className="ui-caption text-rose-700 dark:text-rose-200">
+                        Use an `http(s)` URL, a root-relative URL (`/logo.svg`) or a `data:image/...` URL.
+                      </p>
+                    )}
+                    {isLogoUrlValid && loginLogoUrlDraft.trim() && (
+                      <div className="rounded-md border border-slate-200/80 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Login preview
+                        </p>
+                        <img
+                          src={loginLogoUrlDraft.trim()}
+                          alt="Company logo preview"
+                          className="mt-2 max-h-16 w-auto object-contain"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </PortalSettingsItem>
               </PortalSettingsSection>
             </div>
           </div>

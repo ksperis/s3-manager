@@ -198,7 +198,7 @@ export default function ManagerGroupUsersPage() {
           <button
             type="submit"
             disabled={busy !== null || !newUser}
-            className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+            className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
           >
             {busy === "add" ? "Adding..." : "Add"}
           </button>

@@ -4,6 +4,7 @@
  */
 import Modal from "../../components/Modal";
 import { bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
+import { uiCheckboxClass } from "../../components/ui/styles";
 
 type BrowserCleanupModalProps = {
   currentPath: string;
@@ -77,7 +78,7 @@ export default function BrowserCleanupModal({
               type="checkbox"
               checked={cleanupDeleteOrphanMarkers}
               onChange={(event) => setCleanupDeleteOrphanMarkers(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+              className={uiCheckboxClass}
             />
             Delete orphan delete markers (runs after version cleanup)
           </label>

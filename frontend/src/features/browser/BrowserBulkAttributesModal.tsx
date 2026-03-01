@@ -4,6 +4,7 @@
  */
 import type { Dispatch, SetStateAction } from "react";
 import Modal from "../../components/Modal";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import {
   aclOptions,
   bulkActionClasses,
@@ -112,15 +113,13 @@ export default function BrowserBulkAttributesModal({
         )}
         <div className="space-y-3">
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={bulkApplyMetadata}
-                onChange={(event) => setBulkApplyMetadata(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-              />
+            <UiCheckboxField
+              checked={bulkApplyMetadata}
+              onChange={(event) => setBulkApplyMetadata(event.target.checked)}
+              className="font-semibold text-slate-700 dark:text-slate-200"
+            >
               Metadata headers
-            </label>
+            </UiCheckboxField>
             {bulkApplyMetadata && (
               <div className="mt-3 grid gap-2">
                 <input
@@ -187,15 +186,13 @@ export default function BrowserBulkAttributesModal({
             )}
           </div>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={bulkApplyTags}
-                onChange={(event) => setBulkApplyTags(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-              />
+            <UiCheckboxField
+              checked={bulkApplyTags}
+              onChange={(event) => setBulkApplyTags(event.target.checked)}
+              className="font-semibold text-slate-700 dark:text-slate-200"
+            >
               Tags (key=value per line)
-            </label>
+            </UiCheckboxField>
             {bulkApplyTags && (
               <textarea
                 rows={3}
@@ -206,15 +203,13 @@ export default function BrowserBulkAttributesModal({
             )}
           </div>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={bulkApplyStorageClass}
-                onChange={(event) => setBulkApplyStorageClass(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-              />
+            <UiCheckboxField
+              checked={bulkApplyStorageClass}
+              onChange={(event) => setBulkApplyStorageClass(event.target.checked)}
+              className="font-semibold text-slate-700 dark:text-slate-200"
+            >
               Storage class
-            </label>
+            </UiCheckboxField>
             {bulkApplyStorageClass && (
               <select
                 className={`${formInputClasses} mt-3`}
@@ -231,15 +226,13 @@ export default function BrowserBulkAttributesModal({
             )}
           </div>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={bulkApplyAcl}
-                onChange={(event) => setBulkApplyAcl(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-              />
+            <UiCheckboxField
+              checked={bulkApplyAcl}
+              onChange={(event) => setBulkApplyAcl(event.target.checked)}
+              className="font-semibold text-slate-700 dark:text-slate-200"
+            >
               ACL
-            </label>
+            </UiCheckboxField>
             {bulkApplyAcl && (
               <select
                 className={`${formInputClasses} mt-3`}
@@ -255,15 +248,13 @@ export default function BrowserBulkAttributesModal({
             )}
           </div>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={bulkApplyLegalHold}
-                onChange={(event) => setBulkApplyLegalHold(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-              />
+            <UiCheckboxField
+              checked={bulkApplyLegalHold}
+              onChange={(event) => setBulkApplyLegalHold(event.target.checked)}
+              className="font-semibold text-slate-700 dark:text-slate-200"
+            >
               Legal hold
-            </label>
+            </UiCheckboxField>
             {bulkApplyLegalHold && (
               <select
                 className={`${formInputClasses} mt-3`}
@@ -276,15 +267,13 @@ export default function BrowserBulkAttributesModal({
             )}
           </div>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <label className="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
-              <input
-                type="checkbox"
-                checked={bulkApplyRetention}
-                onChange={(event) => setBulkApplyRetention(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-              />
+            <UiCheckboxField
+              checked={bulkApplyRetention}
+              onChange={(event) => setBulkApplyRetention(event.target.checked)}
+              className="font-semibold text-slate-700 dark:text-slate-200"
+            >
               Retention
-            </label>
+            </UiCheckboxField>
             {bulkApplyRetention && (
               <div className="mt-3 grid gap-2">
                 <select
@@ -304,15 +293,13 @@ export default function BrowserBulkAttributesModal({
                   value={bulkRetentionDate}
                   onChange={(event) => setBulkRetentionDate(event.target.value)}
                 />
-                <label className="flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={bulkRetentionBypass}
-                    onChange={(event) => setBulkRetentionBypass(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                  />
+                <UiCheckboxField
+                  checked={bulkRetentionBypass}
+                  onChange={(event) => setBulkRetentionBypass(event.target.checked)}
+                  className="ui-caption text-slate-500 dark:text-slate-400"
+                >
                   Bypass governance
-                </label>
+                </UiCheckboxField>
               </div>
             )}
           </div>

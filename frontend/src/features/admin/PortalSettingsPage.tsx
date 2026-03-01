@@ -10,10 +10,14 @@ import {
   PortalSettingsSection,
   PortalSettingsSwitch,
 } from "../../components/PortalSettingsLayout";
+import UiButton from "../../components/ui/UiButton";
+import { cx, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { confirmAction } from "../../utils/confirm";
 
 const PORTAL_KEY_ROTATION_WARNING = "When enabled, key rotations can immediately impact portal users relying on the displayed key.";
+const allowOverrideLabelClass = "inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200";
+const corsOriginsTextareaClass = cx("mt-2 ui-caption", uiInputClass);
 
 export default function PortalSettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -252,22 +256,21 @@ export default function PortalSettingsPage() {
         ]}
         rightContent={
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
+            <UiButton
+              variant="ghost"
               onClick={handleResetDefaults}
               disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-              className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:pointer-events-none disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+              className="py-1.5 disabled:pointer-events-none"
             >
               {resetting ? "Resetting..." : "Reset to defaults"}
-            </button>
-            <button
-              type="button"
+            </UiButton>
+            <UiButton
               onClick={handleSave}
               disabled={!settings || saving || resetting || Boolean(resettingPolicy)}
-              className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:pointer-events-none disabled:opacity-60"
+              className="py-1.5 disabled:pointer-events-none"
             >
               {saving ? "Saving..." : "Save changes"}
-            </button>
+            </UiButton>
           </div>
         }
       />
@@ -287,13 +290,13 @@ export default function PortalSettingsPage() {
                     disabled={!settings}
                     ariaLabel="Portal key visibility"
                   />
-                  <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                  <label className={allowOverrideLabelClass}>
                     <span>Allow override</span>
                     <input
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.allow_portal_key)}
                       onChange={(e) => handleOverrideToggle("allow_portal_key", e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      className={uiCheckboxClass}
                       disabled={!settings}
                     />
                   </label>
@@ -315,13 +318,13 @@ export default function PortalSettingsPage() {
                     disabled={!settings}
                     ariaLabel="Portal user bucket creation"
                   />
-                  <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                  <label className={allowOverrideLabelClass}>
                     <span>Allow override</span>
                     <input
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.allow_portal_user_bucket_create)}
                       onChange={(e) => handleOverrideToggle("allow_portal_user_bucket_create", e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      className={uiCheckboxClass}
                       disabled={!settings}
                     />
                   </label>
@@ -339,13 +342,13 @@ export default function PortalSettingsPage() {
                     disabled={!settings}
                     ariaLabel="Portal user access key creation"
                   />
-                  <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                  <label className={allowOverrideLabelClass}>
                     <span>Allow override</span>
                     <input
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.allow_portal_user_access_key_create)}
                       onChange={(e) => handleOverrideToggle("allow_portal_user_access_key_create", e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      className={uiCheckboxClass}
                       disabled={!settings}
                     />
                   </label>
@@ -366,13 +369,13 @@ export default function PortalSettingsPage() {
                 description="Actions granted to the portal-manager IAM group."
                 action={
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                    <label className={allowOverrideLabelClass}>
                       <span>Allow override</span>
                       <input
                         type="checkbox"
                         checked={Boolean(settings?.portal.override_policy.iam_group_manager_policy.actions)}
                         onChange={(e) => handleOverridePolicyToggle("iam_group_manager_policy", "actions", e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                        className={uiCheckboxClass}
                         disabled={!settings}
                       />
                     </label>
@@ -403,13 +406,13 @@ export default function PortalSettingsPage() {
                 description="Actions granted to the portal-user IAM group."
                 action={
                   <div className="flex flex-wrap items-center gap-2">
-                    <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                    <label className={allowOverrideLabelClass}>
                       <span>Allow override</span>
                       <input
                         type="checkbox"
                         checked={Boolean(settings?.portal.override_policy.iam_group_user_policy.actions)}
                         onChange={(e) => handleOverridePolicyToggle("iam_group_user_policy", "actions", e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                        className={uiCheckboxClass}
                         disabled={!settings}
                       />
                     </label>
@@ -441,13 +444,13 @@ export default function PortalSettingsPage() {
               description="Actions added when granting a portal user access to a bucket."
               action={
                 <div className="flex flex-wrap items-center gap-2">
-                  <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                  <label className={allowOverrideLabelClass}>
                     <span>Allow override</span>
                     <input
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.bucket_access_policy.actions)}
                       onChange={(e) => handleOverridePolicyToggle("bucket_access_policy", "actions", e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      className={uiCheckboxClass}
                       disabled={!settings}
                     />
                   </label>
@@ -495,13 +498,13 @@ export default function PortalSettingsPage() {
                     disabled={!settings}
                     ariaLabel="Bucket versioning default"
                   />
-                  <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                  <label className={allowOverrideLabelClass}>
                     <span>Allow override</span>
                     <input
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.bucket_defaults.versioning)}
                       onChange={(e) => handleOverrideBucketDefaultsToggle("versioning", e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      className={uiCheckboxClass}
                       disabled={!settings}
                     />
                   </label>
@@ -519,13 +522,13 @@ export default function PortalSettingsPage() {
                     disabled={!settings}
                     ariaLabel="Bucket lifecycle default"
                   />
-                  <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                  <label className={allowOverrideLabelClass}>
                     <span>Allow override</span>
                     <input
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.bucket_defaults.enable_lifecycle)}
                       onChange={(e) => handleOverrideBucketDefaultsToggle("enable_lifecycle", e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      className={uiCheckboxClass}
                       disabled={!settings}
                     />
                   </label>
@@ -543,13 +546,13 @@ export default function PortalSettingsPage() {
                     disabled={!settings}
                     ariaLabel="Portal CORS default"
                   />
-                  <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                  <label className={allowOverrideLabelClass}>
                     <span>Allow override</span>
                     <input
                       type="checkbox"
                       checked={Boolean(settings?.portal.override_policy.bucket_defaults.enable_cors)}
                       onChange={(e) => handleOverrideBucketDefaultsToggle("enable_cors", e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      className={uiCheckboxClass}
                       disabled={!settings}
                     />
                   </label>
@@ -561,13 +564,13 @@ export default function PortalSettingsPage() {
               description="One URL per line. These origins are added to the portal bucket CORS rule."
               className="md:col-span-2"
               action={
-                <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                <label className={allowOverrideLabelClass}>
                   <span>Allow override</span>
                   <input
                     type="checkbox"
                     checked={Boolean(settings?.portal.override_policy.bucket_defaults.cors_allowed_origins)}
                     onChange={(e) => handleOverrideBucketDefaultsToggle("cors_allowed_origins", e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                    className={uiCheckboxClass}
                     disabled={!settings}
                   />
                 </label>
@@ -576,7 +579,7 @@ export default function PortalSettingsPage() {
               <textarea
                 value={corsOriginsText}
                 onChange={(e) => handleBucketCorsOrigins(e.target.value)}
-                className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                className={corsOriginsTextareaClass}
                 rows={4}
                 placeholder="https://s3-manager.example.com"
                 disabled={!settings || !bucketCorsEnabled}

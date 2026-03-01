@@ -443,7 +443,7 @@ export default function AddS3ConnectionFromKeyModal({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+            className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
           >
             {saving ? "Creating..." : "Create private connection"}
           </button>

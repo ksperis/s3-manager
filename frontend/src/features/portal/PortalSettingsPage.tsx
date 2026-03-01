@@ -17,6 +17,8 @@ import {
   PortalSettingsSection,
   PortalSettingsSwitch,
 } from "../../components/PortalSettingsLayout";
+import UiButton from "../../components/ui/UiButton";
+import { cx, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { confirmAction } from "../../utils/confirm";
 import { usePortalAccountContext } from "./PortalAccountContext";
@@ -42,6 +44,9 @@ const toOverrideValue = (value: TriState): boolean | undefined => {
   if (value === "inherit") return undefined;
   return value === "enabled";
 };
+
+const inheritToggleLabelClass = "inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200";
+const policyActionsTextareaClass = cx("mt-2 ui-caption", uiInputClass);
 
 export default function PortalSettingsPage() {
   const { t } = useI18n();
@@ -350,24 +355,22 @@ export default function PortalSettingsPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
+                <UiButton
+                  variant="secondary"
                   onClick={handleResetPortalOverrides}
                   disabled={!portalAccountSettings || portalSettingsSaving}
-                  className="rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200"
+                  className="text-slate-600 dark:text-slate-200"
                 >
                   {t({ en: "Reset", fr: "Reinitialiser", de: "Zurucksetzen" })}
-                </button>
-                <button
-                  type="button"
+                </UiButton>
+                <UiButton
                   onClick={handleSavePortalOverrides}
                   disabled={!portalAccountSettings || portalSettingsSaving}
-                  className="rounded-md bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                 >
                   {portalSettingsSaving
                     ? t({ en: "Saving...", fr: "Enregistrement...", de: "Wird gespeichert..." })
                     : t({ en: "Save", fr: "Enregistrer", de: "Speichern" })}
-                </button>
+                </UiButton>
               </div>
             </div>
           </div>
@@ -402,7 +405,7 @@ export default function PortalSettingsPage() {
                           ariaLabel={t({ en: "Toggle portal key", fr: "Basculer la cle portail", de: "Portal-Schlussel umschalten" })}
                           onChange={(value) => setOverridePortalKey(value ? "enabled" : "disabled")}
                         />
-                        <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                        <label className={inheritToggleLabelClass}>
                           <span>{inheritLabel}</span>
                           <input
                             type="checkbox"
@@ -412,7 +415,7 @@ export default function PortalSettingsPage() {
                                 e.target.checked ? "inherit" : portalKeyEnabled ? "enabled" : "disabled"
                               )
                             }
-                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            className={uiCheckboxClass}
                             disabled={
                               portalSettingsLoading ||
                               portalSettingsSaving ||
@@ -448,7 +451,7 @@ export default function PortalSettingsPage() {
                           ariaLabel={t({ en: "Toggle bucket creation for portal users", fr: "Basculer la creation de bucket pour les utilisateurs portail", de: "Bucket-Erstellung fur Portal-Benutzer umschalten" })}
                           onChange={(value) => setOverridePortalBucketCreate(value ? "enabled" : "disabled")}
                         />
-                        <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                        <label className={inheritToggleLabelClass}>
                           <span>{inheritLabel}</span>
                           <input
                             type="checkbox"
@@ -458,7 +461,7 @@ export default function PortalSettingsPage() {
                                 e.target.checked ? "inherit" : portalBucketCreateEnabled ? "enabled" : "disabled"
                               )
                             }
-                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            className={uiCheckboxClass}
                             disabled={
                               portalSettingsLoading ||
                               portalSettingsSaving ||
@@ -494,7 +497,7 @@ export default function PortalSettingsPage() {
                           ariaLabel={t({ en: "Toggle access key creation for portal users", fr: "Basculer la creation de cles d'acces pour les utilisateurs portail", de: "Erstellung von Zugriffsschlusseln fur Portal-Benutzer umschalten" })}
                           onChange={(value) => setOverridePortalAccessKeyCreate(value ? "enabled" : "disabled")}
                         />
-                        <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                        <label className={inheritToggleLabelClass}>
                           <span>{inheritLabel}</span>
                           <input
                             type="checkbox"
@@ -504,7 +507,7 @@ export default function PortalSettingsPage() {
                                 e.target.checked ? "inherit" : portalAccessKeyCreateEnabled ? "enabled" : "disabled"
                               )
                             }
-                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            className={uiCheckboxClass}
                             disabled={
                               portalSettingsLoading ||
                               portalSettingsSaving ||
@@ -530,7 +533,7 @@ export default function PortalSettingsPage() {
                     title={t({ en: "Policy portal-manager", fr: "Politique portal-manager", de: "Richtlinie portal-manager" })}
                     description={t({ en: "Actions granted to the portal-manager IAM group.", fr: "Actions accordees au groupe IAM portal-manager.", de: "Aktionen fur die IAM-Gruppe portal-manager." })}
                     action={
-                      <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                      <label className={inheritToggleLabelClass}>
                         <span>{inheritLabel}</span>
                         <input
                           type="checkbox"
@@ -544,7 +547,7 @@ export default function PortalSettingsPage() {
                               );
                             }
                           }}
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                          className={uiCheckboxClass}
                           disabled={
                             portalSettingsLoading ||
                             portalSettingsSaving ||
@@ -559,7 +562,7 @@ export default function PortalSettingsPage() {
                     <textarea
                       value={managerPolicyActionsText}
                       onChange={(e) => setManagerPolicyActionsText(e.target.value)}
-                      className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className={policyActionsTextareaClass}
                       rows={4}
                       disabled={
                         managerPolicyMode === "inherit" ||
@@ -583,7 +586,7 @@ export default function PortalSettingsPage() {
                     title={t({ en: "Policy portal-user", fr: "Politique portal-user", de: "Richtlinie portal-user" })}
                     description={t({ en: "Actions granted to the portal-user IAM group.", fr: "Actions accordees au groupe IAM portal-user.", de: "Aktionen fur die IAM-Gruppe portal-user." })}
                     action={
-                      <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                      <label className={inheritToggleLabelClass}>
                         <span>{inheritLabel}</span>
                         <input
                           type="checkbox"
@@ -597,7 +600,7 @@ export default function PortalSettingsPage() {
                               );
                             }
                           }}
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                          className={uiCheckboxClass}
                           disabled={
                             portalSettingsLoading ||
                             portalSettingsSaving ||
@@ -612,7 +615,7 @@ export default function PortalSettingsPage() {
                     <textarea
                       value={userPolicyActionsText}
                       onChange={(e) => setUserPolicyActionsText(e.target.value)}
-                      className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className={policyActionsTextareaClass}
                       rows={4}
                       disabled={
                         userPolicyMode === "inherit" ||
@@ -636,7 +639,7 @@ export default function PortalSettingsPage() {
                     title={t({ en: "Policy bucket access", fr: "Politique acces bucket", de: "Richtlinie Bucket-Zugriff" })}
                     description={t({ en: "Actions applied when granting bucket access.", fr: "Actions appliquees lors de l'octroi d'acces bucket.", de: "Aktionen beim Gewahren von Bucket-Zugriff." })}
                     action={
-                      <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                      <label className={inheritToggleLabelClass}>
                         <span>{inheritLabel}</span>
                         <input
                           type="checkbox"
@@ -650,7 +653,7 @@ export default function PortalSettingsPage() {
                               );
                             }
                           }}
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                          className={uiCheckboxClass}
                           disabled={
                             portalSettingsLoading ||
                             portalSettingsSaving ||
@@ -665,7 +668,7 @@ export default function PortalSettingsPage() {
                     <textarea
                       value={bucketPolicyActionsText}
                       onChange={(e) => setBucketPolicyActionsText(e.target.value)}
-                      className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className={policyActionsTextareaClass}
                       rows={4}
                       disabled={
                         bucketPolicyMode === "inherit" ||
@@ -704,7 +707,7 @@ export default function PortalSettingsPage() {
                           ariaLabel={t({ en: "Toggle default versioning", fr: "Basculer le versioning par defaut", de: "Standard-Versionierung umschalten" })}
                           onChange={(value) => setBucketVersioningOverride(value ? "enabled" : "disabled")}
                         />
-                        <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                        <label className={inheritToggleLabelClass}>
                           <span>{inheritLabel}</span>
                           <input
                             type="checkbox"
@@ -714,7 +717,7 @@ export default function PortalSettingsPage() {
                                 e.target.checked ? "inherit" : bucketVersioningEnabled ? "enabled" : "disabled"
                               )
                             }
-                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            className={uiCheckboxClass}
                             disabled={
                               portalSettingsLoading ||
                               portalSettingsSaving ||
@@ -750,7 +753,7 @@ export default function PortalSettingsPage() {
                           ariaLabel={t({ en: "Toggle default lifecycle", fr: "Basculer le lifecycle par defaut", de: "Standard-Lifecycle umschalten" })}
                           onChange={(value) => setBucketLifecycleOverride(value ? "enabled" : "disabled")}
                         />
-                        <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                        <label className={inheritToggleLabelClass}>
                           <span>{inheritLabel}</span>
                           <input
                             type="checkbox"
@@ -760,7 +763,7 @@ export default function PortalSettingsPage() {
                                 e.target.checked ? "inherit" : bucketLifecycleEnabled ? "enabled" : "disabled"
                               )
                             }
-                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            className={uiCheckboxClass}
                             disabled={
                               portalSettingsLoading ||
                               portalSettingsSaving ||
@@ -796,7 +799,7 @@ export default function PortalSettingsPage() {
                           ariaLabel={t({ en: "Toggle default CORS", fr: "Basculer CORS par defaut", de: "Standard-CORS umschalten" })}
                           onChange={(value) => setBucketCorsOverride(value ? "enabled" : "disabled")}
                         />
-                        <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                        <label className={inheritToggleLabelClass}>
                           <span>{inheritLabel}</span>
                           <input
                             type="checkbox"
@@ -806,7 +809,7 @@ export default function PortalSettingsPage() {
                                 e.target.checked ? "inherit" : bucketCorsEnabled ? "enabled" : "disabled"
                               )
                             }
-                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                            className={uiCheckboxClass}
                             disabled={
                               portalSettingsLoading ||
                               portalSettingsSaving ||
@@ -830,7 +833,7 @@ export default function PortalSettingsPage() {
                     description={t({ en: "One URL per line for the CORS rule.", fr: "Une URL par ligne pour la regle CORS.", de: "Eine URL pro Zeile fur die CORS-Regel." })}
                     className="md:col-span-2"
                     action={
-                      <label className="inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                      <label className={inheritToggleLabelClass}>
                         <span>{inheritLabel}</span>
                         <input
                           type="checkbox"
@@ -844,7 +847,7 @@ export default function PortalSettingsPage() {
                               );
                             }
                           }}
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                          className={uiCheckboxClass}
                           disabled={
                             portalSettingsLoading ||
                             portalSettingsSaving ||
@@ -858,7 +861,7 @@ export default function PortalSettingsPage() {
                     <textarea
                       value={bucketCorsOriginsText}
                       onChange={(e) => setBucketCorsOriginsText(e.target.value)}
-                      className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      className={policyActionsTextareaClass}
                       rows={3}
                       placeholder="https://portal.example.com"
                       disabled={

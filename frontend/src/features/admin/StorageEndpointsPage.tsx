@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   detectStorageEndpointFeatures,
   StorageEndpoint,
@@ -1340,7 +1341,7 @@ export default function StorageEndpointsPage() {
                               sts: { ...current.sts, enabled: e.target.checked },
                             }))
                           }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                          className={uiCheckboxClass}
                         />
                       </label>
                       <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
@@ -1354,7 +1355,7 @@ export default function StorageEndpointsPage() {
                               static_website: { ...current.static_website, enabled: e.target.checked },
                             }))
                           }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                          className={uiCheckboxClass}
                         />
                       </label>
                       <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
@@ -1368,7 +1369,7 @@ export default function StorageEndpointsPage() {
                               iam: { ...current.iam, enabled: e.target.checked },
                             }))
                           }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                          className={uiCheckboxClass}
                         />
                       </label>
                       <label className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
@@ -1382,7 +1383,7 @@ export default function StorageEndpointsPage() {
                               sse: { ...current.sse, enabled: e.target.checked },
                             }))
                           }
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                          className={uiCheckboxClass}
                         />
                       </label>
                     </div>

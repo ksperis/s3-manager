@@ -869,7 +869,7 @@ export default function S3UsersPage() {
               <button
                 type="submit"
                 disabled={creating || createPermissionLoading || !createEndpointCanWrite}
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {creating ? "Creating..." : "Create user"}
               </button>
@@ -950,7 +950,7 @@ export default function S3UsersPage() {
               type="button"
               disabled={importBusy || importPermissionLoading || !importEndpointCanWrite || !importText.trim() || !importEndpointId}
               onClick={submitImport}
-              className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+              className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
             >
               {importBusy ? "Importing..." : "Import"}
             </button>
@@ -1207,7 +1207,7 @@ export default function S3UsersPage() {
                           setPortalUserSearch("");
                           setShowEditPortalUserPanel(false);
                         }}
-                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         Add selected
                       </button>
@@ -1232,7 +1232,7 @@ export default function S3UsersPage() {
               <button
                 type="submit"
                 disabled={editBusy}
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {editBusy ? "Saving..." : "Save changes"}
               </button>

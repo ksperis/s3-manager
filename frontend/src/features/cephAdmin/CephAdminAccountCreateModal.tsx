@@ -4,6 +4,7 @@
  */
 import axios from "axios";
 import { useState } from "react";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   CephAdminRgwAccountDetail,
   createCephAdminAccount,
@@ -251,7 +252,7 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
               type="checkbox"
               checked={accountQuotaEnabled}
               onChange={(event) => setAccountQuotaEnabled(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+              className={uiCheckboxClass}
             />
             Enable account quota
           </label>
@@ -303,7 +304,7 @@ export default function CephAdminAccountCreateModal({ endpointId, onClose, onCre
               type="checkbox"
               checked={bucketQuotaEnabled}
               onChange={(event) => setBucketQuotaEnabled(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+              className={uiCheckboxClass}
             />
             Enable bucket quota
           </label>

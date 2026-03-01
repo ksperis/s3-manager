@@ -8,6 +8,7 @@ import { completeOidcLogin } from "../../api/auth";
 import { fetchGeneralSettings } from "../../api/appSettings";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
+import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
 import { resolvePostLoginPath, type SessionUser } from "../../utils/workspaces";
 
 export default function OidcCallbackPage() {
@@ -29,6 +30,7 @@ export default function OidcCallbackPage() {
       setError("Missing identity provider.");
       return;
     }
+    const providerId = provider;
     if (!code || !state) {
       setProcessing(false);
       setError("Incomplete authentication response.");
@@ -37,7 +39,7 @@ export default function OidcCallbackPage() {
 
     async function finalizeLogin() {
       try {
-        const res = await completeOidcLogin(provider, code, state);
+        const res = await completeOidcLogin(providerId, code, state);
         if (cancelled) return;
         localStorage.setItem("token", res.access_token);
         const sessionUser: SessionUser = { ...res.user, authType: "oidc" };
@@ -52,6 +54,7 @@ export default function OidcCallbackPage() {
         }
         const baseDestination = resolvePostLoginPath(sessionUser, settings);
         const destination = baseDestination === "/unauthorized" ? baseDestination : res.redirect_path || baseDestination;
+        prefetchWorkspaceBranch(destination);
         navigate(destination, { replace: true });
       } catch (err) {
         console.error(err);
@@ -66,7 +69,7 @@ export default function OidcCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, provider, searchParams, setGeneralSettings]);
+  }, [navigate, provider, searchParams, setGeneralSettings, setLanguagePreference]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -87,7 +90,7 @@ export default function OidcCallbackPage() {
               <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700">{error}</p>
               <button
                 type="button"
-                className="mt-6 w-full rounded-xl bg-primary px-4 py-2.5 ui-body font-semibold text-white shadow-sm transition hover:bg-sky-500"
+                className="mt-6 w-full rounded-xl bg-primary px-4 py-2.5 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600"
                 onClick={() => navigate("/login", { replace: true })}
               >
                 Back to login

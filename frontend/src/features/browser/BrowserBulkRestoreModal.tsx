@@ -4,6 +4,7 @@
  */
 import Modal from "../../components/Modal";
 import { bulkActionClasses, formInputClasses, toolbarPrimaryClasses } from "./browserConstants";
+import { uiCheckboxClass } from "../../components/ui/styles";
 
 type BrowserBulkRestoreModalProps = {
   bulkActionFileCount: number;
@@ -85,7 +86,7 @@ export default function BrowserBulkRestoreModal({
               type="checkbox"
               checked={bulkRestoreDeleteMissing}
               onChange={(event) => setBulkRestoreDeleteMissing(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+              className={uiCheckboxClass}
             />
             Delete objects not present at the selected date
           </label>
@@ -94,7 +95,7 @@ export default function BrowserBulkRestoreModal({
               type="checkbox"
               checked={bulkRestoreRestoreDeleted}
               onChange={(event) => setBulkRestoreRestoreDeleted(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+              className={uiCheckboxClass}
             />
             Restore deleted objects to their latest version
           </label>
@@ -103,7 +104,7 @@ export default function BrowserBulkRestoreModal({
               type="checkbox"
               checked={bulkRestoreDryRun}
               onChange={(event) => setBulkRestoreDryRun(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+              className={uiCheckboxClass}
             />
             Dry run (preview only)
           </label>

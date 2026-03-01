@@ -50,6 +50,11 @@ export type GeneralFeatureLocks = {
   endpoint_status_enabled: GeneralFeatureLock;
 };
 
+export type BrandingSettings = {
+  primary_color: string;
+  login_logo_url: string | null;
+};
+
 export type PortalIAMPolicySettings = {
   actions: string[];
   advanced_policy?: Record<string, unknown> | null;
@@ -133,6 +138,7 @@ export type AppSettings = {
   manager: ManagerSettings;
   browser: BrowserSettings;
   onboarding: OnboardingSettings;
+  branding: BrandingSettings;
 };
 
 export type PublicStorageEndpoint = {
@@ -185,6 +191,15 @@ export async function fetchLoginSettings(): Promise<LoginSettings> {
     seed_login_prefill: Boolean(normalized.seed_login_prefill ?? false),
     seed_login_email: normalized.seed_login_email ?? null,
     seed_login_password: normalized.seed_login_password ?? null,
+  };
+}
+
+export async function fetchBrandingSettings(): Promise<BrandingSettings> {
+  const { data } = await client.get<BrandingSettings>("/settings/branding");
+  const normalized = (data && typeof data === "object" ? data : {}) as Partial<BrandingSettings>;
+  return {
+    primary_color: typeof normalized.primary_color === "string" ? normalized.primary_color : "#0ea5e9",
+    login_logo_url: typeof normalized.login_logo_url === "string" ? normalized.login_logo_url : null,
   };
 }
 

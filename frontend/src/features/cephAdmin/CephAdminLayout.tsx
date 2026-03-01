@@ -9,6 +9,7 @@ import { SidebarSection } from "../../components/Sidebar";
 import PageBanner from "../../components/PageBanner";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndpointContext";
+import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 
 function CephAdminShell() {
   const { generalSettings } = useGeneralSettings();
@@ -82,32 +83,65 @@ function CephAdminShell() {
   }));
   const pillClasses =
     "inline-flex h-9 items-center rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
+  const selectedEndpointLabel = selectedEndpoint ? selectedEndpoint.name : loading ? "Loading..." : "No endpoint selected";
 
-  const topbarContent = (
-    <div className="flex items-center gap-3">
-      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Endpoint</span>
-      {showSelector ? (
-        <TopbarDropdownSelect
-          value={selectedEndpointId ? String(selectedEndpointId) : ""}
-          options={endpointOptions}
-          onChange={handleChange}
-          ariaLabel="Select Ceph endpoint"
-          title={selectedEndpoint?.endpoint_url ?? undefined}
-          widthClassName="w-80"
-          icon={<EndpointIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
-          disabled={!selectorEnabled || loading}
-        />
-      ) : (
-        <div className={`${pillClasses} gap-2`}>
-          <EndpointIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
-          <span>{selectedEndpoint ? selectedEndpoint.name : loading ? "Loading..." : "No endpoint selected"}</span>
-        </div>
-      )}
-    </div>
-  );
+  const renderStaticEndpointPill = (mode: "icon" | "icon_label") => {
+    if (mode === "icon") {
+      return (
+        <button
+          type="button"
+          aria-label={`Endpoint ${selectedEndpointLabel}`}
+          title={selectedEndpoint?.endpoint_url ?? selectedEndpointLabel}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+        >
+          <EndpointIcon className="h-4 w-4" />
+        </button>
+      );
+    }
+    return (
+      <div className={`${pillClasses} gap-2`}>
+        <EndpointIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
+        <span className="max-w-[20rem] truncate">{selectedEndpointLabel}</span>
+      </div>
+    );
+  };
+
+  const topbarControlDescriptors: TopbarControlDescriptor[] = [
+    {
+      id: "endpoint",
+      icon: <EndpointIcon className="h-4 w-4" />,
+      selectedLabel: selectedEndpointLabel,
+      priority: 20,
+      estimatedIconWidth: 36,
+      estimatedLabelWidth: 216,
+      renderControl: (mode) =>
+        showSelector ? (
+          <TopbarDropdownSelect
+            value={selectedEndpointId ? String(selectedEndpointId) : ""}
+            options={endpointOptions}
+            onChange={handleChange}
+            ariaLabel="Select Ceph endpoint"
+            triggerLabel="Endpoint"
+            title={selectedEndpoint?.endpoint_url ?? undefined}
+            widthClassName={mode === "icon" ? "w-9" : "w-52 lg:w-64 xl:w-80"}
+            icon={<EndpointIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
+            disabled={!selectorEnabled || loading}
+            triggerMode={mode}
+          />
+        ) : (
+          renderStaticEndpointPill(mode)
+        ),
+    },
+  ];
 
   return (
-    <Layout navSections={navSections} sidebarTitle="CEPH ADMIN" hideHeader topbarContent={topbarContent}>
+    <Layout
+      navSections={navSections}
+      headerTitle="Ceph Admin"
+      sidebarTitle="CEPH ADMIN"
+      hideHeader
+      topbarControlDescriptors={topbarControlDescriptors}
+    >
       <>
         {error && <PageBanner tone="warning" className="mb-4">{error}</PageBanner>}
         {selectedEndpointAccessError && <PageBanner tone="warning" className="mb-4">{selectedEndpointAccessError}</PageBanner>}

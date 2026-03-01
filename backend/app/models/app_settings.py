@@ -1,6 +1,8 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import re
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -154,6 +156,44 @@ class GeneralFeatureLocks(BaseModel):
     endpoint_status_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
 
 
+class BrandingSettings(BaseModel):
+    primary_color: str = "#0ea5e9"
+    login_logo_url: Optional[str] = None
+
+    @field_validator("primary_color", mode="before")
+    @classmethod
+    def normalize_primary_color(cls, value: Optional[str]) -> str:
+        if value is None:
+            return "#0ea5e9"
+        if not isinstance(value, str):
+            raise ValueError("primary_color must be a string")
+        normalized = value.strip().lower()
+        if not normalized:
+            return "#0ea5e9"
+        if not re.fullmatch(r"#[0-9a-f]{6}", normalized):
+            raise ValueError("primary_color must be a hex color in #rrggbb format")
+        return normalized
+
+    @field_validator("login_logo_url", mode="before")
+    @classmethod
+    def normalize_login_logo_url(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("login_logo_url must be a string")
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if normalized.startswith("/"):
+            return normalized
+        if normalized.startswith("data:image/"):
+            return normalized
+        parsed = urlparse(normalized)
+        if parsed.scheme in {"http", "https"} and bool(parsed.netloc):
+            return normalized
+        raise ValueError("login_logo_url must be http(s), root-relative (/...), or data:image/... URL")
+
+
 class LoginSettings(BaseModel):
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False
@@ -227,3 +267,4 @@ class AppSettings(BaseModel):
     manager: ManagerSettings = ManagerSettings()
     browser: BrowserSettings = BrowserSettings()
     onboarding: OnboardingSettings = OnboardingSettings()
+    branding: BrandingSettings = BrandingSettings()

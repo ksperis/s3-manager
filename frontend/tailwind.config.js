@@ -1,3 +1,9 @@
+const PRIMARY_SHADES = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+const primaryPalette = Object.fromEntries(
+  PRIMARY_SHADES.map((shade) => [shade, `rgb(var(--ui-primary-${shade}-rgb) / <alpha-value>)`])
+);
+primaryPalette.DEFAULT = "rgb(var(--ui-primary-500-rgb) / <alpha-value>)";
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: "class",
@@ -8,19 +14,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: "#f0f9ff",
-          100: "#e0f2fe",
-          200: "#bae6fd",
-          300: "#7dd3fc",
-          400: "#38bdf8",
-          500: "#0ea5e9",
-          600: "#0284c7",
-          700: "#0369a1",
-          800: "#075985",
-          900: "#0c4a6e",
-          DEFAULT: "#0ea5e9",
-        },
+        primary: primaryPalette,
         sidebar: {
           DEFAULT: "#0b1727",
           dark: "#0f172a",

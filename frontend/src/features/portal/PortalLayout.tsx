@@ -10,6 +10,7 @@ import { PortalAccountProvider, usePortalAccountContext } from "./PortalAccountC
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useI18n } from "../../i18n";
+import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 
 type StoredUser = {
   account_links?: { account_id: number; account_role?: string | null }[] | null;
@@ -34,10 +35,26 @@ function resolvePortalRole(user: StoredUser | null, accountId: string | null): s
   return link?.account_role ?? null;
 }
 
-function AccountSelector() {
+type AccountSelectorProps = {
+  triggerMode?: "icon" | "icon_label";
+  openInPortal?: boolean;
+  widthClassName?: string;
+  menuMinWidthClassName?: string;
+};
+
+function AccountSelector({
+  triggerMode = "icon_label",
+  openInPortal = true,
+  widthClassName,
+  menuMinWidthClassName = "min-w-full",
+}: AccountSelectorProps) {
   const { t } = useI18n();
   const { accounts, selectedAccountId, setSelectedAccountId, selectedAccount, loading, error } = usePortalAccountContext();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
+  const iconOnly = triggerMode === "icon";
+  const selectedLabel = selectedAccount
+    ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
+    : t({ en: "No account", fr: "Aucun compte", de: "Kein Konto" });
   const options: TopbarDropdownOption[] = [
     ...(!selectedAccount
       ? [
@@ -55,21 +72,52 @@ function AccountSelector() {
   ];
   const pillClasses =
     "inline-flex h-9 w-56 items-center rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
+  const iconButtonClasses =
+    "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
 
   if (loading) {
+    if (iconOnly) {
+      return (
+        <button
+          type="button"
+          disabled
+          aria-label={t({ en: "Loading account", fr: "Chargement du compte", de: "Konto wird geladen" })}
+          className={iconButtonClasses}
+        >
+          <AccountControlIcon className="h-4 w-4 animate-pulse" />
+        </button>
+      );
+    }
     return <div className={pillClasses}>{t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })}</div>;
   }
 
   if (error) {
+    if (iconOnly) {
+      return (
+        <button type="button" aria-label={error} title={error} className={`${iconButtonClasses} text-rose-600 dark:text-rose-300`}>
+          <WarningIcon className="h-4 w-4" />
+        </button>
+      );
+    }
     return <div className="ui-body font-semibold text-rose-600">{error}</div>;
   }
 
   if (accounts.length <= 1) {
+    if (iconOnly) {
+      return (
+        <button
+          type="button"
+          aria-label={selectedLabel}
+          title={selectedAccount?.storage_endpoint_url || selectedLabel}
+          className={iconButtonClasses}
+        >
+          <AccountControlIcon className="h-4 w-4" />
+        </button>
+      );
+    }
     return (
       <div className={pillClasses} title={selectedAccount?.storage_endpoint_url || undefined}>
-        {selectedAccount
-          ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
-          : t({ en: "No account", fr: "Aucun compte", de: "Kein Konto" })}
+        {selectedLabel}
       </div>
     );
   }
@@ -85,18 +133,29 @@ function AccountSelector() {
       options={options}
       onChange={handleChange}
       ariaLabel={t({ en: "Select portal account", fr: "Selectionner un compte portail", de: "Portal-Konto auswahlen" })}
-      widthClassName="w-56"
+      triggerLabel={t({ en: "Account", fr: "Compte", de: "Konto" })}
+      widthClassName={widthClassName ?? (iconOnly ? "w-9" : "w-56 lg:w-64")}
+      menuMinWidthClassName={menuMinWidthClassName}
+      triggerMode={triggerMode}
+      openInPortal={openInPortal}
+      icon={<AccountControlIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />}
     />
   );
 }
 
 function PortalShell() {
   const { t } = useI18n();
-  const { selectedAccountId } = usePortalAccountContext();
+  const { selectedAccountId, selectedAccount, loading } = usePortalAccountContext();
   const { generalSettings } = useGeneralSettings();
+  const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const accountRole = resolvePortalRole(getStoredUser(), selectedAccountId);
   const hideSidebar = accountRole === "portal_user";
   const isPortalManager = accountRole === "portal_manager";
+  const selectedPortalLabel = selectedAccount
+    ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
+    : loading
+      ? t({ en: "Loading...", fr: "Chargement...", de: "Wird geladen..." })
+      : t({ en: "No account", fr: "Aucun compte", de: "Kein Konto" });
   const navSections: SidebarSection[] = [
     {
       label: t({ en: "Portal", fr: "Portail", de: "Portal" }),
@@ -115,6 +174,20 @@ function PortalShell() {
     },
   ];
 
+  const topbarControlDescriptors: TopbarControlDescriptor[] = [
+    {
+      id: "account",
+      icon: <AccountControlIcon className="h-4 w-4" />,
+      selectedLabel: selectedPortalLabel,
+      priority: 10,
+      estimatedIconWidth: 36,
+      estimatedLabelWidth: 220,
+      renderControl: (mode) => (
+        <AccountSelector triggerMode={mode} openInPortal widthClassName={mode === "icon" ? "w-9" : "w-56 lg:w-64"} />
+      ),
+    },
+  ];
+
   return (
     <Layout
       headerTitle={t({ en: "Portal", fr: "Portail", de: "Portal" })}
@@ -122,14 +195,7 @@ function PortalShell() {
       sidebarTitle="PORTAL"
       hideSidebar={hideSidebar}
       hideHeader
-      topbarContent={
-        <div className="flex items-center gap-3">
-          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            {t({ en: "Account", fr: "Compte", de: "Konto" })}
-          </span>
-          <AccountSelector />
-        </div>
-      }
+      topbarControlDescriptors={topbarControlDescriptors}
     >
       <Outlet />
     </Layout>
@@ -141,5 +207,26 @@ export default function PortalLayout() {
     <PortalAccountProvider>
       <PortalShell />
     </PortalAccountProvider>
+  );
+}
+
+function AccountControlIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" strokeWidth={1.5} />
+      <path strokeLinecap="round" strokeWidth={1.5} d="M3 10h18" />
+      <circle cx="8.5" cy="14.2" r="1.1" strokeWidth={1.4} />
+      <path strokeLinecap="round" strokeWidth={1.5} d="M12 14.2h6" />
+    </svg>
+  );
+}
+
+function WarningIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="m12 4 9 16H3l9-16Z" />
+      <path strokeLinecap="round" strokeWidth={1.7} d="M12 9v5.5" />
+      <circle cx="12" cy="17.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
   );
 }

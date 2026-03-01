@@ -9,6 +9,7 @@ import { ZipWriter } from "@zip.js/zip.js";
 import axios from "axios";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
 import {
   S3_BUCKET_NAME_MAX_LENGTH,
@@ -73,6 +74,7 @@ import ObjectAdvancedModal from "./ObjectAdvancedModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { S3AccountProvider } from "../manager/S3AccountContext";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
+import { resolveBrowserPanelVisibility } from "./browserResponsivePanels";
 import {
   BucketIcon,
   ChevronDownIcon,
@@ -84,7 +86,6 @@ import {
   FileIcon,
   FolderIcon,
   FolderPlusIcon,
-  GridIcon,
   HistoryIcon,
   ListIcon,
   LinkIcon,
@@ -122,9 +123,6 @@ import {
   countBadgeClasses,
   filterChipActiveClasses,
   filterChipClasses,
-  gridQuickActionClasses,
-  gridQuickActionDangerClasses,
-  gridTitleClampStyle,
   iconButtonClasses,
   iconButtonDangerClasses,
   storageClassChipClasses,
@@ -236,6 +234,8 @@ const PATH_SUGGESTIONS_LIMIT = 20;
 const PATH_SUGGESTIONS_API_LIMIT = 50;
 const PATH_HISTORY_LIMIT = 20;
 const PATH_HISTORY_STORAGE_KEY = "browser:path-history:v1";
+const PANELS_DISABLE_MAX_WIDTH_PX = 1023;
+const PANELS_DISABLE_MEDIA_QUERY = `(max-width: ${PANELS_DISABLE_MAX_WIDTH_PX}px)`;
 const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
   history: 300,
   local: 200,
@@ -441,6 +441,10 @@ export default function BrowserPage({
   const [showPrefixVersions, setShowPrefixVersions] = useState(false);
   const [showFolders, setShowFolders] = useState(Boolean(allowFoldersPanel && defaultShowFolders));
   const [showInspector, setShowInspector] = useState(Boolean(allowInspectorPanel && defaultShowInspector));
+  const [isNarrowViewport, setIsNarrowViewport] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
+  });
   const [inspectorTab, setInspectorTab] = useState<"context" | "bucket" | "selection" | "details">("context");
   const [compactMode, setCompactMode] = useState(true);
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
@@ -494,7 +498,6 @@ export default function BrowserPage({
   const [bucketInspectorError, setBucketInspectorError] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [showDeletedObjects, setShowDeletedObjects] = useState(false);
   const [showFolderItems, setShowFolderItems] = useState(true);
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "folder">("all");
@@ -678,6 +681,33 @@ export default function BrowserPage({
   const clipboardAccountId = normalizeAccountId(clipboard?.sourceAccountId ?? null);
   const clipboardMatchesContext = Boolean(clipboard && clipboardAccountId === currentAccountId);
   const canPaste = Boolean(clipboard && bucketName && hasS3AccountContext && clipboardMatchesContext);
+  const { canUseFoldersPanel, canUseInspectorPanel, isFoldersPanelVisible, isInspectorPanelVisible } =
+    resolveBrowserPanelVisibility({
+      allowFoldersPanel,
+      allowInspectorPanel,
+      isNarrowViewport,
+      showFolders,
+      showInspector,
+    });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia(PANELS_DISABLE_MEDIA_QUERY);
+    const syncViewportWidth = () => {
+      setIsNarrowViewport(mediaQuery.matches);
+    };
+    syncViewportWidth();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncViewportWidth);
+      return () => {
+        mediaQuery.removeEventListener("change", syncViewportWidth);
+      };
+    }
+    mediaQuery.addListener(syncViewportWidth);
+    return () => {
+      mediaQuery.removeListener(syncViewportWidth);
+    };
+  }, []);
 
   useEffect(() => {
     if (!allowFoldersPanel && showFolders) {
@@ -692,14 +722,14 @@ export default function BrowserPage({
   }, [allowInspectorPanel, showInspector]);
 
   const toggleFoldersPanel = useCallback(() => {
-    if (!allowFoldersPanel) return;
+    if (!canUseFoldersPanel) return;
     setShowFolders((prev) => !prev);
-  }, [allowFoldersPanel]);
+  }, [canUseFoldersPanel]);
 
   const toggleInspectorPanel = useCallback(() => {
-    if (!allowInspectorPanel) return;
+    if (!canUseInspectorPanel) return;
     setShowInspector((prev) => !prev);
-  }, [allowInspectorPanel]);
+  }, [canUseInspectorPanel]);
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   const isVersioningEnabled = bucketVersioningEnabled;
@@ -1030,7 +1060,6 @@ export default function BrowserPage({
   }, [showBucketMenu]);
 
   useEffect(() => {
-    if (viewMode !== "list") return;
     const header = nameHeaderRef.current;
     if (!header || typeof ResizeObserver === "undefined") return;
     const updateControls = () => {
@@ -1041,7 +1070,7 @@ export default function BrowserPage({
     const observer = new ResizeObserver(() => updateControls());
     observer.observe(header);
     return () => observer.disconnect();
-  }, [viewMode]);
+  }, []);
 
 
 
@@ -1965,11 +1994,11 @@ export default function BrowserPage({
     return previewKindForItem(previewItem, previewContentType);
   }, [previewContentType, previewItem]);
 
-  const layoutClass = showFolders && showInspector
+  const layoutClass = isFoldersPanelVisible && isInspectorPanelVisible
     ? "xl:grid-cols-[200px_minmax(0,1fr)_320px]"
-    : showFolders
+    : isFoldersPanelVisible
       ? "xl:grid-cols-[200px_minmax(0,1fr)]"
-      : showInspector
+      : isInspectorPanelVisible
         ? "xl:grid-cols-[minmax(0,1fr)_320px]"
         : "xl:grid-cols-[minmax(0,1fr)]";
   const rowPadding = compactMode ? "py-1" : "py-2.5";
@@ -1978,9 +2007,6 @@ export default function BrowserPage({
   const headerPadding = compactMode ? "py-2" : "py-3";
   const iconBoxClasses = compactMode ? "h-7 w-7" : "h-9 w-9";
   const nameGapClasses = compactMode ? "gap-2" : "gap-3";
-  const gridCardHeightClasses = "min-h-[240px]";
-  const gridCardGapClasses = "gap-3";
-
   const prefixVersionRows = useMemo(
     () => buildVersionRows(prefixVersions, prefixDeleteMarkers),
     [prefixDeleteMarkers, prefixVersions]
@@ -2662,7 +2688,7 @@ export default function BrowserPage({
   };
 
   const toggleInspectorForItem = (item: BrowserItem) => {
-    if (!allowInspectorPanel) return;
+    if (!canUseInspectorPanel) return;
     setActiveItem(item);
     setInspectorTab("details");
   };
@@ -6212,8 +6238,8 @@ export default function BrowserPage({
     hasFailedOperations ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100" : ""
   }`;
   const isCreateBucketNameValid = !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
-  const showFolderToggle = showPanelToggles && allowFoldersPanel;
-  const showInspectorToggle = showPanelToggles && allowInspectorPanel;
+  const showFolderToggle = showPanelToggles && canUseFoldersPanel;
+  const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
@@ -6511,36 +6537,21 @@ export default function BrowserPage({
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => {
-                  setViewMode("list");
-                  setCompactMode(true);
-                }}
-                className={`${viewToggleBaseClasses} ${viewMode === "list" && compactMode ? viewToggleActiveClasses : ""}`}
+                onClick={() => setCompactMode(true)}
+                className={`${viewToggleBaseClasses} ${compactMode ? viewToggleActiveClasses : ""}`}
                 aria-label="Compact list view"
-                aria-pressed={viewMode === "list" && compactMode}
+                aria-pressed={compactMode}
               >
                 <CompactIcon className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setViewMode("list");
-                  setCompactMode(false);
-                }}
-                className={`${viewToggleBaseClasses} ${viewMode === "list" && !compactMode ? viewToggleActiveClasses : ""}`}
+                onClick={() => setCompactMode(false)}
+                className={`${viewToggleBaseClasses} ${!compactMode ? viewToggleActiveClasses : ""}`}
                 aria-label="List view"
-                aria-pressed={viewMode === "list" && !compactMode}
+                aria-pressed={!compactMode}
               >
                 <ListIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                className={`${viewToggleBaseClasses} ${viewMode === "grid" ? viewToggleActiveClasses : ""}`}
-                aria-label="Grid view"
-                aria-pressed={viewMode === "grid"}
-              >
-                <GridIcon className="h-3.5 w-3.5" />
               </button>
             </div>
             <button
@@ -6627,7 +6638,7 @@ export default function BrowserPage({
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
           <div className={`grid min-h-0 flex-1 grid-rows-1 gap-3 ${layoutClass}`}>
-            {showFolders && (
+            {isFoldersPanelVisible && (
               <div className="flex min-h-0 h-full flex-col rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Folders</p>
                 <div className="mt-3 min-h-0 flex-1 overflow-x-auto overflow-y-auto pr-1">
@@ -6662,8 +6673,7 @@ export default function BrowserPage({
                         </div>
                       </div>
                     )}
-                    {viewMode === "list" ? (
-                      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto" onClick={handleListBackgroundClick}>
+                    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto" onClick={handleListBackgroundClick}>
                         <table className="manager-table min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
                           <thead className="bg-slate-50 dark:bg-slate-900/50">
                             <tr>
@@ -6673,7 +6683,7 @@ export default function BrowserPage({
                                   checked={allSelected}
                                   onChange={toggleAllSelection}
                                   aria-label="Select all"
-                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                                  className={uiCheckboxClass}
                                 />
                               </th>
                               <th
@@ -6810,7 +6820,7 @@ export default function BrowserPage({
                                     checked={isSelected}
                                     onChange={() => toggleSelection(item.id)}
                                     aria-label={`Select ${item.name}`}
-                                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                                    className={uiCheckboxClass}
                                   />
                                 </td>
                                 <td
@@ -6953,7 +6963,7 @@ export default function BrowserPage({
                                     >
                                       <TrashIcon />
                                     </button>
-                                    {allowInspectorPanel && (
+                                    {canUseInspectorPanel && (
                                       <button
                                         type="button"
                                         className={iconButtonClasses}
@@ -6972,239 +6982,6 @@ export default function BrowserPage({
                           </tbody>
                         </table>
                       </div>
-                    ) : (
-                      <div
-                        className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
-                        onClick={handleListBackgroundClick}
-                      >
-                        {objectsLoading && (
-                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                            Loading objects...
-                          </div>
-                        )}
-                        {!objectsLoading && !bucketName && (
-                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                            Select a bucket to browse objects.
-                          </div>
-                        )}
-                        {!objectsLoading && bucketName && objectsError && (
-                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                            {objectsError}
-                          </div>
-                        )}
-                        {!objectsLoading && bucketName && !objectsError && listItems.length === 0 && (
-                          <div className="col-span-full rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center ui-body text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                            No objects found for this path.
-                          </div>
-                        )}
-                        {listItems.map((item) => {
-                          const selected = selectedSet.has(item.id);
-                          const isDeleted = Boolean(item.isDeleted);
-                          return (
-                            <div
-                              key={item.id}
-                              data-browser-item
-                              className={`group relative flex ${gridCardGapClasses} ${gridCardHeightClasses} flex-col overflow-hidden rounded-2xl border p-4 shadow-sm transition ${
-                                selected
-                                  ? "border-primary-200 bg-primary-50/60 shadow-[0_12px_24px_-16px_rgba(79,70,229,0.45)] dark:border-primary-700/60 dark:bg-primary-500/20"
-                                  : isDeleted
-                                    ? "border-rose-200 bg-rose-50/70 dark:border-rose-500/40 dark:bg-rose-900/20"
-                                  : "border-slate-200 bg-white/90 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-primary-700/60"
-                              }`}
-                              onDoubleClick={(event) => handleItemDoubleClick(event, item)}
-                              onContextMenu={(event) => handleItemContextMenu(event, item)}
-                            >
-                              <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-slate-50/90 to-transparent dark:from-slate-900/60" />
-                              <div className="relative flex items-center justify-between">
-                                <input
-                                  type="checkbox"
-                                  checked={selected}
-                                  onChange={() => toggleSelection(item.id)}
-                                  aria-label={`Select ${item.name}`}
-                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                                />
-                                {allowInspectorPanel && (
-                                  <button
-                                    type="button"
-                                    className={iconButtonClasses}
-                                    aria-label="Focus"
-                                    onClick={() => toggleInspectorForItem(item)}
-                                  >
-                                    <MoreIcon />
-                                  </button>
-                                )}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={(event) => handleItemNameClick(event, item)}
-                                onDoubleClick={() => {
-                                  if (item.type === "folder") {
-                                    handleOpenItem(item);
-                                    return;
-                                  }
-                                  if (item.isDeleted) {
-                                    if (isVersioningEnabled) {
-                                      openObjectVersionsModal(item);
-                                    }
-                                    return;
-                                  }
-                                  handlePreviewItem(item);
-                                }}
-                                className="relative flex min-w-0 flex-1 items-start gap-3 text-left"
-                              >
-                                <span
-                                  className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border shadow-sm ${
-                                    isDeleted
-                                      ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-900/20 dark:text-rose-200"
-                                      : item.type === "folder"
-                                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-900/20 dark:text-amber-200"
-                                      : "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-200"
-                                  }`}
-                                >
-                                  {item.type === "folder" ? <FolderIcon /> : isDeleted ? <TrashIcon /> : <FileIcon />}
-                                </span>
-                                <span className="min-w-0">
-                                  <span
-                                    className={`flex min-w-0 items-baseline gap-1 break-words ui-body font-semibold leading-snug ${
-                                      isDeleted ? "text-rose-700 dark:text-rose-200" : "text-slate-900 dark:text-slate-100"
-                                    }`}
-                                    style={gridTitleClampStyle}
-                                    title={item.name}
-                                  >
-                                    <span className="min-w-0">{item.name}</span>
-                                    {isDeleted && (
-                                      <span className="shrink-0 ui-caption font-semibold text-rose-500 dark:text-rose-300">
-                                        (deleted)
-                                      </span>
-                                    )}
-                                  </span>
-                                  {!isDeleted && (
-                                    <span className="mt-1 block ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                      {item.type === "folder" ? "Folder" : "File"}
-                                    </span>
-                                  )}
-                                </span>
-                              </button>
-                              <div className="flex flex-wrap items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
-                                <span className="rounded-full border border-slate-200 px-2 py-0.5 font-semibold dark:border-slate-700">
-                                  {item.type === "folder"
-                                    ? (isDeleted ? "Deleted folder" : "Prefix")
-                                    : isDeleted
-                                      ? "Deleted object"
-                                      : "Object"}
-                                </span>
-                                {isDeleted && (
-                                  <span className="rounded-full border border-rose-200 px-2 py-0.5 font-semibold text-rose-700 dark:border-rose-500/40 dark:text-rose-200">
-                                    {item.type === "folder" ? "Delete markers" : "Delete marker"}
-                                  </span>
-                                )}
-                                {item.storageClass && (
-                                  <span
-                                    className={`rounded-full border px-2 py-0.5 font-semibold ${
-                                      storageClassChipClasses[item.storageClass] ??
-                                      "border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                                    }`}
-                                  >
-                                    {item.storageClass}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="grid grid-cols-2 gap-2 ui-caption text-slate-500 dark:text-slate-400">
-                                <div className="min-w-0 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2 py-1 dark:border-slate-700/60 dark:bg-slate-900/50">
-                                  <div className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Size
-                                  </div>
-                                  <div className="font-semibold text-slate-700 dark:text-slate-200">{item.size}</div>
-                                </div>
-                                <div className="min-w-0 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2 py-1 dark:border-slate-700/60 dark:bg-slate-900/50">
-                                  <div className="ui-caption font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Modified
-                                  </div>
-                                  <div
-                                    className="truncate font-semibold text-slate-700 dark:text-slate-200"
-                                    title={item.modified}
-                                  >
-                                    {item.modified}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="mt-auto flex flex-nowrap gap-1.5">
-                                {item.type === "folder" && (
-                                  <button
-                                    type="button"
-                                    className={gridQuickActionClasses}
-                                    aria-label="Open"
-                                    title="Open"
-                                    onClick={() => handleOpenItem(item)}
-                                  >
-                                    <OpenIcon className="h-3.5 w-3.5" />
-                                    <span className="min-w-0 truncate">Open</span>
-                                  </button>
-                                )}
-                                {item.type === "file" && !isDeleted && (
-                                  <button
-                                    type="button"
-                                    className={gridQuickActionClasses}
-                                    aria-label="Preview"
-                                    title="Preview"
-                                    onClick={() => handlePreviewItem(item)}
-                                  >
-                                    <EyeIcon className="h-3.5 w-3.5" />
-                                    <span className="min-w-0 truncate">Preview</span>
-                                  </button>
-                                )}
-                                {item.type === "file" && isDeleted && isVersioningEnabled && (
-                                  <button
-                                    type="button"
-                                    className={gridQuickActionClasses}
-                                    aria-label="Versions"
-                                    title="Versions"
-                                    onClick={() => openObjectVersionsModal(item)}
-                                  >
-                                    <HistoryIcon className="h-3.5 w-3.5" />
-                                    <span className="min-w-0 truncate">Versions</span>
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  className={gridQuickActionClasses}
-                                  aria-label="Download"
-                                  title={isDeleted ? "Restore from versions before download" : "Download"}
-                                  onClick={() => handleDownloadTarget(item)}
-                                  disabled={isDeleted}
-                                >
-                                  <DownloadIcon className="h-3.5 w-3.5" />
-                                  <span className="min-w-0 truncate">Download</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className={gridQuickActionDangerClasses}
-                                  aria-label="Delete"
-                                  title={isDeleted ? "Delete marker entries are managed in versions." : "Delete"}
-                                  onClick={() => handleDeleteItems([item])}
-                                  disabled={isDeleted}
-                                >
-                                  <TrashIcon className="h-3.5 w-3.5" />
-                                  <span className="min-w-0 truncate">Delete</span>
-                                </button>
-                                {allowInspectorPanel && (
-                                  <button
-                                    type="button"
-                                    className={gridQuickActionClasses}
-                                    aria-label="More actions"
-                                    title="More"
-                                    onClick={() => toggleInspectorForItem(item)}
-                                  >
-                                    <MoreIcon className="h-3.5 w-3.5" />
-                                    <span className="min-w-0 truncate">More</span>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
                     {objectsIsTruncated && objectsNextToken && (
                       <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900/60">
                         <button
@@ -7220,7 +6997,7 @@ export default function BrowserPage({
                   </div>
                 </div>
 
-                {showInspector && (
+                {isInspectorPanelVisible && (
                   <div className="flex min-h-0 h-full flex-col gap-3">
                     <div className="flex min-h-0 h-full flex-1 flex-col rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
                       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Inspector tabs">
@@ -7967,7 +7744,7 @@ export default function BrowserPage({
           versioningEnabled={isVersioningEnabled}
           showFolderItems={showFolderItems}
           showDeletedObjects={showDeletedObjects}
-          allowInspectorPanel={allowInspectorPanel}
+          allowInspectorPanel={canUseInspectorPanel}
           canPaste={canPaste}
           clipboard={clipboard}
           currentPath={currentPath}

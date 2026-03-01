@@ -11,6 +11,7 @@ import { S3AccountProvider, useS3AccountContext } from "./S3AccountContext";
 import { SidebarSection } from "../../components/Sidebar";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 
 type SessionCapabilities = {
   can_manage_iam?: boolean;
@@ -100,8 +101,6 @@ function ManagerShell() {
       ? `S3 user account: ${sessionS3AccountName}`
       : null;
 
-  const pillClasses =
-    "inline-flex h-9 items-center rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
   const selectedLabel = selected
     ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
     : "No account selected";
@@ -124,47 +123,59 @@ function ManagerShell() {
     setAccessMode(accessMode === "admin" ? "portal" : "admin");
   };
 
-  const inlineAction = (
-    <div className="flex items-center gap-4">
-      <div className="flex items-center gap-3">
-        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Context</span>
-        {requiresS3AccountSelection ? (
-          showSelector ? (
-            <TopbarContextAccountSelector
-              contexts={accounts}
-              selectedContextId={selectedS3AccountId}
-              onContextChange={handleS3AccountChange}
-              selectedLabel={selectedLabel}
-              identityLabel={identityLabel}
-              accessMode={accessMode}
-              canToggleAccess={canToggleAccess}
-              onToggleAccess={handleAccessModeToggle}
-              defaultEndpointId={defaultEndpointId}
-              defaultEndpointName={defaultEndpointName}
-            />
-          ) : (
-            <div className="inline-flex items-center gap-2">
-              <div className={pillClasses} title={identityLabel ?? undefined}>
-                {selectedLabel}
-              </div>
-              <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${modeVisual.classes}`}>
-                {modeVisual.shortLabel}
-              </span>
-            </div>
-          )
-        ) : (
-          <div className="inline-flex items-center gap-2">
-            <div className={pillClasses} title={identityLabel ?? undefined}>
-              {sessionS3AccountName || "S3 session"}
-            </div>
-            <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${modeVisual.classes}`}>
-              {modeVisual.shortLabel}
-            </span>
-          </div>
-        )}
+  const renderStaticAccountPill = (mode: "icon" | "icon_label") => {
+    if (mode === "icon") {
+      return (
+        <button
+          type="button"
+          aria-label={`Account context ${selectedLabel}`}
+          title={identityLabel ?? selectedLabel}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+        >
+          <AccountControlIcon className="h-4 w-4" />
+        </button>
+      );
+    }
+    return (
+      <div className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+        <AccountControlIcon className="h-4 w-4 text-slate-500 dark:text-slate-300" />
+        <span className="max-w-[20rem] truncate">{selectedLabel}</span>
+        <span className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${modeVisual.classes}`}>
+          {modeVisual.shortLabel}
+        </span>
       </div>
-    </div>
-  );
+    );
+  };
+
+  const topbarControlDescriptors: TopbarControlDescriptor[] = [
+    {
+      id: "account",
+      icon: <AccountControlIcon className="h-4 w-4" />,
+      selectedLabel,
+      priority: 10,
+      estimatedIconWidth: 36,
+      estimatedLabelWidth: 228,
+      renderControl: (mode) =>
+        requiresS3AccountSelection && showSelector ? (
+          <TopbarContextAccountSelector
+            contexts={accounts}
+            selectedContextId={selectedS3AccountId}
+            onContextChange={handleS3AccountChange}
+            selectedLabel={selectedLabel}
+            identityLabel={identityLabel}
+            accessMode={accessMode}
+            canToggleAccess={canToggleAccess}
+            onToggleAccess={handleAccessModeToggle}
+            defaultEndpointId={defaultEndpointId}
+            defaultEndpointName={defaultEndpointName}
+            widthClassName={mode === "icon" ? "w-9" : "w-44 lg:w-64 xl:w-[26rem] min-w-[11rem] max-w-[42vw]"}
+            triggerMode={mode}
+          />
+        ) : (
+          renderStaticAccountPill(mode)
+        ),
+    },
+  ];
 
   const navSections: SidebarSection[] = [
     {
@@ -214,7 +225,13 @@ function ManagerShell() {
   }
 
   return (
-    <Layout navSections={navSections} hideHeader topbarContent={inlineAction} sidebarTitle="MANAGER">
+    <Layout
+      navSections={navSections}
+      headerTitle="Manager"
+      hideHeader
+      sidebarTitle="MANAGER"
+      topbarControlDescriptors={topbarControlDescriptors}
+    >
       <>
         {accessError && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 ui-body text-amber-800 shadow-sm dark:border-amber-900/40 dark:bg-amber-900/30 dark:text-amber-100">
@@ -224,6 +241,17 @@ function ManagerShell() {
         <Outlet key={`${selectedS3AccountId ?? "session"}:${accessMode ?? "default"}`} />
       </>
     </Layout>
+  );
+}
+
+function AccountControlIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" strokeWidth={1.5} />
+      <path strokeLinecap="round" strokeWidth={1.5} d="M3 10h18" />
+      <circle cx="8.5" cy="14.2" r="1.1" strokeWidth={1.4} />
+      <path strokeLinecap="round" strokeWidth={1.5} d="M12 14.2h6" />
+    </svg>
   );
 }
 

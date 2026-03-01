@@ -21,6 +21,15 @@ backend-tests:
     - cd backend
     - PYTHONPATH=. python -m pytest tests -q
 
+frontend-quality:
+  stage: test
+  image: node:20
+  needs: []
+  script:
+    - cd frontend
+    - npm ci
+    - npm run check
+
 build-backend:
   stage: build
   needs: []

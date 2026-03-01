@@ -4,6 +4,7 @@
  */
 import axios from "axios";
 import { useEffect, useState } from "react";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   CephAdminRgwUserDetail,
   createCephAdminUser,
@@ -358,7 +359,7 @@ export default function CephAdminUserCreateModal({ endpointId, endpointUrl, onCl
               type="checkbox"
               checked={quotaEnabled}
               onChange={(event) => setQuotaEnabled(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+              className={uiCheckboxClass}
             />
             Configure user quota
           </label>

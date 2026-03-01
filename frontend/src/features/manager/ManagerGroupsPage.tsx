@@ -16,6 +16,7 @@ import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
+import { uiCheckboxClass } from "../../components/ui/styles";
 
 export default function ManagerGroupsPage() {
   const { selectedS3AccountType, accountIdForApi, requiresS3AccountSelection, selectedS3AccountId, accessMode } = useS3AccountContext();
@@ -364,7 +365,7 @@ export default function ManagerGroupsPage() {
                             >
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                                className={uiCheckboxClass}
                                 checked={checked}
                                 onChange={(e) => {
                                   if (e.target.checked) {

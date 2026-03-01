@@ -24,6 +24,7 @@ import TableEmptyState from "../../components/TableEmptyState";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { confirmDeletion } from "../../utils/confirm";
 import { DEFAULT_INLINE_POLICY_TEXT } from "./inlinePolicyTemplate";
 import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
@@ -350,7 +351,7 @@ export default function ManagerUsersPage() {
               </button>
               <Link
                 to={`/manager/users/${encodeURIComponent(createdForUser)}/keys`}
-                className="ui-body font-medium text-primary hover:text-sky-600 dark:text-primary-200 dark:hover:text-primary-100"
+                className="ui-body font-medium text-primary hover:text-primary-600 dark:text-primary-200 dark:hover:text-primary-100"
               >
                 Manage keys
               </Link>
@@ -546,15 +547,13 @@ export default function ManagerUsersPage() {
                 required
               />
             </div>
-            <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:text-slate-300">
-              <input
-                type="checkbox"
-                checked={createKey}
-                onChange={(e) => setCreateKey(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-              />
+            <UiCheckboxField
+              checked={createKey}
+              onChange={(e) => setCreateKey(e.target.checked)}
+              className="rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:text-slate-300"
+            >
               Auto-generate an access key (shown only once)
-            </label>
+            </UiCheckboxField>
             <div className="space-y-2 rounded-xl border border-dashed border-slate-200/80 p-3 dark:border-slate-700">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -582,24 +581,20 @@ export default function ManagerUsersPage() {
                   {groups.map((g) => {
                     const checked = selectedGroups.includes(g.name);
                     return (
-                      <label
+                      <UiCheckboxField
                         key={g.name}
-                        className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        checked={checked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedGroups((prev) => [...prev, g.name]);
+                          } else {
+                            setSelectedGroups((prev) => prev.filter((name) => name !== g.name));
+                          }
+                        }}
+                        className="rounded border border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       >
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                          checked={checked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedGroups((prev) => [...prev, g.name]);
-                            } else {
-                              setSelectedGroups((prev) => prev.filter((name) => name !== g.name));
-                            }
-                          }}
-                        />
                         {g.name}
-                      </label>
+                      </UiCheckboxField>
                     );
                   })}
                 </div>
@@ -646,25 +641,21 @@ export default function ManagerUsersPage() {
                         {filteredPolicies.map((policy) => {
                           const checked = selectedPolicies.includes(policy.arn);
                           return (
-                            <label
+                            <UiCheckboxField
                               key={policy.arn}
-                              className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              title={policy.arn}
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedPolicies((prev) => [...prev, policy.arn]);
+                                } else {
+                                  setSelectedPolicies((prev) => prev.filter((arn) => arn !== policy.arn));
+                                }
+                              }}
+                              className="rounded border border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              labelProps={{ title: policy.arn }}
                             >
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                                checked={checked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedPolicies((prev) => [...prev, policy.arn]);
-                                  } else {
-                                    setSelectedPolicies((prev) => prev.filter((arn) => arn !== policy.arn));
-                                  }
-                                }}
-                              />
                               <span>{policy.name}</span>
-                            </label>
+                            </UiCheckboxField>
                           );
                         })}
                       </div>
@@ -803,25 +794,21 @@ export default function ManagerUsersPage() {
                         {filteredPolicies.map((policy) => {
                           const checked = selectedPolicies.includes(policy.arn);
                           return (
-                            <label
+                            <UiCheckboxField
                               key={policy.arn}
-                              className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                              title={policy.arn}
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedPolicies((prev) => [...prev, policy.arn]);
+                                } else {
+                                  setSelectedPolicies((prev) => prev.filter((arn) => arn !== policy.arn));
+                                }
+                              }}
+                              className="rounded border border-slate-200 px-3 py-2 ui-body dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                              labelProps={{ title: policy.arn }}
                             >
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
-                                checked={checked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedPolicies((prev) => [...prev, policy.arn]);
-                                  } else {
-                                    setSelectedPolicies((prev) => prev.filter((arn) => arn !== policy.arn));
-                                  }
-                                }}
-                              />
                               <span>{policy.name}</span>
-                            </label>
+                            </UiCheckboxField>
                           );
                         })}
                       </div>

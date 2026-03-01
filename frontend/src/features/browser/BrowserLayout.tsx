@@ -11,6 +11,7 @@ import TopbarContextAccountSelector, {
 import { BrowserContextProvider, useBrowserContext } from "./BrowserContext";
 import { fetchManagerContext } from "../../api/managerContext";
 import { formatAccountLabel, useDefaultStorageEndpoint } from "../shared/storageEndpointLabel";
+import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 
 function BrowserShell() {
   const {
@@ -18,7 +19,6 @@ function BrowserShell() {
     selectedContextId,
     setSelectedContextId,
     requiresContextSelection,
-    selectedKind,
     sessionAccountName,
     accessError,
   } = useBrowserContext();
@@ -33,9 +33,6 @@ function BrowserShell() {
       ? `S3 Identity: ${iamIdentity}`
       : `IAM Identity: ${iamIdentity}`
     : null;
-  const baseControlClasses =
-    "h-9 w-60 rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold text-slate-700 shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus-visible:ring-offset-slate-900";
-  const pillClasses = `inline-flex items-center ${baseControlClasses} ${selected ? "" : "text-slate-500 dark:text-slate-400"}`;
   const selectedLabel = selected
     ? formatAccountLabel(selected, defaultEndpointId, defaultEndpointName)
     : requiresContextSelection
@@ -76,11 +73,42 @@ function BrowserShell() {
     setSelectedContextId(value);
   };
 
-  const inlineAction = (
-    <div className="flex items-center gap-4">
-      <div className="flex items-center gap-3">
-        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Context</span>
-        {showSelector ? (
+  const renderStaticAccountPill = (mode: "icon" | "icon_label") => {
+    if (mode === "icon") {
+      return (
+        <button
+          type="button"
+          aria-label={`Account context ${selectedLabel}`}
+          title={identityLabel ?? selectedLabel}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+        >
+          <AccountControlIcon className="h-4 w-4" />
+        </button>
+      );
+    }
+    return (
+      <div
+        className={`inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-3 ui-caption font-semibold shadow-sm dark:border-slate-700 dark:bg-slate-800 ${
+          selected ? "text-slate-700 dark:text-slate-100" : "text-slate-500 dark:text-slate-400"
+        }`}
+        title={identityLabel ?? undefined}
+      >
+        <AccountControlIcon className="h-4 w-4 text-slate-500 dark:text-slate-300" />
+        <span className="max-w-[20rem] truncate">{selectedLabel}</span>
+      </div>
+    );
+  };
+
+  const topbarControlDescriptors: TopbarControlDescriptor[] = [
+    {
+      id: "account",
+      icon: <AccountControlIcon className="h-4 w-4" />,
+      selectedLabel,
+      priority: 10,
+      estimatedIconWidth: 36,
+      estimatedLabelWidth: 228,
+      renderControl: (mode) =>
+        showSelector ? (
           <TopbarContextAccountSelector
             contexts={visibleContexts}
             selectedContextId={selectedContextId}
@@ -90,26 +118,21 @@ function BrowserShell() {
             accessMode={identityAccessMode ?? "session"}
             defaultEndpointId={defaultEndpointId}
             defaultEndpointName={defaultEndpointName}
+            widthClassName={mode === "icon" ? "w-9" : "w-44 lg:w-64 xl:w-[26rem] min-w-[11rem] max-w-[42vw]"}
+            triggerMode={mode}
           />
         ) : (
-          <div className={pillClasses} title={identityLabel ?? undefined}>
-            {selectedLabel}
-          </div>
-        )}
-        {requiresContextSelection && selectedKind === "legacy_user" && (
-          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
-            S3 user context
-          </span>
-        )}
-      </div>
-    </div>
-  );
+          renderStaticAccountPill(mode)
+        ),
+    },
+  ];
 
   return (
     <Layout
+      headerTitle="Browser"
       hideHeader
       hideSidebar
-      topbarContent={inlineAction}
+      topbarControlDescriptors={topbarControlDescriptors}
       mainClassName="pb-0"
       disableMainScroll
       fullHeight
@@ -123,6 +146,17 @@ function BrowserShell() {
         <Outlet key={`${selectedContextId ?? "none"}`} />
       </>
     </Layout>
+  );
+}
+
+function AccountControlIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" strokeWidth={1.5} />
+      <path strokeLinecap="round" strokeWidth={1.5} d="M3 10h18" />
+      <circle cx="8.5" cy="14.2" r="1.1" strokeWidth={1.4} />
+      <path strokeLinecap="round" strokeWidth={1.5} d="M12 14.2h6" />
+    </svg>
   );
 }
 

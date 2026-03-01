@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 import { useS3AccountContext } from "./S3AccountContext";
 import { S3AccountSelector } from "../../api/accountParams";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   IAMRole,
   attachRolePolicy,
@@ -516,7 +517,7 @@ export default function ManagerRolesPage() {
                             >
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                                className={uiCheckboxClass}
                                 checked={checked}
                                 onChange={(e) => {
                                   if (e.target.checked) {

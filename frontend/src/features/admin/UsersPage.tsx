@@ -354,7 +354,7 @@ const AssociationsTabs = ({
                             accounts.setSearch("");
                             accounts.setShowPanel(false);
                           }}
-                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         >
                           Add selected
                         </button>
@@ -499,7 +499,7 @@ const AssociationsTabs = ({
                             s3Users.setSearch("");
                             s3Users.setShowPanel(false);
                           }}
-                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         >
                           Add selected
                         </button>
@@ -647,7 +647,7 @@ const AssociationsTabs = ({
                             connections.setSearch("");
                             connections.setShowPanel(false);
                           }}
-                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                         >
                           Add selected
                         </button>
@@ -1671,7 +1671,7 @@ export default function UsersPage() {
               </button>
               <button
                 type="submit"
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 Create
               </button>
@@ -2000,7 +2000,7 @@ export default function UsersPage() {
               <button
                 type="submit"
                 disabled={busyId === editingUser.id}
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {busyId === editingUser.id ? "Saving..." : "Save"}
               </button>

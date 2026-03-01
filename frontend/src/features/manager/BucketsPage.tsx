@@ -6,6 +6,7 @@ import axios from "axios";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   Bucket,
   BucketFeatureStatus,
@@ -730,7 +731,7 @@ export default function BucketsPage() {
                               type="checkbox"
                               checked={visibleColumns.includes(opt.id)}
                               onChange={() => toggleColumn(opt.id)}
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                              className={uiCheckboxClass}
                             />
                           </label>
                         ))}
@@ -745,7 +746,7 @@ export default function BucketsPage() {
                               type="checkbox"
                               checked={visibleColumns.includes(opt.id)}
                               onChange={() => toggleColumn(opt.id)}
-                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                              className={uiCheckboxClass}
                             />
                           </label>
                         ))}
@@ -865,7 +866,7 @@ export default function BucketsPage() {
                       type="checkbox"
                       checked={useCustomLocationConstraint}
                       onChange={(e) => setUseCustomLocationConstraint(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      className={uiCheckboxClass}
                     />
                     <span>Custom LocationConstraint</span>
                   </label>

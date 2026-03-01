@@ -17,8 +17,41 @@
   --ui-border: #cbd5e1;
   --ui-text: #0f172a;
   --ui-text-muted: #475569;
-  --ui-primary: #0ea5e9;
-  --ui-primary-strong: #0284c7;
+  --ui-primary-light-50-rgb: 240 249 255;
+  --ui-primary-light-100-rgb: 224 242 254;
+  --ui-primary-light-200-rgb: 186 230 253;
+  --ui-primary-light-300-rgb: 125 211 252;
+  --ui-primary-light-400-rgb: 56 189 248;
+  --ui-primary-light-500-rgb: 14 165 233;
+  --ui-primary-light-600-rgb: 2 132 199;
+  --ui-primary-light-700-rgb: 3 105 161;
+  --ui-primary-light-800-rgb: 7 89 133;
+  --ui-primary-light-900-rgb: 12 74 110;
+  --ui-primary-light-950-rgb: 8 47 73;
+  --ui-primary-dark-50-rgb: 240 249 255;
+  --ui-primary-dark-100-rgb: 224 242 254;
+  --ui-primary-dark-200-rgb: 186 230 253;
+  --ui-primary-dark-300-rgb: 125 211 252;
+  --ui-primary-dark-400-rgb: 56 189 248;
+  --ui-primary-dark-500-rgb: 14 165 233;
+  --ui-primary-dark-600-rgb: 2 132 199;
+  --ui-primary-dark-700-rgb: 3 105 161;
+  --ui-primary-dark-800-rgb: 7 89 133;
+  --ui-primary-dark-900-rgb: 12 74 110;
+  --ui-primary-dark-950-rgb: 8 47 73;
+  --ui-primary-50-rgb: var(--ui-primary-light-50-rgb);
+  --ui-primary-100-rgb: var(--ui-primary-light-100-rgb);
+  --ui-primary-200-rgb: var(--ui-primary-light-200-rgb);
+  --ui-primary-300-rgb: var(--ui-primary-light-300-rgb);
+  --ui-primary-400-rgb: var(--ui-primary-light-400-rgb);
+  --ui-primary-500-rgb: var(--ui-primary-light-500-rgb);
+  --ui-primary-600-rgb: var(--ui-primary-light-600-rgb);
+  --ui-primary-700-rgb: var(--ui-primary-light-700-rgb);
+  --ui-primary-800-rgb: var(--ui-primary-light-800-rgb);
+  --ui-primary-900-rgb: var(--ui-primary-light-900-rgb);
+  --ui-primary-950-rgb: var(--ui-primary-light-950-rgb);
+  --ui-primary: rgb(var(--ui-primary-500-rgb));
+  --ui-primary-strong: rgb(var(--ui-primary-600-rgb));
   --ui-success: #059669;
   --ui-warning: #d97706;
   --ui-danger: #e11d48;
@@ -35,8 +68,19 @@
   --ui-border: #334155;
   --ui-text: #e2e8f0;
   --ui-text-muted: #94a3b8;
-  --ui-primary: #38bdf8;
-  --ui-primary-strong: #0ea5e9;
+  --ui-primary-50-rgb: var(--ui-primary-dark-50-rgb);
+  --ui-primary-100-rgb: var(--ui-primary-dark-100-rgb);
+  --ui-primary-200-rgb: var(--ui-primary-dark-200-rgb);
+  --ui-primary-300-rgb: var(--ui-primary-dark-300-rgb);
+  --ui-primary-400-rgb: var(--ui-primary-dark-400-rgb);
+  --ui-primary-500-rgb: var(--ui-primary-dark-500-rgb);
+  --ui-primary-600-rgb: var(--ui-primary-dark-600-rgb);
+  --ui-primary-700-rgb: var(--ui-primary-dark-700-rgb);
+  --ui-primary-800-rgb: var(--ui-primary-dark-800-rgb);
+  --ui-primary-900-rgb: var(--ui-primary-dark-900-rgb);
+  --ui-primary-950-rgb: var(--ui-primary-dark-950-rgb);
+  --ui-primary: rgb(var(--ui-primary-400-rgb));
+  --ui-primary-strong: rgb(var(--ui-primary-500-rgb));
   --ui-success: #34d399;
   --ui-warning: #fbbf24;
   --ui-danger: #fb7185;
@@ -163,7 +207,7 @@ a:hover {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(14, 165, 233, 0.6);
+  background: rgb(var(--ui-primary-500-rgb) / 0.6);
 }
 
 /* Keep manager data tables readable without horizontal scrolling */

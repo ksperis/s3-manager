@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from app.models.app_settings import AppSettings
+import pytest
+from pydantic import ValidationError
+
+from app.models.app_settings import AppSettings, BrandingSettings
 from app.services import app_settings_service
 
 
@@ -101,3 +104,21 @@ def test_general_feature_locks_include_dedicated_and_legacy_sources(monkeypatch)
     assert locks.endpoint_status_enabled.value is False
     assert locks.endpoint_status_enabled.source == "HEALTHCHECK_ENABLED"
 
+
+def test_branding_settings_defaults_and_normalizes_hex():
+    assert BrandingSettings().primary_color == "#0ea5e9"
+    assert BrandingSettings().login_logo_url is None
+    assert BrandingSettings(primary_color="  #A1B2C3 ").primary_color == "#a1b2c3"
+    assert BrandingSettings(login_logo_url="  https://cdn.example.com/logo.svg ").login_logo_url == "https://cdn.example.com/logo.svg"
+    assert BrandingSettings(login_logo_url="   ").login_logo_url is None
+    assert AppSettings(branding={"primary_color": ""}).branding.primary_color == "#0ea5e9"
+
+
+def test_branding_settings_reject_invalid_hex():
+    with pytest.raises(ValidationError):
+        BrandingSettings(primary_color="blue")
+
+
+def test_branding_settings_reject_invalid_logo_url():
+    with pytest.raises(ValidationError):
+        BrandingSettings(login_logo_url="logo.svg")

@@ -4,6 +4,7 @@
  */
 import axios from "axios";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   AccountUserLink,
   ImportS3AccountPayload,
@@ -1029,7 +1030,7 @@ export default function S3AccountsPage() {
               <button
                 type="submit"
                 disabled={creating || createPermissionLoading || !createEndpointCanWrite}
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
               >
                 {creating ? "Creating..." : "Create account"}
               </button>
@@ -1234,7 +1235,7 @@ export default function S3AccountsPage() {
                   setImportBusy(false);
                 }
               }}
-              className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+              className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
             >
               {importBusy ? "Importing..." : "Import"}
             </button>
@@ -1597,7 +1598,7 @@ export default function S3AccountsPage() {
                                 setUserSelections([]);
                                 setUserSearch("");
                               }}
-                              className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                              className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                             >
                               Add selected
                             </button>
@@ -1630,7 +1631,7 @@ export default function S3AccountsPage() {
                         type="button"
                         onClick={handleSaveAdminOverrides}
                         disabled={!portalAccountSettings || portalSettingsSaving}
-                        className="rounded-md bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                        className="rounded-md bg-primary px-3 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                       >
                         {portalSettingsSaving ? "Saving..." : "Save overrides"}
                       </button>
@@ -1869,7 +1870,7 @@ export default function S3AccountsPage() {
                                   type="checkbox"
                                   checked={adminBucketCorsOriginsOverride}
                                   onChange={(e) => setAdminBucketCorsOriginsOverride(e.target.checked)}
-                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                                  className={uiCheckboxClass}
                                   disabled={portalSettingsLoading || portalSettingsSaving}
                                 />
                                 <span>Override</span>
@@ -1906,7 +1907,7 @@ export default function S3AccountsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                  className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                 >
                   Save
                 </button>

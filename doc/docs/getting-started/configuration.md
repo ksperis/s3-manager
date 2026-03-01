@@ -35,3 +35,17 @@ Use this to:
 
 - deploy a **minimal credential-first console** (Browser surface only)
 - deploy a **platform console** (Admin + Manager + optional Portal)
+
+## Branding accent color
+
+You can customize branding from **Admin > General settings > Branding**.
+
+- Format: `#RRGGBB` (example: `#0057b8`)
+- Scope: full UI, including the login page
+- Behavior: light and dark primary scales are generated automatically from that single value
+- Optional login logo URL: `http(s)://...`, `/...` (root-relative), or `data:image/...`
+- Login logo placement: left panel of the login page (in place of the help/security cards when configured)
+- Fallback: if branding data cannot be fetched, the app keeps the default accent (`#0ea5e9`)
+
+This feature is intentionally lightweight and mainly targets the primary accent + login logo.
+It is not a full theme engine (no custom typography, layout system, or semantic status colors).

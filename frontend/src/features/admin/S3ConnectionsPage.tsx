@@ -725,7 +725,7 @@ export default function S3ConnectionsPage() {
                 Cancel
               </button>
               <button
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                 disabled={creating}
               >
                 {creating ? "Creating..." : "Create"}
@@ -987,7 +987,7 @@ export default function S3ConnectionsPage() {
                 Close
               </button>
               <button
-                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-60"
+                className="rounded-md bg-primary px-4 py-2 ui-body font-medium text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                 disabled={editBusy}
               >
                 {editBusy ? "Saving..." : "Save"}

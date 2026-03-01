@@ -5,6 +5,7 @@
 import axios from "axios";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
+import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   Bucket,
   BucketAcl,
@@ -2589,7 +2590,7 @@ export default function BucketDetailPage({
                                   setObjectLockEnabled(e.target.checked);
                                 }}
                                 disabled={objectLockPersistentlyEnabled}
-                                className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                                className={uiCheckboxClass}
                               />
                               Enable Object Lock
                             </label>
@@ -3632,7 +3633,7 @@ export default function BucketDetailPage({
                         setAccessLoggingError(null);
                       }}
                       disabled={accessLoggingLoading || savingAccessLogging || clearingAccessLogging}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary dark:border-slate-600"
+                      className={uiCheckboxClass}
                     />
                     Enable server access logging
                   </label>
