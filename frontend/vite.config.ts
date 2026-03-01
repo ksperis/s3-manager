@@ -20,11 +20,16 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes("node_modules")) return undefined;
-            if (id.includes("@aws-sdk")) return "aws-sdk";
+            if (
+              id.includes("@aws-sdk") ||
+              id.includes("@smithy") ||
+              id.includes("@aws-crypto") ||
+              id.includes("@aws/lambda-invoke-store")
+            ) {
+              return "aws-sdk";
+            }
             if (id.includes("recharts")) return "charts";
             if (id.includes("jszip") || id.includes("@zip.js")) return "zip";
-            if (id.includes("react-router-dom")) return "router";
-            if (id.includes("react")) return "react-vendor";
             return "vendor";
           },
         },

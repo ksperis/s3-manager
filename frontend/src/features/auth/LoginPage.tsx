@@ -5,13 +5,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchOidcProviders, login, loginWithKeys, startOidcLogin, type OidcProviderInfo } from "../../api/auth";
-import {
-  fetchBrandingSettings,
-  fetchGeneralSettings,
-  fetchLoginSettings,
-  type GeneralSettings,
-  type LoginSettings,
-} from "../../api/appSettings";
+import { fetchGeneralSettings, fetchLoginSettings, type GeneralSettings, type LoginSettings } from "../../api/appSettings";
 import { DEFAULT_GENERAL_SETTINGS, useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { useLanguage } from "../../components/language";
 import { prefetchWorkspaceBranch } from "../../utils/routePrefetch";
@@ -36,7 +30,6 @@ export default function LoginPage() {
   const [endpointLoading, setEndpointLoading] = useState(false);
   const [selectedEndpoint, setSelectedEndpoint] = useState("");
   const [customEndpoint, setCustomEndpoint] = useState("");
-  const [loginBrandingLogoUrl, setLoginBrandingLogoUrl] = useState<string | null>(null);
   const [loginBrandingLogoFailed, setLoginBrandingLogoFailed] = useState(false);
   const loadGeneralSettings = async (): Promise<GeneralSettings> => {
     try {
@@ -102,22 +95,8 @@ export default function LoginPage() {
   }, [loginSettings, selectedEndpoint, customEndpoint]);
 
   useEffect(() => {
-    let isMounted = true;
-    fetchBrandingSettings()
-      .then((branding) => {
-        if (!isMounted) return;
-        setLoginBrandingLogoUrl(branding.login_logo_url);
-        setLoginBrandingLogoFailed(false);
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setLoginBrandingLogoUrl(null);
-        setLoginBrandingLogoFailed(false);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    setLoginBrandingLogoFailed(false);
+  }, [loginSettings?.login_logo_url]);
 
   const handlePasswordLogin = async (event: FormEvent) => {
     event.preventDefault();
@@ -214,6 +193,7 @@ export default function LoginPage() {
   const allowEndpointList = Boolean(loginSettings?.allow_login_endpoint_list);
   const allowCustomEndpoint = Boolean(loginSettings?.allow_login_custom_endpoint);
   const endpointOptions = loginSettings?.endpoints ?? [];
+  const loginBrandingLogoUrl = loginSettings?.login_logo_url ?? null;
   const shouldShowLeftLogo = Boolean(loginBrandingLogoUrl && !loginBrandingLogoFailed);
   const inputClasses =
     "mt-1 w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2.5 ui-body text-slate-800 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30";

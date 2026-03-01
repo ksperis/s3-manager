@@ -20,7 +20,8 @@ def get_general_settings(_: object = Depends(get_current_actor)) -> GeneralSetti
 
 @router.get("/login", response_model=LoginSettings)
 def get_login_settings(db: Session = Depends(get_db)) -> LoginSettings:
-    general = load_app_settings().general
+    settings = load_app_settings()
+    general = settings.general
     allow_access_keys = bool(general.allow_login_access_keys)
     allow_list = bool(general.allow_login_endpoint_list)
     allow_custom = bool(general.allow_login_custom_endpoint)
@@ -49,6 +50,7 @@ def get_login_settings(db: Session = Depends(get_db)) -> LoginSettings:
         allow_login_custom_endpoint=allow_custom,
         default_endpoint_url=default_endpoint_url,
         endpoints=endpoints,
+        login_logo_url=settings.branding.login_logo_url,
         seed_login_prefill=False,
         seed_login_email=None,
         seed_login_password=None,

@@ -200,6 +200,7 @@ class LoginSettings(BaseModel):
     allow_login_custom_endpoint: bool = False
     default_endpoint_url: Optional[str] = None
     endpoints: list[StorageEndpointPublic] = Field(default_factory=list)
+    login_logo_url: Optional[str] = None
     seed_login_prefill: bool = False
     seed_login_email: Optional[str] = None
     seed_login_password: Optional[str] = None

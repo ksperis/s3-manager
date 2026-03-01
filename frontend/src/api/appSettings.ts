@@ -154,6 +154,7 @@ export type LoginSettings = {
   allow_login_custom_endpoint: boolean;
   default_endpoint_url?: string | null;
   endpoints: PublicStorageEndpoint[];
+  login_logo_url?: string | null;
   seed_login_prefill?: boolean;
   seed_login_email?: string | null;
   seed_login_password?: string | null;
@@ -188,6 +189,7 @@ export async function fetchLoginSettings(): Promise<LoginSettings> {
     allow_login_custom_endpoint: Boolean(normalized.allow_login_custom_endpoint ?? false),
     default_endpoint_url: normalized.default_endpoint_url ?? null,
     endpoints: Array.isArray(normalized.endpoints) ? normalized.endpoints : [],
+    login_logo_url: typeof normalized.login_logo_url === "string" ? normalized.login_logo_url : null,
     seed_login_prefill: Boolean(normalized.seed_login_prefill ?? false),
     seed_login_email: normalized.seed_login_email ?? null,
     seed_login_password: normalized.seed_login_password ?? null,
