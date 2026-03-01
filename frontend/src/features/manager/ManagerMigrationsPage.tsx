@@ -386,6 +386,7 @@ export default function ManagerMigrationsPage() {
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [reconfigureSourceMigrationId, setReconfigureSourceMigrationId] = useState<number | null>(null);
 
   const [migrations, setMigrations] = useState<BucketMigrationView[]>([]);
   const [migrationsLoading, setMigrationsLoading] = useState(true);
@@ -591,6 +592,44 @@ export default function ManagerMigrationsPage() {
     });
   };
 
+  const openCreateModal = () => {
+    setCreateError(null);
+    setCreateSuccess(null);
+    setReconfigureSourceMigrationId(null);
+    setWebhookUrl("");
+    setShowAdvancedOptions(false);
+    setIsCreateModalOpen(true);
+  };
+
+  const openCreateModalFromMigration = (detail: BucketMigrationDetail) => {
+    if (!sourceContextId || detail.source_context_id !== sourceContextId) {
+      setCreateError("Cannot reconfigure this migration from the current source context.");
+      return;
+    }
+
+    const configuredBuckets = detail.items.map((item) => item.source_bucket);
+    const configuredOverrides: Record<string, string> = {};
+    detail.items.forEach((item) => {
+      configuredOverrides[item.source_bucket] = item.target_bucket;
+    });
+
+    setCreateError(null);
+    setCreateSuccess(null);
+    setTargetContextId(detail.target_context_id);
+    setSelectedBuckets(configuredBuckets);
+    setTargetOverrides(configuredOverrides);
+    setMappingPrefix(detail.mapping_prefix ?? "");
+    setMode(detail.mode);
+    setCopyBucketSettings(detail.copy_bucket_settings);
+    setDeleteSource(detail.delete_source);
+    setLockTargetWrites(detail.lock_target_writes);
+    setAutoGrantSourceReadForCopy(detail.auto_grant_source_read_for_copy);
+    setWebhookUrl(detail.webhook_url ?? "");
+    setShowAdvancedOptions(true);
+    setReconfigureSourceMigrationId(detail.id);
+    setIsCreateModalOpen(true);
+  };
+
   const runReviewInBackground = (migrationId: number) => {
     void (async () => {
       try {
@@ -647,6 +686,7 @@ export default function ManagerMigrationsPage() {
 
     setCreateLoading(true);
     try {
+      const sourceMigrationId = reconfigureSourceMigrationId;
       const buckets = selectedBuckets.map((source_bucket) => ({
         source_bucket,
         target_bucket: (targetOverrides[source_bucket] || "").trim() || undefined,
@@ -666,9 +706,14 @@ export default function ManagerMigrationsPage() {
       setSelectedMigrationId(detail.id);
       await loadMigrations();
       setMigrationDetail(detail);
-      setCreateSuccess(`Migration #${detail.id} was created. Review is running in background.`);
+      setCreateSuccess(
+        sourceMigrationId == null
+          ? `Migration #${detail.id} was created. Review is running in background.`
+          : `Migration #${detail.id} was created from migration #${sourceMigrationId}. Review is running in background.`
+      );
       setWebhookUrl("");
       setShowAdvancedOptions(false);
+      setReconfigureSourceMigrationId(null);
       setIsCreateModalOpen(false);
       runReviewInBackground(detail.id);
     } catch (error) {
@@ -916,13 +961,7 @@ export default function ManagerMigrationsPage() {
         actions={[
           {
             label: "New migration",
-            onClick: () => {
-              setCreateError(null);
-              setCreateSuccess(null);
-              setWebhookUrl("");
-              setShowAdvancedOptions(false);
-              setIsCreateModalOpen(true);
-            },
+            onClick: openCreateModal,
           },
         ]}
       />
@@ -1130,6 +1169,18 @@ export default function ManagerMigrationsPage() {
                       className="rounded-lg border border-amber-300 px-3 py-1.5 ui-caption font-semibold text-amber-800 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200"
                     >
                       {actionLoading === "precheck" ? "Reviewing..." : "Re-run review"}
+                    </button>
+                  )}
+                {migrationDetail.precheck_status === "failed" &&
+                  migrationDetail.status === "draft" &&
+                  !["queued", "running", "pause_requested", "cancel_requested"].includes(migrationDetail.status) && (
+                    <button
+                      type="button"
+                      onClick={() => openCreateModalFromMigration(migrationDetail)}
+                      disabled={actionLoading != null}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 ui-caption font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+                    >
+                      Adjust configuration
                     </button>
                   )}
 
@@ -1383,9 +1434,12 @@ export default function ManagerMigrationsPage() {
 
       {isCreateModalOpen && (
         <Modal
-          title="Create migration"
+          title={reconfigureSourceMigrationId == null ? "Create migration" : `Reconfigure migration #${reconfigureSourceMigrationId}`}
           onClose={() => {
-            if (!createLoading) setIsCreateModalOpen(false);
+            if (!createLoading) {
+              setReconfigureSourceMigrationId(null);
+              setIsCreateModalOpen(false);
+            }
           }}
           maxWidthClass="max-w-3xl"
           maxBodyHeightClass="max-h-[78vh]"
@@ -1394,7 +1448,9 @@ export default function ManagerMigrationsPage() {
         >
           <form onSubmit={handleSubmit} className="space-y-5">
             <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Create a draft, run review automatically, then launch from the operator view.
+              {reconfigureSourceMigrationId == null
+                ? "Create a draft, run review automatically, then launch from the operator view."
+                : `Adjust settings for migration #${reconfigureSourceMigrationId}, then create a revised draft and run review automatically.`}
             </p>
               {contextsLoading && <p className="ui-caption text-slate-500 dark:text-slate-400">Loading contexts...</p>}
               {contextsError && <p className="ui-caption text-rose-600 dark:text-rose-300">{contextsError}</p>}
@@ -1600,7 +1656,10 @@ export default function ManagerMigrationsPage() {
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
+                  onClick={() => {
+                    setReconfigureSourceMigrationId(null);
+                    setIsCreateModalOpen(false);
+                  }}
                   disabled={createLoading}
                   className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
                 >
@@ -1611,7 +1670,13 @@ export default function ManagerMigrationsPage() {
                   disabled={createLoading || !sourceContextId}
                   className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  {createLoading ? "Creating and reviewing..." : "Create migration"}
+                  {createLoading
+                    ? reconfigureSourceMigrationId == null
+                      ? "Creating and reviewing..."
+                      : "Creating revised migration..."
+                    : reconfigureSourceMigrationId == null
+                      ? "Create migration"
+                      : "Create revised migration"}
                 </button>
               </div>
           </form>
