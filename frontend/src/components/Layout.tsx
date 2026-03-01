@@ -92,7 +92,7 @@ export default function Layout({
   const mainClasses = `flex min-h-0 flex-1 flex-col ${mainOverflowClass} bg-surface px-3 pb-8 pt-3 sm:px-6 dark:bg-slate-950${
     mainClassName ? ` ${mainClassName}` : ""
   }`;
-  const rootHeightClass = fullHeight ? "h-screen" : "min-h-screen";
+  const rootHeightClass = fullHeight ? "h-[100dvh]" : "h-screen";
   const drawerTopClass = hideTopbar ? "top-0" : "top-14";
 
   useEffect(() => {
@@ -141,7 +141,7 @@ export default function Layout({
   }, [mobileSidebarOpen]);
 
   return (
-    <div className={`flex ${rootHeightClass} flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50`}>
+    <div className={`flex ${rootHeightClass} flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50`}>
       {!hideTopbar && (
         <Topbar
           projectName={projectName}
@@ -188,7 +188,7 @@ export default function Layout({
           </div>
         </div>
       )}
-      <div className={`flex min-h-0 flex-1 ${hideTopbar ? "pt-0" : "pt-14"}`}>
+      <div className={`flex min-h-0 flex-1 overflow-hidden ${hideTopbar ? "pt-0" : "pt-14"}`}>
         {shouldShowSidebar && (
           <Sidebar
             title={sidebarTitle}

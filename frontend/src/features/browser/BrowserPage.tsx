@@ -6277,263 +6277,265 @@ export default function BrowserPage({
       )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
-          <div className="flex items-center gap-1.5">
-            <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Browser</span>
-            {accessBadge && (
-              <span
-                className={`inline-flex h-3 w-3 rounded-full border shadow-sm ${accessBadge.className}`}
-                title={`${accessBadge.label} — ${accessBadge.title}`}
-                aria-label={`${accessBadge.label} — ${accessBadge.title}`}
-              />
-            )}
-          </div>
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-            <div ref={bucketMenuRef} className="relative flex items-center gap-1">
-              <button
-                type="button"
-                className={bucketButtonClasses}
-                onClick={() => setShowBucketMenu((prev) => !prev)}
-                disabled={loadingBuckets || bucketOptions.length === 0}
-                aria-haspopup="listbox"
-                aria-expanded={showBucketMenu}
-                aria-label="Select bucket"
-              >
-                <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
-                <span className="max-w-[160px] truncate">{bucketButtonLabel}</span>
-                <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
-              </button>
-              {bucketConfigurationEnabled && (
-                <button
-                  type="button"
-                  className={`${iconButtonClasses} h-8 w-8`}
-                  onClick={() => openBucketConfigurationModal(bucketName)}
-                  disabled={!bucketName || !hasS3AccountContext}
-                  aria-label="Configure selected bucket"
-                  title="Configure selected bucket"
-                >
-                  <SettingsIcon className="h-3.5 w-3.5" />
-                </button>
-              )}
-              {showBucketMenu && (
-                <div className="absolute left-0 top-[calc(100%+6px)] z-[60] w-64 rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                  <div className="flex items-center gap-2 px-2 pb-2 pt-1">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <SearchIcon className="h-3.5 w-3.5 text-slate-400" />
-                      <input
-                        ref={bucketFilterRef}
-                        type="text"
-                        value={bucketFilter}
-                        onChange={(event) => setBucketFilter(event.target.value)}
-                        placeholder="Filter buckets"
-                        className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        spellCheck={false}
-                      />
-                    </div>
-                    {bucketManagementEnabled && (
-                      <button
-                        type="button"
-                        onClick={openCreateBucketDialog}
-                        disabled={!hasS3AccountContext}
-                        className="shrink-0 rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        title="Create bucket"
-                        aria-label="Create bucket"
-                      >
-                        + Bucket
-                      </button>
-                    )}
-                  </div>
-                  <div className="max-h-56 overflow-y-auto px-1 pb-1">
-                    {loadingBuckets ? (
-                      <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                        Loading buckets...
-                      </div>
-                    ) : bucketOptions.length === 0 ? (
-                      <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">No buckets</div>
-                    ) : filteredBucketOptions.length === 0 ? (
-                      <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
-                        No buckets match this filter.
-                      </div>
-                    ) : (
-                      visibleBucketOptions.map((bucket) => {
-                        const isActive = bucket === bucketName;
-                        return (
-                          <button
-                            key={bucket}
-                            type="button"
-                            onClick={() => handleBucketChange(bucket)}
-                            className={`flex w-full min-w-0 items-center justify-between rounded-md px-2.5 py-2 text-left font-semibold transition ${
-                              isActive
-                                ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
-                                : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                            }`}
-                          >
-                            <span className="truncate">{bucket}</span>
-                            {isActive && (
-                              <span className="ui-caption font-semibold uppercase text-primary-600 dark:text-primary-200">
-                                Active
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                  {!loadingBuckets && filteredBucketOptions.length > 0 && (
-                    <div className="border-t border-slate-200 px-2 py-1 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                      {bucketOverflowCount > 0
-                        ? `Showing ${visibleBucketOptions.length} of ${filteredBucketOptions.length} buckets. Use filter to narrow.`
-                        : `${filteredBucketOptions.length} bucket${filteredBucketOptions.length === 1 ? "" : "s"}`}
-                    </div>
-                  )}
-                </div>
+          <div className="flex w-full min-w-0 items-center gap-2 xl:w-auto xl:flex-1">
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Browser</span>
+              {accessBadge && (
+                <span
+                  className={`inline-flex h-3 w-3 rounded-full border shadow-sm ${accessBadge.className}`}
+                  title={`${accessBadge.label} — ${accessBadge.title}`}
+                  aria-label={`${accessBadge.label} — ${accessBadge.title}`}
+                />
               )}
             </div>
-            <div
-              className="flex min-w-[240px] flex-1 flex-wrap items-center gap-1 ui-caption font-semibold text-slate-500 dark:text-slate-400 sm:min-w-[460px]"
-              onClick={isEditingPath ? undefined : startEditingPath}
-              onDoubleClick={isEditingPath ? undefined : startEditingPath}
-            >
-              {isEditingPath ? (
-                <div className="relative min-w-[240px] flex-1 sm:min-w-[460px] md:min-w-[640px] lg:min-w-[760px]">
-                  <input
-                    ref={pathInputRef}
-                    type="text"
-                    value={pathDraft}
-                    onChange={(event) => setPathDraft(event.target.value)}
-                    onBlur={commitPathDraft}
-                    onKeyDown={handlePathKeyDown}
-                    placeholder="root"
-                    aria-label="Path"
-                    role="combobox"
-                    aria-autocomplete="list"
-                    aria-controls="browser-path-suggestion-list"
-                    aria-expanded={pathSuggestions.length > 0 || pathSuggestionsLoading}
-                    aria-activedescendant={
-                      activePathSuggestion ? `browser-path-suggestion-${pathSuggestionIndex}` : undefined
-                    }
-                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    disabled={!bucketName}
-                    spellCheck={false}
-                  />
-                  {(pathSuggestions.length > 0 || pathSuggestionsLoading) && (
-                    <div
-                      id="browser-path-suggestion-list"
-                      role="listbox"
-                      className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
-                    >
-                      {pathSuggestions.length === 0 ? (
-                        <div className="px-2 py-1.5 text-slate-500 dark:text-slate-300">Searching folders...</div>
-                      ) : (
-                        <div className="max-h-56 overflow-y-auto">
-                          {pathSuggestions.map((suggestion, idx) => {
-                            const isActive = idx === pathSuggestionIndex;
-                            const suggestionId = `browser-path-suggestion-${idx}`;
-                            const sourceBadge =
-                              suggestion.source === "history"
-                                ? "Recent"
-                                : suggestion.source === "local"
-                                  ? "Visible"
-                                  : null;
-                            return (
-                              <button
-                                id={suggestionId}
-                                key={`${suggestion.source}-${suggestion.value}`}
-                                type="button"
-                                role="option"
-                                aria-selected={isActive}
-                                onMouseEnter={() => setPathSuggestionIndex(idx)}
-                                onMouseDown={(event) => {
-                                  event.preventDefault();
-                                  applyPathSuggestion(suggestion, { commit: true });
-                                }}
-                                className={`flex w-full items-start gap-2 px-2 py-1.5 text-left transition ${
-                                  isActive
-                                    ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
-                                    : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                                }`}
-                              >
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate font-semibold" title={suggestion.label}>
-                                    {suggestion.label}
-                                  </span>
-                                  <span
-                                    className="mt-0.5 block break-all text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500"
-                                    title={suggestion.value}
-                                  >
-                                    {suggestion.value}
-                                  </span>
-                                </span>
-                                {sourceBadge && (
-                                  <span className="ml-2 shrink-0 self-start rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                                    {sourceBadge}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {pathSuggestionsLoading && pathSuggestions.length > 0 && (
-                        <div className="border-t border-slate-200 px-2 py-1 text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                          Searching more folders...
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <>
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+              <div ref={bucketMenuRef} className="relative flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  className={bucketButtonClasses}
+                  onClick={() => setShowBucketMenu((prev) => !prev)}
+                  disabled={loadingBuckets || bucketOptions.length === 0}
+                  aria-haspopup="listbox"
+                  aria-expanded={showBucketMenu}
+                  aria-label="Select bucket"
+                >
+                  <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
+                  <span className="max-w-[160px] truncate">{bucketButtonLabel}</span>
+                  <ChevronDownIcon className="h-3.5 w-3.5 text-slate-400" />
+                </button>
+                {bucketConfigurationEnabled && (
                   <button
                     type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleGoUp();
-                    }}
-                    className={breadcrumbIconButtonClasses}
-                    disabled={!canGoUp}
-                    aria-label="Parent folder"
-                    title="Parent folder"
+                    className={`${iconButtonClasses} h-8 w-8`}
+                    onClick={() => openBucketConfigurationModal(bucketName)}
+                    disabled={!bucketName || !hasS3AccountContext}
+                    aria-label="Configure selected bucket"
+                    title="Configure selected bucket"
                   >
-                    <UpIcon className="h-3.5 w-3.5" />
+                    <SettingsIcon className="h-3.5 w-3.5" />
                   </button>
-                  <div className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5">
-                    {breadcrumbs.length === 0 ? (
-                      <span className="shrink-0 text-slate-400">(root)</span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleSelectPrefix("");
-                        }}
-                        className="shrink-0 rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
-                        title="root"
-                      >
-                        root
-                      </button>
+                )}
+                {showBucketMenu && (
+                  <div className="absolute left-0 top-[calc(100%+6px)] z-[60] w-64 rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                    <div className="flex items-center gap-2 px-2 pb-2 pt-1">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <SearchIcon className="h-3.5 w-3.5 text-slate-400" />
+                        <input
+                          ref={bucketFilterRef}
+                          type="text"
+                          value={bucketFilter}
+                          onChange={(event) => setBucketFilter(event.target.value)}
+                          placeholder="Filter buckets"
+                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          spellCheck={false}
+                        />
+                      </div>
+                      {bucketManagementEnabled && (
+                        <button
+                          type="button"
+                          onClick={openCreateBucketDialog}
+                          disabled={!hasS3AccountContext}
+                          className="shrink-0 rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-600 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                          title="Create bucket"
+                          aria-label="Create bucket"
+                        >
+                          + Bucket
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-56 overflow-y-auto px-1 pb-1">
+                      {loadingBuckets ? (
+                        <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
+                          Loading buckets...
+                        </div>
+                      ) : bucketOptions.length === 0 ? (
+                        <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">No buckets</div>
+                      ) : filteredBucketOptions.length === 0 ? (
+                        <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
+                          No buckets match this filter.
+                        </div>
+                      ) : (
+                        visibleBucketOptions.map((bucket) => {
+                          const isActive = bucket === bucketName;
+                          return (
+                            <button
+                              key={bucket}
+                              type="button"
+                              onClick={() => handleBucketChange(bucket)}
+                              className={`flex w-full min-w-0 items-center justify-between rounded-md px-2.5 py-2 text-left font-semibold transition ${
+                                isActive
+                                  ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
+                                  : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                              }`}
+                            >
+                              <span className="truncate">{bucket}</span>
+                              {isActive && (
+                                <span className="ui-caption font-semibold uppercase text-primary-600 dark:text-primary-200">
+                                  Active
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                    {!loadingBuckets && filteredBucketOptions.length > 0 && (
+                      <div className="border-t border-slate-200 px-2 py-1 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                        {bucketOverflowCount > 0
+                          ? `Showing ${visibleBucketOptions.length} of ${filteredBucketOptions.length} buckets. Use filter to narrow.`
+                          : `${filteredBucketOptions.length} bucket${filteredBucketOptions.length === 1 ? "" : "s"}`}
+                      </div>
                     )}
-                    {breadcrumbs.map((crumb) => (
-                      <span key={crumb.prefix} className="flex shrink-0 items-center gap-1">
-                        <span className="text-slate-300">/</span>
+                  </div>
+                )}
+              </div>
+              <div
+                className="flex min-w-0 flex-1 items-center gap-1 ui-caption font-semibold text-slate-500 dark:text-slate-400"
+                onClick={isEditingPath ? undefined : startEditingPath}
+                onDoubleClick={isEditingPath ? undefined : startEditingPath}
+              >
+                {isEditingPath ? (
+                  <div className="relative min-w-0 flex-1">
+                    <input
+                      ref={pathInputRef}
+                      type="text"
+                      value={pathDraft}
+                      onChange={(event) => setPathDraft(event.target.value)}
+                      onBlur={commitPathDraft}
+                      onKeyDown={handlePathKeyDown}
+                      placeholder="root"
+                      aria-label="Path"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-controls="browser-path-suggestion-list"
+                      aria-expanded={pathSuggestions.length > 0 || pathSuggestionsLoading}
+                      aria-activedescendant={
+                        activePathSuggestion ? `browser-path-suggestion-${pathSuggestionIndex}` : undefined
+                      }
+                      className="min-w-0 w-full rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      disabled={!bucketName}
+                      spellCheck={false}
+                    />
+                    {(pathSuggestions.length > 0 || pathSuggestionsLoading) && (
+                      <div
+                        id="browser-path-suggestion-list"
+                        role="listbox"
+                        className="absolute left-0 right-0 top-[calc(100%+4px)] z-40 overflow-hidden rounded-md border border-slate-200 bg-white py-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                      >
+                        {pathSuggestions.length === 0 ? (
+                          <div className="px-2 py-1.5 text-slate-500 dark:text-slate-300">Searching folders...</div>
+                        ) : (
+                          <div className="max-h-56 overflow-y-auto">
+                            {pathSuggestions.map((suggestion, idx) => {
+                              const isActive = idx === pathSuggestionIndex;
+                              const suggestionId = `browser-path-suggestion-${idx}`;
+                              const sourceBadge =
+                                suggestion.source === "history"
+                                  ? "Recent"
+                                  : suggestion.source === "local"
+                                    ? "Visible"
+                                    : null;
+                              return (
+                                <button
+                                  id={suggestionId}
+                                  key={`${suggestion.source}-${suggestion.value}`}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={isActive}
+                                  onMouseEnter={() => setPathSuggestionIndex(idx)}
+                                  onMouseDown={(event) => {
+                                    event.preventDefault();
+                                    applyPathSuggestion(suggestion, { commit: true });
+                                  }}
+                                  className={`flex w-full items-start gap-2 px-2 py-1.5 text-left transition ${
+                                    isActive
+                                      ? "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100"
+                                      : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                                  }`}
+                                >
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate font-semibold" title={suggestion.label}>
+                                      {suggestion.label}
+                                    </span>
+                                    <span
+                                      className="mt-0.5 block break-all text-[11px] font-medium leading-tight text-slate-400 dark:text-slate-500"
+                                      title={suggestion.value}
+                                    >
+                                      {suggestion.value}
+                                    </span>
+                                  </span>
+                                  {sourceBadge && (
+                                    <span className="ml-2 shrink-0 self-start rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                                      {sourceBadge}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {pathSuggestionsLoading && pathSuggestions.length > 0 && (
+                          <div className="border-t border-slate-200 px-2 py-1 text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                            Searching more folders...
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleGoUp();
+                      }}
+                      className={breadcrumbIconButtonClasses}
+                      disabled={!canGoUp}
+                      aria-label="Parent folder"
+                      title="Parent folder"
+                    >
+                      <UpIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <div className="min-w-0 flex flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-0.5">
+                      {breadcrumbs.length === 0 ? (
+                        <span className="shrink-0 text-slate-400">(root)</span>
+                      ) : (
                         <button
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            handleSelectPrefix(crumb.prefix);
+                            handleSelectPrefix("");
                           }}
-                          className="max-w-[220px] truncate rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 sm:max-w-[320px] md:max-w-[420px]"
-                          title={crumb.prefix}
+                          className="shrink-0 rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+                          title="root"
                         >
-                          {crumb.label}
+                          root
                         </button>
-                      </span>
-                    ))}
-                  </div>
-                </>
-              )}
+                      )}
+                      {breadcrumbs.map((crumb) => (
+                        <span key={crumb.prefix} className="flex shrink-0 items-center gap-1">
+                          <span className="text-slate-300">/</span>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleSelectPrefix(crumb.prefix);
+                            }}
+                            className="max-w-[220px] truncate rounded-md px-1.5 py-0.5 text-slate-600 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 sm:max-w-[320px] md:max-w-[420px]"
+                            title={crumb.prefix}
+                          >
+                            {crumb.label}
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:ml-auto xl:w-auto xl:flex-nowrap">
             <div className="flex items-center gap-1">
               <button
                 type="button"
