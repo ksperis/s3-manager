@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.db import S3Account
 from app.models.healthcheck import WorkspaceEndpointHealthOverviewResponse
@@ -27,6 +28,7 @@ from app.utils.s3_endpoint import resolve_s3_client_options
 router = APIRouter(prefix="/manager/stats", tags=["manager-stats"])
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 def _safe_list(operation: str, func):
@@ -148,7 +150,7 @@ def endpoint_health_overview(
     if endpoint_id is None:
         return WorkspaceEndpointHealthOverviewResponse(
             generated_at=utcnow().isoformat(),
-            incident_highlight_minutes=max(1, int(app_settings.healthcheck_incident_recent_minutes or 720)),
+            incident_highlight_minutes=max(1, int(settings.healthcheck_incident_recent_minutes or 720)),
             endpoint_count=0,
             up_count=0,
             degraded_count=0,

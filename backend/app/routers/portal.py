@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.db import AccountIAMUser, AccountRole, S3Account, User, UserS3Account, is_admin_ui_role
 from app.models.bucket import Bucket, BucketCreate
@@ -54,6 +55,7 @@ from app.models.billing import BillingSubjectDetail
 
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 @router.get("/accounts", response_model=list[S3AccountSchema])
@@ -178,7 +180,7 @@ def portal_endpoint_health(
     if endpoint_id is None:
         return WorkspaceEndpointHealthOverviewResponse(
             generated_at=utcnow().isoformat(),
-            incident_highlight_minutes=max(1, int(app_settings.healthcheck_incident_recent_minutes or 720)),
+            incident_highlight_minutes=max(1, int(settings.healthcheck_incident_recent_minutes or 720)),
             endpoint_count=0,
             up_count=0,
             degraded_count=0,
