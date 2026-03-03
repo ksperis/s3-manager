@@ -21,6 +21,7 @@ from app.models.bucket import (
     BucketNotificationConfiguration,
     BucketObjectLock,
     BucketObjectLockUpdate,
+    BucketReplicationConfiguration,
     BucketProperties,
     BucketPublicAccessBlock,
     BucketQuotaUpdate,
@@ -963,6 +964,56 @@ class BucketsService:
             **self._client_kwargs(account),
         ) or {}
         return BucketNotificationConfiguration(configuration=config)
+
+    def get_bucket_replication(self, name: str, account: S3Account) -> BucketReplicationConfiguration:
+        access_key, secret_key = self._account_credentials(account)
+        config = s3_client.get_bucket_replication(
+            name,
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._client_kwargs(account),
+        ) or {}
+        return BucketReplicationConfiguration(configuration=config)
+
+    def _validate_bucket_replication_configuration(self, configuration: Any) -> dict:
+        if not isinstance(configuration, dict):
+            raise ValueError("Replication configuration must be an object.")
+        rules = configuration.get("Rules")
+        if not isinstance(rules, list) or len(rules) == 0:
+            raise ValueError("Replication configuration must include a non-empty Rules array.")
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            destination = rule.get("Destination")
+            if isinstance(destination, dict) and "Zone" in destination:
+                raise ValueError("Destination.Zone is not supported in V1.")
+        return configuration
+
+    def set_bucket_replication(
+        self,
+        name: str,
+        account: S3Account,
+        payload: BucketReplicationConfiguration,
+    ) -> BucketReplicationConfiguration:
+        configuration = self._validate_bucket_replication_configuration(payload.configuration)
+        access_key, secret_key = self._account_credentials(account)
+        s3_client.put_bucket_replication(
+            name,
+            configuration=configuration,
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._client_kwargs(account),
+        )
+        return self.get_bucket_replication(name, account)
+
+    def delete_bucket_replication(self, name: str, account: S3Account) -> None:
+        access_key, secret_key = self._account_credentials(account)
+        s3_client.delete_bucket_replication(
+            name,
+            access_key=access_key,
+            secret_key=secret_key,
+            **self._client_kwargs(account),
+        )
 
     def set_bucket_notifications(
         self,

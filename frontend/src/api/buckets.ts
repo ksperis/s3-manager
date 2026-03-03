@@ -96,6 +96,10 @@ export type BucketNotificationConfiguration = {
   configuration: Record<string, unknown>;
 };
 
+export type BucketReplicationConfiguration = {
+  configuration: Record<string, unknown>;
+};
+
 export type BucketLoggingConfiguration = {
   enabled?: boolean | null;
   target_bucket?: string | null;
@@ -376,6 +380,36 @@ export async function putBucketNotifications(
 
 export async function deleteBucketNotifications(accountId: S3AccountSelector, bucketName: string): Promise<void> {
   await client.delete(`${bucketPath(bucketName)}/notifications`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
+}
+
+export async function getBucketReplication(
+  accountId: S3AccountSelector,
+  bucketName: string
+): Promise<BucketReplicationConfiguration> {
+  const { data } = await client.get<BucketReplicationConfiguration>(
+    `${bucketPath(bucketName)}/replication`,
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function putBucketReplication(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  configuration: Record<string, unknown>
+): Promise<BucketReplicationConfiguration> {
+  const { data } = await client.put<BucketReplicationConfiguration>(
+    `${bucketPath(bucketName)}/replication`,
+    { configuration },
+    { params: withS3AccountParam(undefined, accountId) }
+  );
+  return data;
+}
+
+export async function deleteBucketReplication(accountId: S3AccountSelector, bucketName: string): Promise<void> {
+  await client.delete(`${bucketPath(bucketName)}/replication`, {
     params: withS3AccountParam(undefined, accountId),
   });
 }

@@ -16,6 +16,7 @@ import {
   BucketNotificationConfiguration,
   BucketObjectLockConfiguration,
   BucketPolicy,
+  BucketReplicationConfiguration,
   BucketProperties,
   BucketPublicAccessBlock,
   BucketTag,
@@ -25,6 +26,7 @@ import {
   deleteBucketLogging,
   deleteBucketNotifications,
   deleteBucketPolicyApi,
+  deleteBucketReplication,
   deleteBucketTags,
   deleteBucketWebsite,
   deleteBucketLifecycle,
@@ -34,6 +36,7 @@ import {
   getBucketLogging,
   getBucketNotifications,
   getBucketPolicy,
+  getBucketReplication,
   getBucketProperties,
   getBucketWebsite,
   getBucketAcl,
@@ -46,6 +49,7 @@ import {
   putBucketLogging,
   putBucketNotifications,
   putBucketPolicy,
+  putBucketReplication,
   putBucketWebsite,
   putBucketLifecycle,
   setBucketVersioning,
@@ -61,6 +65,7 @@ import {
   deleteCephAdminBucketLogging,
   deleteCephAdminBucketNotifications,
   deleteCephAdminBucketPolicy,
+  deleteCephAdminBucketReplication,
   deleteCephAdminBucketTags,
   deleteCephAdminBucketWebsite,
   getCephAdminBucketAcl,
@@ -70,6 +75,7 @@ import {
   getCephAdminBucketLogging,
   getCephAdminBucketNotifications,
   getCephAdminBucketPolicy,
+  getCephAdminBucketReplication,
   getCephAdminBucketProperties,
   getCephAdminBucketPublicAccessBlock,
   getCephAdminBucketTags,
@@ -81,6 +87,7 @@ import {
   putCephAdminBucketLogging,
   putCephAdminBucketNotifications,
   putCephAdminBucketPolicy,
+  putCephAdminBucketReplication,
   putCephAdminBucketTags,
   putCephAdminBucketWebsite,
   setCephAdminBucketVersioning,
@@ -103,6 +110,15 @@ import { useS3AccountContext } from "./S3AccountContext";
 import TrafficAnalytics from "./TrafficAnalytics";
 import PropertySummaryChip, { PropertySummaryTone } from "../../components/PropertySummaryChip";
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
+import {
+  buildReplicationConfigurationFromGraphical,
+  containsUnsupportedReplicationZone,
+  createEmptyGraphicalReplicationRule,
+  GraphicalReplicationRule,
+  parseReplicationConfigurationForGraphical,
+  validateGraphicalReplication,
+  validateJsonReplicationConfiguration,
+} from "./bucketReplication";
 
 function getUserRole(): string | null {
   if (typeof window === "undefined") return null;
@@ -348,6 +364,17 @@ export default function BucketDetailPage({
   ]);
   const [simpleLifecycleWarning, setSimpleLifecycleWarning] = useState<string | null>(null);
   const [showLifecycleEditor, setShowLifecycleEditor] = useState(false);
+  const [replicationConfig, setReplicationConfig] = useState<BucketReplicationConfiguration>({ configuration: {} });
+  const [replicationMode, setReplicationMode] = useState<"graphical" | "json">("graphical");
+  const [replicationText, setReplicationText] = useState("{}");
+  const [replicationRole, setReplicationRole] = useState("");
+  const [replicationRules, setReplicationRules] = useState<GraphicalReplicationRule[]>([createEmptyGraphicalReplicationRule()]);
+  const [replicationWarning, setReplicationWarning] = useState<string | null>(null);
+  const [replicationError, setReplicationError] = useState<string | null>(null);
+  const [replicationStatus, setReplicationStatus] = useState<string | null>(null);
+  const [replicationLoading, setReplicationLoading] = useState(false);
+  const [savingReplication, setSavingReplication] = useState(false);
+  const [clearingReplication, setClearingReplication] = useState(false);
   const [bucketTags, setBucketTags] = useState<BucketTag[]>([]);
   const [bucketTagsLoading, setBucketTagsLoading] = useState(false);
   const [bucketTagsError, setBucketTagsError] = useState<string | null>(null);
@@ -861,6 +888,56 @@ export default function BucketDetailPage({
     }
   }, [accountId, applyWebsiteState, bucketName, endpointId, hasContext, isCephAdmin, staticWebsiteEnabled]);
 
+  const loadReplication = useCallback(async () => {
+    if (!bucketName || !hasContext || !isCephEndpoint) {
+      setReplicationConfig({ configuration: {} });
+      setReplicationText("{}");
+      setReplicationRole("");
+      setReplicationRules([createEmptyGraphicalReplicationRule()]);
+      setReplicationWarning(null);
+      setReplicationError(null);
+      setReplicationStatus(null);
+      return;
+    }
+    setReplicationLoading(true);
+    setReplicationError(null);
+    setReplicationStatus(null);
+    try {
+      const data = isCephAdmin
+        ? endpointId
+          ? await getCephAdminBucketReplication(endpointId, bucketName)
+          : { configuration: {} }
+        : await getBucketReplication(accountId, bucketName);
+      const rawConfiguration = data.configuration;
+      const configuration =
+        rawConfiguration && typeof rawConfiguration === "object" && !Array.isArray(rawConfiguration)
+          ? (rawConfiguration as Record<string, unknown>)
+          : {};
+      setReplicationConfig({ configuration });
+      setReplicationText(Object.keys(configuration).length > 0 ? JSON.stringify(configuration, null, 2) : "{}");
+      const parsed = parseReplicationConfigurationForGraphical(configuration);
+      setReplicationRole(parsed.role);
+      setReplicationRules(parsed.rules);
+      setReplicationWarning(
+        parsed.hasAdvancedFields
+          ? "This configuration has fields not covered by graphical mode. Use JSON mode to avoid losing data."
+          : null
+      );
+    } catch (err) {
+      setReplicationConfig({ configuration: {} });
+      setReplicationText("{}");
+      setReplicationRole("");
+      setReplicationRules([createEmptyGraphicalReplicationRule()]);
+      setReplicationWarning(null);
+      const message =
+        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
+        "Unable to load bucket replication configuration.";
+      setReplicationError(message);
+    } finally {
+      setReplicationLoading(false);
+    }
+  }, [accountId, bucketName, endpointId, hasContext, isCephAdmin, isCephEndpoint]);
+
   const loadBucketAcl = useCallback(async () => {
     if (!bucketName || !hasContext) {
       setBucketAcl(null);
@@ -953,11 +1030,12 @@ export default function BucketDetailPage({
     }
     if (activeTab === "overview" || activeTab === "advanced") {
       loadCors();
+      loadReplication();
     }
     if (activeTab === "permissions") {
       loadPublicAccessBlock();
     }
-  }, [activeTab, loadBucketAcl, loadCors, loadPolicy, loadPublicAccessBlock]);
+  }, [activeTab, loadBucketAcl, loadCors, loadPolicy, loadPublicAccessBlock, loadReplication]);
 
   useEffect(() => {
     if (activeTab === "properties") {
@@ -986,9 +1064,22 @@ export default function BucketDetailPage({
     loadWebsite();
   }, [loadWebsite]);
 
+  useEffect(() => {
+    loadReplication();
+  }, [loadReplication]);
+
   const refreshActiveTab = useCallback(async () => {
     if (activeTab === "overview") {
-      await Promise.all([refreshBucketMeta(), loadProperties(), loadLifecycle(), loadPolicy(), loadBucketAcl(), loadCors(), loadEncryption()]);
+      await Promise.all([
+        refreshBucketMeta(),
+        loadProperties(),
+        loadLifecycle(),
+        loadPolicy(),
+        loadBucketAcl(),
+        loadCors(),
+        loadReplication(),
+        loadEncryption(),
+      ]);
       return;
     }
     if (activeTab === "metrics") {
@@ -1010,7 +1101,7 @@ export default function BucketDetailPage({
       return;
     }
     if (activeTab === "advanced") {
-      await Promise.all([loadWebsite(), loadCors(), loadAccessLogging(), loadNotifications()]);
+      await Promise.all([loadWebsite(), loadCors(), loadReplication(), loadAccessLogging(), loadNotifications()]);
       return;
     }
     if (activeTab === "ceph") {
@@ -1031,6 +1122,7 @@ export default function BucketDetailPage({
     loadPolicy,
     loadProperties,
     loadPublicAccessBlock,
+    loadReplication,
     loadWebsite,
     refreshBucketMeta,
   ]);
@@ -1042,7 +1134,16 @@ export default function BucketDetailPage({
 
   const activeTabLoading = useMemo(() => {
     if (activeTab === "overview") {
-      return loadingBucket || propsLoading || lifecycleLoading || policyLoading || bucketAclLoading || corsLoading || encryptionLoading;
+      return (
+        loadingBucket ||
+        propsLoading ||
+        lifecycleLoading ||
+        policyLoading ||
+        bucketAclLoading ||
+        corsLoading ||
+        replicationLoading ||
+        encryptionLoading
+      );
     }
     if (activeTab === "metrics") {
       return loadingBucket;
@@ -1057,7 +1158,7 @@ export default function BucketDetailPage({
       return publicAccessLoading || bucketAclLoading || policyLoading;
     }
     if (activeTab === "advanced") {
-      return websiteLoading || corsLoading || accessLoggingLoading || notificationsLoading;
+      return websiteLoading || corsLoading || replicationLoading || accessLoggingLoading || notificationsLoading;
     }
     if (activeTab === "ceph") {
       return loadingBucket || propsLoading;
@@ -1077,6 +1178,7 @@ export default function BucketDetailPage({
     policyLoading,
     propsLoading,
     publicAccessLoading,
+    replicationLoading,
     websiteLoading,
   ]);
 
@@ -1275,6 +1377,9 @@ export default function BucketDetailPage({
       (websiteConfig?.index_document ?? "").trim() ||
       websiteRoutingRulesList.length > 0
   );
+  const replicationConfiguration = replicationConfig.configuration ?? {};
+  const replicationConfigured = Object.keys(replicationConfiguration).length > 0;
+  const replicationBusy = replicationLoading || savingReplication || clearingReplication;
   const publicAccessBlockConfig = properties?.public_access_block;
   const publicAccessBlockEnabled = isPublicAccessFullyEnabled(publicAccessBlockConfig);
   const publicAccessBlockPartial =
@@ -1371,6 +1476,23 @@ export default function BucketDetailPage({
     const accessLoggingTone: PropertySummary["tone"] =
       accessLoggingLoading || accessLoggingError ? "unknown" : accessLoggingConfigured ? "active" : "inactive";
 
+    const replicationState = !isCephEndpoint
+      ? "Unavailable"
+      : replicationLoading
+        ? "Loading..."
+        : replicationError
+          ? "Unavailable"
+          : replicationConfigured
+            ? "Configured"
+            : "Not set";
+    const replicationTone: PropertySummary["tone"] = !isCephEndpoint
+      ? "unknown"
+      : replicationLoading || replicationError
+        ? "unknown"
+        : replicationConfigured
+          ? "active"
+          : "inactive";
+
     const websiteState = !staticWebsiteEnabled
       ? "Unavailable"
       : websiteLoading
@@ -1418,6 +1540,9 @@ export default function BucketDetailPage({
       summary.push({ label: "Server-side encryption", state: encryptionState, tone: encryptionTone });
     }
     summary.push({ label: "Access logging", state: accessLoggingState, tone: accessLoggingTone });
+    if (isCephEndpoint) {
+      summary.push({ label: "Replication", state: replicationState, tone: replicationTone });
+    }
 
     return summary;
   }, [
@@ -1447,6 +1572,10 @@ export default function BucketDetailPage({
     publicAccessBlockPartial,
     sseFeatureEnabled,
     versioningIsEnabled,
+    isCephEndpoint,
+    replicationConfigured,
+    replicationError,
+    replicationLoading,
     staticWebsiteEnabled,
     websiteConfigured,
     websiteError,
@@ -1838,6 +1967,120 @@ export default function BucketDetailPage({
       setNotificationsError("Unable to delete bucket notifications.");
     } finally {
       setClearingNotifications(false);
+    }
+  };
+
+  const updateReplicationRule = (index: number, patch: Partial<GraphicalReplicationRule>) => {
+    setReplicationRules((prev) =>
+      prev.map((rule, ruleIndex) => (ruleIndex === index ? { ...rule, ...patch } : rule))
+    );
+    setReplicationStatus(null);
+  };
+
+  const addReplicationRule = () => {
+    setReplicationRules((prev) => [...prev, createEmptyGraphicalReplicationRule()]);
+    setReplicationStatus(null);
+  };
+
+  const removeReplicationRule = (index: number) => {
+    setReplicationRules((prev) => {
+      const next = prev.filter((_, ruleIndex) => ruleIndex !== index);
+      return next.length > 0 ? next : [createEmptyGraphicalReplicationRule()];
+    });
+    setReplicationStatus(null);
+  };
+
+  const saveReplication = async () => {
+    if (!bucketName || !hasContext || !isCephEndpoint) return;
+    setReplicationError(null);
+    setReplicationStatus(null);
+
+    let configuration: Record<string, unknown>;
+    if (replicationMode === "graphical") {
+      const validationError = validateGraphicalReplication(replicationRole, replicationRules);
+      if (validationError) {
+        setReplicationError(validationError);
+        return;
+      }
+      configuration = buildReplicationConfigurationFromGraphical(replicationRole, replicationRules);
+    } else {
+      let parsed: unknown;
+      try {
+        parsed = replicationText.trim() ? JSON.parse(replicationText) : {};
+      } catch {
+        setReplicationError("Replication configuration JSON is invalid.");
+        return;
+      }
+      const validationError = validateJsonReplicationConfiguration(parsed);
+      if (validationError) {
+        setReplicationError(validationError);
+        return;
+      }
+      configuration = parsed as Record<string, unknown>;
+    }
+
+    setSavingReplication(true);
+    try {
+      const saved = isCephAdmin
+        ? endpointId
+          ? await putCephAdminBucketReplication(endpointId, bucketName, configuration)
+          : { configuration }
+        : await putBucketReplication(accountId, bucketName, configuration);
+      const rawConfiguration = saved.configuration;
+      const normalizedConfiguration =
+        rawConfiguration && typeof rawConfiguration === "object" && !Array.isArray(rawConfiguration)
+          ? (rawConfiguration as Record<string, unknown>)
+          : {};
+      setReplicationConfig({ configuration: normalizedConfiguration });
+      setReplicationText(
+        Object.keys(normalizedConfiguration).length > 0 ? JSON.stringify(normalizedConfiguration, null, 2) : "{}"
+      );
+      const parsed = parseReplicationConfigurationForGraphical(normalizedConfiguration);
+      setReplicationRole(parsed.role);
+      setReplicationRules(parsed.rules);
+      setReplicationWarning(
+        parsed.hasAdvancedFields
+          ? "This configuration has fields not covered by graphical mode. Use JSON mode to avoid losing data."
+          : null
+      );
+      setReplicationStatus("Replication configuration updated.");
+    } catch (err) {
+      const message =
+        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
+        "Unable to update bucket replication configuration.";
+      setReplicationError(message);
+    } finally {
+      setSavingReplication(false);
+    }
+  };
+
+  const clearReplication = async () => {
+    if (!bucketName || !hasContext || !isCephEndpoint) return;
+    const confirmDelete = window.confirm("Delete the bucket replication configuration?");
+    if (!confirmDelete) return;
+    setClearingReplication(true);
+    setReplicationError(null);
+    setReplicationStatus(null);
+    try {
+      if (isCephAdmin) {
+        if (!endpointId) return;
+        await deleteCephAdminBucketReplication(endpointId, bucketName);
+      } else {
+        await deleteBucketReplication(accountId, bucketName);
+      }
+      setReplicationConfig({ configuration: {} });
+      setReplicationText("{}");
+      setReplicationRole("");
+      setReplicationRules([createEmptyGraphicalReplicationRule()]);
+      setReplicationWarning(null);
+      setReplicationStatus("Replication configuration cleared.");
+    } catch (err) {
+      const message =
+        (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
+        "Unable to clear bucket replication configuration.";
+      setReplicationError(message);
+    } finally {
+      setClearingReplication(false);
     }
   };
 
@@ -3528,6 +3771,232 @@ export default function BucketDetailPage({
                     </div>
                   )}
                 </div>
+                {isCephEndpoint && (
+                  <div className={`${bucketCardClass} space-y-3`}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Replication / multisite</p>
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Configure cross-zonegroup replication rules supported by Ceph RGW.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={clearReplication}
+                          disabled={replicationBusy}
+                          className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                        >
+                          {clearingReplication ? "Clearing..." : "Clear"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveReplication}
+                          disabled={replicationBusy}
+                          className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        >
+                          {savingReplication ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReplicationMode("graphical");
+                          setReplicationStatus(null);
+                          setReplicationError(null);
+                        }}
+                        className={`rounded-md px-3 py-1 ui-caption font-semibold transition ${
+                          replicationMode === "graphical"
+                            ? "bg-primary text-white"
+                            : "border border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
+                        }`}
+                        disabled={replicationBusy}
+                      >
+                        Graphical mode
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReplicationMode("json");
+                          setReplicationStatus(null);
+                          setReplicationError(null);
+                        }}
+                        className={`rounded-md px-3 py-1 ui-caption font-semibold transition ${
+                          replicationMode === "json"
+                            ? "bg-primary text-white"
+                            : "border border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
+                        }`}
+                        disabled={replicationBusy}
+                      >
+                        JSON mode
+                      </button>
+                    </div>
+                    {replicationError && (
+                      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                        {replicationError}
+                      </div>
+                    )}
+                    {replicationWarning && (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/50 dark:text-amber-100">
+                        {replicationWarning}
+                      </div>
+                    )}
+                    {replicationStatus && (
+                      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                        {replicationStatus}
+                      </div>
+                    )}
+                    {replicationLoading ? (
+                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                        Loading replication configuration...
+                      </div>
+                    ) : replicationMode === "graphical" ? (
+                      <div className="space-y-3">
+                        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                          Role ARN
+                          <input
+                            type="text"
+                            value={replicationRole}
+                            onChange={(e) => {
+                              setReplicationRole(e.target.value);
+                              setReplicationStatus(null);
+                            }}
+                            className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            placeholder="arn:aws:iam::123456789012:role/replication-role"
+                            disabled={replicationBusy}
+                          />
+                        </label>
+                        <div className="space-y-3">
+                          {replicationRules.map((rule, index) => (
+                            <div
+                              key={`replication-rule-${index}-${rule.id || "new"}`}
+                              className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                            >
+                              <div className="flex items-center justify-between">
+                                <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Rule {index + 1}</p>
+                                <button
+                                  type="button"
+                                  onClick={() => removeReplicationRule(index)}
+                                  disabled={replicationBusy || replicationRules.length <= 1}
+                                  className="rounded-md border border-rose-200 px-2 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                  ID
+                                  <input
+                                    type="text"
+                                    value={rule.id}
+                                    onChange={(e) => updateReplicationRule(index, { id: e.target.value })}
+                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    placeholder={`rule-${index + 1}`}
+                                    disabled={replicationBusy}
+                                  />
+                                </label>
+                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                  Status
+                                  <select
+                                    value={rule.status}
+                                    onChange={(e) => updateReplicationRule(index, { status: e.target.value as "Enabled" | "Disabled" })}
+                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    disabled={replicationBusy}
+                                  >
+                                    <option value="Enabled">Enabled</option>
+                                    <option value="Disabled">Disabled</option>
+                                  </select>
+                                </label>
+                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                  Priority
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    value={rule.priority}
+                                    onChange={(e) => updateReplicationRule(index, { priority: e.target.value })}
+                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    placeholder="1"
+                                    disabled={replicationBusy}
+                                  />
+                                </label>
+                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                  Prefix (optional)
+                                  <input
+                                    type="text"
+                                    value={rule.prefix}
+                                    onChange={(e) => updateReplicationRule(index, { prefix: e.target.value })}
+                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    placeholder="logs/"
+                                    disabled={replicationBusy}
+                                  />
+                                </label>
+                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                  Destination bucket ARN
+                                  <input
+                                    type="text"
+                                    value={rule.destinationBucket}
+                                    onChange={(e) => updateReplicationRule(index, { destinationBucket: e.target.value })}
+                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    placeholder="arn:aws:s3:::target-bucket"
+                                    disabled={replicationBusy}
+                                  />
+                                </label>
+                                <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
+                                  Delete marker replication
+                                  <select
+                                    value={rule.deleteMarkerStatus}
+                                    onChange={(e) =>
+                                      updateReplicationRule(index, {
+                                        deleteMarkerStatus: e.target.value as "Enabled" | "Disabled",
+                                      })
+                                    }
+                                    className="rounded-md border border-slate-200 px-2 py-1 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    disabled={replicationBusy}
+                                  >
+                                    <option value="Disabled">Disabled</option>
+                                    <option value="Enabled">Enabled</option>
+                                  </select>
+                                </label>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={addReplicationRule}
+                            disabled={replicationBusy}
+                            className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
+                          >
+                            Add rule
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <textarea
+                          value={replicationText}
+                          onChange={(e) => {
+                            setReplicationText(e.target.value);
+                            setReplicationStatus(null);
+                          }}
+                          rows={14}
+                          className="w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          spellCheck={false}
+                          disabled={replicationBusy}
+                        />
+                        {containsUnsupportedReplicationZone(replicationConfiguration) && (
+                          <p className="ui-caption text-rose-700 dark:text-rose-200">
+                            Destination.Zone is not supported in V1 and must be removed before saving.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className={`space-y-3 ${bucketCardClass}`}>
                   <div className="flex items-center justify-between">
                     <div>
@@ -3902,8 +4371,12 @@ export default function BucketDetailPage({
                       </div>
                       <InfoCard
                         title="Replication / multisite"
-                        description="Set up inter-cluster replication."
-                        disabled
+                        description={
+                          isCephEndpoint
+                            ? "Replication is configured in the Advanced tab to avoid duplicate editors."
+                            : "Replication is available only for Ceph endpoints."
+                        }
+                        badge={isCephEndpoint ? "Advanced tab" : "Unavailable"}
                       />
                     </div>
                   ),

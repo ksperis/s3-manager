@@ -17,6 +17,7 @@ from app.models.bucket import (
     BucketObjectLockUpdate,
     BucketPolicyIn,
     BucketPolicyOut,
+    BucketReplicationConfiguration,
     BucketProperties,
     BucketPublicAccessBlock,
     BucketVersioningUpdate,
@@ -523,6 +524,71 @@ def delete_notifications(
             user=current_user,
             scope="manager",
             action="delete_bucket_notifications",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
+def get_replication(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: dict = Depends(get_current_account_admin),
+) -> BucketReplicationConfiguration:
+    try:
+        return service.get_bucket_replication(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
+def put_replication(
+    bucket_name: str,
+    payload: BucketReplicationConfiguration,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> BucketReplicationConfiguration:
+    try:
+        result = service.set_bucket_replication(bucket_name, account, payload)
+        configuration = payload.configuration or {}
+        rules = configuration.get("Rules")
+        rules_count = len(rules) if isinstance(rules, list) else 0
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="update_bucket_replication",
+            entity_type="bucket",
+            entity_id=bucket_name,
+            account=account,
+            metadata={"rules_count": rules_count},
+        )
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/{bucket_name}/replication", status_code=status.HTTP_204_NO_CONTENT)
+def delete_replication(
+    bucket_name: str,
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    current_user: User = Depends(get_current_account_admin),
+    audit_service: AuditService = Depends(get_audit_logger),
+) -> None:
+    try:
+        service.delete_bucket_replication(bucket_name, account)
+        audit_service.record_action(
+            user=current_user,
+            scope="manager",
+            action="delete_bucket_replication",
             entity_type="bucket",
             entity_id=bucket_name,
             account=account,

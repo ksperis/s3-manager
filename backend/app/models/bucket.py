@@ -154,6 +154,10 @@ class BucketNotificationConfiguration(BaseModel):
     configuration: dict = Field(default_factory=dict)
 
 
+class BucketReplicationConfiguration(BaseModel):
+    configuration: dict = Field(default_factory=dict)
+
+
 class BucketLoggingConfiguration(BaseModel):
     enabled: Optional[bool] = None
     target_bucket: Optional[str] = None

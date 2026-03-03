@@ -576,6 +576,7 @@ export type BucketCors = { rules: Record<string, unknown>[] };
 export type BucketEncryptionConfiguration = { rules: Record<string, unknown>[] };
 export type BucketPolicy = { policy: Record<string, unknown> | null };
 export type BucketTag = { key: string; value: string };
+export type BucketReplicationConfiguration = { configuration: Record<string, unknown> };
 
 export type BucketObjectLockConfiguration = {
   enabled?: boolean | null;
@@ -722,6 +723,32 @@ export async function putCephAdminBucketNotifications(
 
 export async function deleteCephAdminBucketNotifications(endpointId: number, bucketName: string): Promise<void> {
   await client.delete(`/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/notifications`);
+}
+
+export async function getCephAdminBucketReplication(
+  endpointId: number,
+  bucketName: string
+): Promise<BucketReplicationConfiguration> {
+  const { data } = await client.get<BucketReplicationConfiguration>(
+    `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/replication`
+  );
+  return data;
+}
+
+export async function putCephAdminBucketReplication(
+  endpointId: number,
+  bucketName: string,
+  configuration: Record<string, unknown>
+): Promise<BucketReplicationConfiguration> {
+  const { data } = await client.put<BucketReplicationConfiguration>(
+    `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/replication`,
+    { configuration }
+  );
+  return data;
+}
+
+export async function deleteCephAdminBucketReplication(endpointId: number, bucketName: string): Promise<void> {
+  await client.delete(`/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/replication`);
 }
 
 export async function getCephAdminBucketLogging(

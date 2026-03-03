@@ -28,6 +28,7 @@ from app.models.bucket import (
     BucketObjectLockUpdate,
     BucketPolicyIn,
     BucketPolicyOut,
+    BucketReplicationConfiguration,
     BucketProperties,
     BucketPublicAccessBlock,
     BucketTag,
@@ -2137,6 +2138,52 @@ def delete_notifications(
     account = _build_endpoint_account(ctx)
     try:
         service.delete_bucket_notifications(bucket_name, account)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
+def get_replication(
+    bucket_name: str,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> BucketReplicationConfiguration:
+    service = BucketsService()
+    account = _build_endpoint_account(ctx)
+    try:
+        return service.get_bucket_replication(bucket_name, account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.put("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
+def put_replication(
+    bucket_name: str,
+    payload: BucketReplicationConfiguration,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> BucketReplicationConfiguration:
+    service = BucketsService()
+    account = _build_endpoint_account(ctx)
+    try:
+        response = service.set_bucket_replication(bucket_name, account, payload)
+        _invalidate_bucket_listing_cache(ctx.endpoint.id)
+        return response
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.delete("/{bucket_name}/replication", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+def delete_replication(
+    bucket_name: str,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> Response:
+    service = BucketsService()
+    account = _build_endpoint_account(ctx)
+    try:
+        service.delete_bucket_replication(bucket_name, account)
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
