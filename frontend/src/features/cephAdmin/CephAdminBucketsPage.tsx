@@ -2066,24 +2066,6 @@ export default function CephAdminBucketsPage() {
     });
     return groups;
   }, [featureColumnOptions]);
-  const allExportColumnIds = useMemo<ColumnId[]>(
-    () => [
-      "tenant",
-      "owner",
-      "owner_name",
-      "used_bytes",
-      "quota_max_size_bytes",
-      "object_count",
-      "quota_max_objects",
-      "quota_usage_percent",
-      "quota_status",
-      "tags",
-      "ui_tags",
-      ...featureColumnOptions.map((column) => column.id),
-      ...FEATURE_DETAIL_COLUMN_IDS,
-    ],
-    [featureColumnOptions]
-  );
   const exportIncludeParams = useMemo(() => {
     const include = new Set<string>(["owner_name", "tags"]);
     featureColumnOptions.forEach((column) => include.add(column.id));
@@ -2937,7 +2919,7 @@ export default function CephAdminBucketsPage() {
       }
 
       const bucketsByName = await loadSelectedBucketsForExport();
-      const exportColumns = buildExportColumns(allExportColumnIds);
+      const exportColumns = buildExportColumns(visibleColumns);
       if (format === "csv") {
         const lines = [
           exportColumns.map((column) => csvEscape(column.label)).join(","),
@@ -7486,7 +7468,7 @@ export default function CephAdminBucketsPage() {
                           if (parent) parent.removeAttribute("open");
                         }}
                       >
-                        CSV (all columns)
+                        CSV (selected columns)
                       </button>
                       <button
                         type="button"
@@ -7499,7 +7481,7 @@ export default function CephAdminBucketsPage() {
                           if (parent) parent.removeAttribute("open");
                         }}
                       >
-                        JSON (all columns)
+                        JSON (selected columns)
                       </button>
                     </div>
                   </details>
