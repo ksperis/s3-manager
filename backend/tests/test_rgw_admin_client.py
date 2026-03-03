@@ -141,3 +141,76 @@ def test_request_uses_verify_tls_flag(monkeypatch):
     assert captured["method"] == "GET"
     assert captured["url"] == "https://rgw-admin.example.test/admin/info"
     assert captured["verify"] is False
+
+
+def test_request_uses_configurable_default_timeout(monkeypatch):
+    client = RGWAdminClient(
+        access_key="AKIA-TEST",
+        secret_key="SECRET-TEST",
+        endpoint="https://rgw-admin.example.test",
+        region="us-east-1",
+        request_timeout_seconds=17,
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+        text = "{}"
+
+        @staticmethod
+        def json():
+            return {}
+
+    def fake_request(method: str, url: str, **kwargs):
+        captured["method"] = method
+        captured["url"] = url
+        captured["timeout"] = kwargs.get("timeout")
+        return FakeResponse()
+
+    monkeypatch.setattr(client.session, "request", fake_request)
+
+    payload = client._request("GET", "/admin/info")
+    assert payload == {}
+    assert captured["method"] == "GET"
+    assert captured["url"] == "https://rgw-admin.example.test/admin/info"
+    assert captured["timeout"] == 17
+
+
+def test_get_all_buckets_uses_extended_timeout_only_with_stats(monkeypatch):
+    client = RGWAdminClient(
+        access_key="AKIA-TEST",
+        secret_key="SECRET-TEST",
+        endpoint="https://rgw-admin.example.test",
+        region="us-east-1",
+        request_timeout_seconds=11,
+        bucket_list_stats_timeout_seconds=45,
+    )
+
+    captured: list[dict[str, object]] = []
+
+    def fake_request(method: str, path: str, **kwargs):
+        captured.append(
+            {
+                "method": method,
+                "path": path,
+                "params": kwargs.get("params"),
+                "timeout": kwargs.get("timeout"),
+            }
+        )
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    client.get_all_buckets(with_stats=False)
+    client.get_all_buckets(with_stats=True)
+
+    assert captured[0]["method"] == "GET"
+    assert captured[0]["path"] == "/admin/bucket"
+    assert captured[0]["timeout"] is None
+    assert captured[0]["params"] == {"format": "json"}
+
+    assert captured[1]["method"] == "GET"
+    assert captured[1]["path"] == "/admin/bucket"
+    assert captured[1]["timeout"] == 45
+    assert captured[1]["params"] == {"format": "json", "stats": "true"}

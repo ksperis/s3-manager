@@ -142,6 +142,19 @@ class Settings(BaseSettings):
         None,
         description="Seed admin ops secret key (defaults to seed_s3_secret_key)",
     )
+    rgw_admin_timeout_seconds: float = Field(
+        10.0,
+        gt=0,
+        description="HTTP timeout for RGW Admin Ops requests in seconds (RGW_ADMIN_TIMEOUT_SECONDS)",
+    )
+    rgw_admin_bucket_list_stats_timeout_seconds: float = Field(
+        60.0,
+        gt=0,
+        description=(
+            "HTTP timeout for RGW Admin Ops bucket listing with stats in seconds "
+            "(RGW_ADMIN_BUCKET_LIST_STATS_TIMEOUT_SECONDS)"
+        ),
+    )
     seed_supervision_access_key: Optional[str] = Field(
         None,
         description="Seed access key dedicated to supervision usage stats",

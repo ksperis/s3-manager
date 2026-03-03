@@ -30,6 +30,8 @@ class RGWAdminClient:
         endpoint: Optional[str] = None,
         region: Optional[str] = None,
         verify_tls: bool = True,
+        request_timeout_seconds: Optional[float] = None,
+        bucket_list_stats_timeout_seconds: Optional[float] = None,
     ) -> None:
         resolved_endpoint = endpoint
         if not resolved_endpoint:
@@ -43,6 +45,16 @@ class RGWAdminClient:
             raise RGWAdminError("RGW admin credentials are not configured")
         self.auth = AWS4Auth(self.access_key, self.secret_key, self.region, "s3")
         self.session = requests.Session()
+        self.request_timeout_seconds = (
+            float(request_timeout_seconds)
+            if request_timeout_seconds is not None
+            else float(settings.rgw_admin_timeout_seconds)
+        )
+        self.bucket_list_stats_timeout_seconds = (
+            float(bucket_list_stats_timeout_seconds)
+            if bucket_list_stats_timeout_seconds is not None
+            else float(settings.rgw_admin_bucket_list_stats_timeout_seconds)
+        )
 
     def _request(
         self,
@@ -53,6 +65,7 @@ class RGWAdminClient:
         allow_conflict: bool = False,
         allow_not_found: bool = False,
         allow_not_implemented: bool = False,
+        timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         url = f"{self.endpoint}{path}"
         start = perf_counter()
@@ -69,7 +82,7 @@ class RGWAdminClient:
                 data=data,
                 headers=headers,
                 auth=self.auth,
-                timeout=10,
+                timeout=self.request_timeout_seconds if timeout is None else timeout,
                 verify=self.verify_tls,
             )
             logger.debug(
@@ -726,9 +739,11 @@ class RGWAdminClient:
             params["account-id"] = account_id
         if uid:
             params["uid"] = uid
+        timeout: Optional[float] = None
         if with_stats:
             params["stats"] = "true"
-        return self._request("GET", "/admin/bucket", params=params)
+            timeout = self.bucket_list_stats_timeout_seconds
+        return self._request("GET", "/admin/bucket", params=params, timeout=timeout)
 
     def get_account_stats(self, account_id: str, sync: bool = True) -> Dict[str, Any]:
         base_params: Dict[str, Any] = {"format": "json"}
