@@ -21,6 +21,21 @@ backend-tests:
     - cd backend
     - PYTHONPATH=. python -m pytest tests -q
 
+ceph-functional-tests:
+  stage: test
+  image: python:3.12-slim
+  needs: []
+  rules:
+    - if: '$CEPH_TEST_BACKEND_BASE_URL && $CEPH_TEST_SUPERADMIN_EMAIL && $CEPH_TEST_SUPERADMIN_PASSWORD'
+      when: on_success
+    - when: never
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install -r backend/requirements-test.txt
+  script:
+    - cd backend
+    - PYTHONPATH=. python tests_ceph_functional/run.py -q
+
 frontend-quality:
   stage: test
   image: node:20

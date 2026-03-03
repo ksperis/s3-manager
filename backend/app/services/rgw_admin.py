@@ -139,7 +139,12 @@ class RGWAdminClient:
                 if not normalized_key or value is None:
                     continue
                 params[normalized_key] = value
-        return self._request("PUT", "/admin/user", params=params, allow_conflict=True)
+        result = self._request("PUT", "/admin/user", params=params, allow_conflict=True)
+        if isinstance(result, dict) and result.get("conflict"):
+            existing = self.get_user(uid, tenant=tenant, allow_not_found=True)
+            if existing and not existing.get("not_found"):
+                return existing
+        return result
 
     def get_user(
         self, uid: str, tenant: Optional[str] = None, allow_not_found: bool = False
@@ -419,14 +424,20 @@ class RGWAdminClient:
                 if not normalized_key or value is None:
                     continue
                 params[normalized_key] = value
-        return self._request(
+        result = self._request(
             "POST",
             "/admin/account",
             params=params,
             data=None,
+            allow_conflict=True,
             allow_not_found=True,
             allow_not_implemented=True,
         )
+        if isinstance(result, dict) and result.get("conflict"):
+            existing = self.get_account(account_id, allow_not_found=True)
+            if existing and not existing.get("not_found"):
+                return existing
+        return result
 
     def delete_account(self, account_id: str) -> Dict[str, Any]:
         params: Dict[str, Any] = {
@@ -593,14 +604,20 @@ class RGWAdminClient:
                 if not normalized_key or value is None:
                     continue
                 params[normalized_key] = value
-        return self._request(
+        result = self._request(
             "PUT",
             "/admin/user",
             params=params,
             data=None,
+            allow_conflict=True,
             allow_not_found=True,
             allow_not_implemented=True,
         )
+        if isinstance(result, dict) and result.get("conflict"):
+            existing = self.get_user(uid, tenant=tenant, allow_not_found=True)
+            if existing and not existing.get("not_found"):
+                return existing
+        return result
 
     def list_user_keys(self, uid: str, tenant: Optional[str] = None) -> list[Dict[str, Any]]:
         payload = self.get_user(uid, tenant=tenant, allow_not_found=True)
@@ -812,7 +829,16 @@ class RGWAdminClient:
                 if not normalized_key or value is None:
                     continue
                 params[normalized_key] = value
-        return self._request("PUT", "/admin/user", params=params, allow_conflict=True)
+        result = self._request("PUT", "/admin/user", params=params, allow_conflict=True)
+        if isinstance(result, dict) and result.get("conflict"):
+            # Some RGW versions return 409 even after creating the account-scoped user.
+            existing = self.get_user(uid, tenant=None, allow_not_found=True)
+            if existing and not existing.get("not_found"):
+                return existing
+            account_existing = self.get_account_user(account_id, uid, allow_not_found=True)
+            if account_existing and not account_existing.get("not_found"):
+                return account_existing
+        return result
 
     def delete_user(self, uid: str, tenant: Optional[str] = None) -> None:
         attempts = [uid]

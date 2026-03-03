@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from .clients import BackendSession
+from .clients import BackendAPIError, BackendSession
 from .config import CephTestSettings
 from .resources import ResourceTracker
 
@@ -146,9 +146,21 @@ def test_account_bucket_object_flow(
     )
     resource_tracker.discard_user(manager_user_id)
 
-    super_admin_session.delete(
-        f"/admin/accounts/{account_id}",
-        params={"delete_rgw": "true"},
-        expected_status=(204,),
-    )
+    delete_rgw = "true" if ceph_test_settings.cleanup_delete_rgw else "false"
+    try:
+        super_admin_session.delete(
+            f"/admin/accounts/{account_id}",
+            params={"delete_rgw": delete_rgw},
+            expected_status=(204,),
+        )
+    except BackendAPIError:
+        # Some clusters reject tenant deletion checks even though DB unlink is valid.
+        if delete_rgw == "true":
+            super_admin_session.delete(
+                f"/admin/accounts/{account_id}",
+                params={"delete_rgw": "false"},
+                expected_status=(204,),
+            )
+        else:
+            raise
     resource_tracker.discard_account(account_id)

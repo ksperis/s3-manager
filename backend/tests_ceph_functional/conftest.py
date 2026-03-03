@@ -6,7 +6,7 @@ import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Generator
+from typing import Any, Callable, Generator
 
 import pytest
 
@@ -28,6 +28,17 @@ class S3AccountTestContext:
     manager_session: BackendSession
     manager_user_id: int
     manager_email: str
+
+
+@dataclass(frozen=True)
+class CephAdminEndpointTestContext:
+    endpoint_id: int
+    name: str
+    is_default: bool
+    can_admin: bool
+    can_accounts: bool
+    can_metrics: bool
+    admin_warning: str | None
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -96,6 +107,54 @@ def ceph_verifier(ceph_test_settings: CephTestSettings) -> CephVerifier | None:
 
 
 @pytest.fixture(scope="session")
+def ceph_admin_endpoint(
+    super_admin_session: BackendSession,
+    ceph_test_settings: CephTestSettings,
+) -> CephAdminEndpointTestContext:
+    endpoints = super_admin_session.get("/ceph-admin/endpoints")
+    if not isinstance(endpoints, list) or not endpoints:
+        pytest.skip("Ceph Admin tests skipped: no Ceph endpoint exposed by /ceph-admin/endpoints")
+
+    selected: dict[str, Any] | None = None
+    endpoint_name_filter = (ceph_test_settings.ceph_admin_endpoint_name or "").strip().lower()
+    if endpoint_name_filter:
+        for candidate in endpoints:
+            if str(candidate.get("name") or "").strip().lower() == endpoint_name_filter:
+                selected = candidate
+                break
+        if selected is None:
+            pytest.skip(f"Ceph Admin tests skipped: endpoint '{ceph_test_settings.ceph_admin_endpoint_name}' not found")
+
+    if selected is None and ceph_test_settings.ceph_admin_require_default_endpoint:
+        selected = next((candidate for candidate in endpoints if bool(candidate.get("is_default"))), None)
+        if selected is None:
+            pytest.skip("Ceph Admin tests skipped: no endpoint marked as default")
+
+    if selected is None:
+        selected = endpoints[0]
+
+    endpoint_id_raw = selected.get("id")
+    if endpoint_id_raw is None:
+        pytest.skip("Ceph Admin tests skipped: selected endpoint has no id")
+    endpoint_id = int(endpoint_id_raw)
+    access = super_admin_session.get(f"/ceph-admin/endpoints/{endpoint_id}/access")
+    if not bool(access.get("can_admin")):
+        warning = access.get("admin_warning")
+        reason = f"{warning}" if warning else "missing or invalid ceph-admin credentials"
+        pytest.skip(f"Ceph Admin tests skipped: endpoint '{selected.get('name')}' not usable ({reason})")
+
+    return CephAdminEndpointTestContext(
+        endpoint_id=endpoint_id,
+        name=str(selected.get("name") or f"endpoint-{endpoint_id}"),
+        is_default=bool(selected.get("is_default")),
+        can_admin=bool(access.get("can_admin")),
+        can_accounts=bool(access.get("can_accounts")),
+        can_metrics=bool(access.get("can_metrics")),
+        admin_warning=str(access.get("admin_warning")) if access.get("admin_warning") else None,
+    )
+
+
+@pytest.fixture(scope="session")
 def summary_recorder(pytestconfig: pytest.Config) -> RunSummary:
     summary: RunSummary = pytestconfig._ceph_summary  # type: ignore[attr-defined]
     return summary
@@ -105,11 +164,13 @@ def summary_recorder(pytestconfig: pytest.Config) -> RunSummary:
 def resource_tracker(
     super_admin_session: BackendSession,
     ceph_test_settings: CephTestSettings,
+    ceph_verifier: CephVerifier | None,
     summary_recorder: RunSummary,
 ) -> Generator[ResourceTracker, None, None]:
     tracker = ResourceTracker(
         admin_session=super_admin_session,
         delete_rgw_by_default=ceph_test_settings.cleanup_delete_rgw,
+        rgw_admin_client=ceph_verifier.client if ceph_verifier else None,
     )
     yield tracker
     errors = tracker.cleanup()
@@ -143,7 +204,7 @@ def _provision_account(
         expected_status=201,
     )
     account_id = int(created_account["id"])
-    resource_tracker.track_account(account_id)
+    resource_tracker.track_account(account_id, rgw_account_id=created_account.get("rgw_account_id"))
 
     manager_email = f"{ceph_test_settings.test_prefix}.manager.{_rand_suffix(6)}@example.com"
     manager_password = f"Test-{_rand_suffix(10)}"
@@ -154,7 +215,7 @@ def _provision_account(
             "email": manager_email,
             "password": manager_password,
             "full_name": "Ceph Functional Manager",
-            "role": "account_admin",
+            "role": "ui_user",
         },
         expected_status=201,
     )
@@ -163,7 +224,7 @@ def _provision_account(
 
     super_admin_session.post(
         f"/admin/users/{manager_user_id}/assign-account",
-        json={"account_id": account_id, "account_root": False},
+        json={"account_id": account_id, "account_root": True},
         expected_status=200,
     )
 
