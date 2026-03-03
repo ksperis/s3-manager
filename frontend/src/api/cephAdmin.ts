@@ -473,6 +473,7 @@ export type CephAdminBucket = {
   quota_max_objects?: number | null;
   tags?: BucketTag[] | null;
   features?: Record<string, BucketFeatureStatus> | null;
+  column_details?: Record<string, unknown> | null;
 };
 
 export type PaginatedCephAdminBucketsResponse = PaginatedResponse<CephAdminBucket>;

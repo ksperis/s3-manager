@@ -5,8 +5,18 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.models.bucket import (
+    BucketLifecycleConfig,
+    BucketLoggingConfiguration,
+    BucketObjectLock,
+    BucketProperties,
+    BucketPublicAccessBlock,
+    BucketWebsiteConfiguration,
+    BucketWebsiteRedirectAllRequestsTo,
+)
 from app.models.ceph_admin import CephAdminBucketSummary
 from app.routers.ceph_admin import buckets as buckets_router
+from app.services.buckets_service import BucketsService
 
 
 class FakeRGWAdmin:
@@ -161,6 +171,58 @@ def test_ceph_admin_bucket_listing_cache_does_not_leak_owner_name_mutations():
 
     assert all(item.owner_name for item in with_owner_name.items)
     assert all(item.owner_name is None for item in without_owner_name.items)
+    assert rgw_admin.get_all_buckets_calls == 1
+
+
+def test_ceph_admin_bucket_listing_cache_does_not_leak_lifecycle_column_details(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, rgw_admin = _build_ctx(endpoint_id=74, payload=payload)
+
+    lifecycle_by_bucket = {
+        "bucket-a": [{"ID": "exp-a", "Expiration": {"Days": 7}, "Transitions": [{"Days": 30, "StorageClass": "GLACIER"}]}],
+        "bucket-b": [{"ID": "exp-b", "Expiration": {"Days": 14}}],
+    }
+
+    def fake_get_lifecycle(self, name: str, account):
+        return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    with_details = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=["lifecycle_expiration_days", "lifecycle_transition_days"],
+        with_stats=False,
+        ctx=ctx,
+    )
+    without_details = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=None,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert with_details.items[0].column_details == {
+        "lifecycle_expiration_days": [7],
+        "lifecycle_transition_days": [30],
+    }
+    assert with_details.items[1].column_details == {
+        "lifecycle_expiration_days": [14],
+        "lifecycle_transition_days": [],
+    }
+    assert all(item.column_details is None for item in without_details.items)
     assert rgw_admin.get_all_buckets_calls == 1
 
 
@@ -795,3 +857,574 @@ def test_ceph_admin_bucket_listing_prefers_quota_max_size_bytes_when_both_units_
     assert len(response.items) == 1
     assert response.items[0].quota_max_size_bytes == max_size_bytes
     assert response.items[0].quota_max_size_bytes != max_size_bytes * 1024
+
+
+def test_ceph_admin_bucket_listing_lifecycle_param_filters_use_same_rule_matching(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+        {"name": "bucket-c", "owner": "owner-c"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=201, payload=payload)
+
+    lifecycle_by_bucket = {
+        "bucket-a": [
+            {"ID": "keep-temp", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 3}},
+            {"ID": "archive"},
+        ],
+        "bucket-b": [
+            {"ID": "archive", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 10}},
+        ],
+        "bucket-c": [
+            {"ID": "keep-temp"},
+            {"ID": "archive", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 10}},
+        ],
+    }
+
+    def fake_get_lifecycle(self, name: str, account):
+        return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "lifecycle_rules", "param": "lifecycle_rule_id", "op": "eq", "value": "keep-temp"},
+                {"feature": "lifecycle_rules", "param": "lifecycle_abort_multipart_days", "op": "gte", "value": 3},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    # bucket-c does not match because name and abort conditions are on different lifecycle rules.
+    assert [item.name for item in response.items] == ["bucket-a"]
+
+
+def test_ceph_admin_bucket_listing_lifecycle_rule_name_can_be_negated_with_quantifier_none(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=202, payload=payload)
+
+    def fake_get_lifecycle(self, name: str, account):
+        rules = [{"ID": "archive"}] if name == "bucket-b" else [{"ID": "keep"}]
+        return BucketLifecycleConfig(rules=rules)
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_rule_id",
+                    "op": "eq",
+                    "value": "archive",
+                    "quantifier": "none",
+                }
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-a"]
+
+
+@pytest.mark.parametrize(
+    ("op", "value", "expected"),
+    [
+        ("has", "transition", ["bucket-b", "bucket-c"]),
+        ("has_not", "transition", ["bucket-a"]),
+    ],
+)
+def test_ceph_admin_bucket_listing_lifecycle_rule_type_filters(
+    monkeypatch: pytest.MonkeyPatch, op: str, value: str, expected: list[str]
+):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+        {"name": "bucket-c", "owner": "owner-c"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=206, payload=payload)
+
+    lifecycle_by_bucket = {
+        "bucket-a": [{"ID": "exp", "Expiration": {"Days": 30}, "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}}],
+        "bucket-b": [{"ID": "tr", "Transitions": [{"Days": 30, "StorageClass": "GLACIER"}]}],
+        "bucket-c": [{"ID": "nctr", "NoncurrentVersionTransitions": [{"NoncurrentDays": 14, "StorageClass": "GLACIER"}], "Transitions": [{"Days": 60, "StorageClass": "GLACIER"}]}],
+    }
+
+    def fake_get_lifecycle(self, name: str, account):
+        return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_rule_type",
+                    "op": op,
+                    "value": value,
+                }
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == expected
+
+
+def test_ceph_admin_bucket_listing_lifecycle_rule_type_and_abort_days_must_match_same_rule(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=207, payload=payload)
+
+    lifecycle_by_bucket = {
+        "bucket-a": [
+            {"ID": "exp", "Expiration": {"Days": 30}},
+            {"ID": "abort", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}},
+        ],
+        "bucket-b": [
+            {"ID": "exp-abort", "Expiration": {"Days": 30}, "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}},
+        ],
+    }
+
+    def fake_get_lifecycle(self, name: str, account):
+        return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "lifecycle_rules", "param": "lifecycle_rule_type", "op": "has", "value": "expiration"},
+                {"feature": "lifecycle_rules", "param": "lifecycle_abort_multipart_days", "op": "gte", "value": 7},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-b"]
+
+
+@pytest.mark.parametrize(
+    ("op", "value", "expected"),
+    [
+        ("eq", 3, ["bucket-a"]),
+        ("neq", 3, ["bucket-b"]),
+        ("gt", 3, ["bucket-b"]),
+        ("gte", 10, ["bucket-b"]),
+        ("lt", 10, ["bucket-a"]),
+        ("lte", 3, ["bucket-a"]),
+    ],
+)
+def test_ceph_admin_bucket_listing_lifecycle_abort_days_operators(
+    monkeypatch: pytest.MonkeyPatch, op: str, value: int, expected: list[str]
+):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=203, payload=payload)
+
+    def fake_get_lifecycle(self, name: str, account):
+        days = 3 if name == "bucket-a" else 10
+        return BucketLifecycleConfig(rules=[{"ID": f"rule-{name}", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": days}}])
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_abort_multipart_days",
+                    "op": op,
+                    "value": value,
+                }
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == expected
+
+
+@pytest.mark.parametrize(
+    ("param", "bucket_a_rule", "bucket_b_rule", "value", "expected"),
+    [
+        (
+            "lifecycle_expiration_days",
+            {"ID": "rule-a", "Expiration": {"Days": 3}},
+            {"ID": "rule-b", "Expiration": {"Days": 10}},
+            10,
+            ["bucket-b"],
+        ),
+        (
+            "lifecycle_noncurrent_expiration_days",
+            {"ID": "rule-a", "NoncurrentVersionExpiration": {"NoncurrentDays": 3}},
+            {"ID": "rule-b", "NoncurrentVersionExpiration": {"NoncurrentDays": 10}},
+            10,
+            ["bucket-b"],
+        ),
+        (
+            "lifecycle_transition_days",
+            {"ID": "rule-a", "Transitions": [{"Days": 3, "StorageClass": "GLACIER"}]},
+            {"ID": "rule-b", "Transitions": [{"Days": 10, "StorageClass": "GLACIER"}]},
+            10,
+            ["bucket-b"],
+        ),
+    ],
+)
+def test_ceph_admin_bucket_listing_lifecycle_other_days_filters(
+    monkeypatch: pytest.MonkeyPatch,
+    param: str,
+    bucket_a_rule: dict,
+    bucket_b_rule: dict,
+    value: int,
+    expected: list[str],
+):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=208, payload=payload)
+
+    def fake_get_lifecycle(self, name: str, account):
+        rule = bucket_a_rule if name == "bucket-a" else bucket_b_rule
+        return BucketLifecycleConfig(rules=[rule])
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": param,
+                    "op": "gte",
+                    "value": value,
+                }
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == expected
+
+
+@pytest.mark.parametrize(
+    ("op", "value", "expected"),
+    [
+        ("eq", 3, ["bucket-a"]),
+        ("neq", 3, ["bucket-b"]),
+        ("gt", 3, ["bucket-b"]),
+        ("gte", 10, ["bucket-b"]),
+        ("lt", 10, ["bucket-a"]),
+        ("lte", 3, ["bucket-a"]),
+    ],
+)
+def test_ceph_admin_bucket_listing_lifecycle_transition_days_operators(
+    monkeypatch: pytest.MonkeyPatch, op: str, value: int, expected: list[str]
+):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=210, payload=payload)
+
+    def fake_get_lifecycle(self, name: str, account):
+        days = 3 if name == "bucket-a" else 10
+        return BucketLifecycleConfig(rules=[{"ID": f"rule-{name}", "Transitions": [{"Days": days, "StorageClass": "GLACIER"}]}])
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {
+                    "feature": "lifecycle_rules",
+                    "param": "lifecycle_transition_days",
+                    "op": op,
+                    "value": value,
+                }
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == expected
+
+
+def test_ceph_admin_bucket_listing_lifecycle_transition_days_and_rule_name_must_match_same_rule(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=209, payload=payload)
+
+    lifecycle_by_bucket = {
+        "bucket-a": [
+            {"ID": "archive", "Expiration": {"Days": 30}},
+            {"ID": "cold", "Transitions": [{"Days": 30, "StorageClass": "GLACIER"}]},
+        ],
+        "bucket-b": [
+            {"ID": "archive", "Transitions": [{"Days": 30, "StorageClass": "GLACIER"}]},
+        ],
+    }
+
+    def fake_get_lifecycle(self, name: str, account):
+        return BucketLifecycleConfig(rules=lifecycle_by_bucket.get(name, []))
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "lifecycle_rules", "param": "lifecycle_rule_id", "op": "eq", "value": "archive"},
+                {"feature": "lifecycle_rules", "param": "lifecycle_transition_days", "op": "eq", "value": 30},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-b"]
+
+
+def test_ceph_admin_bucket_listing_feature_param_filters_exclude_unavailable_buckets_even_in_any_mode(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "target-owner"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=204, payload=payload)
+
+    def fake_get_lifecycle(self, name: str, account):
+        if name == "bucket-b":
+            raise RuntimeError("lifecycle unavailable")
+        return BucketLifecycleConfig(rules=[{"ID": "rule-a", "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 5}}])
+
+    monkeypatch.setattr(BucketsService, "get_lifecycle", fake_get_lifecycle)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "any",
+            "rules": [
+                {"field": "owner", "op": "contains", "value": "target-owner"},
+                {"feature": "lifecycle_rules", "param": "lifecycle_abort_multipart_days", "op": "gte", "value": 5},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-a"]
+
+
+def test_ceph_admin_bucket_listing_feature_param_filters_cover_non_lifecycle_features(monkeypatch: pytest.MonkeyPatch):
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=205, payload=payload)
+
+    def fake_get_bucket_properties(self, name: str, account):
+        if name == "bucket-a":
+            return BucketProperties(
+                object_lock_enabled=True,
+                object_lock=BucketObjectLock(enabled=True, mode="GOVERNANCE", days=30),
+                public_access_block=BucketPublicAccessBlock(
+                    block_public_acls=True,
+                    ignore_public_acls=True,
+                    block_public_policy=True,
+                    restrict_public_buckets=True,
+                ),
+                lifecycle_rules=[],
+                cors_rules=[{"AllowedMethods": ["GET", "HEAD"], "AllowedOrigins": ["https://example.test"]}],
+            )
+        return BucketProperties(
+            object_lock_enabled=False,
+            object_lock=BucketObjectLock(enabled=False, mode="COMPLIANCE", days=5),
+            public_access_block=BucketPublicAccessBlock(
+                block_public_acls=False,
+                ignore_public_acls=False,
+                block_public_policy=False,
+                restrict_public_buckets=False,
+            ),
+            lifecycle_rules=[],
+            cors_rules=[{"AllowedMethods": ["PUT"], "AllowedOrigins": ["https://other.test"]}],
+        )
+
+    def fake_get_bucket_logging(self, name: str, account):
+        if name == "bucket-a":
+            return BucketLoggingConfiguration(enabled=True, target_bucket="audit-bucket", target_prefix="logs/")
+        return BucketLoggingConfiguration(enabled=False, target_bucket=None, target_prefix=None)
+
+    def fake_get_bucket_website(self, name: str, account):
+        if name == "bucket-a":
+            return BucketWebsiteConfiguration(
+                index_document="index.html",
+                redirect_all_requests_to=BucketWebsiteRedirectAllRequestsTo(host_name="www.example.test"),
+            )
+        return BucketWebsiteConfiguration(index_document=None, redirect_all_requests_to=None)
+
+    def fake_get_policy(self, name: str, account):
+        if name == "bucket-a":
+            return {
+                "Statement": [
+                    {"Effect": "Allow", "Action": "s3:GetObject", "Resource": "*"},
+                    {"Effect": "Deny", "Action": "s3:DeleteObject", "Resource": "*", "Condition": {"Bool": {"aws:SecureTransport": "false"}}},
+                ]
+            }
+        return {"Statement": [{"Effect": "Allow", "Action": "s3:GetObject", "Resource": "*"}]}
+
+    monkeypatch.setattr(BucketsService, "get_bucket_properties", fake_get_bucket_properties)
+    monkeypatch.setattr(BucketsService, "get_bucket_logging", fake_get_bucket_logging)
+    monkeypatch.setattr(BucketsService, "get_bucket_website", fake_get_bucket_website)
+    monkeypatch.setattr(BucketsService, "get_policy", fake_get_policy)
+
+    advanced_filter = json.dumps(
+        {
+            "match": "all",
+            "rules": [
+                {"feature": "object_lock", "param": "object_lock_mode", "op": "eq", "value": "GOVERNANCE"},
+                {"feature": "object_lock", "param": "object_lock_retention_days", "op": "gte", "value": 30},
+                {"feature": "block_public_access", "param": "bpa_block_public_acls", "op": "eq", "value": True},
+                {"feature": "cors", "param": "cors_allowed_method", "op": "has", "value": "GET"},
+                {"feature": "cors", "param": "cors_allowed_origin", "op": "has", "value": "https://example.test"},
+                {"feature": "access_logging", "param": "logging_enabled", "op": "eq", "value": True},
+                {"feature": "access_logging", "param": "logging_target_bucket", "op": "eq", "value": "audit-bucket"},
+                {"feature": "static_website", "param": "website_index_present", "op": "eq", "value": True},
+                {"feature": "static_website", "param": "website_redirect_host_present", "op": "eq", "value": True},
+                {"feature": "bucket_policy", "param": "policy_statement_count", "op": "gte", "value": 2},
+                {"feature": "bucket_policy", "param": "policy_has_conditions", "op": "eq", "value": True},
+            ],
+        }
+    )
+
+    response = buckets_router.list_buckets(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+    )
+
+    assert [item.name for item in response.items] == ["bucket-a"]

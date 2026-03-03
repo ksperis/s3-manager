@@ -23,6 +23,7 @@ import {
   deleteCephAdminBucketLifecycle,
   deleteCephAdminBucketPolicy,
   getCephAdminBucketCors,
+  getCephAdminBucketEncryption,
   getCephAdminBucketLifecycle,
   getCephAdminBucketLogging,
   getCephAdminBucketPolicy,
@@ -46,6 +47,18 @@ import { useCephAdminBucketListing } from "./useCephAdminBucketListing";
 import CephAdminBucketCompareModal from "./CephAdminBucketCompareModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import {
+  buildFeatureDetailRules,
+  clearFeatureDetailField,
+  defaultFeatureDetailFilters,
+  featureDetailSummary,
+  featureDetailSummaryItems,
+  hasFeatureDetailFilters,
+  sanitizeFeatureDetailFilters,
+  type FeatureDetailFilterKey,
+  type FeatureDetailFilters,
+  type NumericComparisonOpUi,
+} from "./filtering/bucketAdvancedFilter";
 
 const extractError = (err: unknown): string => {
   if (axios.isAxiosError(err)) {
@@ -850,6 +863,11 @@ type ColumnId =
   | "bucket_policy"
   | "cors"
   | "access_logging"
+  | "server_side_encryption"
+  | "lifecycle_expiration_days"
+  | "lifecycle_noncurrent_expiration_days"
+  | "lifecycle_transition_days"
+  | "lifecycle_abort_multipart_days"
   | "quota_status";
 
 type SortField = "name" | "tenant" | "owner" | "used_bytes" | "object_count";
@@ -861,7 +879,8 @@ type FeatureKey =
   | "static_website"
   | "bucket_policy"
   | "cors"
-  | "access_logging";
+  | "access_logging"
+  | "server_side_encryption";
 type FeatureFilterState = "any" | "enabled" | "disabled" | "suspended" | "disabled_or_suspended";
 type TextMatchMode = "contains" | "exact";
 type AdvancedNumericField =
@@ -882,7 +901,8 @@ type ActiveFilterRemoveAction =
   | { type: "advanced_text"; field: "tenant" | "owner" | "ownerName" | "s3Tags" }
   | { type: "advanced_owner_scope" }
   | { type: "advanced_numeric"; field: AdvancedNumericField }
-  | { type: "advanced_feature"; feature: FeatureKey };
+  | { type: "advanced_feature"; feature: FeatureKey }
+  | { type: "advanced_feature_detail"; field: FeatureDetailFilterKey };
 type ActiveFilterSummaryItem = {
   id: string;
   label: string;
@@ -918,6 +938,7 @@ type AdvancedFilterState = {
   minQuotaObjects: string;
   maxQuotaObjects: string;
   features: Record<FeatureKey, FeatureFilterState>;
+  featureDetails: FeatureDetailFilters;
 };
 
 const defaultAdvancedFilter: AdvancedFilterState = {
@@ -947,7 +968,9 @@ const defaultAdvancedFilter: AdvancedFilterState = {
     bucket_policy: "any",
     cors: "any",
     access_logging: "any",
+    server_side_encryption: "any",
   },
+  featureDetails: { ...defaultFeatureDetailFilters },
 };
 
 const FEATURE_LABELS: Record<FeatureKey, string> = {
@@ -959,6 +982,7 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   bucket_policy: "Bucket policy",
   cors: "CORS",
   access_logging: "Access logging",
+  server_side_encryption: "Server-side encryption",
 };
 
 const FEATURE_STATE_OPTIONS: Array<{ id: FeatureKey; label: string }> = [
@@ -970,7 +994,47 @@ const FEATURE_STATE_OPTIONS: Array<{ id: FeatureKey; label: string }> = [
   { id: "bucket_policy", label: "Bucket policy" },
   { id: "cors", label: "CORS" },
   { id: "access_logging", label: "Access logging" },
+  { id: "server_side_encryption", label: "Server-side encryption" },
 ];
+type FeatureDetailColumnOption = {
+  id: ColumnId;
+  label: string;
+  feature: FeatureKey;
+  include: string;
+};
+const FEATURE_DETAIL_COLUMN_OPTIONS: FeatureDetailColumnOption[] = [
+  {
+    id: "lifecycle_expiration_days",
+    label: "Lifecycle expiration days",
+    feature: "lifecycle_rules",
+    include: "lifecycle_expiration_days",
+  },
+  {
+    id: "lifecycle_noncurrent_expiration_days",
+    label: "Lifecycle noncurrent expiration days",
+    feature: "lifecycle_rules",
+    include: "lifecycle_noncurrent_expiration_days",
+  },
+  {
+    id: "lifecycle_transition_days",
+    label: "Lifecycle transition days",
+    feature: "lifecycle_rules",
+    include: "lifecycle_transition_days",
+  },
+  {
+    id: "lifecycle_abort_multipart_days",
+    label: "Lifecycle abort multipart days",
+    feature: "lifecycle_rules",
+    include: "lifecycle_abort_multipart_days",
+  },
+];
+const FEATURE_DETAIL_COLUMN_IDS = FEATURE_DETAIL_COLUMN_OPTIONS.map((option) => option.id);
+const BOOLEAN_FILTER_OPTIONS: Array<{ value: "any" | "true" | "false"; label: string }> = [
+  { value: "any", label: "Any" },
+  { value: "true", label: "Yes" },
+  { value: "false", label: "No" },
+];
+const NUMERIC_FILTER_OPTIONS: NumericComparisonOpUi[] = ["=", "!=", ">", ">=", "<", "<="];
 
 const formatFeatureFilterStateLabel = (state: FeatureFilterState) => {
   if (state === "disabled_or_suspended") return "Disabled or Suspended";
@@ -1162,6 +1226,7 @@ const buildAdvancedFilterPayload = (
       if (state === "any") return;
       rules.push({ feature: key, state });
     });
+    rules.push(...buildFeatureDetailRules(advanced.featureDetails));
   }
 
   if (taggedBuckets) {
@@ -1204,9 +1269,14 @@ const hasAdvancedFilters = (
   ) {
     return true;
   }
-  return (Object.keys(advanced.features) as FeatureKey[]).some(
-    (feature) => featureSupport[feature] !== false && advanced.features[feature] !== "any"
-  );
+  if (
+    (Object.keys(advanced.features) as FeatureKey[]).some(
+      (feature) => featureSupport[feature] !== false && advanced.features[feature] !== "any"
+    )
+  ) {
+    return true;
+  }
+  return hasFeatureDetailFilters(advanced.featureDetails);
 };
 
 const COLUMNS_STORAGE_KEY = "ceph-admin.bucket_list.columns.v1";
@@ -1244,6 +1314,11 @@ const loadVisibleColumns = (): ColumnId[] => {
       "bucket_policy",
       "cors",
       "access_logging",
+      "server_side_encryption",
+      "lifecycle_expiration_days",
+      "lifecycle_noncurrent_expiration_days",
+      "lifecycle_transition_days",
+      "lifecycle_abort_multipart_days",
       "quota_status",
     ]);
     const cleaned = parsed.filter((v) => typeof v === "string" && allowed.has(v as ColumnId)) as ColumnId[];
@@ -1508,6 +1583,7 @@ const sanitizeAdvancedFilter = (value: unknown): AdvancedFilterState => {
     minQuotaObjects: safeString(data.minQuotaObjects),
     maxQuotaObjects: safeString(data.maxQuotaObjects),
     features,
+    featureDetails: sanitizeFeatureDetailFilters(data.featureDetails),
   };
 };
 
@@ -1629,6 +1705,7 @@ export default function CephAdminBucketsPage() {
   const cephAdminBrowserEnabled = generalSettings.browser_enabled && generalSettings.browser_ceph_admin_enabled;
   const usageFeatureEnabled = selectedEndpoint?.capabilities?.metrics !== false;
   const staticWebsiteFeatureEnabled = selectedEndpoint?.capabilities?.static_website === true;
+  const sseFeatureEnabled = selectedEndpoint?.capabilities?.sse !== false;
   const featureSupport = useMemo<Record<FeatureKey, boolean>>(
     () => ({
       versioning: true,
@@ -1639,8 +1716,9 @@ export default function CephAdminBucketsPage() {
       bucket_policy: true,
       cors: true,
       access_logging: true,
+      server_side_encryption: sseFeatureEnabled,
     }),
-    [staticWebsiteFeatureEnabled]
+    [staticWebsiteFeatureEnabled, sseFeatureEnabled]
   );
   const featureStateOptions = useMemo(
     () => FEATURE_STATE_OPTIONS.map((option) => ({ ...option, supported: featureSupport[option.id] !== false })),
@@ -1653,6 +1731,9 @@ export default function CephAdminBucketsPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const [expandedFeatureColumnGroups, setExpandedFeatureColumnGroups] = useState<Partial<Record<FeatureKey, boolean>>>({
+    lifecycle_rules: true,
+  });
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
@@ -1788,10 +1869,14 @@ export default function CephAdminBucketsPage() {
 
   useEffect(() => {
     setVisibleColumns((prev) => {
-      const next = prev.filter((column) => (column === "static_website" ? staticWebsiteFeatureEnabled : true));
+      const next = prev.filter((column) => {
+        if (column === "static_website") return staticWebsiteFeatureEnabled;
+        if (column === "server_side_encryption") return sseFeatureEnabled;
+        return true;
+      });
       return next.length === prev.length ? prev : next;
     });
-  }, [staticWebsiteFeatureEnabled]);
+  }, [staticWebsiteFeatureEnabled, sseFeatureEnabled]);
 
   useEffect(() => {
     if (!showAdvancedFilter) return;
@@ -1971,6 +2056,16 @@ export default function CephAdminBucketsPage() {
     () => featureStateOptions.filter((option) => option.supported).map((option) => ({ ...option, key: option.id })),
     [featureStateOptions]
   );
+  const featureDetailColumnsByFeature = useMemo(() => {
+    const supported = new Set(featureColumnOptions.map((option) => option.id));
+    const groups: Partial<Record<FeatureKey, FeatureDetailColumnOption[]>> = {};
+    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((option) => {
+      if (!supported.has(option.feature)) return;
+      const current = groups[option.feature] ?? [];
+      groups[option.feature] = [...current, option];
+    });
+    return groups;
+  }, [featureColumnOptions]);
   const allExportColumnIds = useMemo<ColumnId[]>(
     () => [
       "tenant",
@@ -1985,12 +2080,14 @@ export default function CephAdminBucketsPage() {
       "tags",
       "ui_tags",
       ...featureColumnOptions.map((column) => column.id),
+      ...FEATURE_DETAIL_COLUMN_IDS,
     ],
     [featureColumnOptions]
   );
   const exportIncludeParams = useMemo(() => {
     const include = new Set<string>(["owner_name", "tags"]);
     featureColumnOptions.forEach((column) => include.add(column.id));
+    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((column) => include.add(column.include));
     return Array.from(include.values());
   }, [featureColumnOptions]);
 
@@ -2000,6 +2097,9 @@ export default function CephAdminBucketsPage() {
     if (visibleColumns.includes("tags")) include.push("tags");
     featureColumnOptions.forEach(({ id }) => {
       if (visibleColumns.includes(id)) include.push(id);
+    });
+    FEATURE_DETAIL_COLUMN_OPTIONS.forEach((column) => {
+      if (visibleColumns.includes(column.id)) include.push(column.include);
     });
     return include;
   }, [featureColumnOptions, visibleColumns]);
@@ -2148,6 +2248,9 @@ export default function CephAdminBucketsPage() {
 
   const toggleColumn = (id: ColumnId) => {
     setVisibleColumns((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
+  };
+  const toggleFeatureColumnGroup = (feature: FeatureKey) => {
+    setExpandedFeatureColumnGroups((prev) => ({ ...prev, [feature]: !prev[feature] }));
   };
 
   const resetColumns = () => {
@@ -2766,6 +2869,38 @@ export default function CephAdminBucketsPage() {
           id: col,
           label: "Quota status",
           getValue: (bucket) => (quotaConfigured(bucket) ? "Configured" : "Not set"),
+        });
+        return;
+      }
+      if (col === "lifecycle_expiration_days") {
+        exportColumns.push({
+          id: col,
+          label: "Lifecycle expiration days",
+          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_expiration_days"),
+        });
+        return;
+      }
+      if (col === "lifecycle_noncurrent_expiration_days") {
+        exportColumns.push({
+          id: col,
+          label: "Lifecycle noncurrent expiration days",
+          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_noncurrent_expiration_days"),
+        });
+        return;
+      }
+      if (col === "lifecycle_transition_days") {
+        exportColumns.push({
+          id: col,
+          label: "Lifecycle transition days",
+          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_transition_days"),
+        });
+        return;
+      }
+      if (col === "lifecycle_abort_multipart_days") {
+        exportColumns.push({
+          id: col,
+          label: "Lifecycle abort multipart days",
+          getValue: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_abort_multipart_days"),
         });
         return;
       }
@@ -4355,7 +4490,7 @@ export default function CephAdminBucketsPage() {
     refreshBuckets();
   };
 
-  const updateAdvancedField = (field: keyof AdvancedFilterState, value: string) => {
+  const updateAdvancedField = (field: AdvancedTextOrNumericField, value: string) => {
     setAdvancedDraft((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -4368,6 +4503,19 @@ export default function CephAdminBucketsPage() {
 
   const updateFeatureFilter = (feature: FeatureKey, value: FeatureFilterState) => {
     setAdvancedDraft((prev) => ({ ...prev, features: { ...prev.features, [feature]: value } }));
+  };
+
+  const updateFeatureDetailFilter = (
+    field: FeatureDetailFilterKey,
+    value: FeatureDetailFilters[FeatureDetailFilterKey]
+  ) => {
+    setAdvancedDraft((prev) => ({
+      ...prev,
+      featureDetails: {
+        ...prev.featureDetails,
+        [field]: value,
+      },
+    }));
   };
 
   const closeAdvancedFilterDrawer = () => {
@@ -4397,7 +4545,6 @@ export default function CephAdminBucketsPage() {
   );
   const hasPendingAdvancedChanges = advancedDraftPayload !== advancedAppliedPayload;
   const hasAnyAdvancedToClear = advancedDraftPayload !== undefined || advancedAppliedPayload !== undefined;
-  const advancedFilterActive = advancedFiltersApplied || tagFilters.length > 0;
   const quickFilterActive = filterValue.trim().length > 0;
   const columnsCustomized = useMemo(() => {
     if (visibleColumns.length !== defaultVisibleColumns.length) return true;
@@ -4526,6 +4673,11 @@ export default function CephAdminBucketsPage() {
   );
   const ownerNameLookupActive = ownerNameDraftValue.length > 0;
   const s3TagsLookupActive = s3TagsDraftExpressions.length > 0;
+  const featureDetailDraftLabels = useMemo(
+    () => featureDetailSummary(advancedDraft.featureDetails),
+    [advancedDraft.featureDetails]
+  );
+  const featureDetailFiltersActive = featureDetailDraftLabels.length > 0;
   const ownerPrefilterActive = tenantDraftValue.length > 0 || ownerDraftValue.length > 0 || ownerNameDraftScope !== "any";
   const advancedDraftIdentityCount =
     Number(tenantDraftValue.length > 0) +
@@ -4553,11 +4705,14 @@ export default function CephAdminBucketsPage() {
     [advancedDraft, featureSupport]
   );
   const advancedDraftTagCount = s3TagsDraftExpressions.length;
-  const advancedDraftActiveCount = advancedDraftIdentityCount + advancedDraftRangeCount + advancedDraftFeatureCount + advancedDraftTagCount;
+  const advancedDraftFeatureDetailCount = featureDetailDraftLabels.length;
+  const advancedDraftActiveCount =
+    advancedDraftIdentityCount + advancedDraftRangeCount + advancedDraftFeatureCount + advancedDraftTagCount + advancedDraftFeatureDetailCount;
   const multipleFeatureFiltersActive = advancedDraftFeatureCount > 1;
   const featureCostReducedByPrefilter =
     advancedDraftFeatureCount === 1 && ownerPrefilterActive && !ownerNameLookupActive && !s3TagsLookupActive;
   const advancedDraftGlobalCostLevel: FilterCostLevel = useMemo(() => {
+    if (featureDetailFiltersActive) return "high";
     if (s3TagsLookupActive) return "high";
     if (advancedDraftFeatureCount > 0) {
       if (multipleFeatureFiltersActive) return "high";
@@ -4575,9 +4730,13 @@ export default function CephAdminBucketsPage() {
     s3TagsLookupActive,
     featureCostReducedByPrefilter,
     multipleFeatureFiltersActive,
+    featureDetailFiltersActive,
   ]);
   const advancedDraftGlobalCostTooltip = useMemo(() => {
     if (advancedDraftGlobalCostLevel === "high") {
+      if (featureDetailFiltersActive) {
+        return `${FILTER_COST_LABEL.high}: feature detail filters require additional per-bucket configuration reads.`;
+      }
       if (s3TagsLookupActive) {
         return `${FILTER_COST_LABEL.high}: S3 tag filters require bucket tag retrieval.`;
       }
@@ -4606,6 +4765,7 @@ export default function CephAdminBucketsPage() {
     featureCostReducedByPrefilter,
     multipleFeatureFiltersActive,
     advancedDraftFeatureCount,
+    featureDetailFiltersActive,
   ]);
   const toggleQuickFilterMode = () => {
     if (quickFilterDraftForcesExact) return;
@@ -4638,6 +4798,13 @@ export default function CephAdminBucketsPage() {
     setAdvancedApplied((prev) => (prev ? { ...prev, features: { ...prev.features, [feature]: "any" } } : prev));
     setPage(1);
   };
+  const clearAdvancedFeatureDetailFilterField = (field: FeatureDetailFilterKey) => {
+    setAdvancedDraft((prev) => ({ ...prev, featureDetails: clearFeatureDetailField(prev.featureDetails, field) }));
+    setAdvancedApplied((prev) =>
+      prev ? { ...prev, featureDetails: clearFeatureDetailField(prev.featureDetails, field) } : prev
+    );
+    setPage(1);
+  };
   const removeActiveFilterItem = (action: ActiveFilterRemoveAction) => {
     if (action.type === "quick") {
       setFilter("");
@@ -4660,6 +4827,10 @@ export default function CephAdminBucketsPage() {
     }
     if (action.type === "advanced_text" || action.type === "advanced_numeric") {
       clearAdvancedTextOrNumericField(action.field);
+      return;
+    }
+    if (action.type === "advanced_feature_detail") {
+      clearAdvancedFeatureDetailFilterField(action.field);
       return;
     }
     clearAdvancedFeatureField(action.feature);
@@ -4782,6 +4953,13 @@ export default function CephAdminBucketsPage() {
           remove: { type: "advanced_feature", feature },
         });
       });
+      featureDetailSummaryItems(advancedApplied.featureDetails).forEach((entry) => {
+        items.push({
+          id: `feature-detail-${entry.field}`,
+          label: entry.label,
+          remove: { type: "advanced_feature_detail", field: entry.field },
+        });
+      });
     }
 
     return items;
@@ -4856,13 +5034,19 @@ export default function CephAdminBucketsPage() {
       });
     }
 
-  (Object.keys(advancedDraft.features) as FeatureKey[]).forEach((feature) => {
+    (Object.keys(advancedDraft.features) as FeatureKey[]).forEach((feature) => {
       if (featureSupport[feature] === false) return;
       const state = advancedDraft.features[feature];
       if (state === "any") return;
       items.push({
         id: `draft-feature-${feature}`,
         label: `${FEATURE_LABELS[feature]}: ${formatFeatureFilterStateLabel(state)}`,
+      });
+    });
+    featureDetailSummaryItems(advancedDraft.featureDetails).forEach((entry) => {
+      items.push({
+        id: `draft-feature-detail-${entry.field}`,
+        label: entry.label,
       });
     });
 
@@ -5454,6 +5638,22 @@ export default function CephAdminBucketsPage() {
       return lines;
     }
 
+    if (featureKey === "server_side_encryption") {
+      const encryption = await getCephAdminBucketEncryption(selectedEndpointId, bucket.name);
+      const rules = Array.isArray(encryption.rules) ? encryption.rules : [];
+      if (rules.length === 0) {
+        return ["Enabled: No"];
+      }
+      const lines = [`Enabled: Yes`, `Rules: ${rules.length}`];
+      const firstRule = rules[0] as Record<string, unknown>;
+      const defaultSse = firstRule.ApplyServerSideEncryptionByDefault as Record<string, unknown> | undefined;
+      const algorithm = typeof defaultSse?.SSEAlgorithm === "string" ? defaultSse.SSEAlgorithm.trim() : "";
+      const kmsKeyId = typeof defaultSse?.KMSMasterKeyID === "string" ? defaultSse.KMSMasterKeyID.trim() : "";
+      if (algorithm) lines.push(`Algorithm: ${algorithm}`);
+      if (kmsKeyId) lines.push(`KMS key: ${kmsKeyId}`);
+      return lines;
+    }
+
     return ["No additional details available."];
   };
 
@@ -5592,6 +5792,27 @@ export default function CephAdminBucketsPage() {
         )}
       </div>
     );
+  };
+
+  const formatLifecycleDayDetail = (
+    bucket: CephAdminBucket,
+    detailKey:
+      | "lifecycle_expiration_days"
+      | "lifecycle_noncurrent_expiration_days"
+      | "lifecycle_transition_days"
+      | "lifecycle_abort_multipart_days"
+  ): string => {
+    const details = bucket.column_details as Record<string, unknown> | null | undefined;
+    const raw = details?.[detailKey];
+    if (raw === null || raw === undefined) return "-";
+    if (!Array.isArray(raw)) return "-";
+    const values = raw
+      .map((item) => Number(item))
+      .filter((item) => Number.isFinite(item))
+      .map((item) => Math.trunc(item))
+      .sort((a, b) => a - b);
+    if (values.length === 0) return "None";
+    return Array.from(new Set(values)).join(", ");
   };
 
   const bucketTableColumns: ColumnDef[] = (() => {
@@ -5779,6 +6000,47 @@ export default function CephAdminBucketsPage() {
       });
     });
 
+    if (visible.has("lifecycle_expiration_days")) {
+      cols.push({
+        id: "lifecycle_expiration_days",
+        label: "LC Expiration d",
+        field: null,
+        expensive: true,
+        headerClassName: "w-36",
+        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_expiration_days"),
+      });
+    }
+    if (visible.has("lifecycle_noncurrent_expiration_days")) {
+      cols.push({
+        id: "lifecycle_noncurrent_expiration_days",
+        label: "LC Noncurrent exp d",
+        field: null,
+        expensive: true,
+        headerClassName: "w-44",
+        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_noncurrent_expiration_days"),
+      });
+    }
+    if (visible.has("lifecycle_transition_days")) {
+      cols.push({
+        id: "lifecycle_transition_days",
+        label: "LC Transition d",
+        field: null,
+        expensive: true,
+        headerClassName: "w-36",
+        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_transition_days"),
+      });
+    }
+    if (visible.has("lifecycle_abort_multipart_days")) {
+      cols.push({
+        id: "lifecycle_abort_multipart_days",
+        label: "LC Abort mp d",
+        field: null,
+        expensive: true,
+        headerClassName: "w-36",
+        render: (bucket) => formatLifecycleDayDetail(bucket, "lifecycle_abort_multipart_days"),
+      });
+    }
+
     if (visible.has("quota_status")) {
       cols.push({
         id: "quota_status",
@@ -5907,7 +6169,7 @@ export default function CephAdminBucketsPage() {
                     Columns
                   </button>
                   {showColumnPicker && (
-                    <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                    <div className="absolute right-0 z-30 mt-2 w-96 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
                       <div className="flex items-center justify-between gap-2">
                         <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Visible columns</p>
                         <button
@@ -5949,19 +6211,53 @@ export default function CephAdminBucketsPage() {
 
                         <div className="space-y-2">
                           <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
-                          {featureColumnOptions.map((opt) => (
-                            <UiCheckboxField
-                              key={opt.id}
-                              checked={visibleColumns.includes(opt.id)}
-                              onChange={() => toggleColumn(opt.id)}
-                              className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200"
-                              inputPosition="end"
-                            >
-                              <span>{opt.label}</span>
-                            </UiCheckboxField>
-                          ))}
+                          <div className="space-y-1.5">
+                            {featureColumnOptions.map((opt) => {
+                              const detailOptions = featureDetailColumnsByFeature[opt.id] ?? [];
+                              const expanded = expandedFeatureColumnGroups[opt.id] === true;
+                              return (
+                                <div key={opt.id} className="rounded-lg border border-slate-200 p-2 dark:border-slate-700">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <UiCheckboxField
+                                      checked={visibleColumns.includes(opt.id)}
+                                      onChange={() => toggleColumn(opt.id)}
+                                      className="flex-1 ui-body text-slate-700 dark:text-slate-200"
+                                      inputPosition="end"
+                                    >
+                                      <span>{opt.label}</span>
+                                    </UiCheckboxField>
+                                    {detailOptions.length > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleFeatureColumnGroup(opt.id)}
+                                        className="rounded-md border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                                        aria-expanded={expanded}
+                                      >
+                                        {expanded ? "Details ▾" : "Details ▸"}
+                                      </button>
+                                    )}
+                                  </div>
+                                  {detailOptions.length > 0 && expanded && (
+                                    <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
+                                      {detailOptions.map((detail) => (
+                                        <UiCheckboxField
+                                          key={detail.id}
+                                          checked={visibleColumns.includes(detail.id)}
+                                          onChange={() => toggleColumn(detail.id)}
+                                          className="flex items-center justify-between ui-caption text-slate-600 dark:text-slate-300"
+                                          inputPosition="end"
+                                        >
+                                          <span>{detail.label}</span>
+                                        </UiCheckboxField>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                           <p className="ui-caption text-slate-500 dark:text-slate-400">
-                            Feature checks run only when their column is enabled.
+                            Feature checks and detail values are loaded only for enabled columns.
                           </p>
                         </div>
                       </div>
@@ -6349,6 +6645,10 @@ export default function CephAdminBucketsPage() {
                           <div className="mb-3 flex items-center justify-between">
                             <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               <span>Storage Metrics and Quota</span>
+                              {renderFilterCostIndicator(
+                                "medium",
+                                "Medium cost: storage metrics and quota filters require bucket stats."
+                              )}
                             </p>
                             {!usageFeatureEnabled && (
                               <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 ui-caption font-semibold text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200">
@@ -6397,12 +6697,7 @@ export default function CephAdminBucketsPage() {
                                       const maxState = fieldHighlight(Boolean(maxApplied), maxDraft !== maxApplied);
                                       return (
                                         <div key={`${section.title}:${row.label}`}>
-                                          <label className={`ui-caption font-medium text-slate-600 dark:text-slate-300 ${rowState.labelClass}`}>
-                                            <span className="inline-flex items-center gap-1">
-                                              <span>{row.label}</span>
-                                              {renderFilterCostIndicator("medium", "Medium cost: numeric usage/quota filters require bucket stats.")}
-                                            </span>
-                                          </label>
+                                          <label className={`ui-caption font-medium text-slate-600 dark:text-slate-300 ${rowState.labelClass}`}>{row.label}</label>
                                           <div className="mt-1 grid grid-cols-2 gap-2">
                                             <input
                                               type="number"
@@ -6437,12 +6732,13 @@ export default function CephAdminBucketsPage() {
                           <div className="mb-3 flex items-center justify-between">
                             <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               <span>Feature states</span>
+                              {renderFilterCostIndicator("high", "High cost: feature-state filters may trigger extra checks.")}
                             </p>
                             <span className="ui-caption text-slate-500 dark:text-slate-400">
                               {advancedDraftFeatureCount} active
                             </span>
                           </div>
-                          {!staticWebsiteFeatureEnabled && (
+                          {featureStateOptions.some((feature) => !feature.supported) && (
                             <p className="mb-3 ui-caption text-slate-500 dark:text-slate-400">
                               Some features are disabled on this endpoint and cannot be filtered.
                             </p>
@@ -6460,12 +6756,7 @@ export default function CephAdminBucketsPage() {
                                   key={feature.id}
                                   className={`rounded-lg border border-slate-200 p-2.5 dark:border-slate-700 ${disabled ? "opacity-60" : ""}`}
                                 >
-                                  <label className={`ui-caption font-medium text-slate-700 dark:text-slate-200 ${state.labelClass}`}>
-                                    <span className="inline-flex items-center gap-1">
-                                      <span>{feature.label}</span>
-                                      {renderFilterCostIndicator("high", "High cost: feature-state filters may trigger extra checks.")}
-                                    </span>
-                                  </label>
+                                  <label className={`ui-caption font-medium text-slate-700 dark:text-slate-200 ${state.labelClass}`}>{feature.label}</label>
                                   <select
                                     value={advancedDraft.features[feature.id]}
                                     onChange={(e) => updateFeatureFilter(feature.id, e.target.value as FeatureFilterState)}
@@ -6496,6 +6787,481 @@ export default function CephAdminBucketsPage() {
                                 </div>
                               );
                             })}
+                          </div>
+                        </section>
+
+                        <section className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                          <div className="mb-3 flex items-center justify-between">
+                            <p className="inline-flex items-center gap-1 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              <span>Feature details</span>
+                              {renderFilterCostIndicator(
+                                "high",
+                                "High cost: feature-detail filters may trigger additional per-bucket data retrieval."
+                              )}
+                            </p>
+                            <span className="ui-caption text-slate-500 dark:text-slate-400">
+                              {featureDetailDraftLabels.length} active
+                            </span>
+                          </div>
+                          <div className="grid gap-3 lg:grid-cols-2">
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Lifecycle
+                              </p>
+                              <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                Rule name, type and lifecycle day conditions are evaluated on the same lifecycle rule.
+                              </p>
+                              <div className="mt-2 space-y-2">
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule name</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.lifecycleRuleNameMode}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "lifecycleRuleNameMode",
+                                          e.target.value as FeatureDetailFilters["lifecycleRuleNameMode"]
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      <option value="any">Any</option>
+                                      <option value="has_named">Has named rule</option>
+                                      <option value="has_not_named">Has no named rule</option>
+                                    </select>
+                                    <input
+                                      type="text"
+                                      value={advancedDraft.featureDetails.lifecycleRuleName}
+                                      onChange={(e) => updateFeatureDetailFilter("lifecycleRuleName", e.target.value)}
+                                      placeholder="rule-id"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Rule type</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.lifecycleRuleTypeMode}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "lifecycleRuleTypeMode",
+                                          e.target.value as FeatureDetailFilters["lifecycleRuleTypeMode"]
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      <option value="any">Any</option>
+                                      <option value="has">Has rule type</option>
+                                      <option value="has_not">Has no rule type</option>
+                                    </select>
+                                    <select
+                                      value={advancedDraft.featureDetails.lifecycleRuleTypeValue}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "lifecycleRuleTypeValue",
+                                          e.target.value as FeatureDetailFilters["lifecycleRuleTypeValue"]
+                                        )
+                                      }
+                                      disabled={advancedDraft.featureDetails.lifecycleRuleTypeMode === "any"}
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      <option value="">Select type</option>
+                                      {LIFECYCLE_TYPE_OPTIONS.map((option) => (
+                                        <option key={option.key} value={option.key}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Expiration days</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.lifecycleExpirationDaysOp}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "lifecycleExpirationDaysOp",
+                                          e.target.value as NumericComparisonOpUi
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {NUMERIC_FILTER_OPTIONS.map((op) => (
+                                        <option key={op} value={op}>
+                                          {op}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={advancedDraft.featureDetails.lifecycleExpirationDays}
+                                      onChange={(e) => updateFeatureDetailFilter("lifecycleExpirationDays", e.target.value)}
+                                      placeholder="days"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Noncurrent expiration days</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.lifecycleNoncurrentExpirationDaysOp}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "lifecycleNoncurrentExpirationDaysOp",
+                                          e.target.value as NumericComparisonOpUi
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {NUMERIC_FILTER_OPTIONS.map((op) => (
+                                        <option key={op} value={op}>
+                                          {op}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={advancedDraft.featureDetails.lifecycleNoncurrentExpirationDays}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter("lifecycleNoncurrentExpirationDays", e.target.value)
+                                      }
+                                      placeholder="days"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Transition days</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.lifecycleTransitionDaysOp}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "lifecycleTransitionDaysOp",
+                                          e.target.value as NumericComparisonOpUi
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {NUMERIC_FILTER_OPTIONS.map((op) => (
+                                        <option key={op} value={op}>
+                                          {op}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={advancedDraft.featureDetails.lifecycleTransitionDays}
+                                      onChange={(e) => updateFeatureDetailFilter("lifecycleTransitionDays", e.target.value)}
+                                      placeholder="days"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Abort days</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.lifecycleAbortDaysOp}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "lifecycleAbortDaysOp",
+                                          e.target.value as NumericComparisonOpUi
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {NUMERIC_FILTER_OPTIONS.map((op) => (
+                                        <option key={op} value={op}>
+                                          {op}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={advancedDraft.featureDetails.lifecycleAbortDays}
+                                      onChange={(e) => updateFeatureDetailFilter("lifecycleAbortDays", e.target.value)}
+                                      placeholder="days"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Object Lock and BPA
+                              </p>
+                              <div className="mt-2 space-y-2">
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Object Lock mode</label>
+                                  <select
+                                    value={advancedDraft.featureDetails.objectLockMode}
+                                    onChange={(e) =>
+                                      updateFeatureDetailFilter(
+                                        "objectLockMode",
+                                        e.target.value as FeatureDetailFilters["objectLockMode"]
+                                      )
+                                    }
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  >
+                                    <option value="">Any</option>
+                                    <option value="GOVERNANCE">GOVERNANCE</option>
+                                    <option value="COMPLIANCE">COMPLIANCE</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Object Lock retention days</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.objectLockRetentionOp}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "objectLockRetentionOp",
+                                          e.target.value as NumericComparisonOpUi
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {NUMERIC_FILTER_OPTIONS.map((op) => (
+                                        <option key={op} value={op}>
+                                          {op}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={advancedDraft.featureDetails.objectLockRetentionDays}
+                                      onChange={(e) => updateFeatureDetailFilter("objectLockRetentionDays", e.target.value)}
+                                      placeholder="days"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {[
+                                    { key: "bpaBlockPublicAcls" as const, label: "Block public ACLs" },
+                                    { key: "bpaIgnorePublicAcls" as const, label: "Ignore public ACLs" },
+                                    { key: "bpaBlockPublicPolicy" as const, label: "Block public policy" },
+                                    { key: "bpaRestrictPublicBuckets" as const, label: "Restrict public buckets" },
+                                  ].map((entry) => (
+                                    <div key={entry.key}>
+                                      <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">{entry.label}</label>
+                                      <select
+                                        value={advancedDraft.featureDetails[entry.key]}
+                                        onChange={(e) =>
+                                          updateFeatureDetailFilter(
+                                            entry.key,
+                                            e.target.value as FeatureDetailFilters[typeof entry.key]
+                                          )
+                                        }
+                                        className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                      >
+                                        {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                                          <option key={option.value} value={option.value}>
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                CORS and Logging
+                              </p>
+                              <div className="mt-2 space-y-2">
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">CORS method</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.corsMethodMode}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "corsMethodMode",
+                                          e.target.value as FeatureDetailFilters["corsMethodMode"]
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      <option value="any">Any</option>
+                                      <option value="has">Has</option>
+                                      <option value="has_not">Has not</option>
+                                    </select>
+                                    <input
+                                      type="text"
+                                      value={advancedDraft.featureDetails.corsMethodValue}
+                                      onChange={(e) => updateFeatureDetailFilter("corsMethodValue", e.target.value)}
+                                      placeholder="GET"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">CORS origin</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.corsOriginMode}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "corsOriginMode",
+                                          e.target.value as FeatureDetailFilters["corsOriginMode"]
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      <option value="any">Any</option>
+                                      <option value="has">Has</option>
+                                      <option value="has_not">Has not</option>
+                                    </select>
+                                    <input
+                                      type="text"
+                                      value={advancedDraft.featureDetails.corsOriginValue}
+                                      onChange={(e) => updateFeatureDetailFilter("corsOriginValue", e.target.value)}
+                                      placeholder="https://example.test"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Logging enabled</label>
+                                  <select
+                                    value={advancedDraft.featureDetails.loggingEnabled}
+                                    onChange={(e) =>
+                                      updateFeatureDetailFilter(
+                                        "loggingEnabled",
+                                        e.target.value as FeatureDetailFilters["loggingEnabled"]
+                                      )
+                                    }
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  >
+                                    {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Logging target bucket</label>
+                                  <input
+                                    type="text"
+                                    value={advancedDraft.featureDetails.loggingTargetBucket}
+                                    onChange={(e) => updateFeatureDetailFilter("loggingTargetBucket", e.target.value)}
+                                    placeholder="audit-bucket"
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                              <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Website and Policy
+                              </p>
+                              <div className="mt-2 space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website index present</label>
+                                    <select
+                                      value={advancedDraft.featureDetails.websiteIndexPresent}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "websiteIndexPresent",
+                                          e.target.value as FeatureDetailFilters["websiteIndexPresent"]
+                                        )
+                                      }
+                                      className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Website redirect host present</label>
+                                    <select
+                                      value={advancedDraft.featureDetails.websiteRedirectHostPresent}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "websiteRedirectHostPresent",
+                                          e.target.value as FeatureDetailFilters["websiteRedirectHostPresent"]
+                                        )
+                                      }
+                                      className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Policy statements</label>
+                                  <div className="mt-1 grid grid-cols-5 gap-2">
+                                    <select
+                                      value={advancedDraft.featureDetails.policyStatementOp}
+                                      onChange={(e) =>
+                                        updateFeatureDetailFilter(
+                                          "policyStatementOp",
+                                          e.target.value as NumericComparisonOpUi
+                                        )
+                                      }
+                                      className="col-span-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    >
+                                      {NUMERIC_FILTER_OPTIONS.map((op) => (
+                                        <option key={op} value={op}>
+                                          {op}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={advancedDraft.featureDetails.policyStatementCount}
+                                      onChange={(e) => updateFeatureDetailFilter("policyStatementCount", e.target.value)}
+                                      placeholder="count"
+                                      className="col-span-3 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="ui-caption font-medium text-slate-700 dark:text-slate-200">Policy has conditions</label>
+                                  <select
+                                    value={advancedDraft.featureDetails.policyHasConditions}
+                                    onChange={(e) =>
+                                      updateFeatureDetailFilter(
+                                        "policyHasConditions",
+                                        e.target.value as FeatureDetailFilters["policyHasConditions"]
+                                      )
+                                    }
+                                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                  >
+                                    {BOOLEAN_FILTER_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </section>
                       </div>

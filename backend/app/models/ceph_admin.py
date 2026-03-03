@@ -62,6 +62,7 @@ class CephAdminBucketSummary(BaseModel):
     quota_max_objects: Optional[int] = None
     tags: Optional[list[BucketTag]] = None
     features: Optional[dict[str, BucketFeatureStatus]] = None
+    column_details: Optional[dict[str, Any]] = None
 
 
 class PaginatedCephAdminBucketsResponse(PaginatedResponse):
@@ -288,6 +289,8 @@ BucketFilterOp = Literal[
     "not_in",
     "is_null",
     "not_null",
+    "has",
+    "has_not",
 ]
 BucketFeatureKey = Literal[
     "versioning",
@@ -298,6 +301,7 @@ BucketFeatureKey = Literal[
     "bucket_policy",
     "cors",
     "access_logging",
+    "server_side_encryption",
 ]
 BucketFeatureState = Literal[
     "enabled",
@@ -310,14 +314,40 @@ BucketFeatureState = Literal[
     "not_set",
     "unavailable",
 ]
+BucketFeatureParam = Literal[
+    "lifecycle_rule_id",
+    "lifecycle_rule_type",
+    "lifecycle_expiration_days",
+    "lifecycle_noncurrent_expiration_days",
+    "lifecycle_transition_days",
+    "lifecycle_abort_multipart_present",
+    "lifecycle_abort_multipart_days",
+    "object_lock_mode",
+    "object_lock_retention_days",
+    "bpa_block_public_acls",
+    "bpa_ignore_public_acls",
+    "bpa_block_public_policy",
+    "bpa_restrict_public_buckets",
+    "cors_allowed_method",
+    "cors_allowed_origin",
+    "logging_enabled",
+    "logging_target_bucket",
+    "website_index_present",
+    "website_redirect_host_present",
+    "policy_statement_count",
+    "policy_has_conditions",
+]
+BucketFeatureParamQuantifier = Literal["any", "none"]
 
 
 class CephAdminBucketFilterRule(BaseModel):
     field: Optional[BucketFilterField] = None
     op: Optional[BucketFilterOp] = None
-    value: Optional[Union[str, int, float, bool, list[str], list[int], list[float]]] = None
+    value: Optional[Union[str, int, float, bool, list[str], list[int], list[float], list[bool]]] = None
     feature: Optional[BucketFeatureKey] = None
     state: Optional[BucketFeatureState] = None
+    param: Optional[BucketFeatureParam] = None
+    quantifier: Optional[BucketFeatureParamQuantifier] = None
 
     @model_validator(mode="after")
     def validate_rule(self):
@@ -329,12 +359,62 @@ class CephAdminBucketFilterRule(BaseModel):
             op = self.op
             if op is None:
                 raise ValueError("Field rule requires op.")
+            if op in {"has", "has_not"}:
+                raise ValueError("Field rule does not support has/has_not op.")
             if op not in ("is_null", "not_null") and self.value is None:
                 raise ValueError("Field rule requires value.")
+            if self.state is not None or self.param is not None:
+                raise ValueError("Field rule cannot define state or param.")
+            if self.quantifier not in (None, "any"):
+                raise ValueError("Field rule quantifier must be omitted or 'any'.")
         if feature:
-            state = self.state
-            if state is None:
-                raise ValueError("Feature rule requires state.")
+            has_state = self.state is not None
+            has_param = self.param is not None
+            if has_state == has_param:
+                raise ValueError("Feature rule requires exactly one of state or param.")
+            if has_state:
+                if self.op is not None or self.value is not None:
+                    raise ValueError("Feature state rule cannot define op or value.")
+                if self.quantifier not in (None, "any"):
+                    raise ValueError("Feature state rule quantifier must be omitted or 'any'.")
+            else:
+                op = self.op
+                if op is None:
+                    raise ValueError("Feature param rule requires op.")
+                assert self.param is not None
+                allowed: dict[BucketFeatureParam, tuple[set[str], set[str], bool]] = {
+                    "lifecycle_rule_id": ({"lifecycle_rules"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
+                    "lifecycle_rule_type": ({"lifecycle_rules"}, {"has", "has_not"}, True),
+                    "lifecycle_expiration_days": ({"lifecycle_rules"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
+                    "lifecycle_noncurrent_expiration_days": ({"lifecycle_rules"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
+                    "lifecycle_transition_days": ({"lifecycle_rules"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
+                    "lifecycle_abort_multipart_present": ({"lifecycle_rules"}, {"has", "has_not"}, False),
+                    "lifecycle_abort_multipart_days": ({"lifecycle_rules"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
+                    "object_lock_mode": ({"object_lock"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
+                    "object_lock_retention_days": ({"object_lock"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
+                    "bpa_block_public_acls": ({"block_public_access"}, {"eq", "neq"}, True),
+                    "bpa_ignore_public_acls": ({"block_public_access"}, {"eq", "neq"}, True),
+                    "bpa_block_public_policy": ({"block_public_access"}, {"eq", "neq"}, True),
+                    "bpa_restrict_public_buckets": ({"block_public_access"}, {"eq", "neq"}, True),
+                    "cors_allowed_method": ({"cors"}, {"has", "has_not", "eq", "neq"}, True),
+                    "cors_allowed_origin": ({"cors"}, {"has", "has_not", "eq", "neq"}, True),
+                    "logging_enabled": ({"access_logging"}, {"eq", "neq"}, True),
+                    "logging_target_bucket": ({"access_logging"}, {"eq", "neq", "contains", "starts_with", "ends_with"}, True),
+                    "website_index_present": ({"static_website"}, {"eq", "neq"}, True),
+                    "website_redirect_host_present": ({"static_website"}, {"eq", "neq"}, True),
+                    "policy_statement_count": ({"bucket_policy"}, {"eq", "neq", "gt", "gte", "lt", "lte"}, True),
+                    "policy_has_conditions": ({"bucket_policy"}, {"eq", "neq"}, True),
+                }
+                feature_keys, allowed_ops, requires_value = allowed[self.param]
+                if feature not in feature_keys:
+                    raise ValueError(f"Feature param '{self.param}' is invalid for feature '{feature}'.")
+                if op not in allowed_ops:
+                    raise ValueError(f"Feature param '{self.param}' does not support op '{op}'.")
+                if requires_value and self.value is None:
+                    raise ValueError("Feature param rule requires value.")
+                if (not requires_value) and self.value is not None:
+                    raise ValueError("Feature param rule does not accept value.")
+                self.quantifier = self.quantifier or "any"
         return self
 
 

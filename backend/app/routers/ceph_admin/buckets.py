@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Lock
 from time import monotonic
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import ValidationError
@@ -95,6 +95,36 @@ _BUCKET_LIST_CACHE: OrderedDict[_BucketListCacheKey, _BucketListCacheEntry] = Or
 _BUCKET_LIST_CACHE_LOCK = Lock()
 _RGW_BUCKET_PAYLOAD_CACHE: OrderedDict[_RgwBucketPayloadCacheKey, _RgwBucketPayloadCacheEntry] = OrderedDict()
 _RGW_BUCKET_PAYLOAD_CACHE_LOCK = Lock()
+_FEATURE_PARAM_UNAVAILABLE = object()
+_FEATURE_PARAM_SOURCE_BY_PARAM: dict[str, str] = {
+    "lifecycle_rule_id": "lifecycle",
+    "lifecycle_rule_type": "lifecycle",
+    "lifecycle_expiration_days": "lifecycle",
+    "lifecycle_noncurrent_expiration_days": "lifecycle",
+    "lifecycle_transition_days": "lifecycle",
+    "lifecycle_abort_multipart_present": "lifecycle",
+    "lifecycle_abort_multipart_days": "lifecycle",
+    "object_lock_mode": "props",
+    "object_lock_retention_days": "props",
+    "bpa_block_public_acls": "props",
+    "bpa_ignore_public_acls": "props",
+    "bpa_block_public_policy": "props",
+    "bpa_restrict_public_buckets": "props",
+    "cors_allowed_method": "props",
+    "cors_allowed_origin": "props",
+    "logging_enabled": "logging",
+    "logging_target_bucket": "logging",
+    "website_index_present": "website",
+    "website_redirect_host_present": "website",
+    "policy_statement_count": "policy",
+    "policy_has_conditions": "policy",
+}
+_COLUMN_DETAIL_LIFECYCLE_KEYS = {
+    "lifecycle_expiration_days",
+    "lifecycle_noncurrent_expiration_days",
+    "lifecycle_transition_days",
+    "lifecycle_abort_multipart_days",
+}
 
 
 def _build_endpoint_account(ctx: CephAdminContext) -> S3Account:
@@ -606,6 +636,505 @@ def _match_feature_rule(bucket: CephAdminBucketSummary, rule: CephAdminBucketFil
     return False
 
 
+def _bucket_identity_key(bucket: CephAdminBucketSummary) -> str:
+    return f"{bucket.tenant or ''}:{bucket.name}"
+
+
+def _coerce_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    if isinstance(value, (int, float)) and value in {0, 1}:
+        return bool(value)
+    return None
+
+
+def _match_text_value(left: str | None, op: str, right_raw: object) -> bool:
+    if left is None:
+        return False
+    right = _normalize_text(str(right_raw or ""))
+    if not right:
+        return False
+    left_norm = _normalize_text(left)
+    if op == "eq":
+        return left_norm == right
+    if op == "neq":
+        return left_norm != right
+    if op == "contains":
+        return right in left_norm
+    if op == "starts_with":
+        return left_norm.startswith(right)
+    if op == "ends_with":
+        return left_norm.endswith(right)
+    return False
+
+
+def _match_numeric_value(left: float | None, op: str, right_raw: object) -> bool:
+    if left is None:
+        return False
+    right = _coerce_number(right_raw)
+    if right is None:
+        return False
+    if op == "eq":
+        return left == right
+    if op == "neq":
+        return left != right
+    if op == "gt":
+        return left > right
+    if op == "gte":
+        return left >= right
+    if op == "lt":
+        return left < right
+    if op == "lte":
+        return left <= right
+    return False
+
+
+def _match_bool_value(left: bool | None, op: str, right_raw: object) -> bool:
+    if left is None:
+        return False
+    right = _coerce_bool(right_raw)
+    if right is None:
+        return False
+    if op == "eq":
+        return left is right
+    if op == "neq":
+        return left is not right
+    return False
+
+
+def _extract_lifecycle_rule_id(rule_entry: dict) -> str | None:
+    raw = rule_entry.get("ID")
+    if raw is None:
+        raw = rule_entry.get("Id")
+    if raw is None:
+        raw = rule_entry.get("id")
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    return value or None
+
+
+def _extract_lifecycle_abort_days(rule_entry: dict) -> float | None:
+    raw = rule_entry.get("AbortIncompleteMultipartUpload")
+    if not isinstance(raw, dict):
+        return None
+    return _coerce_number(raw.get("DaysAfterInitiation"))
+
+
+def _extract_lifecycle_expiration_days(rule_entry: dict) -> float | None:
+    expiration = rule_entry.get("Expiration")
+    if not isinstance(expiration, dict):
+        return None
+    return _coerce_number(expiration.get("Days"))
+
+
+def _extract_lifecycle_noncurrent_expiration_days(rule_entry: dict) -> float | None:
+    noncurrent_expiration = rule_entry.get("NoncurrentVersionExpiration")
+    if not isinstance(noncurrent_expiration, dict):
+        return None
+    return _coerce_number(noncurrent_expiration.get("NoncurrentDays"))
+
+
+def _extract_lifecycle_transition_days(rule_entry: dict) -> list[float]:
+    values: list[float] = []
+    transitions = rule_entry.get("Transitions")
+    if isinstance(transitions, list):
+        candidates = transitions
+    elif isinstance(rule_entry.get("Transition"), dict):
+        candidates = [rule_entry.get("Transition")]
+    else:
+        candidates = []
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        days = _coerce_number(item.get("Days"))
+        if days is not None:
+            values.append(days)
+    return values
+
+
+def _dedupe_sorted_day_values(values: list[float]) -> list[int]:
+    normalized: list[int] = []
+    seen: set[int] = set()
+    for raw in values:
+        if raw is None:
+            continue
+        value = int(raw)
+        if value in seen:
+            continue
+        seen.add(value)
+        normalized.append(value)
+    normalized.sort()
+    return normalized
+
+
+def _extract_lifecycle_rule_types(rule_entry: dict) -> list[str]:
+    types: list[str] = []
+
+    expiration = rule_entry.get("Expiration")
+    if isinstance(expiration, dict):
+        if expiration.get("Days") is not None or expiration.get("Date") is not None:
+            types.append("expiration")
+        if expiration.get("ExpiredObjectDeleteMarker") is True:
+            types.append("delete_markers")
+
+    noncurrent_expiration = rule_entry.get("NoncurrentVersionExpiration")
+    if isinstance(noncurrent_expiration, dict) and noncurrent_expiration.get("NoncurrentDays") is not None:
+        types.append("noncurrent_expiration")
+
+    abort_incomplete = rule_entry.get("AbortIncompleteMultipartUpload")
+    if isinstance(abort_incomplete, dict) and abort_incomplete.get("DaysAfterInitiation") is not None:
+        types.append("abort_multipart")
+
+    transitions = rule_entry.get("Transitions")
+    if isinstance(transitions, list) and len(transitions) > 0:
+        types.append("transition")
+    elif isinstance(rule_entry.get("Transition"), dict):
+        types.append("transition")
+
+    noncurrent_transitions = rule_entry.get("NoncurrentVersionTransitions")
+    if isinstance(noncurrent_transitions, list) and len(noncurrent_transitions) > 0:
+        types.append("noncurrent_transition")
+    elif isinstance(rule_entry.get("NoncurrentVersionTransition"), dict):
+        types.append("noncurrent_transition")
+
+    return types
+
+
+def _feature_param_quantifier(rule: CephAdminBucketFilterRule) -> str:
+    return "none" if (rule.quantifier or "").strip().lower() == "none" else "any"
+
+
+def _lifecycle_rule_matches_param(
+    lifecycle_rule: dict,
+    rule: CephAdminBucketFilterRule,
+    *,
+    force_presence_positive: bool = False,
+) -> bool:
+    param = rule.param
+    op = (rule.op or "").strip().lower()
+    if force_presence_positive and op == "has_not":
+        op = "has"
+    if param == "lifecycle_rule_id":
+        return _match_text_value(_extract_lifecycle_rule_id(lifecycle_rule), op, rule.value)
+    if param == "lifecycle_rule_type":
+        rule_types = _extract_lifecycle_rule_types(lifecycle_rule)
+        if op == "has":
+            return any(_match_text_value(value, "eq", rule.value) for value in rule_types)
+        if op == "has_not":
+            return not any(_match_text_value(value, "eq", rule.value) for value in rule_types)
+        return False
+    if param == "lifecycle_abort_multipart_present":
+        present = _extract_lifecycle_abort_days(lifecycle_rule) is not None
+        if op == "has":
+            return present
+        if op == "has_not":
+            return not present
+        return False
+    if param == "lifecycle_expiration_days":
+        return _match_numeric_value(_extract_lifecycle_expiration_days(lifecycle_rule), op, rule.value)
+    if param == "lifecycle_noncurrent_expiration_days":
+        return _match_numeric_value(_extract_lifecycle_noncurrent_expiration_days(lifecycle_rule), op, rule.value)
+    if param == "lifecycle_transition_days":
+        transition_days = _extract_lifecycle_transition_days(lifecycle_rule)
+        return any(_match_numeric_value(days, op, rule.value) for days in transition_days)
+    if param == "lifecycle_abort_multipart_days":
+        return _match_numeric_value(_extract_lifecycle_abort_days(lifecycle_rule), op, rule.value)
+    return False
+
+
+def _match_lifecycle_param_rule_individual(rule: CephAdminBucketFilterRule, lifecycle_rules: list[dict]) -> bool:
+    op = (rule.op or "").strip().lower()
+    if op == "has_not":
+        return not any(_lifecycle_rule_matches_param(item, rule, force_presence_positive=True) for item in lifecycle_rules)
+    matched_any = any(_lifecycle_rule_matches_param(item, rule) for item in lifecycle_rules)
+    return matched_any if _feature_param_quantifier(rule) == "any" else (not matched_any)
+
+
+def _match_lifecycle_param_rules_all(
+    rules: list[CephAdminBucketFilterRule],
+    lifecycle_rules: list[dict],
+) -> bool:
+    positive_rules: list[CephAdminBucketFilterRule] = []
+    forbidden_rules: list[CephAdminBucketFilterRule] = []
+    for rule in rules:
+        op = (rule.op or "").strip().lower()
+        if op == "has_not" or _feature_param_quantifier(rule) == "none":
+            forbidden_rules.append(rule)
+        else:
+            positive_rules.append(rule)
+
+    positive_ok = True
+    if positive_rules:
+        positive_ok = any(
+            all(_lifecycle_rule_matches_param(item, rule) for rule in positive_rules)
+            for item in lifecycle_rules
+        )
+
+    forbidden_ok = True
+    for rule in forbidden_rules:
+        op = (rule.op or "").strip().lower()
+        if op == "has_not":
+            forbidden_match = any(
+                _lifecycle_rule_matches_param(item, rule, force_presence_positive=True)
+                for item in lifecycle_rules
+            )
+        else:
+            forbidden_match = any(_lifecycle_rule_matches_param(item, rule) for item in lifecycle_rules)
+        if forbidden_match:
+            forbidden_ok = False
+            break
+    return positive_ok and forbidden_ok
+
+
+def _extract_policy_statement_summary(policy: dict | None) -> tuple[int, bool]:
+    if not isinstance(policy, dict):
+        return 0, False
+    raw_statements = policy.get("Statement")
+    if isinstance(raw_statements, list):
+        statements = raw_statements
+    elif raw_statements is None:
+        statements = []
+    else:
+        statements = [raw_statements]
+    has_conditions = any(
+        isinstance(item, dict) and isinstance(item.get("Condition"), dict) and len(item.get("Condition", {}).keys()) > 0
+        for item in statements
+    )
+    return len(statements), has_conditions
+
+
+def _match_feature_param_rule(rule: CephAdminBucketFilterRule, snapshot: dict[str, object]) -> bool:
+    feature = rule.feature
+    param = rule.param
+    op = (rule.op or "").strip().lower()
+    if not feature or not param or not op:
+        return False
+    source = _FEATURE_PARAM_SOURCE_BY_PARAM.get(param)
+    if not source:
+        return False
+    source_data = snapshot.get(source, _FEATURE_PARAM_UNAVAILABLE)
+    if source_data is _FEATURE_PARAM_UNAVAILABLE:
+        return False
+
+    if param in {
+        "lifecycle_rule_id",
+        "lifecycle_rule_type",
+        "lifecycle_expiration_days",
+        "lifecycle_noncurrent_expiration_days",
+        "lifecycle_transition_days",
+        "lifecycle_abort_multipart_present",
+        "lifecycle_abort_multipart_days",
+    }:
+        lifecycle_rules = source_data if isinstance(source_data, list) else []
+        return _match_lifecycle_param_rule_individual(rule, [item for item in lifecycle_rules if isinstance(item, dict)])
+
+    quantifier = _feature_param_quantifier(rule)
+
+    def apply_scalar(result: bool) -> bool:
+        return result if quantifier == "any" else (not result)
+
+    def apply_sequence(values: list[str], text_op: str) -> bool:
+        if text_op == "has":
+            return any(_match_text_value(value, "eq", rule.value) for value in values)
+        if text_op == "has_not":
+            return not any(_match_text_value(value, "eq", rule.value) for value in values)
+        matched_any = any(_match_text_value(value, text_op, rule.value) for value in values)
+        return matched_any if quantifier == "any" else (not matched_any)
+
+    if not isinstance(source_data, BucketProperties) and source == "props":
+        return False
+    if source == "props":
+        props = source_data if isinstance(source_data, BucketProperties) else None
+        if props is None:
+            return False
+        if param == "object_lock_mode":
+            value = props.object_lock.mode if props.object_lock else None
+            return apply_scalar(_match_text_value(value, op, rule.value))
+        if param == "object_lock_retention_days":
+            days = props.object_lock.days if props.object_lock else None
+            return apply_scalar(_match_numeric_value(_coerce_number(days), op, rule.value))
+        if param == "bpa_block_public_acls":
+            value = props.public_access_block.block_public_acls if props.public_access_block else None
+            return apply_scalar(_match_bool_value(value, op, rule.value))
+        if param == "bpa_ignore_public_acls":
+            value = props.public_access_block.ignore_public_acls if props.public_access_block else None
+            return apply_scalar(_match_bool_value(value, op, rule.value))
+        if param == "bpa_block_public_policy":
+            value = props.public_access_block.block_public_policy if props.public_access_block else None
+            return apply_scalar(_match_bool_value(value, op, rule.value))
+        if param == "bpa_restrict_public_buckets":
+            value = props.public_access_block.restrict_public_buckets if props.public_access_block else None
+            return apply_scalar(_match_bool_value(value, op, rule.value))
+        if param in {"cors_allowed_method", "cors_allowed_origin"}:
+            field_name = "AllowedMethods" if param == "cors_allowed_method" else "AllowedOrigins"
+            collected: list[str] = []
+            rules = props.cors_rules if isinstance(props.cors_rules, list) else []
+            for cors_rule in rules:
+                if not isinstance(cors_rule, dict):
+                    continue
+                values = cors_rule.get(field_name)
+                if not isinstance(values, list):
+                    continue
+                for item in values:
+                    text = str(item or "").strip()
+                    if text:
+                        collected.append(text)
+            return apply_sequence(collected, op)
+        return False
+
+    if source == "logging":
+        if not isinstance(source_data, BucketLoggingConfiguration):
+            return False
+        target_bucket = (source_data.target_bucket or "").strip() if source_data.target_bucket else ""
+        if param == "logging_enabled":
+            enabled = bool(source_data.enabled and target_bucket)
+            return apply_scalar(_match_bool_value(enabled, op, rule.value))
+        if param == "logging_target_bucket":
+            return apply_scalar(_match_text_value(target_bucket or None, op, rule.value))
+        return False
+
+    if source == "website":
+        if not isinstance(source_data, BucketWebsiteConfiguration):
+            return False
+        redirect_host = ""
+        if source_data.redirect_all_requests_to and source_data.redirect_all_requests_to.host_name:
+            redirect_host = source_data.redirect_all_requests_to.host_name.strip()
+        if param == "website_index_present":
+            index_present = bool((source_data.index_document or "").strip())
+            return apply_scalar(_match_bool_value(index_present, op, rule.value))
+        if param == "website_redirect_host_present":
+            redirect_present = bool(redirect_host)
+            return apply_scalar(_match_bool_value(redirect_present, op, rule.value))
+        return False
+
+    if source == "policy":
+        policy = source_data if isinstance(source_data, dict) else None
+        statement_count, has_conditions = _extract_policy_statement_summary(policy)
+        if param == "policy_statement_count":
+            return apply_scalar(_match_numeric_value(float(statement_count), op, rule.value))
+        if param == "policy_has_conditions":
+            return apply_scalar(_match_bool_value(has_conditions, op, rule.value))
+        return False
+
+    return False
+
+
+def _match_feature_param_rules(
+    rules: list[CephAdminBucketFilterRule],
+    match_mode: str,
+    snapshot: dict[str, object],
+) -> bool:
+    if not rules:
+        return True
+    lifecycle_rules = [rule for rule in rules if rule.feature == "lifecycle_rules"]
+    non_lifecycle_rules = [rule for rule in rules if rule.feature != "lifecycle_rules"]
+    results: list[bool] = []
+
+    if lifecycle_rules:
+        lifecycle_source = snapshot.get("lifecycle", _FEATURE_PARAM_UNAVAILABLE)
+        if lifecycle_source is _FEATURE_PARAM_UNAVAILABLE or not isinstance(lifecycle_source, list):
+            lifecycle_result = False if match_mode == "all" else False
+            if match_mode == "all":
+                return False
+            results.append(lifecycle_result)
+        else:
+            normalized = [item for item in lifecycle_source if isinstance(item, dict)]
+            if match_mode == "all":
+                results.append(_match_lifecycle_param_rules_all(lifecycle_rules, normalized))
+            else:
+                results.extend(_match_lifecycle_param_rule_individual(rule, normalized) for rule in lifecycle_rules)
+
+    results.extend(_match_feature_param_rule(rule, snapshot) for rule in non_lifecycle_rules)
+    return all(results) if match_mode == "all" else any(results)
+
+
+def _required_feature_param_sources(rules: list[CephAdminBucketFilterRule]) -> set[str]:
+    required: set[str] = set()
+    for rule in rules:
+        if not rule.param:
+            continue
+        source = _FEATURE_PARAM_SOURCE_BY_PARAM.get(rule.param)
+        if source:
+            required.add(source)
+    return required
+
+
+def _load_feature_param_snapshot_for_bucket(
+    bucket: CephAdminBucketSummary,
+    required_sources: set[str],
+    service: BucketsService,
+    account: S3Account,
+) -> dict[str, object]:
+    snapshot: dict[str, object] = {}
+    if "props" in required_sources:
+        try:
+            snapshot["props"] = service.get_bucket_properties(bucket.name, account)
+        except RuntimeError:
+            snapshot["props"] = _FEATURE_PARAM_UNAVAILABLE
+    if "lifecycle" in required_sources:
+        try:
+            snapshot["lifecycle"] = service.get_lifecycle(bucket.name, account).rules or []
+        except RuntimeError:
+            snapshot["lifecycle"] = _FEATURE_PARAM_UNAVAILABLE
+    if "logging" in required_sources:
+        try:
+            snapshot["logging"] = service.get_bucket_logging(bucket.name, account)
+        except RuntimeError:
+            snapshot["logging"] = _FEATURE_PARAM_UNAVAILABLE
+    if "website" in required_sources:
+        try:
+            snapshot["website"] = service.get_bucket_website(bucket.name, account)
+        except RuntimeError:
+            snapshot["website"] = _FEATURE_PARAM_UNAVAILABLE
+    if "policy" in required_sources:
+        try:
+            snapshot["policy"] = service.get_policy(bucket.name, account)
+        except RuntimeError:
+            snapshot["policy"] = _FEATURE_PARAM_UNAVAILABLE
+    return snapshot
+
+
+def _load_feature_param_snapshots(
+    buckets: list[CephAdminBucketSummary],
+    rules: list[CephAdminBucketFilterRule],
+    service: BucketsService,
+    account: S3Account,
+) -> tuple[dict[str, dict[str, object]], set[str]]:
+    snapshots: dict[str, dict[str, object]] = {}
+    if not buckets:
+        return snapshots, set()
+    required_sources = _required_feature_param_sources(rules)
+    if not required_sources:
+        available = {_bucket_identity_key(bucket) for bucket in buckets}
+        return snapshots, available
+
+    def load_one(bucket: CephAdminBucketSummary) -> tuple[str, dict[str, object]]:
+        return _bucket_identity_key(bucket), _load_feature_param_snapshot_for_bucket(bucket, required_sources, service, account)
+
+    max_workers = min(BUCKET_ENRICH_MAX_WORKERS, len(buckets))
+    if max_workers <= 1:
+        for bucket in buckets:
+            key, snapshot = load_one(bucket)
+            snapshots[key] = snapshot
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for key, snapshot in executor.map(load_one, buckets):
+                snapshots[key] = snapshot
+
+    available_keys: set[str] = set()
+    for key, snapshot in snapshots.items():
+        if all(snapshot.get(source, _FEATURE_PARAM_UNAVAILABLE) is not _FEATURE_PARAM_UNAVAILABLE for source in required_sources):
+            available_keys.add(key)
+    return snapshots, available_keys
+
+
 def _match_rules(bucket: CephAdminBucketSummary, rules: list[CephAdminBucketFilterRule], match: str) -> bool:
     if not rules:
         return True
@@ -613,6 +1142,8 @@ def _match_rules(bucket: CephAdminBucketSummary, rules: list[CephAdminBucketFilt
     for rule in rules:
         if rule.field:
             results.append(_match_field_rule(bucket, rule))
+        elif rule.param:
+            results.append(False)
         else:
             results.append(_match_feature_rule(bucket, rule))
     return all(results) if match == "all" else any(results)
@@ -651,6 +1182,9 @@ def _enrich_buckets(
     wants_website = "static_website" in requested
     wants_policy = "bucket_policy" in requested
     wants_logging = "access_logging" in requested
+    wants_encryption = "server_side_encryption" in requested
+    lifecycle_detail_keys = requested & _COLUMN_DETAIL_LIFECYCLE_KEYS
+    wants_lifecycle_details = bool(lifecycle_detail_keys)
     props_feature_keys = {"versioning", "object_lock", "block_public_access", "lifecycle_rules", "cors"}
     requested_props_features = requested & props_feature_keys
     use_props_bundle = len(requested_props_features) > 1
@@ -664,6 +1198,7 @@ def _enrich_buckets(
                 tags = []
 
         feature_map: dict[str, BucketFeatureStatus] = {}
+        column_details: dict[str, Any] = {}
         props: BucketProperties | None = None
         props_error = False
         if use_props_bundle:
@@ -740,21 +1275,65 @@ def _enrich_buckets(
                     else:
                         feature_map["block_public_access"] = _feature_status_inactive("Disabled")
 
-        if "lifecycle_rules" in requested:
-            rules = None
-            if use_props_bundle:
+        if "lifecycle_rules" in requested or wants_lifecycle_details:
+            lifecycle_rules_for_state: list[object] = []
+            lifecycle_rules_raw: list[dict] | None = None
+            lifecycle_unavailable = False
+
+            if wants_lifecycle_details:
+                try:
+                    lifecycle_rules_raw = service.get_lifecycle(bucket.name, account).rules or []
+                    lifecycle_rules_for_state = lifecycle_rules_raw
+                except RuntimeError:
+                    lifecycle_unavailable = True
+            elif use_props_bundle:
                 if props_error:
-                    feature_map["lifecycle_rules"] = _feature_status_unavailable()
+                    lifecycle_unavailable = True
                 else:
-                    rules = props.lifecycle_rules if props else []
+                    lifecycle_rules_for_state = props.lifecycle_rules if props else []
             else:
                 try:
-                    rules = service.get_lifecycle(bucket.name, account).rules or []
+                    lifecycle_rules_raw = service.get_lifecycle(bucket.name, account).rules or []
+                    lifecycle_rules_for_state = lifecycle_rules_raw
                 except RuntimeError:
+                    lifecycle_unavailable = True
+
+            if "lifecycle_rules" in requested:
+                if lifecycle_unavailable:
                     feature_map["lifecycle_rules"] = _feature_status_unavailable()
-            if "lifecycle_rules" not in feature_map:
-                has_rules = bool(rules and len(rules) > 0)
-                feature_map["lifecycle_rules"] = _feature_status_active("Enabled") if has_rules else _feature_status_inactive("Disabled")
+                else:
+                    has_rules = bool(lifecycle_rules_for_state and len(lifecycle_rules_for_state) > 0)
+                    feature_map["lifecycle_rules"] = (
+                        _feature_status_active("Enabled") if has_rules else _feature_status_inactive("Disabled")
+                    )
+
+            if wants_lifecycle_details:
+                if lifecycle_unavailable:
+                    for key in lifecycle_detail_keys:
+                        column_details[key] = None
+                else:
+                    normalized_rules = [item for item in (lifecycle_rules_raw or []) if isinstance(item, dict)]
+
+                    if "lifecycle_expiration_days" in lifecycle_detail_keys:
+                        values = [_extract_lifecycle_expiration_days(rule) for rule in normalized_rules]
+                        column_details["lifecycle_expiration_days"] = _dedupe_sorted_day_values(
+                            [value for value in values if value is not None]
+                        )
+                    if "lifecycle_noncurrent_expiration_days" in lifecycle_detail_keys:
+                        values = [_extract_lifecycle_noncurrent_expiration_days(rule) for rule in normalized_rules]
+                        column_details["lifecycle_noncurrent_expiration_days"] = _dedupe_sorted_day_values(
+                            [value for value in values if value is not None]
+                        )
+                    if "lifecycle_transition_days" in lifecycle_detail_keys:
+                        values: list[float] = []
+                        for rule in normalized_rules:
+                            values.extend(_extract_lifecycle_transition_days(rule))
+                        column_details["lifecycle_transition_days"] = _dedupe_sorted_day_values(values)
+                    if "lifecycle_abort_multipart_days" in lifecycle_detail_keys:
+                        values = [_extract_lifecycle_abort_days(rule) for rule in normalized_rules]
+                        column_details["lifecycle_abort_multipart_days"] = _dedupe_sorted_day_values(
+                            [value for value in values if value is not None]
+                        )
 
         if "cors" in requested:
             rules = None
@@ -801,11 +1380,23 @@ def _enrich_buckets(
             except RuntimeError:
                 feature_map["access_logging"] = _feature_status_unavailable()
 
+        if wants_encryption and "server_side_encryption" in requested:
+            try:
+                encryption = service.get_bucket_encryption(bucket.name, account)
+                enabled = bool(encryption.rules and len(encryption.rules) > 0)
+                feature_map["server_side_encryption"] = (
+                    _feature_status_active("Enabled") if enabled else _feature_status_inactive("Disabled")
+                )
+            except RuntimeError:
+                feature_map["server_side_encryption"] = _feature_status_unavailable()
+
         update = {}
         if tags is not None:
             update["tags"] = tags
         if feature_map:
             update["features"] = feature_map
+        if column_details:
+            update["column_details"] = column_details
         if update:
             base = bucket.model_dump() if hasattr(bucket, "model_dump") else bucket.dict()
             return CephAdminBucketSummary(**{**base, **update})
@@ -975,7 +1566,9 @@ def list_buckets(
         "bucket_policy",
         "cors",
         "access_logging",
+        "server_side_encryption",
     }
+    requested_detail_fields = include_set & _COLUMN_DETAIL_LIFECYCLE_KEYS
 
     cache_key = _BucketListCacheKey(
         endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
@@ -1016,7 +1609,8 @@ def list_buckets(
 
         if advanced_filter and advanced_filter.rules:
             field_rules = [rule for rule in advanced_filter.rules if rule.field]
-            feature_rules = [rule for rule in advanced_filter.rules if rule.feature]
+            feature_state_rules = [rule for rule in advanced_filter.rules if rule.feature and rule.state is not None]
+            feature_param_rules = [rule for rule in advanced_filter.rules if rule.feature and rule.param is not None]
             match_mode = advanced_filter.match
             expensive_field_rules = [
                 rule for rule in field_rules if rule.field in {"owner_name", "tag"}
@@ -1027,76 +1621,137 @@ def list_buckets(
 
             if cheap_field_rules and match_mode == "all":
                 results = [bucket for bucket in results if all(_match_field_rule(bucket, rule) for rule in cheap_field_rules)]
-            elif cheap_field_rules and match_mode == "any" and not expensive_field_rules and not feature_rules:
+            elif (
+                cheap_field_rules
+                and match_mode == "any"
+                and not expensive_field_rules
+                and not feature_state_rules
+                and not feature_param_rules
+            ):
                 results = [bucket for bucket in results if any(_match_field_rule(bucket, rule) for rule in cheap_field_rules)]
 
-            if expensive_field_rules or feature_rules:
-                filter_features = {rule.feature for rule in feature_rules if rule.feature}
+            if expensive_field_rules or feature_state_rules or feature_param_rules:
+                filter_features = {rule.feature for rule in feature_state_rules if rule.feature}
                 requires_tag_lookup = any(rule.field == "tag" for rule in expensive_field_rules)
                 requires_owner_name_lookup = any(rule.field == "owner_name" for rule in expensive_field_rules)
                 service = BucketsService()
                 account = _build_endpoint_account(ctx)
-                field_matched: list[CephAdminBucketSummary] = []
                 expensive_candidates = results
-                if match_mode == "any" and cheap_field_rules:
-                    # Apply cheap predicates first and resolve expensive data only for unresolved buckets.
-                    unresolved: list[CephAdminBucketSummary] = []
-                    for bucket in results:
-                        if any(_match_field_rule(bucket, rule) for rule in cheap_field_rules):
-                            field_matched.append(bucket)
-                        else:
-                            unresolved.append(bucket)
-                    expensive_candidates = unresolved
 
-                if requires_owner_name_lookup and expensive_candidates:
-                    owner_scope = _determine_owner_name_lookup_scope(advanced_filter)
-                    owner_name_by_key = _resolve_owner_names_for_buckets(
-                        ctx,
-                        expensive_candidates,
-                        owner_scope=owner_scope,
-                    )
-                    for bucket in expensive_candidates:
-                        if not bucket.owner:
-                            bucket.owner_name = None
-                            continue
-                        owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
-                        bucket.owner_name = owner_name_by_key.get(owner_key)
+                if feature_param_rules:
+                    if requires_owner_name_lookup and expensive_candidates:
+                        owner_scope = _determine_owner_name_lookup_scope(advanced_filter)
+                        owner_name_by_key = _resolve_owner_names_for_buckets(
+                            ctx,
+                            expensive_candidates,
+                            owner_scope=owner_scope,
+                        )
+                        for bucket in expensive_candidates:
+                            if not bucket.owner:
+                                bucket.owner_name = None
+                                continue
+                            owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
+                            bucket.owner_name = owner_name_by_key.get(owner_key)
 
-                if expensive_candidates and (filter_features or requires_tag_lookup):
-                    expensive_candidates = _enrich_buckets(
+                    if expensive_candidates and (filter_features or requires_tag_lookup):
+                        expensive_candidates = _enrich_buckets(
+                            expensive_candidates,
+                            {feature for feature in filter_features if feature != "tags"},
+                            include_tags=requires_tag_lookup or ("tags" in filter_features),
+                            service=service,
+                            account=account,
+                        )
+
+                    feature_param_snapshots, feature_param_available_keys = _load_feature_param_snapshots(
                         expensive_candidates,
-                        {feature for feature in filter_features if feature != "tags"},
-                        include_tags=requires_tag_lookup or ("tags" in filter_features),
+                        feature_param_rules,
                         service=service,
                         account=account,
                     )
 
-                if match_mode == "all":
-                    results = [
-                        bucket
-                        for bucket in expensive_candidates
-                        if (all(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else True)
-                        and (all(_match_feature_rule(bucket, rule) for rule in feature_rules) if feature_rules else True)
-                    ]
-                elif cheap_field_rules:
-                    expensive_matched = [
-                        bucket
-                        for bucket in expensive_candidates
-                        if (any(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
-                        or (any(_match_feature_rule(bucket, rule) for rule in feature_rules) if feature_rules else False)
-                    ]
-                    results = field_matched + expensive_matched
+                    filtered: list[CephAdminBucketSummary] = []
+                    for bucket in expensive_candidates:
+                        bucket_key = _bucket_identity_key(bucket)
+                        if bucket_key not in feature_param_available_keys:
+                            # Strict mode: exclude buckets that cannot be evaluated for active feature param rules.
+                            continue
+                        snapshot = feature_param_snapshots.get(bucket_key, {})
+                        if match_mode == "all":
+                            matches = (
+                                (all(_match_field_rule(bucket, rule) for rule in field_rules) if field_rules else True)
+                                and (all(_match_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else True)
+                                and _match_feature_param_rules(feature_param_rules, match_mode, snapshot)
+                            )
+                        else:
+                            field_match = any(_match_field_rule(bucket, rule) for rule in field_rules) if field_rules else False
+                            state_match = any(_match_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else False
+                            param_match = _match_feature_param_rules(feature_param_rules, match_mode, snapshot)
+                            matches = field_match or state_match or param_match
+                        if matches:
+                            filtered.append(bucket)
+                    results = filtered
                 else:
-                    results = [
-                        bucket
-                        for bucket in expensive_candidates
-                        if (any(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
-                        or (any(_match_feature_rule(bucket, rule) for rule in feature_rules) if feature_rules else False)
-                    ]
+                    field_matched: list[CephAdminBucketSummary] = []
+                    if match_mode == "any" and cheap_field_rules:
+                        # Apply cheap predicates first and resolve expensive data only for unresolved buckets.
+                        unresolved: list[CephAdminBucketSummary] = []
+                        for bucket in results:
+                            if any(_match_field_rule(bucket, rule) for rule in cheap_field_rules):
+                                field_matched.append(bucket)
+                            else:
+                                unresolved.append(bucket)
+                        expensive_candidates = unresolved
+
+                    if requires_owner_name_lookup and expensive_candidates:
+                        owner_scope = _determine_owner_name_lookup_scope(advanced_filter)
+                        owner_name_by_key = _resolve_owner_names_for_buckets(
+                            ctx,
+                            expensive_candidates,
+                            owner_scope=owner_scope,
+                        )
+                        for bucket in expensive_candidates:
+                            if not bucket.owner:
+                                bucket.owner_name = None
+                                continue
+                            owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
+                            bucket.owner_name = owner_name_by_key.get(owner_key)
+
+                    if expensive_candidates and (filter_features or requires_tag_lookup):
+                        expensive_candidates = _enrich_buckets(
+                            expensive_candidates,
+                            {feature for feature in filter_features if feature != "tags"},
+                            include_tags=requires_tag_lookup or ("tags" in filter_features),
+                            service=service,
+                            account=account,
+                        )
+
+                    if match_mode == "all":
+                        results = [
+                            bucket
+                            for bucket in expensive_candidates
+                            if (all(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else True)
+                            and (all(_match_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else True)
+                        ]
+                    elif cheap_field_rules:
+                        expensive_matched = [
+                            bucket
+                            for bucket in expensive_candidates
+                            if (any(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
+                            or (any(_match_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else False)
+                        ]
+                        results = field_matched + expensive_matched
+                    else:
+                        results = [
+                            bucket
+                            for bucket in expensive_candidates
+                            if (any(_match_field_rule(bucket, rule) for rule in expensive_field_rules) if expensive_field_rules else False)
+                            or (any(_match_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else False)
+                        ]
 
                 for bucket in results:
                     bucket.features = None
                     bucket.tags = None
+                    bucket.column_details = None
 
         def sort_value(bucket: CephAdminBucketSummary):
             if sort_by == "tenant":
@@ -1146,7 +1801,7 @@ def list_buckets(
     end = start + page_size
     page_items = _clone_bucket_list(filtered_results[start:end])
 
-    requested = {feature for feature in requested_features if feature != "tags"}
+    requested = ({feature for feature in requested_features if feature != "tags"} | requested_detail_fields)
     if requested or ("tags" in requested_features):
         service = BucketsService()
         account = _build_endpoint_account(ctx)
