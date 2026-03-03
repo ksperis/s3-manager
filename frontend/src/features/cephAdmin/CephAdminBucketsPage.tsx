@@ -6086,7 +6086,7 @@ export default function CephAdminBucketsPage() {
               </div>
 
               {showAdvancedFilter && (
-                <div className="fixed inset-0 z-40">
+                <div className="fixed inset-x-0 bottom-0 top-14 z-40">
                   <button
                     type="button"
                     onClick={closeAdvancedFilterDrawer}

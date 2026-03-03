@@ -138,3 +138,31 @@ def test_compare_bucket_pair_translates_service_runtime_errors(monkeypatch):
 
     assert exc.value.status_code == 502
     assert "target bucket not found" in str(exc.value.detail)
+
+
+def test_compare_bucket_pair_supports_config_only(monkeypatch):
+    payload = CephAdminBucketCompareRequest(
+        target_endpoint_id=2,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        include_content=False,
+        include_config=True,
+    )
+    monkeypatch.setattr(buckets_router, "_resolve_storage_endpoint", lambda _db, _endpoint_id: _build_target_endpoint(2))
+
+    def should_not_compare_content(*_args, **_kwargs):
+        raise AssertionError("compare_bucket_content should not be called in config-only mode")
+
+    monkeypatch.setattr(buckets_router.BucketsService, "compare_bucket_content", should_not_compare_content)
+    monkeypatch.setattr(
+        buckets_router.BucketsService,
+        "compare_bucket_configuration",
+        lambda *_args, **_kwargs: CephAdminBucketConfigDiff(changed=True, sections=[]),
+    )
+
+    response = buckets_router.compare_bucket_pair(endpoint_id=1, payload=payload, db=SimpleNamespace(), ctx=_build_ctx(1))
+
+    assert response.compare_mode is None
+    assert response.content_diff is None
+    assert response.config_diff is not None
+    assert response.has_differences is True

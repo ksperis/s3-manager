@@ -118,6 +118,17 @@ def _extract_user_payload(raw: dict) -> dict:
     return raw
 
 
+def _extract_user_setting(payload: dict[str, Any], user_payload: dict[str, Any], *keys: str) -> Optional[str]:
+    for key in keys:
+        value = _normalize_optional_str(user_payload.get(key))
+        if value is not None:
+            return value
+        value = _normalize_optional_str(payload.get(key))
+        if value is not None:
+            return value
+    return None
+
+
 def _parse_suspended(raw: Any) -> Optional[bool]:
     if isinstance(raw, bool):
         return raw
@@ -661,6 +672,20 @@ def _build_user_detail(
             or user_payload.get("op-mask")
             or payload.get("op_mask")
             or payload.get("op-mask")
+        ),
+        default_placement=_extract_user_setting(
+            payload,
+            user_payload,
+            "default_placement",
+            "default-placement",
+            "default_placement_rule",
+            "default-placement-rule",
+        ),
+        default_storage_class=_extract_user_setting(
+            payload,
+            user_payload,
+            "default_storage_class",
+            "default-storage-class",
         ),
         caps=_extract_caps(payload),
         quota=quota,

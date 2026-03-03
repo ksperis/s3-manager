@@ -245,3 +245,20 @@ def test_ceph_admin_users_advanced_filter_rejects_invalid_json():
             ctx=ctx,
         )
     assert exc.value.status_code == 400
+
+
+def test_build_user_detail_reads_default_placement_and_storage_class():
+    payload = _build_user_payload("alice")
+    payload["user"]["default-placement"] = "hot-placement"
+    payload["user"]["default-storage-class"] = "STANDARD"
+
+    detail = users_router._build_user_detail(
+        payload,
+        uid_fallback="alice",
+        tenant_fallback=None,
+        account_name=None,
+        keys=[],
+    )
+
+    assert detail.default_placement == "hot-placement"
+    assert detail.default_storage_class == "STANDARD"

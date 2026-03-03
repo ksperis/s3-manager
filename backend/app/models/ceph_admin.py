@@ -129,6 +129,8 @@ class CephAdminRgwUserDetail(BaseModel):
     account_root: Optional[bool] = None
     max_buckets: Optional[int] = None
     op_mask: Optional[str] = None
+    default_placement: Optional[str] = None
+    default_storage_class: Optional[str] = None
     caps: list[str] = Field(default_factory=list)
     quota: Optional[CephAdminRgwQuotaConfig] = None
     keys: list[CephAdminRgwAccessKey] = Field(default_factory=list)
@@ -345,6 +347,7 @@ class CephAdminBucketCompareRequest(BaseModel):
     target_endpoint_id: int = Field(..., ge=1)
     source_bucket: str
     target_bucket: str
+    include_content: bool = True
     include_config: bool = False
     size_only: bool = False
     diff_sample_limit: int = Field(default=200, ge=1, le=2000)
@@ -357,6 +360,8 @@ class CephAdminBucketCompareRequest(BaseModel):
             raise ValueError("source_bucket is required.")
         if not self.target_bucket:
             raise ValueError("target_bucket is required.")
+        if not self.include_content and not self.include_config:
+            raise ValueError("At least one comparison scope must be enabled.")
         return self
 
 
@@ -400,9 +405,9 @@ class CephAdminBucketCompareResult(BaseModel):
     target_endpoint_id: int
     source_bucket: str
     target_bucket: str
-    compare_mode: Literal["size_only", "md5_or_size"]
+    compare_mode: Optional[Literal["size_only", "md5_or_size"]] = None
     has_differences: bool = False
-    content_diff: CephAdminBucketContentDiff
+    content_diff: Optional[CephAdminBucketContentDiff] = None
     config_diff: Optional[CephAdminBucketConfigDiff] = None
 
 

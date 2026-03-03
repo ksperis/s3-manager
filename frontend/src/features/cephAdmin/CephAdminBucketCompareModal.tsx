@@ -193,6 +193,7 @@ export default function CephAdminBucketCompareModal({
   const [mappingMode, setMappingMode] = useState<"by_name" | "manual">("by_name");
   const [manualMapping, setManualMapping] = useState<Record<string, string>>({});
   const [rawMappingText, setRawMappingText] = useState("");
+  const [includeContent, setIncludeContent] = useState(true);
   const [includeConfig, setIncludeConfig] = useState(false);
   const [sizeOnly, setSizeOnly] = useState(false);
   const [parallelism, setParallelism] = useState(4);
@@ -426,10 +427,20 @@ export default function CephAdminBucketCompareModal({
     if (progress.total <= 0) return 0;
     return Math.min(100, Math.round((progress.completed / progress.total) * 100));
   }, [progress.completed, progress.total]);
+  const hasScopeSelected = includeContent || includeConfig;
+
+  useEffect(() => {
+    if (includeContent) return;
+    setSizeOnly(false);
+  }, [includeContent]);
 
   const runCompare = async () => {
     if (!targetEndpointId) {
       setRunError("Select a target endpoint.");
+      return;
+    }
+    if (!hasScopeSelected) {
+      setRunError("Select at least one comparison scope: content and/or configuration.");
       return;
     }
     if (comparePlan.error) {
@@ -477,6 +488,7 @@ export default function CephAdminBucketCompareModal({
               target_endpoint_id: targetEndpointId,
               source_bucket: mapping.sourceBucket,
               target_bucket: mapping.targetBucket,
+              include_content: includeContent,
               include_config: includeConfig,
               size_only: sizeOnly,
             },
@@ -616,6 +628,7 @@ export default function CephAdminBucketCompareModal({
         : null,
       options: {
         mapping_mode: mappingMode,
+        include_content: includeContent,
         include_config: includeConfig,
         size_only: sizeOnly,
         parallelism,
@@ -685,7 +698,17 @@ export default function CephAdminBucketCompareModal({
             Same-endpoint comparison is enabled: manual mapping is required, and selected source buckets are excluded from targets.
           </p>
         )}
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-4">
+          <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
+            <input
+              type="checkbox"
+              checked={includeContent}
+              onChange={(event) => setIncludeContent(event.target.checked)}
+              disabled={running}
+              className={uiCheckboxClass}
+            />
+            Include object content
+          </label>
           <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
             <input
               type="checkbox"
@@ -701,7 +724,7 @@ export default function CephAdminBucketCompareModal({
               type="checkbox"
               checked={sizeOnly}
               onChange={(event) => setSizeOnly(event.target.checked)}
-              disabled={running}
+              disabled={running || !includeContent}
               className={uiCheckboxClass}
             />
             Quick check (size only)
@@ -724,6 +747,11 @@ export default function CephAdminBucketCompareModal({
         {mappingMode === "by_name" && missingByName.length > 0 && (
           <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">
             {missingByName.length} target bucket(s) do not exist with the same name.
+          </p>
+        )}
+        {!hasScopeSelected && (
+          <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">
+            Select at least one comparison scope to run.
           </p>
         )}
         {mappingMode === "manual" && (
@@ -835,7 +863,7 @@ export default function CephAdminBucketCompareModal({
         <div className="flex flex-wrap items-center gap-2">
           <UiButton
             onClick={runCompare}
-            disabled={running || Boolean(comparePlan.error) || !targetEndpointId}
+            disabled={running || Boolean(comparePlan.error) || !targetEndpointId || !hasScopeSelected}
             className="ui-body"
           >
             {running ? "Comparing..." : "Run comparison"}

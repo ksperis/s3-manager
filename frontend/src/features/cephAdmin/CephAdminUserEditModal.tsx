@@ -154,6 +154,8 @@ export default function CephAdminUserEditModal({
   const [suspended, setSuspended] = useState(false);
   const [maxBuckets, setMaxBuckets] = useState("");
   const [opMask, setOpMask] = useState("");
+  const [defaultPlacement, setDefaultPlacement] = useState("");
+  const [defaultStorageClass, setDefaultStorageClass] = useState("");
   const [adminFlag, setAdminFlag] = useState(false);
   const [systemFlag, setSystemFlag] = useState(false);
   const [quotaEnabled, setQuotaEnabled] = useState(true);
@@ -191,6 +193,8 @@ export default function CephAdminUserEditModal({
         setSuspended(Boolean(payload.suspended));
         setMaxBuckets(payload.max_buckets != null ? String(payload.max_buckets) : "");
         setOpMask(payload.op_mask ?? "");
+        setDefaultPlacement(payload.default_placement ?? "");
+        setDefaultStorageClass(payload.default_storage_class ?? "");
         setAdminFlag(Boolean(payload.admin));
         setSystemFlag(Boolean(payload.system));
         const quotaConfigured = Boolean(
@@ -276,6 +280,8 @@ export default function CephAdminUserEditModal({
       setSaveError("Storage quota value is invalid.");
       return;
     }
+    const nextDefaultPlacement = defaultPlacement.trim();
+    const nextDefaultStorageClass = defaultStorageClass.trim();
 
     setSaving(true);
     try {
@@ -297,6 +303,10 @@ export default function CephAdminUserEditModal({
           caps: {
             mode: capsMode,
             values: capsTextToValues(capsText),
+          },
+          extra_params: {
+            "default-placement": nextDefaultPlacement || "",
+            "default-storage-class": nextDefaultStorageClass || "",
           },
         },
         tenant
@@ -488,6 +498,26 @@ export default function CephAdminUserEditModal({
             className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           />
         </label>
+        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+          Default placement
+          <input
+            type="text"
+            value={defaultPlacement}
+            onChange={(event) => setDefaultPlacement(event.target.value)}
+            placeholder="e.g. default-placement"
+            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          />
+        </label>
+        <label className="flex flex-col gap-1 ui-caption font-medium text-slate-600 dark:text-slate-200">
+          Default storage class
+          <input
+            type="text"
+            value={defaultStorageClass}
+            onChange={(event) => setDefaultStorageClass(event.target.value)}
+            placeholder="e.g. STANDARD"
+            className="rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          />
+        </label>
       </div>
 
       <div className="grid gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 sm:grid-cols-2 dark:border-slate-800 dark:bg-slate-900/40">
@@ -615,11 +645,9 @@ export default function CephAdminUserEditModal({
   const s3Tab = (
     <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <header className="space-y-1">
-        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">S3 API</p>
+        <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Key Management</p>
         <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Access keys</h3>
-        <p className="ui-caption text-slate-500 dark:text-slate-400">
-          Manage S3 credentials for this user without leaving the listing context.
-        </p>
+        <p className="ui-caption text-slate-500 dark:text-slate-400">Manage S3 credentials for this user.</p>
       </header>
 
       {keysError && <PageBanner tone="error">{keysError}</PageBanner>}
@@ -820,7 +848,7 @@ export default function CephAdminUserEditModal({
     const baseTabs = [
       { id: "overview", label: "Overview", content: overviewTab },
       { id: "ceph", label: "Ceph Admin", content: cephTab },
-      { id: "s3", label: "S3 API", content: s3Tab },
+      { id: "s3", label: "Key Management", content: s3Tab },
     ];
     if (canViewMetrics) {
       baseTabs.push({ id: "metrics", label: "Metrics", content: metricsTab });

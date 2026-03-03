@@ -291,6 +291,8 @@ export type CephAdminRgwUserDetail = {
   account_root?: boolean | null;
   max_buckets?: number | null;
   op_mask?: string | null;
+  default_placement?: string | null;
+  default_storage_class?: string | null;
   caps: string[];
   quota?: CephAdminRgwQuotaConfig | null;
   keys: CephAdminRgwAccessKey[];
@@ -503,6 +505,7 @@ export type CephAdminBucketCompareRequest = {
   target_endpoint_id: number;
   source_bucket: string;
   target_bucket: string;
+  include_content?: boolean;
   include_config?: boolean;
   size_only?: boolean;
   diff_sample_limit?: number;
@@ -548,9 +551,9 @@ export type CephAdminBucketCompareResult = {
   target_endpoint_id: number;
   source_bucket: string;
   target_bucket: string;
-  compare_mode: "size_only" | "md5_or_size";
+  compare_mode?: "size_only" | "md5_or_size" | null;
   has_differences: boolean;
-  content_diff: CephAdminBucketContentDiff;
+  content_diff?: CephAdminBucketContentDiff | null;
   config_diff?: CephAdminBucketConfigDiff | null;
 };
 

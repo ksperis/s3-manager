@@ -69,6 +69,11 @@ function CephAdminShell() {
         { to: "/ceph-admin/accounts", label: "RGW Accounts", disabled: !canAccounts },
         { to: "/ceph-admin/users", label: "RGW Users", disabled: !canAdmin },
         { to: "/ceph-admin/buckets", label: "Buckets", disabled: !canAdmin },
+      ],
+    },
+    {
+      label: "Data",
+      links: [
         { to: "/ceph-admin/browser", label: "Browser", disabled: !canBrowser },
       ],
     },

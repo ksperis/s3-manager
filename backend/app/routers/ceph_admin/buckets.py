@@ -1201,16 +1201,18 @@ def compare_bucket_pair(
     )
 
     service = BucketsService()
+    content_diff = None
+    config_diff = None
     try:
-        content_diff = service.compare_bucket_content(
-            payload.source_bucket,
-            source_account,
-            payload.target_bucket,
-            target_account,
-            size_only=payload.size_only,
-            diff_sample_limit=payload.diff_sample_limit,
-        )
-        config_diff = None
+        if payload.include_content:
+            content_diff = service.compare_bucket_content(
+                payload.source_bucket,
+                source_account,
+                payload.target_bucket,
+                target_account,
+                size_only=payload.size_only,
+                diff_sample_limit=payload.diff_sample_limit,
+            )
         if payload.include_config:
             config_diff = service.compare_bucket_configuration(
                 payload.source_bucket,
@@ -1222,9 +1224,14 @@ def compare_bucket_pair(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     has_differences = bool(
-        content_diff.different_count > 0
-        or content_diff.only_source_count > 0
-        or content_diff.only_target_count > 0
+        (
+            content_diff is not None
+            and (
+                content_diff.different_count > 0
+                or content_diff.only_source_count > 0
+                or content_diff.only_target_count > 0
+            )
+        )
         or (config_diff.changed if config_diff else False)
     )
     return CephAdminBucketCompareResult(
@@ -1232,7 +1239,7 @@ def compare_bucket_pair(
         target_endpoint_id=payload.target_endpoint_id,
         source_bucket=payload.source_bucket,
         target_bucket=payload.target_bucket,
-        compare_mode=content_diff.compare_mode,
+        compare_mode=content_diff.compare_mode if content_diff else None,
         has_differences=has_differences,
         content_diff=content_diff,
         config_diff=config_diff,

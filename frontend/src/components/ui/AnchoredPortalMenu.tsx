@@ -74,6 +74,7 @@ export function useAnchoredMenuPosition({
     position: "fixed",
     top: -9999,
     left: -9999,
+    minWidth: 0,
     zIndex: 70,
   });
 
