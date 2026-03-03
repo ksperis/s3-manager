@@ -86,6 +86,15 @@ const formatNumber = (value?: number | null) => {
   return value.toLocaleString();
 };
 
+const formatAdvancedSearchStage = (stage: string) => {
+  if (!stage.trim()) return "";
+  return stage
+    .split("_")
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
 const sanitizeExportFilenamePart = (value?: string | null) => {
   const normalized = (value ?? "").trim();
   const cleaned = normalized.replace(/[^a-zA-Z0-9-_]+/g, "_").replace(/^_+|_+$/g, "");
@@ -2176,6 +2185,7 @@ export default function CephAdminBucketsPage() {
     total,
     loading,
     loadingDetails,
+    advancedProgress,
     error,
     setError,
     refresh: refreshBuckets,
@@ -2185,6 +2195,7 @@ export default function CephAdminBucketsPage() {
     pageSize,
     filterValue: effectiveQuickSearchValue,
     advancedFilterParam,
+    advancedSearchEnabled: Boolean(advancedFilterParam),
     sort,
     includeParams,
     requiresStats,
@@ -7503,6 +7514,33 @@ export default function CephAdminBucketsPage() {
               </div>
             </div>
           )}
+
+        {advancedProgress.active && (
+          <div className="mb-3 rounded-xl border border-slate-200 bg-white/90 p-3 dark:border-slate-700 dark:bg-slate-900/70">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                {advancedProgress.determinate
+                  ? `Advanced search in progress · ${Math.max(0, Math.min(100, Math.round(advancedProgress.percent)))}%`
+                  : "Advanced search in progress..."}
+              </p>
+              {(advancedProgress.message || advancedProgress.stage) && (
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  {advancedProgress.message || formatAdvancedSearchStage(advancedProgress.stage)}
+                </p>
+              )}
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800" role="progressbar">
+              {advancedProgress.determinate ? (
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-150 ease-out"
+                  style={{ width: `${Math.max(0, Math.min(100, Math.round(advancedProgress.percent)))}%` }}
+                />
+              ) : (
+                <div className="h-full w-full animate-pulse rounded-full bg-primary/70" />
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="manager-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">

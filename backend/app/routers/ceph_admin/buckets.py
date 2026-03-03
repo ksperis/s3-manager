@@ -2,15 +2,21 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import asyncio
+import logging
 import json
+import threading
+import uuid
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from contextlib import suppress
 from threading import Lock
 from time import monotonic
 from typing import Any, Callable, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -54,12 +60,16 @@ from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
 
 router = APIRouter(prefix="/ceph-admin/endpoints/{endpoint_id}/buckets", tags=["ceph-admin-buckets"])
+logger = logging.getLogger(__name__)
 
 BUCKET_LIST_CACHE_TTL_SECONDS = 30.0
 BUCKET_LIST_CACHE_MAX_ENTRIES = 64
 RGW_BUCKET_PAYLOAD_CACHE_MAX_ENTRIES = 16
 BUCKET_ENRICH_MAX_WORKERS = 6
 BUCKET_OWNER_LOOKUP_MAX_WORKERS = 6
+PROGRESS_EMIT_EVERY_ITEMS = 100
+PROGRESS_EMIT_MIN_INTERVAL_SECONDS = 0.2
+SSE_KEEPALIVE_INTERVAL_SECONDS = 10.0
 
 
 @dataclass(frozen=True)
@@ -90,6 +100,93 @@ class _RgwBucketPayloadCacheEntry:
     endpoint_id: int
     expires_at: float
     entries: list[dict]
+
+
+@dataclass(frozen=True)
+class _BucketListingProgressSnapshot:
+    percent: int
+    stage: str
+    processed: int
+    total: int
+    message: str | None = None
+
+
+class _BucketListingCancelled(RuntimeError):
+    pass
+
+
+class _BucketListingProgressEmitter:
+    def __init__(self, callback: Callable[[_BucketListingProgressSnapshot], None] | None) -> None:
+        self._callback = callback
+        self._last_emitted_at = 0.0
+        self._last_snapshot: _BucketListingProgressSnapshot | None = None
+
+    def emit(
+        self,
+        *,
+        percent: int,
+        stage: str,
+        processed: int = 0,
+        total: int = 0,
+        message: str | None = None,
+        force: bool = False,
+    ) -> None:
+        if self._callback is None:
+            return
+        clamped_percent = max(0, min(100, int(percent)))
+        if self._last_snapshot is not None:
+            clamped_percent = max(clamped_percent, self._last_snapshot.percent)
+        snapshot = _BucketListingProgressSnapshot(
+            percent=clamped_percent,
+            stage=stage,
+            processed=max(0, int(processed)),
+            total=max(0, int(total)),
+            message=message,
+        )
+        now = monotonic()
+        if not force:
+            is_progress_tick = snapshot.processed > 0 and (snapshot.processed % PROGRESS_EMIT_EVERY_ITEMS == 0)
+            interval_elapsed = (now - self._last_emitted_at) >= PROGRESS_EMIT_MIN_INTERVAL_SECONDS
+            if snapshot == self._last_snapshot:
+                return
+            if not is_progress_tick and not interval_elapsed and snapshot.processed != snapshot.total:
+                return
+        self._last_emitted_at = now
+        self._last_snapshot = snapshot
+        self._callback(snapshot)
+
+
+def _invoke_cancel_check(cancel_check: Callable[[], None] | None) -> None:
+    if cancel_check is None:
+        return
+    cancel_check()
+
+
+def _normalize_http_error_detail(detail: object) -> object:
+    if isinstance(detail, (str, int, float, bool)) or detail is None:
+        return detail
+    if isinstance(detail, (list, dict)):
+        return detail
+    return str(detail)
+
+
+def _format_sse_event(event: str, payload: dict[str, object]) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
+
+
+def _is_advanced_filter_stream_payload(raw_advanced_filter: str | None) -> bool:
+    if not isinstance(raw_advanced_filter, str):
+        return False
+    text = raw_advanced_filter.strip()
+    if not text or not text.startswith("{"):
+        return False
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    return "rules" in payload or "match" in payload
 
 
 _BUCKET_LIST_CACHE: OrderedDict[_BucketListCacheKey, _BucketListCacheEntry] = OrderedDict()
@@ -1538,12 +1635,44 @@ def list_buckets(
     with_stats: bool = True,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> PaginatedCephAdminBucketsResponse:
+    return _compute_bucket_listing(
+        page=page,
+        page_size=page_size,
+        filter=filter,
+        advanced_filter=advanced_filter,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        include=include,
+        with_stats=with_stats,
+        ctx=ctx,
+    )
+
+
+def _compute_bucket_listing(
+    *,
+    page: int,
+    page_size: int,
+    filter: str | None,
+    advanced_filter: str | None,
+    sort_by: str,
+    sort_dir: str,
+    include: list[str],
+    with_stats: bool,
+    ctx: CephAdminContext,
+    progress_callback: Callable[[_BucketListingProgressSnapshot], None] | None = None,
+    cancel_check: Callable[[], None] | None = None,
+) -> PaginatedCephAdminBucketsResponse:
+    progress = _BucketListingProgressEmitter(progress_callback)
+    _invoke_cancel_check(cancel_check)
+    progress.emit(percent=5, stage="prepare", message="Preparing advanced search", force=True)
+
     if advanced_filter:
         simple_filter = filter.strip() if isinstance(filter, str) and filter.strip() else None
         _, advanced_filter = _parse_filter(advanced_filter)
     else:
         simple_filter, advanced_filter = _parse_filter(filter)
     simple_filter = simple_filter.strip() if isinstance(simple_filter, str) and simple_filter.strip() else None
+
     storage_metrics_enabled = True
     endpoint = getattr(ctx, "endpoint", None)
     if endpoint is not None and hasattr(endpoint, "provider") and hasattr(endpoint, "features_config"):
@@ -1579,10 +1708,13 @@ def list_buckets(
         with_stats=with_stats,
         with_owner_metadata=needs_owner_metadata,
     )
+    _invoke_cancel_check(cancel_check)
 
     def build_listing() -> list[CephAdminBucketSummary]:
+        _invoke_cancel_check(cancel_check)
         try:
             name_candidates = _extract_name_candidates(advanced_filter)
+            progress.emit(percent=10, stage="fetch_rgw", message="Loading buckets from RGW", force=True)
             if name_candidates is not None:
                 if not name_candidates:
                     entries: list[dict] = []
@@ -1595,10 +1727,21 @@ def list_buckets(
                     ]
             else:
                 entries = _get_cached_rgw_bucket_entries(ctx, with_stats=fetch_with_stats)
+            progress.emit(
+                percent=15,
+                stage="fetch_rgw",
+                processed=len(entries),
+                total=len(entries),
+                message="RGW bucket payload loaded",
+                force=True,
+            )
         except RGWAdminError as exc:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
         results: list[CephAdminBucketSummary] = []
-        for entry in entries:
+        total_entries = len(entries)
+        for idx, entry in enumerate(entries, start=1):
+            _invoke_cancel_check(cancel_check)
             summary = _build_bucket_summary(entry)
             if summary:
                 if not with_stats:
@@ -1607,18 +1750,32 @@ def list_buckets(
                     summary.quota_max_size_bytes = None
                     summary.quota_max_objects = None
                 results.append(summary)
+            percent = 15 + int((idx / total_entries) * 45) if total_entries > 0 else 60
+            progress.emit(
+                percent=percent,
+                stage="scan_entries",
+                processed=idx,
+                total=total_entries,
+                message="Scanning RGW bucket entries",
+            )
+        progress.emit(
+            percent=60,
+            stage="scan_entries",
+            processed=total_entries,
+            total=total_entries,
+            message="Bucket scanning completed",
+            force=True,
+        )
+        _invoke_cancel_check(cancel_check)
 
         if advanced_filter and advanced_filter.rules:
+            progress.emit(percent=65, stage="expensive_filters", message="Applying advanced filters", force=True)
             field_rules = [rule for rule in advanced_filter.rules if rule.field]
             feature_state_rules = [rule for rule in advanced_filter.rules if rule.feature and rule.state is not None]
             feature_param_rules = [rule for rule in advanced_filter.rules if rule.feature and rule.param is not None]
             match_mode = advanced_filter.match
-            expensive_field_rules = [
-                rule for rule in field_rules if rule.field in {"owner_name", "tag"}
-            ]
-            cheap_field_rules = [
-                rule for rule in field_rules if rule.field not in {"owner_name", "tag"}
-            ]
+            expensive_field_rules = [rule for rule in field_rules if rule.field in {"owner_name", "tag"}]
+            cheap_field_rules = [rule for rule in field_rules if rule.field not in {"owner_name", "tag"}]
 
             if cheap_field_rules and match_mode == "all":
                 results = [bucket for bucket in results if all(_match_field_rule(bucket, rule) for rule in cheap_field_rules)]
@@ -1674,7 +1831,6 @@ def list_buckets(
                     for bucket in expensive_candidates:
                         bucket_key = _bucket_identity_key(bucket)
                         if bucket_key not in feature_param_available_keys:
-                            # Strict mode: exclude buckets that cannot be evaluated for active feature param rules.
                             continue
                         snapshot = feature_param_snapshots.get(bucket_key, {})
                         if match_mode == "all":
@@ -1685,7 +1841,11 @@ def list_buckets(
                             )
                         else:
                             field_match = any(_match_field_rule(bucket, rule) for rule in field_rules) if field_rules else False
-                            state_match = any(_match_feature_rule(bucket, rule) for rule in feature_state_rules) if feature_state_rules else False
+                            state_match = (
+                                any(_match_feature_rule(bucket, rule) for rule in feature_state_rules)
+                                if feature_state_rules
+                                else False
+                            )
                             param_match = _match_feature_param_rules(feature_param_rules, match_mode, snapshot)
                             matches = field_match or state_match or param_match
                         if matches:
@@ -1694,7 +1854,6 @@ def list_buckets(
                 else:
                     field_matched: list[CephAdminBucketSummary] = []
                     if match_mode == "any" and cheap_field_rules:
-                        # Apply cheap predicates first and resolve expensive data only for unresolved buckets.
                         unresolved: list[CephAdminBucketSummary] = []
                         for bucket in results:
                             if any(_match_field_rule(bucket, rule) for rule in cheap_field_rules):
@@ -1753,6 +1912,10 @@ def list_buckets(
                     bucket.features = None
                     bucket.tags = None
                     bucket.column_details = None
+            progress.emit(percent=90, stage="expensive_filters", message="Advanced filters applied", force=True)
+        else:
+            progress.emit(percent=90, stage="expensive_filters", message="No expensive filters", force=True)
+        _invoke_cancel_check(cancel_check)
 
         def sort_value(bucket: CephAdminBucketSummary):
             if sort_by == "tenant":
@@ -1782,7 +1945,10 @@ def list_buckets(
         results = [bucket for _, bucket in sortable] + missing_values
         return results
 
+    _invoke_cancel_check(cancel_check)
     results = _get_cached_bucket_listing(cache_key, build_listing)
+    progress.emit(percent=98, stage="sort_paginate", message="Sorting and paginating results", force=True)
+
     filtered_results = results
     if simple_filter:
         filter_value = simple_filter.lower()
@@ -1797,6 +1963,7 @@ def list_buckets(
                 or filter_value in (bucket.owner or "").lower()
             ]
 
+    _invoke_cancel_check(cancel_check)
     total = len(filtered_results)
     start = max(page - 1, 0) * page_size
     end = start + page_size
@@ -1823,13 +1990,142 @@ def list_buckets(
             owner_key = f"{bucket.tenant or ''}:{bucket.owner}"
             bucket.owner_name = owner_name_by_key.get(owner_key, bucket.owner_name)
 
+    _invoke_cancel_check(cancel_check)
     has_next = end < total
-    return PaginatedCephAdminBucketsResponse(
+    response = PaginatedCephAdminBucketsResponse(
         items=page_items,
         total=total,
         page=page,
         page_size=page_size,
         has_next=has_next,
+    )
+    progress.emit(percent=100, stage="finalize", processed=total, total=total, message="Search completed", force=True)
+    return response
+
+
+@router.get("/stream")
+async def stream_buckets(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+    filter: str | None = Query(None),
+    advanced_filter: str | None = Query(None),
+    sort_by: str = Query("name"),
+    sort_dir: str = Query("asc"),
+    include: list[str] = Query(default=[]),
+    with_stats: bool = True,
+    ctx: CephAdminContext = Depends(get_ceph_admin_context),
+) -> StreamingResponse:
+    if not _is_advanced_filter_stream_payload(advanced_filter):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="advanced_filter must be provided as a JSON payload for streaming search",
+        )
+
+    request_id = uuid.uuid4().hex
+
+    async def event_generator():
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        cancel_event = threading.Event()
+
+        def push_message(payload: str | None) -> None:
+            loop.call_soon_threadsafe(queue.put_nowait, payload)
+
+        def progress_callback(snapshot: _BucketListingProgressSnapshot) -> None:
+            payload: dict[str, object] = {
+                "request_id": request_id,
+                "percent": snapshot.percent,
+                "stage": snapshot.stage,
+                "processed": snapshot.processed,
+                "total": snapshot.total,
+            }
+            if snapshot.message:
+                payload["message"] = snapshot.message
+            push_message(_format_sse_event("progress", payload))
+
+        def cancel_check() -> None:
+            if cancel_event.is_set():
+                raise _BucketListingCancelled()
+
+        def worker() -> None:
+            try:
+                result = _compute_bucket_listing(
+                    page=page,
+                    page_size=page_size,
+                    filter=filter,
+                    advanced_filter=advanced_filter,
+                    sort_by=sort_by,
+                    sort_dir=sort_dir,
+                    include=include,
+                    with_stats=with_stats,
+                    ctx=ctx,
+                    progress_callback=progress_callback,
+                    cancel_check=cancel_check,
+                )
+                payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else result.dict()
+                push_message(_format_sse_event("result", payload))
+                push_message(_format_sse_event("done", {"request_id": request_id}))
+            except _BucketListingCancelled:
+                return
+            except HTTPException as exc:
+                push_message(
+                    _format_sse_event(
+                        "error",
+                        {
+                            "request_id": request_id,
+                            "detail": _normalize_http_error_detail(exc.detail),
+                        },
+                    )
+                )
+                push_message(_format_sse_event("done", {"request_id": request_id}))
+            except Exception as exc:  # pragma: no cover
+                logger.exception("Bucket streaming search failed: %s", exc)
+                push_message(
+                    _format_sse_event(
+                        "error",
+                        {
+                            "request_id": request_id,
+                            "detail": str(exc),
+                        },
+                    )
+                )
+                push_message(_format_sse_event("done", {"request_id": request_id}))
+            finally:
+                push_message(None)
+
+        worker_task = asyncio.create_task(asyncio.to_thread(worker))
+        try:
+            while True:
+                if await request.is_disconnected():
+                    cancel_event.set()
+                    break
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_INTERVAL_SECONDS)
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        cancel_event.set()
+                        break
+                    yield ": keepalive\n\n"
+                    continue
+                if message is None:
+                    break
+                yield message
+        finally:
+            cancel_event.set()
+            if not worker_task.done():
+                worker_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await asyncio.wait_for(worker_task, timeout=0.1)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

@@ -489,17 +489,195 @@ export type ListCephAdminBucketsParams = {
   with_stats?: boolean;
 };
 
+export type CephAdminBucketsStreamProgress = {
+  request_id: string;
+  percent: number;
+  stage: string;
+  processed: number;
+  total: number;
+  message?: string;
+};
+
+type CephAdminBucketsStreamOptions = {
+  signal?: AbortSignal;
+  onProgress?: (event: CephAdminBucketsStreamProgress) => void;
+};
+
+type ListCephAdminBucketsOptions = {
+  signal?: AbortSignal;
+};
+
+function buildCephAdminBucketsQuery(params?: ListCephAdminBucketsParams): URLSearchParams {
+  const query = new URLSearchParams();
+  if (!params) return query;
+  if (params.page !== undefined) query.set("page", String(params.page));
+  if (params.page_size !== undefined) query.set("page_size", String(params.page_size));
+  if (typeof params.filter === "string" && params.filter.trim().length > 0) query.set("filter", params.filter);
+  if (typeof params.advanced_filter === "string" && params.advanced_filter.trim().length > 0) {
+    query.set("advanced_filter", params.advanced_filter);
+  }
+  if (typeof params.sort_by === "string" && params.sort_by.trim().length > 0) query.set("sort_by", params.sort_by);
+  if (typeof params.sort_dir === "string" && params.sort_dir.trim().length > 0) query.set("sort_dir", params.sort_dir);
+  if (Array.isArray(params.include) && params.include.length > 0) query.set("include", params.include.join(","));
+  if (params.with_stats !== undefined) query.set("with_stats", params.with_stats ? "true" : "false");
+  return query;
+}
+
+function resolveApiBaseUrl(): string {
+  const base = typeof client.defaults.baseURL === "string" && client.defaults.baseURL.trim() ? client.defaults.baseURL : "/api";
+  return base.endsWith("/") ? base.slice(0, -1) : base;
+}
+
+function isCancelledError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  if (typeof err !== "object" || err === null) return false;
+  const name = "name" in err ? String((err as { name?: unknown }).name ?? "") : "";
+  const code = "code" in err ? String((err as { code?: unknown }).code ?? "") : "";
+  return name === "CanceledError" || code === "ERR_CANCELED";
+}
+
 export async function listCephAdminBuckets(
   endpointId: number,
-  params?: ListCephAdminBucketsParams
+  params?: ListCephAdminBucketsParams,
+  options?: ListCephAdminBucketsOptions
 ): Promise<PaginatedCephAdminBucketsResponse> {
   const { data } = await client.get<PaginatedCephAdminBucketsResponse>(`/ceph-admin/endpoints/${endpointId}/buckets`, {
     params: {
       ...params,
       include: params?.include?.join(","),
     },
+    signal: options?.signal,
   });
   return data;
+}
+
+export async function streamCephAdminBuckets(
+  endpointId: number,
+  params?: ListCephAdminBucketsParams,
+  options?: CephAdminBucketsStreamOptions
+): Promise<PaginatedCephAdminBucketsResponse> {
+  const baseUrl = resolveApiBaseUrl();
+  const query = buildCephAdminBucketsQuery(params);
+  const queryText = query.toString();
+  const url = `${baseUrl}/ceph-admin/endpoints/${endpointId}/buckets/stream${queryText ? `?${queryText}` : ""}`;
+
+  const buildHeaders = () => {
+    const headers = new Headers({ Accept: "text/event-stream" });
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    return headers;
+  };
+
+  let response = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(),
+    credentials: "include",
+    signal: options?.signal,
+  });
+
+  if (response.status === 401 || response.status === 419) {
+    try {
+      const refresh = await client.post<{ access_token: string; token_type: string }>(
+        "/auth/refresh",
+        undefined,
+        { signal: options?.signal }
+      );
+      if (typeof window !== "undefined") {
+        localStorage.setItem("token", refresh.data.access_token);
+      }
+      response = await fetch(url, {
+        method: "GET",
+        headers: buildHeaders(),
+        credentials: "include",
+        signal: options?.signal,
+      });
+    } catch (err) {
+      if (isCancelledError(err)) throw err;
+    }
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Advanced search stream failed with status ${response.status}`);
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("text/event-stream")) {
+    throw new Error(`Unexpected stream response content type: ${contentType}`);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is unavailable");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let currentEvent = "message";
+  let currentDataLines: string[] = [];
+  let resultPayload: PaginatedCephAdminBucketsResponse | null = null;
+
+  const handleEvent = () => {
+    if (currentDataLines.length === 0) {
+      currentEvent = "message";
+      return;
+    }
+    const payloadText = currentDataLines.join("\n");
+    currentDataLines = [];
+    const payload = payloadText ? (JSON.parse(payloadText) as Record<string, unknown>) : {};
+    if (currentEvent === "progress") {
+      options?.onProgress?.(payload as unknown as CephAdminBucketsStreamProgress);
+    } else if (currentEvent === "result") {
+      resultPayload = payload as unknown as PaginatedCephAdminBucketsResponse;
+    } else if (currentEvent === "error") {
+      const detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail ?? payload);
+      throw new Error(detail || "Advanced search stream failed");
+    }
+    currentEvent = "message";
+  };
+
+  const processLine = (line: string) => {
+    if (line === "") {
+      handleEvent();
+      return;
+    }
+    if (line.startsWith(":")) {
+      return;
+    }
+    if (line.startsWith("event:")) {
+      currentEvent = line.slice(6).trim() || "message";
+      return;
+    }
+    if (line.startsWith("data:")) {
+      currentDataLines.push(line.slice(5).trimStart());
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    buffer = buffer.replace(/\r\n/g, "\n");
+    let newlineIndex = buffer.indexOf("\n");
+    while (newlineIndex >= 0) {
+      const line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 1);
+      processLine(line);
+      newlineIndex = buffer.indexOf("\n");
+    }
+    if (done) {
+      if (buffer.length > 0) {
+        processLine(buffer);
+      }
+      processLine("");
+      break;
+    }
+  }
+
+  if (!resultPayload) {
+    throw new Error("Advanced search stream ended without a result payload");
+  }
+  return resultPayload;
 }
 
 export type CephAdminBucketCompareRequest = {

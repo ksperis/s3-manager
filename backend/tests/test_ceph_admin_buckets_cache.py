@@ -1,9 +1,12 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import json
+import time
+import asyncio
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from app.models.bucket import (
     BucketLifecycleConfig,
@@ -1428,3 +1431,200 @@ def test_ceph_admin_bucket_listing_feature_param_filters_cover_non_lifecycle_fea
     )
 
     assert [item.name for item in response.items] == ["bucket-a"]
+
+
+def test_ceph_admin_bucket_listing_advanced_progress_is_monotonic():
+    payload = [
+        {"name": "bucket-a", "owner": "owner-a"},
+        {"name": "bucket-b", "owner": "owner-b"},
+        {"name": "bucket-c", "owner": "owner-c"},
+    ]
+    ctx, _ = _build_ctx(endpoint_id=301, payload=payload)
+    snapshots: list[buckets_router._BucketListingProgressSnapshot] = []
+    advanced_filter = json.dumps({"match": "all", "rules": [{"field": "owner", "op": "contains", "value": "owner"}]})
+
+    response = buckets_router._compute_bucket_listing(
+        page=1,
+        page_size=25,
+        filter=None,
+        advanced_filter=advanced_filter,
+        sort_by="name",
+        sort_dir="asc",
+        include=[],
+        with_stats=False,
+        ctx=ctx,
+        progress_callback=snapshots.append,
+        cancel_check=None,
+    )
+
+    percents = [snapshot.percent for snapshot in snapshots]
+    assert response.total == 3
+    assert percents
+    assert percents == sorted(percents)
+    assert all(0 <= percent <= 100 for percent in percents)
+    assert percents[-1] == 100
+
+
+def test_ceph_admin_bucket_stream_requires_advanced_filter_payload():
+    async def _run() -> None:
+        request = SimpleNamespace(is_disconnected=lambda: asyncio.sleep(0, result=False))
+        with pytest.raises(HTTPException) as exc:
+            await buckets_router.stream_buckets(
+                request=request,
+                page=1,
+                page_size=25,
+                filter=None,
+                advanced_filter=None,
+                sort_by="name",
+                sort_dir="asc",
+                include=[],
+                with_stats=False,
+                ctx=SimpleNamespace(endpoint=SimpleNamespace(id=999), rgw_admin=SimpleNamespace(), access_key="x", secret_key="y"),
+            )
+        assert exc.value.status_code == 400
+
+    asyncio.run(_run())
+
+
+def test_ceph_admin_bucket_stream_emits_progress_result_and_done(monkeypatch: pytest.MonkeyPatch):
+    payload = [{"name": "bucket-a", "owner": "owner-a"}]
+    ctx, _ = _build_ctx(endpoint_id=302, payload=payload)
+    emitted_calls = {"compute": 0}
+
+    def fake_compute(
+        *,
+        page: int,
+        page_size: int,
+        filter: str | None,
+        advanced_filter: str | None,
+        sort_by: str,
+        sort_dir: str,
+        include: list[str],
+        with_stats: bool,
+        ctx,
+        progress_callback=None,
+        cancel_check=None,
+    ):
+        emitted_calls["compute"] += 1
+        if progress_callback:
+            progress_callback(
+                buckets_router._BucketListingProgressSnapshot(
+                    percent=10,
+                    stage="prepare",
+                    processed=0,
+                    total=1,
+                    message="Preparing",
+                )
+            )
+            progress_callback(
+                buckets_router._BucketListingProgressSnapshot(
+                    percent=65,
+                    stage="expensive_filters",
+                    processed=1,
+                    total=1,
+                    message="Filtering",
+                )
+            )
+        return buckets_router.PaginatedCephAdminBucketsResponse(
+            items=[buckets_router.CephAdminBucketSummary(name="bucket-a", tenant=None, owner="owner-a")],
+            total=1,
+            page=page,
+            page_size=page_size,
+            has_next=False,
+        )
+
+    monkeypatch.setattr(buckets_router, "_compute_bucket_listing", fake_compute)
+
+    async def _run() -> str:
+        request = SimpleNamespace(is_disconnected=lambda: asyncio.sleep(0, result=False))
+        response = await buckets_router.stream_buckets(
+            request=request,
+            page=1,
+            page_size=25,
+            filter=None,
+            advanced_filter=json.dumps({"match": "all", "rules": [{"field": "name", "op": "contains", "value": "bucket"}]}),
+            sort_by="name",
+            sort_dir="asc",
+            include=[],
+            with_stats=False,
+            ctx=ctx,
+        )
+        chunks: list[str] = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk.decode() if isinstance(chunk, bytes) else chunk)
+        return "".join(chunks)
+
+    body = asyncio.run(_run())
+    assert emitted_calls["compute"] == 1
+    assert body.count("event: progress") >= 1
+    assert "event: result" in body
+    assert "event: done" in body
+    assert "\"percent\":10" in body
+    assert "\"percent\":65" in body
+
+
+def test_ceph_admin_bucket_stream_cancels_work_when_client_disconnects(monkeypatch: pytest.MonkeyPatch):
+    payload = [{"name": "bucket-a", "owner": "owner-a"}]
+    ctx, _ = _build_ctx(endpoint_id=303, payload=payload)
+    cancelled = {"value": False}
+
+    def fake_compute(
+        *,
+        page: int,
+        page_size: int,
+        filter: str | None,
+        advanced_filter: str | None,
+        sort_by: str,
+        sort_dir: str,
+        include: list[str],
+        with_stats: bool,
+        ctx,
+        progress_callback=None,
+        cancel_check=None,
+    ):
+        if progress_callback:
+            progress_callback(
+                buckets_router._BucketListingProgressSnapshot(
+                    percent=5,
+                    stage="prepare",
+                    processed=0,
+                    total=1,
+                    message="Preparing",
+                )
+            )
+        try:
+            while True:
+                if cancel_check:
+                    cancel_check()
+                time.sleep(0.01)
+        except buckets_router._BucketListingCancelled:
+            cancelled["value"] = True
+            raise
+
+    monkeypatch.setattr(buckets_router, "_compute_bucket_listing", fake_compute)
+
+    async def _run() -> None:
+        state = {"calls": 0}
+
+        async def is_disconnected() -> bool:
+            state["calls"] += 1
+            return state["calls"] >= 2
+
+        request = SimpleNamespace(is_disconnected=is_disconnected)
+        response = await buckets_router.stream_buckets(
+            request=request,
+            page=1,
+            page_size=25,
+            filter=None,
+            advanced_filter=json.dumps({"match": "all", "rules": [{"field": "name", "op": "contains", "value": "bucket"}]}),
+            sort_by="name",
+            sort_dir="asc",
+            include=[],
+            with_stats=False,
+            ctx=ctx,
+        )
+        async for _ in response.body_iterator:
+            pass
+
+    asyncio.run(_run())
+    assert cancelled["value"] is True
