@@ -32,6 +32,14 @@ class ListBrowserObjectsResponse(BaseModel):
     next_continuation_token: Optional[str] = None
 
 
+class PaginatedBrowserBucketsResponse(BaseModel):
+    items: list[BrowserBucket] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 50
+    has_next: bool = False
+
+
 class BrowserObjectVersion(BaseModel):
     key: str
     version_id: Optional[str] = None

@@ -10,6 +10,11 @@ from pydantic import BaseModel
 
 from app.db import S3Account, User
 from app.models.browser import (
+    BrowserStsCredentials,
+    BrowserBucket,
+    BucketCorsStatus,
+    CleanupObjectVersionsPayload,
+    CleanupObjectVersionsResponse,
     CompleteMultipartUploadRequest,
     CopyObjectPayload,
     DeleteObjectsPayload,
@@ -30,13 +35,9 @@ from app.models.browser import (
     PresignPartResponse,
     PresignRequest,
     PresignedUrl,
-    BucketCorsStatus,
+    PaginatedBrowserBucketsResponse,
     StsStatus,
-    BrowserStsCredentials,
-    CleanupObjectVersionsPayload,
-    CleanupObjectVersionsResponse,
 )
-from app.models.browser import BrowserBucket
 from app.services.audit_service import AuditService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.app_settings_service import load_app_settings
@@ -74,6 +75,28 @@ def list_buckets(
 ) -> list[BrowserBucket]:
     try:
         return service.list_buckets(account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/search", response_model=PaginatedBrowserBucketsResponse)
+def search_buckets(
+    search: Optional[str] = None,
+    exact: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    _: User = Depends(get_current_account_admin),
+) -> PaginatedBrowserBucketsResponse:
+    try:
+        return service.search_buckets(
+            account,
+            search=search,
+            exact=exact,
+            page=page,
+            page_size=page_size,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

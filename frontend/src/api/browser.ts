@@ -10,6 +10,14 @@ export type BrowserBucket = {
   creation_date?: string | null;
 };
 
+export type PaginatedBrowserBucketsResponse = {
+  items: BrowserBucket[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+};
+
 export type BucketVersioningStatus = {
   status?: string | null;
   enabled: boolean;
@@ -285,6 +293,28 @@ export async function listBrowserBuckets(accountId: S3AccountSelector): Promise<
   return data;
 }
 
+export async function searchBrowserBuckets(
+  accountId: S3AccountSelector,
+  options?: {
+    search?: string;
+    exact?: boolean;
+    page?: number;
+    pageSize?: number;
+  }
+): Promise<PaginatedBrowserBucketsResponse> {
+  const params = withS3AccountParam(
+    {
+      search: options?.search?.trim() || undefined,
+      exact: options?.exact ? true : undefined,
+      page: options?.page ?? undefined,
+      page_size: options?.pageSize ?? undefined,
+    },
+    accountId
+  );
+  const { data } = await client.get<PaginatedBrowserBucketsResponse>("/browser/buckets/search", { params });
+  return data;
+}
+
 export async function createBrowserBucket(
   accountId: S3AccountSelector,
   name: string,
@@ -323,7 +353,7 @@ export async function fetchBrowserSettings(accountId: S3AccountSelector): Promis
 export async function listBrowserObjects(
   accountId: S3AccountSelector,
   bucketName: string,
-  options?: { prefix?: string; continuationToken?: string | null; maxKeys?: number } & BrowserObjectsQuery
+  options?: { prefix?: string; continuationToken?: string | null; maxKeys?: number; signal?: AbortSignal } & BrowserObjectsQuery
 ): Promise<ListBrowserObjectsResponse> {
   const params = withS3AccountParam(
     {
@@ -341,7 +371,7 @@ export async function listBrowserObjects(
   );
   const { data } = await client.get<ListBrowserObjectsResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/objects`,
-    { params }
+    { params, signal: options?.signal }
   );
   return data;
 }

@@ -43,9 +43,9 @@ import {
   getObjectTags,
   getStsStatus,
   initiateMultipartUpload,
-  listBrowserBuckets,
   listBrowserObjects,
   listObjectVersions,
+  searchBrowserBuckets,
   updateObjectAcl,
   updateObjectLegalHold,
   updateObjectMetadata,
@@ -166,6 +166,12 @@ import {
   toIsoString,
   updateTreeNodes,
 } from "./browserUtils";
+import {
+  BROWSER_QUERY_DEBOUNCE_MS,
+  isStaleRequest,
+  mergeBucketSearchItems,
+  prepareLatestRequest,
+} from "./browserSearchHelpers";
 import type {
   BrowserItem,
   BulkMetadataDraft,
@@ -428,10 +434,15 @@ export default function BrowserPage({
   const location = useLocation();
   // /browser is credential-first: no root/portal switching in step 2.
   const accessMode = null;
-  const [buckets, setBuckets] = useState<BrowserBucket[]>([]);
   const [bucketName, setBucketName] = useState("");
   const [showBucketMenu, setShowBucketMenu] = useState(false);
   const [bucketFilter, setBucketFilter] = useState("");
+  const [bucketMenuItems, setBucketMenuItems] = useState<BrowserBucket[]>([]);
+  const [bucketMenuPage, setBucketMenuPage] = useState(1);
+  const [bucketMenuHasNext, setBucketMenuHasNext] = useState(false);
+  const [bucketMenuTotal, setBucketMenuTotal] = useState(0);
+  const [bucketTotalCount, setBucketTotalCount] = useState(0);
+  const [bucketMenuLoadingMore, setBucketMenuLoadingMore] = useState(false);
   const [searchParams] = useSearchParams();
   const requestedBucket = useMemo(() => searchParams.get("bucket")?.trim() ?? "", [searchParams]);
   const [prefix, setPrefix] = useState("");
@@ -625,6 +636,11 @@ export default function BrowserPage({
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const newFolderInputRef = useRef<HTMLInputElement | null>(null);
   const pathSuggestionsDebounceRef = useRef<number | null>(null);
+  const bucketSearchDebounceRef = useRef<number | null>(null);
+  const bucketSearchRequestIdRef = useRef(0);
+  const objectsRequestSeqRef = useRef(0);
+  const objectsAbortControllerRef = useRef<AbortController | null>(null);
+  const objectsSearchDebounceRef = useRef<number | null>(null);
   const pathSuggestionsRequestIdRef = useRef(0);
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
   const uploadRefreshTimeoutRef = useRef<number | null>(null);
@@ -1114,6 +1130,21 @@ export default function BrowserPage({
   }, [showBucketMenu]);
 
   useEffect(() => {
+    return () => {
+      if (bucketSearchDebounceRef.current !== null) {
+        window.clearTimeout(bucketSearchDebounceRef.current);
+        bucketSearchDebounceRef.current = null;
+      }
+      if (objectsSearchDebounceRef.current !== null) {
+        window.clearTimeout(objectsSearchDebounceRef.current);
+        objectsSearchDebounceRef.current = null;
+      }
+      objectsAbortControllerRef.current?.abort();
+      objectsAbortControllerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!showSearchOptionsMenu) return;
     const handleMouseDown = (event: MouseEvent) => {
       if (searchOptionsMenuRef.current && !searchOptionsMenuRef.current.contains(event.target as Node)) {
@@ -1192,7 +1223,11 @@ export default function BrowserPage({
   const refreshBucketList = useCallback(
     async (options?: { preferredBucket?: string | null }) => {
       if (!hasS3AccountContext) {
-        setBuckets([]);
+        setBucketMenuItems([]);
+        setBucketMenuPage(1);
+        setBucketMenuHasNext(false);
+        setBucketMenuTotal(0);
+        setBucketTotalCount(0);
         setBucketName("");
         setPrefix("");
         setDeletedObjects([]);
@@ -1200,42 +1235,66 @@ export default function BrowserPage({
         return;
       }
       setLoadingBuckets(true);
+      setBucketMenuLoadingMore(false);
       setBucketError(null);
       try {
-        const data = await listBrowserBuckets(accountIdForApi);
-        setBuckets(data);
-        setBucketName((prev) => {
-          const preferredBucket = options?.preferredBucket?.trim() ?? "";
-          if (preferredBucket && data.some((bucket) => bucket.name === preferredBucket)) {
-            if (preferredBucket !== prev) {
-              setPrefix("");
-            }
-            return preferredBucket;
-          }
-          if (isCephAdminContext && requestedBucket) {
-            if (requestedBucket !== prev) {
-              setPrefix("");
-            }
-            return requestedBucket;
-          }
-          if (requestedBucket && data.some((bucket) => bucket.name === requestedBucket)) {
-            if (requestedBucket !== prev) {
-              setPrefix("");
-            }
-            return requestedBucket;
-          }
-          if (prev && data.some((bucket) => bucket.name === prev)) {
-            return prev;
-          }
-          const next = data.length === 1 ? data[0].name : "";
-          if (next !== prev) {
-            setPrefix("");
-          }
-          return next;
+        const firstPage = await searchBrowserBuckets(accountIdForApi, {
+          page: 1,
+          pageSize: BUCKET_MENU_LIMIT,
         });
+        setBucketMenuItems(firstPage.items);
+        setBucketMenuPage(firstPage.page);
+        setBucketMenuHasNext(firstPage.has_next);
+        setBucketMenuTotal(firstPage.total);
+        setBucketTotalCount(firstPage.total);
+        const previousBucket = bucketNameRef.current;
+        const preferredBucket = options?.preferredBucket?.trim() ?? "";
+        const exactMatchCache = new Map<string, boolean>();
+
+        const bucketExists = async (value: string): Promise<boolean> => {
+          if (!value) return false;
+          if (exactMatchCache.has(value)) {
+            return Boolean(exactMatchCache.get(value));
+          }
+          const includedInFirstPage = firstPage.items.some((bucket) => bucket.name === value);
+          if (includedInFirstPage) {
+            exactMatchCache.set(value, true);
+            return true;
+          }
+          const exactResult = await searchBrowserBuckets(accountIdForApi, {
+            search: value,
+            exact: true,
+            page: 1,
+            pageSize: 1,
+          });
+          const exists = exactResult.total > 0;
+          exactMatchCache.set(value, exists);
+          return exists;
+        };
+
+        let nextBucket = "";
+        if (preferredBucket && (await bucketExists(preferredBucket))) {
+          nextBucket = preferredBucket;
+        } else if (isCephAdminContext && requestedBucket) {
+          nextBucket = requestedBucket;
+        } else if (requestedBucket && (await bucketExists(requestedBucket))) {
+          nextBucket = requestedBucket;
+        } else if (previousBucket && (await bucketExists(previousBucket))) {
+          nextBucket = previousBucket;
+        } else if (firstPage.total === 1 && firstPage.items.length === 1) {
+          nextBucket = firstPage.items[0].name;
+        }
+        if (nextBucket !== previousBucket) {
+          setPrefix("");
+        }
+        setBucketName(nextBucket);
       } catch {
         setBucketError("Unable to list buckets for this account.");
-        setBuckets([]);
+        setBucketMenuItems([]);
+        setBucketMenuPage(1);
+        setBucketMenuHasNext(false);
+        setBucketMenuTotal(0);
+        setBucketTotalCount(0);
         if (isCephAdminContext && requestedBucket) {
           setBucketName(requestedBucket);
         } else {
@@ -1254,6 +1313,86 @@ export default function BrowserPage({
   useEffect(() => {
     void refreshBucketList();
   }, [accessMode, refreshBucketList]);
+
+  const loadBucketSearchPage = useCallback(
+    async (options?: { search?: string; page?: number; append?: boolean }) => {
+      if (!hasS3AccountContext) {
+        setBucketMenuItems([]);
+        setBucketMenuPage(1);
+        setBucketMenuHasNext(false);
+        setBucketMenuTotal(0);
+        return;
+      }
+      const searchValue = (options?.search ?? "").trim();
+      const targetPage = Math.max(1, options?.page ?? 1);
+      const append = Boolean(options?.append && targetPage > 1);
+      const requestId = bucketSearchRequestIdRef.current + 1;
+      bucketSearchRequestIdRef.current = requestId;
+      if (append) {
+        setBucketMenuLoadingMore(true);
+      } else {
+        setLoadingBuckets(true);
+      }
+      setBucketError(null);
+      try {
+        const data = await searchBrowserBuckets(accountIdForApi, {
+          search: searchValue || undefined,
+          page: targetPage,
+          pageSize: BUCKET_MENU_LIMIT,
+        });
+        if (requestId !== bucketSearchRequestIdRef.current) {
+          return;
+        }
+        setBucketMenuItems((prev) => {
+          return mergeBucketSearchItems(prev, data.items, append);
+        });
+        setBucketMenuPage(data.page);
+        setBucketMenuHasNext(data.has_next);
+        setBucketMenuTotal(data.total);
+        if (!searchValue) {
+          setBucketTotalCount(data.total);
+        }
+      } catch {
+        if (requestId !== bucketSearchRequestIdRef.current) {
+          return;
+        }
+        setBucketError("Unable to list buckets for this account.");
+        if (!append) {
+          setBucketMenuItems([]);
+          setBucketMenuPage(1);
+          setBucketMenuHasNext(false);
+          setBucketMenuTotal(0);
+        }
+      } finally {
+        if (requestId !== bucketSearchRequestIdRef.current) {
+          return;
+        }
+        if (append) {
+          setBucketMenuLoadingMore(false);
+        } else {
+          setLoadingBuckets(false);
+        }
+      }
+    },
+    [accountIdForApi, hasS3AccountContext]
+  );
+
+  useEffect(() => {
+    if (!showBucketMenu) return;
+    if (bucketSearchDebounceRef.current !== null) {
+      window.clearTimeout(bucketSearchDebounceRef.current);
+      bucketSearchDebounceRef.current = null;
+    }
+    bucketSearchDebounceRef.current = window.setTimeout(() => {
+      void loadBucketSearchPage({ search: bucketFilter, page: 1, append: false });
+    }, BROWSER_QUERY_DEBOUNCE_MS);
+    return () => {
+      if (bucketSearchDebounceRef.current !== null) {
+        window.clearTimeout(bucketSearchDebounceRef.current);
+        bucketSearchDebounceRef.current = null;
+      }
+    };
+  }, [bucketFilter, loadBucketSearchPage, showBucketMenu]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !accountIdForApi) {
@@ -1405,17 +1544,14 @@ export default function BrowserPage({
     const targetPrefix = normalizePrefix(opts?.prefixOverride ?? prefix);
     const isAppend = Boolean(opts?.append);
     const isSilent = Boolean(opts?.silent);
+    const { requestSeq, controller } = prepareLatestRequest(objectsAbortControllerRef.current, objectsRequestSeqRef.current);
+    objectsRequestSeqRef.current = requestSeq;
+    objectsAbortControllerRef.current = controller;
     if (!isAppend) {
       if (!isSilent) {
         setObjectsLoading(true);
         setObjectsLoadingMore(false);
         setObjectsError(null);
-        setObjects([]);
-        setDeletedObjects([]);
-        setDeletedPrefixes([]);
-        setPrefixes([]);
-        setObjectsNextToken(null);
-        setObjectsIsTruncated(false);
       }
     } else {
       setObjectsLoadingMore(true);
@@ -1435,7 +1571,11 @@ export default function BrowserPage({
         type: typeFilter,
         storageClass: storageFilter,
         recursive: requestRecursive,
+        signal: controller.signal,
       });
+      if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
+        return;
+      }
       let deletedObjectsResult: BrowserObject[] = [];
       let deletedPrefixesResult: string[] = [];
       if (!opts?.append) {
@@ -1463,6 +1603,9 @@ export default function BrowserPage({
           deletedPrefixesResult = [];
         }
       }
+      if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
+        return;
+      }
       setObjects((prev) => (opts?.append ? [...prev, ...data.objects] : data.objects));
       if (!opts?.append) {
         setDeletedObjects(deletedObjectsResult);
@@ -1478,16 +1621,20 @@ export default function BrowserPage({
       setObjectsNextToken(data.next_continuation_token ?? null);
       setObjectsIsTruncated(data.is_truncated);
     } catch (err) {
-      setObjectsError("Unable to list objects for this prefix.");
-      if (!isAppend && !isSilent) {
-        setObjects([]);
-        setDeletedObjects([]);
-        setDeletedPrefixes([]);
-        setPrefixes([]);
-        setObjectsNextToken(null);
-        setObjectsIsTruncated(false);
+      if (isAbortError(err)) {
+        return;
       }
+      if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
+        return;
+      }
+      setObjectsError("Unable to list objects for this prefix.");
     } finally {
+      if (objectsAbortControllerRef.current === controller) {
+        objectsAbortControllerRef.current = null;
+      }
+      if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
+        return;
+      }
       if (!isAppend) {
         if (!isSilent) {
           setObjectsLoading(false);
@@ -1630,17 +1777,32 @@ export default function BrowserPage({
       skipNextObjectsLoadRef.current = false;
       return;
     }
+    if (objectsSearchDebounceRef.current !== null) {
+      window.clearTimeout(objectsSearchDebounceRef.current);
+      objectsSearchDebounceRef.current = null;
+    }
     if (!bucketName || !hasS3AccountContext) {
+      objectsAbortControllerRef.current?.abort();
+      objectsAbortControllerRef.current = null;
       setObjects([]);
       setDeletedObjects([]);
       setDeletedPrefixes([]);
       setPrefixes([]);
       setObjectsNextToken(null);
       setObjectsIsTruncated(false);
+      setObjectsLoading(false);
       setObjectsLoadingMore(false);
       return;
     }
-    loadObjects({ prefixOverride: prefix });
+    objectsSearchDebounceRef.current = window.setTimeout(() => {
+      void loadObjects({ prefixOverride: prefix });
+    }, BROWSER_QUERY_DEBOUNCE_MS);
+    return () => {
+      if (objectsSearchDebounceRef.current !== null) {
+        window.clearTimeout(objectsSearchDebounceRef.current);
+        objectsSearchDebounceRef.current = null;
+      }
+    };
   }, [accountIdForApi, accessMode, bucketName, filter, hasS3AccountContext, isVersioningEnabled, prefix, searchCaseSensitive, searchExactMatch, searchRecursive, searchScope, showDeletedObjects, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -1993,23 +2155,14 @@ export default function BrowserPage({
     storageFilter !== "all";
 
   const prefixParts = useMemo(() => prefix.split("/").filter(Boolean), [prefix]);
-  const bucketOptions = useMemo(() => buckets.map((bucket) => bucket.name), [buckets]);
-  const normalizedBucketFilter = bucketFilter.trim().toLowerCase();
-  const filteredBucketOptions = useMemo(() => {
-    if (!normalizedBucketFilter) return bucketOptions;
-    return bucketOptions.filter((bucket) => bucket.toLowerCase().includes(normalizedBucketFilter));
-  }, [bucketOptions, normalizedBucketFilter]);
-  const visibleBucketOptions = useMemo(
-    () => filteredBucketOptions.slice(0, BUCKET_MENU_LIMIT),
-    [filteredBucketOptions]
-  );
-  const bucketOverflowCount = Math.max(0, filteredBucketOptions.length - visibleBucketOptions.length);
+  const bucketOptions = useMemo(() => bucketMenuItems.map((bucket) => bucket.name), [bucketMenuItems]);
   const bucketButtonLabel = useMemo(() => {
     if (bucketName) return bucketName;
     if (loadingBuckets) return "Loading buckets...";
-    if (bucketOptions.length === 0) return "No buckets";
+    if (bucketTotalCount === 0) return "No buckets";
     return "Select bucket";
-  }, [bucketName, bucketOptions.length, loadingBuckets]);
+  }, [bucketName, bucketTotalCount, loadingBuckets]);
+  const canLoadMoreBucketResults = bucketMenuHasNext && !loadingBuckets && !bucketMenuLoadingMore;
   const sortKey = sortId.split("-")[0] as "name" | "size" | "modified";
   const sortDirection = sortId.endsWith("asc") ? "asc" : "desc";
   const activePathSuggestion =
@@ -2889,6 +3042,17 @@ export default function BrowserPage({
     setSelectedIds([]);
     setActiveItem(null);
     setInspectorTab("context");
+  };
+
+  const handleBucketMenuLoadMore = () => {
+    if (loadingBuckets || bucketMenuLoadingMore || !bucketMenuHasNext) {
+      return;
+    }
+    void loadBucketSearchPage({
+      search: bucketFilter,
+      page: bucketMenuPage + 1,
+      append: true,
+    });
   };
 
   const handleBucketChange = (value: string) => {
@@ -6482,7 +6646,7 @@ export default function BrowserPage({
                   type="button"
                   className={bucketButtonClasses}
                   onClick={() => setShowBucketMenu((prev) => !prev)}
-                  disabled={loadingBuckets || bucketOptions.length === 0}
+                  disabled={!loadingBuckets && bucketTotalCount === 0}
                   aria-haspopup="listbox"
                   aria-expanded={showBucketMenu}
                   aria-label="Select bucket"
@@ -6532,18 +6696,18 @@ export default function BrowserPage({
                       )}
                     </div>
                     <div className="max-h-56 overflow-y-auto px-1 pb-1">
-                      {loadingBuckets ? (
+                      {loadingBuckets && bucketOptions.length === 0 ? (
                         <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
                           Loading buckets...
                         </div>
-                      ) : bucketOptions.length === 0 ? (
+                      ) : bucketTotalCount === 0 ? (
                         <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">No buckets</div>
-                      ) : filteredBucketOptions.length === 0 ? (
+                      ) : bucketOptions.length === 0 ? (
                         <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
                           No buckets match this filter.
                         </div>
                       ) : (
-                        visibleBucketOptions.map((bucket) => {
+                        bucketOptions.map((bucket) => {
                           const isActive = bucket === bucketName;
                           return (
                             <button
@@ -6567,11 +6731,21 @@ export default function BrowserPage({
                         })
                       )}
                     </div>
-                    {!loadingBuckets && filteredBucketOptions.length > 0 && (
+                    {!loadingBuckets && bucketTotalCount > 0 && (
                       <div className="border-t border-slate-200 px-2 py-1 ui-caption text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                        {bucketOverflowCount > 0
-                          ? `Showing ${visibleBucketOptions.length} of ${filteredBucketOptions.length} buckets. Use filter to narrow.`
-                          : `${filteredBucketOptions.length} bucket${filteredBucketOptions.length === 1 ? "" : "s"}`}
+                        {`${bucketOptions.length} of ${bucketMenuTotal} bucket${bucketMenuTotal === 1 ? "" : "s"}`}
+                      </div>
+                    )}
+                    {canLoadMoreBucketResults && (
+                      <div className="border-t border-slate-200 px-2 py-1.5 dark:border-slate-700">
+                        <button
+                          type="button"
+                          onClick={handleBucketMenuLoadMore}
+                          disabled={bucketMenuLoadingMore}
+                          className={filterChipClasses}
+                        >
+                          {bucketMenuLoadingMore ? "Loading..." : "Load more"}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -6878,7 +7052,12 @@ export default function BrowserPage({
                             }`}
                       </div>
                     )}
-                    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto" onClick={handleListBackgroundClick}>
+                    <div className="relative min-h-0 flex-1 overflow-x-auto overflow-y-auto" onClick={handleListBackgroundClick}>
+                        {objectsLoading && listItems.length > 0 && (
+                          <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-white/45 pt-4 ui-caption font-semibold text-slate-600 backdrop-blur-[1px] dark:bg-slate-900/40 dark:text-slate-200">
+                            Refreshing objects...
+                          </div>
+                        )}
                         <table className="manager-table min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
                           <thead className="bg-slate-50 dark:bg-slate-900/50">
                             <tr>
@@ -7104,11 +7283,11 @@ export default function BrowserPage({
                                 <td className={`w-44 px-2 ${rowCellClasses} !align-middle text-right ui-caption text-slate-400`} />
                               </tr>
                             )}
-                            {objectsLoading && <TableEmptyState colSpan={5} message="Loading objects..." />}
+                            {objectsLoading && listItems.length === 0 && <TableEmptyState colSpan={5} message="Loading objects..." />}
                             {!objectsLoading && !bucketName && (
                               <TableEmptyState colSpan={5} message="Select a bucket to browse objects." />
                             )}
-                            {!objectsLoading && bucketName && objectsError && (
+                            {!objectsLoading && bucketName && objectsError && listItems.length === 0 && (
                               <TableEmptyState colSpan={5} message={objectsError} />
                             )}
                             {!objectsLoading && bucketName && !objectsError && listItems.length === 0 && (

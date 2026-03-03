@@ -47,6 +47,7 @@ from app.models.bucket import (
 )
 from app.models.browser import (
     BrowserBucket,
+    BrowserStsCredentials,
     BucketVersioningStatus,
     BucketCorsStatus,
     CleanupObjectVersionsPayload,
@@ -67,12 +68,12 @@ from app.models.browser import (
     ObjectRestoreRequest,
     ObjectRetention,
     ObjectTags,
+    PaginatedBrowserBucketsResponse,
     PresignPartRequest,
     PresignPartResponse,
     PresignRequest,
     PresignedUrl,
     StsStatus,
-    BrowserStsCredentials,
 )
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import (
@@ -158,6 +159,17 @@ def _require_sse_feature(account: S3Account) -> None:
         )
 
 
+def _invalidate_browser_listing_cache(
+    browser_service: BrowserService,
+    account: S3Account,
+    *,
+    bucket_name: Optional[str] = None,
+) -> None:
+    browser_service.invalidate_bucket_list_cache_for_account(account)
+    if bucket_name:
+        browser_service.invalidate_object_list_cache_for_account(account, bucket_name)
+
+
 @router.get("/settings", response_model=BrowserSettings)
 def get_browser_settings(_: BrowserActor = Depends(get_current_account_admin)) -> BrowserSettings:
     return load_app_settings().browser
@@ -171,6 +183,28 @@ def list_buckets(
 ) -> list[BrowserBucket]:
     try:
         return service.list_buckets(account)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.get("/buckets/search", response_model=PaginatedBrowserBucketsResponse)
+def search_buckets(
+    search: Optional[str] = None,
+    exact: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    account: S3Account = Depends(get_account_context),
+    service: BrowserService = Depends(get_browser_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> PaginatedBrowserBucketsResponse:
+    try:
+        return service.search_buckets(
+            account,
+            search=search,
+            exact=exact,
+            page=page,
+            page_size=page_size,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -212,6 +246,7 @@ def list_bucket_configs(
     with_stats: bool = Query(True, description="Include usage/quota stats from admin listing"),
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> list[Bucket]:
     try:
@@ -233,6 +268,7 @@ def create_bucket_config(
     payload: BucketCreate,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict[str, Any]:
@@ -245,6 +281,7 @@ def create_bucket_config(
             versioning=versioning,
             location_constraint=location_constraint,
         )
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=payload.name)
         audit_metadata: dict[str, Any] = {"versioning": versioning}
         if location_constraint:
             audit_metadata["location_constraint"] = location_constraint
@@ -273,11 +310,13 @@ def delete_bucket_config(
     force: bool = Query(False, description="Set to true to delete all objects before deleting the bucket"),
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict[str, str]:
     try:
         service.delete_bucket(bucket_name, account, force=force)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -300,11 +339,13 @@ def update_bucket_quota_config(
     payload: BucketQuotaUpdate,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict[str, str]:
     try:
         service.set_bucket_quota(bucket_name, account, payload)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -326,6 +367,7 @@ def get_bucket_properties_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketProperties:
     try:
@@ -340,11 +382,13 @@ def update_bucket_versioning_config(
     payload: BucketVersioningUpdate,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict[str, Any]:
     try:
         service.set_versioning(bucket_name, account, enabled=payload.enabled)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -364,6 +408,7 @@ def get_bucket_object_lock_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketObjectLock:
     try:
@@ -378,11 +423,13 @@ def put_bucket_object_lock_config(
     payload: BucketObjectLockUpdate,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketObjectLock:
     try:
         result = service.set_object_lock(bucket_name, account, payload)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -404,6 +451,7 @@ def get_bucket_encryption_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketEncryptionConfiguration:
     _require_sse_feature(account)
@@ -419,12 +467,14 @@ def put_bucket_encryption_config(
     payload: BucketEncryptionConfiguration,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketEncryptionConfiguration:
     _require_sse_feature(account)
     try:
         result = service.set_bucket_encryption(bucket_name, account, payload.rules)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -444,12 +494,14 @@ def delete_bucket_encryption_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     _require_sse_feature(account)
     try:
         service.delete_bucket_encryption(bucket_name, account)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -467,6 +519,7 @@ def get_bucket_policy_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketPolicyOut:
     try:
@@ -482,11 +535,13 @@ def put_bucket_policy_config(
     payload: BucketPolicyIn,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketPolicyOut:
     try:
         service.put_policy(bucket_name, account, policy=payload.policy)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -506,11 +561,13 @@ def delete_bucket_policy_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     try:
         service.delete_policy(bucket_name, account)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -528,6 +585,7 @@ def get_bucket_acl_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketAcl:
     try:
@@ -542,11 +600,13 @@ def put_bucket_acl_config(
     payload: BucketAclUpdate,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketAcl:
     try:
         result = service.set_bucket_acl(bucket_name, account, payload)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -566,6 +626,7 @@ def get_bucket_public_access_block_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketPublicAccessBlock:
     try:
@@ -580,11 +641,13 @@ def put_bucket_public_access_block_config(
     payload: BucketPublicAccessBlock,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketPublicAccessBlock:
     try:
         result = service.set_public_access_block(bucket_name, account, payload)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -604,6 +667,7 @@ def get_bucket_lifecycle_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketLifecycleConfig:
     try:
@@ -618,11 +682,13 @@ def put_bucket_lifecycle_config(
     payload: BucketLifecycleConfig,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketLifecycleConfig:
     try:
         result = service.set_lifecycle(bucket_name, account, rules=payload.rules)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -642,11 +708,13 @@ def delete_bucket_lifecycle_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     try:
         service.delete_lifecycle(bucket_name, account)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -664,6 +732,7 @@ def get_bucket_cors_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict[str, Any]:
     try:
@@ -679,11 +748,13 @@ def put_bucket_cors_config(
     payload: BucketCorsUpdate,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict[str, Any]:
     try:
         service.set_cors(bucket_name, account, rules=payload.rules)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -703,11 +774,13 @@ def delete_bucket_cors_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     try:
         service.delete_cors(bucket_name, account)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -725,6 +798,7 @@ def get_bucket_notifications_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketNotificationConfiguration:
     try:
@@ -739,12 +813,14 @@ def put_bucket_notifications_config(
     payload: BucketNotificationConfiguration,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketNotificationConfiguration:
     try:
         configuration = payload.configuration or {}
         result = service.set_bucket_notifications(bucket_name, account, configuration)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -764,11 +840,13 @@ def delete_bucket_notifications_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     try:
         service.delete_bucket_notifications(bucket_name, account)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -786,6 +864,7 @@ def get_bucket_replication_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketReplicationConfiguration:
     try:
@@ -800,11 +879,13 @@ def put_bucket_replication_config(
     payload: BucketReplicationConfiguration,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketReplicationConfiguration:
     try:
         result = service.set_bucket_replication(bucket_name, account, payload)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         configuration = payload.configuration or {}
         rules = configuration.get("Rules")
         rules_count = len(rules) if isinstance(rules, list) else 0
@@ -829,11 +910,13 @@ def delete_bucket_replication_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     try:
         service.delete_bucket_replication(bucket_name, account)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -851,6 +934,7 @@ def get_bucket_logging_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketLoggingConfiguration:
     try:
@@ -865,11 +949,13 @@ def put_bucket_logging_config(
     payload: BucketLoggingConfiguration,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketLoggingConfiguration:
     try:
         result = service.set_bucket_logging(bucket_name, account, payload)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -891,11 +977,13 @@ def delete_bucket_logging_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     try:
         service.delete_bucket_logging(bucket_name, account)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -913,6 +1001,7 @@ def get_bucket_website_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> BucketWebsiteConfiguration:
     try:
@@ -927,11 +1016,13 @@ def put_bucket_website_config(
     payload: BucketWebsiteConfiguration,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketWebsiteConfiguration:
     try:
         result = service.set_bucket_website(bucket_name, account, payload)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -953,11 +1044,13 @@ def delete_bucket_website_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     try:
         service.delete_bucket_website(bucket_name, account)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -975,6 +1068,7 @@ def get_bucket_tags_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     _: BrowserActor = Depends(get_current_account_admin),
 ) -> dict[str, Any]:
     try:
@@ -990,11 +1084,13 @@ def put_bucket_tags_config(
     payload: BucketTagsUpdate,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> dict[str, Any]:
     try:
         service.set_bucket_tags(bucket_name, account, tags=[{"key": tag.key, "value": tag.value} for tag in payload.tags])
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,
@@ -1017,11 +1113,13 @@ def delete_bucket_tags_config(
     bucket_name: str,
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
+    browser_service: BrowserService = Depends(get_browser_service),
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     try:
         service.delete_bucket_tags(bucket_name, account)
+        _invalidate_browser_listing_cache(browser_service, account, bucket_name=bucket_name)
         _record_browser_action(
             audit_service,
             actor,

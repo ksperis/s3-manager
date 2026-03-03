@@ -3,10 +3,12 @@
 import logging
 import os
 import re
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from threading import Lock
-from typing import Optional
+from time import monotonic
+from typing import Callable, Generic, Optional, TypeVar
 from urllib.parse import unquote, urlencode
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -17,6 +19,7 @@ from app.models.browser import (
     BrowserBucket,
     BrowserObject,
     BrowserObjectVersion,
+    BrowserStsCredentials,
     BucketCorsRule,
     BucketCorsStatus,
     CleanupObjectVersionsPayload,
@@ -33,19 +36,19 @@ from app.models.browser import (
     MultipartUploadInitResponse,
     MultipartUploadItem,
     ObjectMetadata,
-    ObjectMetadataUpdate,
-    ObjectTag,
     ObjectAcl,
     ObjectLegalHold,
+    ObjectMetadataUpdate,
     ObjectRetention,
     ObjectRestoreRequest,
+    ObjectTag,
     ObjectTags,
+    PaginatedBrowserBucketsResponse,
     PresignPartRequest,
     PresignPartResponse,
     PresignRequest,
     PresignedUrl,
     StsStatus,
-    BrowserStsCredentials,
 )
 from app.services.s3_client import (
     _delete_objects,
@@ -63,6 +66,12 @@ settings = get_settings()
 STS_SESSION_DURATION_SECONDS = 3600
 STS_CACHE_TTL_BUFFER = timedelta(minutes=5)
 STS_FAILURE_TTL = timedelta(seconds=60)
+BUCKET_LIST_CACHE_TTL_SECONDS = 30
+BUCKET_LIST_CACHE_MAX_ENTRIES = 64
+OBJECT_LIST_CACHE_TTL_SECONDS = 10
+OBJECT_LIST_CACHE_MAX_ENTRIES = 512
+OBJECT_LIST_SCAN_PAGE_BUDGET = 20
+OBJECT_LIST_SCAN_TIME_BUDGET_MS = 1200
 
 
 @dataclass(frozen=True)
@@ -81,6 +90,62 @@ class StsCacheEntry:
 
 _STS_CACHE: dict[str, StsCacheEntry] = {}
 _STS_CACHE_LOCK = Lock()
+
+_CacheKey = TypeVar("_CacheKey")
+_CacheValue = TypeVar("_CacheValue")
+
+
+@dataclass
+class _TtlLruCacheEntry(Generic[_CacheValue]):
+    value: _CacheValue
+    expires_at: float
+
+
+class _TtlLruCache(Generic[_CacheKey, _CacheValue]):
+    def __init__(self, max_entries: int, ttl_seconds: int) -> None:
+        self._max_entries = max_entries
+        self._ttl_seconds = float(ttl_seconds)
+        self._store: OrderedDict[_CacheKey, _TtlLruCacheEntry[_CacheValue]] = OrderedDict()
+        self._lock = Lock()
+
+    def get(self, key: _CacheKey) -> Optional[_CacheValue]:
+        now = monotonic()
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return None
+            if entry.expires_at <= now:
+                del self._store[key]
+                return None
+            self._store.move_to_end(key)
+            return entry.value
+
+    def set(self, key: _CacheKey, value: _CacheValue) -> None:
+        expires_at = monotonic() + self._ttl_seconds
+        with self._lock:
+            self._store[key] = _TtlLruCacheEntry(value=value, expires_at=expires_at)
+            self._store.move_to_end(key)
+            while len(self._store) > self._max_entries:
+                self._store.popitem(last=False)
+
+    def invalidate_where(self, predicate: Callable[[_CacheKey], bool]) -> int:
+        removed = 0
+        with self._lock:
+            keys_to_remove = [key for key in self._store.keys() if predicate(key)]
+            for key in keys_to_remove:
+                self._store.pop(key, None)
+                removed += 1
+        return removed
+
+
+_BUCKET_LIST_CACHE: _TtlLruCache[str, list[BrowserBucket]] = _TtlLruCache(
+    max_entries=BUCKET_LIST_CACHE_MAX_ENTRIES,
+    ttl_seconds=BUCKET_LIST_CACHE_TTL_SECONDS,
+)
+_OBJECT_LIST_CACHE: _TtlLruCache[tuple, ListBrowserObjectsResponse] = _TtlLruCache(
+    max_entries=OBJECT_LIST_CACHE_MAX_ENTRIES,
+    ttl_seconds=OBJECT_LIST_CACHE_TTL_SECONDS,
+)
 
 
 def _resolve_endpoint(account: S3Account) -> str:
@@ -221,6 +286,88 @@ class BrowserService:
         if not etag:
             return None
         return etag.strip('"')
+
+    def _account_context_kind(self, account: S3Account) -> str:
+        if getattr(account, "s3_connection_id", None) is not None:
+            return "connection"
+        if getattr(account, "s3_user_id", None) is not None:
+            return "s3_user"
+        account_id = getattr(account, "id", None)
+        account_name = str(getattr(account, "name", "") or "")
+        if isinstance(account_id, int) and account_id < 0:
+            if account_name.startswith("ceph-admin:"):
+                return "ceph_admin"
+            return "s3_user"
+        return "account"
+
+    def _account_cache_key(self, account: S3Account) -> str:
+        access_key, _ = account.effective_rgw_credentials()
+        if not access_key:
+            raise RuntimeError("S3 credentials missing for this account")
+        endpoint = _resolve_endpoint(account)
+        context_kind = self._account_context_kind(account)
+        return f"{endpoint}::{access_key}::{context_kind}"
+
+    def _object_list_cache_key(
+        self,
+        *,
+        account_cache_key: str,
+        bucket_name: str,
+        prefix: str,
+        continuation_token: Optional[str],
+        max_keys: int,
+        query: Optional[str],
+        query_exact: bool,
+        query_case_sensitive: bool,
+        item_type: str,
+        storage_class: Optional[str],
+        recursive: bool,
+    ) -> tuple:
+        return (
+            account_cache_key,
+            bucket_name,
+            prefix,
+            continuation_token or "",
+            max_keys,
+            (query or "").strip(),
+            bool(query_exact),
+            bool(query_case_sensitive),
+            item_type,
+            storage_class or "",
+            bool(recursive),
+        )
+
+    def invalidate_bucket_list_cache(self, account_key: str) -> None:
+        if not account_key:
+            return
+        removed = _BUCKET_LIST_CACHE.invalidate_where(lambda key: key == account_key)
+        if removed > 0:
+            logger.debug("Browser bucket cache invalidated: account=%s entries=%s", account_key, removed)
+
+    def invalidate_object_list_cache(self, account_key: str, bucket_name: str) -> None:
+        if not account_key or not bucket_name:
+            return
+        removed = _OBJECT_LIST_CACHE.invalidate_where(
+            lambda key: len(key) >= 2 and key[0] == account_key and key[1] == bucket_name
+        )
+        if removed > 0:
+            logger.debug("Browser object cache invalidated: account=%s bucket=%s entries=%s", account_key, bucket_name, removed)
+
+    def invalidate_bucket_list_cache_for_account(self, account: S3Account) -> None:
+        try:
+            account_key = self._account_cache_key(account)
+        except RuntimeError:
+            return
+        self.invalidate_bucket_list_cache(account_key)
+
+    def invalidate_object_list_cache_for_account(self, account: S3Account, bucket_name: str) -> None:
+        if not bucket_name:
+            return
+        try:
+            account_key = self._account_cache_key(account)
+        except RuntimeError:
+            return
+        self.invalidate_object_list_cache(account_key, bucket_name)
 
     def get_bucket_cors_status(
         self,
@@ -477,6 +624,7 @@ class BrowserService:
                 client.upload_fileobj(file_obj, bucket_name, key)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to upload '{key}': {exc}") from exc
+        self.invalidate_object_list_cache_for_account(account, bucket_name)
 
     def upload_via_proxy(
         self,
@@ -545,6 +693,11 @@ class BrowserService:
         return stream, content_type, filename
 
     def list_buckets(self, account: S3Account) -> list[BrowserBucket]:
+        account_key = self._account_cache_key(account)
+        cached = _BUCKET_LIST_CACHE.get(account_key)
+        if cached is not None:
+            logger.debug("Browser bucket cache hit: account=%s count=%s", account_key, len(cached))
+            return list(cached)
         client = self._client(account)
         try:
             resp = client.list_buckets()
@@ -556,7 +709,43 @@ class BrowserService:
             if not name:
                 continue
             buckets.append(BrowserBucket(name=name, creation_date=bucket.get("CreationDate")))
-        return buckets
+        buckets.sort(key=lambda bucket: bucket.name)
+        _BUCKET_LIST_CACHE.set(account_key, buckets)
+        logger.debug("Browser bucket cache miss: account=%s count=%s", account_key, len(buckets))
+        return list(buckets)
+
+    def search_buckets(
+        self,
+        account: S3Account,
+        *,
+        search: Optional[str] = None,
+        exact: bool = False,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> PaginatedBrowserBucketsResponse:
+        normalized_page = max(1, int(page or 1))
+        normalized_page_size = max(1, min(200, int(page_size or 50)))
+        buckets = self.list_buckets(account)
+        query = (search or "").strip()
+        if query:
+            query_normalized = query.lower()
+            if exact:
+                filtered = [bucket for bucket in buckets if bucket.name.lower() == query_normalized]
+            else:
+                filtered = [bucket for bucket in buckets if query_normalized in bucket.name.lower()]
+        else:
+            filtered = buckets
+        total = len(filtered)
+        start = (normalized_page - 1) * normalized_page_size
+        end = start + normalized_page_size
+        items = filtered[start:end] if start < total else []
+        return PaginatedBrowserBucketsResponse(
+            items=items,
+            total=total,
+            page=normalized_page,
+            page_size=normalized_page_size,
+            has_next=end < total,
+        )
 
     def create_bucket(
         self,
@@ -582,6 +771,8 @@ class BrowserService:
                 session_token=session_token,
                 **self._s3_client_kwargs(account),
             )
+        self.invalidate_bucket_list_cache_for_account(account)
+        self.invalidate_object_list_cache_for_account(account, bucket_name)
 
     def list_objects(
         self,
@@ -597,14 +788,33 @@ class BrowserService:
         storage_class: Optional[str] = None,
         recursive: bool = False,
     ) -> ListBrowserObjectsResponse:
-        client = self._client(account)
         normalized_prefix = prefix or ""
+        normalized_max_keys = max(1, min(1000, int(max_keys or 1000)))
         query_value_raw = (query or "").strip()
         query_value = query_value_raw if query_case_sensitive else query_value_raw.lower()
         type_filter = (item_type or "all").lower()
         if type_filter not in {"all", "file", "folder"}:
             type_filter = "all"
         storage_filter = (storage_class or "").strip() or None
+        account_cache_key = self._account_cache_key(account)
+        object_cache_key = self._object_list_cache_key(
+            account_cache_key=account_cache_key,
+            bucket_name=bucket_name,
+            prefix=normalized_prefix,
+            continuation_token=continuation_token,
+            max_keys=normalized_max_keys,
+            query=query_value_raw,
+            query_exact=query_exact,
+            query_case_sensitive=query_case_sensitive,
+            item_type=type_filter,
+            storage_class=storage_filter,
+            recursive=recursive,
+        )
+        cached = _OBJECT_LIST_CACHE.get(object_cache_key)
+        if cached is not None:
+            logger.debug("Browser object cache hit: account=%s bucket=%s", account_cache_key, bucket_name)
+            return cached.model_copy(deep=True)
+        client = self._client(account)
 
         def matches_query(value: str) -> bool:
             if not query_value:
@@ -619,81 +829,178 @@ class BrowserService:
                 return comparable_value == query_value
             return query_value in comparable_value
 
-        kwargs = {
-            "Bucket": bucket_name,
-            "Prefix": normalized_prefix,
-            "MaxKeys": max_keys,
-        }
-        if not recursive:
-            kwargs["Delimiter"] = "/"
-        if continuation_token:
-            kwargs["ContinuationToken"] = continuation_token
-        try:
-            resp = client.list_objects_v2(**kwargs)
-        except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
-        objects: list[BrowserObject] = []
-        recursive_prefixes: set[str] = set()
-        for obj in resp.get("Contents", []):
-            key = obj.get("Key")
-            if not key:
-                continue
-            size = int(obj.get("Size") or 0)
-            if prefix and key.rstrip("/") == prefix.rstrip("/") and size == 0:
-                continue
-            is_folder_marker = key.endswith("/") and size == 0
-            if recursive and type_filter != "file":
-                if is_folder_marker and key != normalized_prefix:
-                    recursive_prefixes.add(key)
-                if normalized_prefix and key.startswith(normalized_prefix):
-                    relative = key[len(normalized_prefix):]
-                else:
-                    relative = key
-                segments = [segment for segment in relative.split("/") if segment]
-                if len(segments) > 1:
-                    running = normalized_prefix
-                    for segment in segments[:-1]:
-                        running = f"{running}{segment}/"
-                        recursive_prefixes.add(running)
-            if type_filter == "folder":
-                continue
-            if recursive and is_folder_marker:
-                continue
-            if not matches_query(key):
-                continue
-            storage = obj.get("StorageClass")
-            if storage_filter and storage != storage_filter:
-                continue
-            objects.append(
-                BrowserObject(
-                    key=key,
-                    size=int(obj.get("Size") or 0),
-                    last_modified=obj.get("LastModified"),
-                    storage_class=storage,
-                    etag=self._clean_etag(obj.get("ETag")),
+        filtered_mode = bool(query_value_raw) or type_filter != "all" or storage_filter is not None or recursive
+
+        if not filtered_mode:
+            kwargs = {
+                "Bucket": bucket_name,
+                "Prefix": normalized_prefix,
+                "MaxKeys": normalized_max_keys,
+                "Delimiter": "/",
+            }
+            if continuation_token:
+                kwargs["ContinuationToken"] = continuation_token
+            try:
+                resp = client.list_objects_v2(**kwargs)
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
+            objects: list[BrowserObject] = []
+            for obj in resp.get("Contents", []):
+                key = obj.get("Key")
+                if not key:
+                    continue
+                size = int(obj.get("Size") or 0)
+                if prefix and key.rstrip("/") == prefix.rstrip("/") and size == 0:
+                    continue
+                objects.append(
+                    BrowserObject(
+                        key=key,
+                        size=size,
+                        last_modified=obj.get("LastModified"),
+                        storage_class=obj.get("StorageClass"),
+                        etag=self._clean_etag(obj.get("ETag")),
+                    )
                 )
+            prefixes = [
+                prefix_value
+                for entry in (resp.get("CommonPrefixes", []) or [])
+                if (prefix_value := entry.get("Prefix"))
+            ]
+            result = ListBrowserObjectsResponse(
+                prefix=prefix,
+                objects=objects,
+                prefixes=prefixes,
+                is_truncated=bool(resp.get("IsTruncated")),
+                next_continuation_token=resp.get("NextContinuationToken"),
             )
-        prefixes = []
-        if not recursive and type_filter != "file":
-            for entry in resp.get("CommonPrefixes", []) or []:
-                prefix_value = entry.get("Prefix")
-                if not prefix_value:
+            _OBJECT_LIST_CACHE.set(object_cache_key, result.model_copy(deep=True))
+            logger.debug("Browser object cache miss: account=%s bucket=%s", account_cache_key, bucket_name)
+            return result
+
+        objects: list[BrowserObject] = []
+        prefixes: list[str] = []
+        seen_prefixes: set[str] = set()
+        scan_token = continuation_token
+        scan_start = monotonic()
+        pages_scanned = 0
+        budget_exceeded = False
+
+        while True:
+            elapsed_ms = int((monotonic() - scan_start) * 1000)
+            if pages_scanned >= OBJECT_LIST_SCAN_PAGE_BUDGET or elapsed_ms >= OBJECT_LIST_SCAN_TIME_BUDGET_MS:
+                budget_exceeded = True
+                break
+
+            remaining = max(normalized_max_keys - (len(objects) + len(prefixes)), 1)
+            kwargs = {
+                "Bucket": bucket_name,
+                "Prefix": normalized_prefix,
+                "MaxKeys": remaining,
+            }
+            if not recursive:
+                kwargs["Delimiter"] = "/"
+            if scan_token:
+                kwargs["ContinuationToken"] = scan_token
+            try:
+                resp = client.list_objects_v2(**kwargs)
+            except (ClientError, BotoCoreError) as exc:
+                raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
+
+            pages_scanned += 1
+            page_recursive_prefixes: set[str] = set()
+            for obj in resp.get("Contents", []):
+                key = obj.get("Key")
+                if not key:
                     continue
-                if not matches_query(prefix_value):
+                size = int(obj.get("Size") or 0)
+                if prefix and key.rstrip("/") == prefix.rstrip("/") and size == 0:
                     continue
-                prefixes.append(prefix_value)
-        if recursive and type_filter != "file":
-            for prefix_value in sorted(recursive_prefixes):
-                if not matches_query(prefix_value):
+                is_folder_marker = key.endswith("/") and size == 0
+
+                if recursive and type_filter != "file":
+                    if is_folder_marker and key != normalized_prefix:
+                        page_recursive_prefixes.add(key)
+                    if normalized_prefix and key.startswith(normalized_prefix):
+                        relative = key[len(normalized_prefix):]
+                    else:
+                        relative = key
+                    segments = [segment for segment in relative.split("/") if segment]
+                    if len(segments) > 1:
+                        running = normalized_prefix
+                        for segment in segments[:-1]:
+                            running = f"{running}{segment}/"
+                            page_recursive_prefixes.add(running)
+
+                if type_filter == "folder":
                     continue
-                prefixes.append(prefix_value)
-        return ListBrowserObjectsResponse(
+                if recursive and is_folder_marker:
+                    continue
+                if not matches_query(key):
+                    continue
+                storage = obj.get("StorageClass")
+                if storage_filter and storage != storage_filter:
+                    continue
+                if len(objects) + len(prefixes) >= normalized_max_keys:
+                    continue
+                objects.append(
+                    BrowserObject(
+                        key=key,
+                        size=size,
+                        last_modified=obj.get("LastModified"),
+                        storage_class=storage,
+                        etag=self._clean_etag(obj.get("ETag")),
+                    )
+                )
+
+            if not recursive and type_filter != "file":
+                for entry in resp.get("CommonPrefixes", []) or []:
+                    prefix_value = entry.get("Prefix")
+                    if not prefix_value or prefix_value in seen_prefixes:
+                        continue
+                    if not matches_query(prefix_value):
+                        continue
+                    if len(objects) + len(prefixes) >= normalized_max_keys:
+                        break
+                    seen_prefixes.add(prefix_value)
+                    prefixes.append(prefix_value)
+
+            if recursive and type_filter != "file":
+                for prefix_value in sorted(page_recursive_prefixes):
+                    if prefix_value in seen_prefixes:
+                        continue
+                    if not matches_query(prefix_value):
+                        continue
+                    if len(objects) + len(prefixes) >= normalized_max_keys:
+                        break
+                    seen_prefixes.add(prefix_value)
+                    prefixes.append(prefix_value)
+
+            is_truncated = bool(resp.get("IsTruncated"))
+            scan_token = resp.get("NextContinuationToken") if is_truncated else None
+            if len(objects) + len(prefixes) >= normalized_max_keys:
+                break
+            if not is_truncated:
+                break
+
+        response_is_truncated = False
+        response_next_token: Optional[str] = None
+        if budget_exceeded and scan_token:
+            response_is_truncated = True
+            response_next_token = scan_token
+        elif scan_token:
+            response_is_truncated = True
+            response_next_token = scan_token
+
+        result = ListBrowserObjectsResponse(
             prefix=prefix,
             objects=objects,
             prefixes=prefixes,
-            is_truncated=bool(resp.get("IsTruncated")),
-            next_continuation_token=resp.get("NextContinuationToken"),
+            is_truncated=response_is_truncated,
+            next_continuation_token=response_next_token,
         )
+        _OBJECT_LIST_CACHE.set(object_cache_key, result.model_copy(deep=True))
+        logger.debug("Browser object cache miss: account=%s bucket=%s", account_cache_key, bucket_name)
+        return result
 
     def list_object_versions(
         self,
@@ -893,6 +1200,7 @@ class BrowserService:
                     _delete_objects(client, bucket_name, markers_to_delete)
                     deleted_delete_markers = len(markers_to_delete)
 
+            self.invalidate_object_list_cache_for_account(account, bucket_name)
             return CleanupObjectVersionsResponse(
                 prefix=prefix or None,
                 deleted_versions=deleted_versions,
@@ -1076,6 +1384,7 @@ class BrowserService:
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to update metadata for '{payload.key}': {exc}") from exc
 
+        self.invalidate_object_list_cache_for_account(account, bucket_name)
         return self.head_object(bucket_name, account, payload.key, version_id=None)
 
     def put_object_acl(
@@ -1204,6 +1513,7 @@ class BrowserService:
             client.restore_object(**kwargs)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to restore '{payload.key}': {exc}") from exc
+        self.invalidate_object_list_cache_for_account(account, bucket_name)
 
     def presign(
         self,
@@ -1325,6 +1635,9 @@ class BrowserService:
                 client.delete_object(**delete_kwargs)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to copy object '{payload.source_key}' -> '{payload.destination_key}': {exc}") from exc
+        self.invalidate_object_list_cache_for_account(account, bucket_name)
+        if source_bucket != bucket_name or payload.move:
+            self.invalidate_object_list_cache_for_account(account, source_bucket)
 
     def delete_objects(
         self,
@@ -1349,6 +1662,7 @@ class BrowserService:
             _delete_objects(client, bucket_name, items)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to delete objects in bucket '{bucket_name}': {exc}") from exc
+        self.invalidate_object_list_cache_for_account(account, bucket_name)
         return len(items)
 
     def create_folder(
@@ -1363,6 +1677,7 @@ class BrowserService:
             client.put_object(Bucket=bucket_name, Key=key, Body=b"")
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to create folder '{key}': {exc}") from exc
+        self.invalidate_object_list_cache_for_account(account, bucket_name)
 
     def initiate_multipart_upload(
         self,
@@ -1516,6 +1831,7 @@ class BrowserService:
             )
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to complete multipart upload for '{key}': {exc}") from exc
+        self.invalidate_object_list_cache_for_account(account, bucket_name)
 
     def abort_multipart_upload(
         self,
@@ -1529,6 +1845,7 @@ class BrowserService:
             client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to abort multipart upload for '{key}': {exc}") from exc
+        self.invalidate_object_list_cache_for_account(account, bucket_name)
 
 
 def get_browser_service() -> BrowserService:
