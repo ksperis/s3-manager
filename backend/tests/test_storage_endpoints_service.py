@@ -288,6 +288,10 @@ def test_delete_endpoint_blocks_when_references_exist(db_session):
 
 def test_detect_features_reuses_stored_secrets_in_edit_mode(db_session, monkeypatch):
     endpoint = _create_ceph_endpoint_with_full_credentials(db_session, name="ceph-edit-detect")
+    endpoint.verify_tls = False
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
 
     class FakeRGWClient:
         def __init__(self, access_key: str):
@@ -320,6 +324,7 @@ def test_detect_features_reuses_stored_secrets_in_edit_mode(db_session, monkeypa
             assert kwargs["secret_key"] == endpoint.admin_secret_key
         if kwargs["access_key"] == endpoint.supervision_access_key:
             assert kwargs["secret_key"] == endpoint.supervision_secret_key
+        assert kwargs["verify_tls"] is False
         return FakeRGWClient(kwargs["access_key"])
 
     monkeypatch.setattr(

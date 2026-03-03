@@ -65,6 +65,7 @@ def validate_ceph_admin_service_identity(endpoint: StorageEndpoint) -> Optional[
             secret_key=secret_key,
             endpoint=admin_endpoint,
             region=getattr(endpoint, "region", None),
+            verify_tls=bool(getattr(endpoint, "verify_tls", True)),
         )
         user_payload = rgw_admin.get_user_by_access_key(access_key, allow_not_found=True)
     except RGWAdminError as exc:
@@ -154,6 +155,7 @@ def get_ceph_admin_context(
         secret_key=secret_key,
         endpoint=admin_endpoint,
         region=region,
+        verify_tls=bool(getattr(endpoint, "verify_tls", True)),
     )
     s3_endpoint = normalize_s3_endpoint(getattr(endpoint, "endpoint_url", None)) or ""
     return CephAdminContext(

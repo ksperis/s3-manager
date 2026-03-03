@@ -197,6 +197,7 @@ Spec fields:
 - `name`
 - `endpoint_url`
 - `region`
+- `verify_tls`
 - `provider`
 - `features_config`
 - `admin_access_key`, `admin_secret_key`

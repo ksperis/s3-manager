@@ -52,6 +52,7 @@ class EnvStorageEndpoint(BaseModel):
     name: str
     endpoint_url: str
     region: Optional[str] = None
+    verify_tls: bool = True
     provider: Optional[StorageProvider] = None
     admin_access_key: Optional[str] = None
     admin_secret_key: Optional[str] = None
@@ -203,6 +204,7 @@ class StorageEndpointsService:
                 secret_key=endpoint.admin_secret_key,
                 endpoint=admin_endpoint,
                 region=endpoint.region,
+                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
             )
             user_payload = admin_client.get_user_by_access_key(endpoint.admin_access_key, allow_not_found=True)
             if not user_payload:
@@ -245,6 +247,7 @@ class StorageEndpointsService:
             endpoint_url=endpoint.endpoint_url,
             admin_endpoint=features.get("admin", {}).get("endpoint"),
             region=endpoint.region,
+            verify_tls=bool(getattr(endpoint, "verify_tls", True)),
             provider=provider,
             admin_access_key=endpoint.admin_access_key,
             supervision_access_key=endpoint.supervision_access_key,
@@ -321,6 +324,13 @@ class StorageEndpointsService:
 
         region = self._clean_optional(payload.region) or (stored_endpoint.region if stored_endpoint else None)
         admin_endpoint = self._normalize_url(payload.admin_endpoint) or endpoint_url
+        verify_tls = (
+            bool(payload.verify_tls)
+            if payload.verify_tls is not None
+            else bool(getattr(stored_endpoint, "verify_tls", True))
+            if stored_endpoint is not None
+            else True
+        )
 
         admin_access_key = self._clean_optional(payload.admin_access_key)
         admin_secret_key = self._clean_optional(payload.admin_secret_key)
@@ -347,6 +357,7 @@ class StorageEndpointsService:
                     secret_key=admin_secret_key,
                     endpoint=admin_endpoint,
                     region=region,
+                    verify_tls=verify_tls,
                 )
                 admin_payload = admin_client.get_user_by_access_key(admin_access_key, allow_not_found=True)
                 if admin_payload:
@@ -375,6 +386,7 @@ class StorageEndpointsService:
                     secret_key=supervision_secret_key,
                     endpoint=admin_endpoint,
                     region=region,
+                    verify_tls=verify_tls,
                 )
                 supervision_client.get_all_buckets(with_stats=False)
                 result.metrics = True
@@ -444,6 +456,7 @@ class StorageEndpointsService:
         for entry, name, endpoint_url in normalized_entries:
             provider = self._normalize_provider(entry.provider)
             region = self._clean_optional(entry.region)
+            verify_tls = bool(entry.verify_tls)
             admin_access = self._clean_optional(entry.admin_access_key)
             admin_secret = self._clean_optional(entry.admin_secret_key)
             supervision_access = self._clean_optional(entry.supervision_access_key)
@@ -482,6 +495,7 @@ class StorageEndpointsService:
                 endpoint.endpoint_url = endpoint_url
                 endpoint.admin_endpoint = admin_endpoint
                 endpoint.region = region
+                endpoint.verify_tls = verify_tls
                 endpoint.provider = provider.value
                 endpoint.admin_access_key = admin_access
                 endpoint.admin_secret_key = admin_secret
@@ -501,6 +515,7 @@ class StorageEndpointsService:
                     endpoint_url=endpoint_url,
                     admin_endpoint=admin_endpoint,
                     region=region,
+                    verify_tls=verify_tls,
                     provider=provider.value,
                     admin_access_key=admin_access,
                     admin_secret_key=admin_secret,
@@ -561,6 +576,7 @@ class StorageEndpointsService:
         name = self._normalize_name(payload.name, fallback="Endpoint")
         endpoint_url = self._normalize_url(payload.endpoint_url)
         region = self._clean_optional(payload.region)
+        verify_tls = bool(payload.verify_tls)
         provider = self._normalize_provider(payload.provider)
         admin_access = self._clean_optional(payload.admin_access_key)
         admin_secret = self._clean_optional(payload.admin_secret_key)
@@ -599,6 +615,7 @@ class StorageEndpointsService:
             endpoint_url=endpoint_url,
             admin_endpoint=admin_endpoint,
             region=region,
+            verify_tls=verify_tls,
             provider=provider.value,
             admin_access_key=admin_access,
             admin_secret_key=admin_secret,
@@ -638,6 +655,11 @@ class StorageEndpointsService:
             self._clean_optional(payload.region)
             if "region" in fields_set
             else endpoint.region
+        )
+        verify_tls = (
+            bool(payload.verify_tls)
+            if "verify_tls" in fields_set and payload.verify_tls is not None
+            else bool(getattr(endpoint, "verify_tls", True))
         )
         provider = self._normalize_provider(payload.provider if "provider" in fields_set else endpoint.provider)
         admin_access = (
@@ -711,6 +733,7 @@ class StorageEndpointsService:
         endpoint.endpoint_url = endpoint_url
         endpoint.admin_endpoint = admin_endpoint
         endpoint.region = region
+        endpoint.verify_tls = verify_tls
         endpoint.provider = provider.value
         endpoint.admin_access_key = admin_access
         endpoint.admin_secret_key = admin_secret
@@ -807,6 +830,7 @@ class StorageEndpointsService:
         if self.db.query(StorageEndpoint).count() > 0:
             return None
         region = settings.seed_s3_region
+        verify_tls = True
         admin_access = settings.seed_rgw_admin_access_key or settings.seed_s3_access_key
         admin_secret = settings.seed_rgw_admin_secret_key or settings.seed_s3_secret_key
         supervision_access = settings.seed_supervision_access_key
@@ -842,6 +866,7 @@ class StorageEndpointsService:
             endpoint_url=endpoint_url,
             admin_endpoint=admin_endpoint,
             region=region,
+            verify_tls=verify_tls,
             provider=provider.value,
             admin_access_key=admin_access,
             admin_secret_key=admin_secret,

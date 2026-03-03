@@ -28,6 +28,7 @@ class StorageEndpointSpec(BaseModel):
     name: Optional[str] = None
     endpoint_url: Optional[str] = None
     region: Optional[str] = None
+    verify_tls: Optional[bool] = None
     provider: Optional[StorageProvider] = None
     admin_access_key: Optional[str] = None
     admin_secret_key: Optional[str] = None

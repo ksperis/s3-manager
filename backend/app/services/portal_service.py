@@ -586,6 +586,7 @@ class PortalService:
                 secret_key=secret_key,
                 endpoint=admin_endpoint,
                 region=endpoint.region,
+                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
             )
         except Exception as exc:
             logger.warning("Unable to build admin client for quota lookup: %s", exc)

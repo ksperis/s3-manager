@@ -90,6 +90,7 @@ def create_storage_endpoint(
                 "endpoint_url": created.endpoint_url,
                 "provider": created.provider.value,
                 "admin_endpoint": created.admin_endpoint,
+                "verify_tls": created.verify_tls,
             },
         )
         return created
@@ -117,6 +118,7 @@ def update_storage_endpoint(
                 "endpoint_url": updated.endpoint_url,
                 "provider": updated.provider.value,
                 "admin_endpoint": updated.admin_endpoint,
+                "verify_tls": updated.verify_tls,
             },
         )
         return updated

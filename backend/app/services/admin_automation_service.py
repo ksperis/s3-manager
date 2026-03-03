@@ -179,6 +179,7 @@ class AdminAutomationService:
                         "endpoint_url": created.endpoint_url,
                         "provider": created.provider.value,
                         "admin_endpoint": created.admin_endpoint,
+                        "verify_tls": created.verify_tls,
                     },
                 )
                 return self._created("storage_endpoint", key, created.id, dry_run=dry_run)
@@ -225,6 +226,7 @@ class AdminAutomationService:
                     "endpoint_url": updated.endpoint_url,
                     "provider": updated.provider.value,
                     "admin_endpoint": updated.admin_endpoint,
+                    "verify_tls": updated.verify_tls,
                 },
             )
             return self._updated("storage_endpoint", key, endpoint.id, diff, dry_run=dry_run)
@@ -730,6 +732,11 @@ class AdminAutomationService:
             desired = self._normalize_optional_str(spec.region)
             if desired != self._normalize_optional_str(endpoint.region):
                 diff["region"] = {"from": endpoint.region, "to": desired}
+        if "verify_tls" in fields_set and spec.verify_tls is not None:
+            desired_verify_tls = bool(spec.verify_tls)
+            current_verify_tls = bool(getattr(endpoint, "verify_tls", True))
+            if desired_verify_tls != current_verify_tls:
+                diff["verify_tls"] = {"from": current_verify_tls, "to": desired_verify_tls}
         if "provider" in fields_set:
             desired = normalize_storage_provider(spec.provider).value
             if desired != str(endpoint.provider):
@@ -971,6 +978,7 @@ class AdminAutomationService:
             name=name,
             endpoint_url=endpoint_url,
             region=self._normalize_optional_str(spec.region),
+            verify_tls=bool(spec.verify_tls if spec.verify_tls is not None else True),
             provider=spec.provider or StorageProvider.CEPH,
             admin_access_key=spec.admin_access_key,
             admin_secret_key=spec.admin_secret_key,

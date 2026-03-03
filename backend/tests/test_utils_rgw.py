@@ -23,11 +23,12 @@ def test_resolve_account_scope_with_tenant_name():
 def test_get_supervision_rgw_client_uses_endpoint_url_when_admin_feature_disabled(monkeypatch):
     captured: dict[str, object] = {}
 
-    def fake_get_rgw_admin_client(access_key=None, secret_key=None, endpoint=None, region=None):
+    def fake_get_rgw_admin_client(access_key=None, secret_key=None, endpoint=None, region=None, verify_tls=True):
         captured["access_key"] = access_key
         captured["secret_key"] = secret_key
         captured["endpoint"] = endpoint
         captured["region"] = region
+        captured["verify_tls"] = verify_tls
         return "client"
 
     monkeypatch.setattr("app.utils.rgw.get_rgw_admin_client", fake_get_rgw_admin_client)
@@ -35,6 +36,7 @@ def test_get_supervision_rgw_client_uses_endpoint_url_when_admin_feature_disable
         name="ceph",
         endpoint_url="https://rgw.example.test/",
         provider=StorageProvider.CEPH.value,
+        verify_tls=False,
         supervision_access_key="SUP-AK",
         supervision_secret_key="SUP-SK",
         features_config="features:\n  admin:\n    enabled: false\n",
@@ -45,3 +47,4 @@ def test_get_supervision_rgw_client_uses_endpoint_url_when_admin_feature_disable
     assert captured["access_key"] == "SUP-AK"
     assert captured["secret_key"] == "SUP-SK"
     assert captured["endpoint"] == "https://rgw.example.test"
+    assert captured["verify_tls"] is False

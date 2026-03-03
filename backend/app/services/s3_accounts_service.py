@@ -127,6 +127,7 @@ class S3AccountsService:
                 secret_key=endpoint.admin_secret_key,
                 endpoint=admin_endpoint,
                 region=endpoint.region,
+                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
             )
         except Exception as exc:
             if allow_missing:

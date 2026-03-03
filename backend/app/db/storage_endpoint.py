@@ -28,6 +28,7 @@ class StorageEndpoint(Base):
     ceph_admin_access_key = Column(String, nullable=True)
     ceph_admin_secret_key = Column(EncryptedString, nullable=True)
     features_config = Column(Text, nullable=True)
+    verify_tls = Column(Boolean, default=True, nullable=False, server_default="1")
     is_default = Column(Boolean, default=False, nullable=False, server_default="0")
     is_editable = Column(Boolean, default=True, nullable=False, server_default="1")
     created_at = Column(DateTime, default=utcnow, nullable=False)

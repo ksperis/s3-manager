@@ -700,6 +700,7 @@ class KeyRotationService:
                 secret_key=secret_key,
                 endpoint=admin_endpoint,
                 region=endpoint.region,
+                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
             )
         except RGWAdminError as exc:
             raise ValueError(f"Unable to build RGW admin client: {exc}") from exc

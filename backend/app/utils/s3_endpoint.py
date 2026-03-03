@@ -68,11 +68,17 @@ def resolve_s3_endpoint(account: object) -> Optional[str]:
 def resolve_s3_client_options(account: object) -> tuple[Optional[str], Optional[str], bool, bool]:
     """Resolve S3 client options (endpoint, region, force_path_style, verify_tls)."""
     endpoint = resolve_s3_endpoint(account)
+    endpoint_obj = getattr(account, "storage_endpoint", None)
     region = getattr(account, "_session_region", None)
     if region is None:
-        endpoint_obj = getattr(account, "storage_endpoint", None)
         if endpoint_obj is not None:
             region = getattr(endpoint_obj, "region", None)
     force_path_style = bool(getattr(account, "_session_force_path_style", False))
-    verify_tls = bool(getattr(account, "_session_verify_tls", True))
+    session_verify_tls = getattr(account, "_session_verify_tls", None)
+    if session_verify_tls is not None:
+        verify_tls = bool(session_verify_tls)
+    elif endpoint_obj is not None:
+        verify_tls = bool(getattr(endpoint_obj, "verify_tls", True))
+    else:
+        verify_tls = True
     return endpoint, region, force_path_style, verify_tls

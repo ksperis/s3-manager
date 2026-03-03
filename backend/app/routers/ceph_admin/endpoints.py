@@ -195,6 +195,7 @@ def get_ceph_admin_endpoint_access(
                     secret_key=endpoint.ceph_admin_secret_key,
                     endpoint=admin_endpoint,
                     region=endpoint.region,
+                    verify_tls=bool(getattr(endpoint, "verify_tls", True)),
                 )
                 # Probe /admin/account directly; not_found still means the API is reachable.
                 admin_client.get_account("RGW00000000000000000", allow_not_found=True)

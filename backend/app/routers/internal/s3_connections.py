@@ -45,6 +45,7 @@ def cleanup_temporary_connections(
                             secret_key=endpoint.admin_secret_key,
                             endpoint=admin_endpoint,
                             region=endpoint.region,
+                            verify_tls=bool(getattr(endpoint, "verify_tls", True)),
                         )
                         admin.delete_access_key(conn.temp_user_uid, conn.temp_access_key_id, tenant=None)
                     except RGWAdminError as exc:

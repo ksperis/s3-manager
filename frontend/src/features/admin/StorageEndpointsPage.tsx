@@ -26,6 +26,7 @@ type FormState = {
   name: string;
   endpoint_url: string;
   region: string;
+  verify_tls: boolean;
   provider: StorageProvider;
   admin_access_key: string;
   admin_secret_key: string;
@@ -167,6 +168,7 @@ function createEmptyForm(): FormState {
     name: "",
     endpoint_url: "",
     region: "",
+    verify_tls: true,
     provider: "ceph",
     admin_access_key: "",
     admin_secret_key: "",
@@ -410,6 +412,7 @@ export default function StorageEndpointsPage() {
           endpoint_url: endpointUrl,
           admin_endpoint: adminEndpointOverride || null,
           region: form.region.trim() || null,
+          verify_tls: form.verify_tls,
           admin_access_key: adminAccessKey || null,
           admin_secret_key: adminSecretKey || null,
           supervision_access_key: supervisionAccessKey || null,
@@ -483,6 +486,7 @@ export default function StorageEndpointsPage() {
     form.has_admin_secret,
     form.has_supervision_secret,
     form.region,
+    form.verify_tls,
     form.supervision_access_key,
     form.supervision_secret_key,
     showForm,
@@ -537,6 +541,7 @@ export default function StorageEndpointsPage() {
       name: endpoint.name ?? "",
       endpoint_url: endpoint.endpoint_url ?? "",
       region: endpoint.region ?? "",
+      verify_tls: endpoint.verify_tls !== false,
       provider: endpoint.provider,
       admin_access_key: endpoint.admin_access_key ?? "",
       admin_secret_key: "",
@@ -618,6 +623,7 @@ export default function StorageEndpointsPage() {
       name: trimmedName,
       endpoint_url: trimmedEndpoint,
       region: trimmedRegion || null,
+      verify_tls: Boolean(form.verify_tls),
       provider: form.provider,
       features_config: featuresConfig,
     };
@@ -702,6 +708,7 @@ export default function StorageEndpointsPage() {
   const renderEndpointCard = (endpoint: StorageEndpoint) => {
     const showSupervision = endpoint.supervision_access_key || endpoint.has_supervision_secret;
     const showCephAdmin = endpoint.ceph_admin_access_key || endpoint.has_ceph_admin_secret;
+    const verifyTls = endpoint.verify_tls !== false;
     const features = resolveFeatureState(endpoint, endpoint.provider);
     const adminEnabled = features.admin.enabled;
     const stsEnabled = features.sts.enabled;
@@ -817,6 +824,12 @@ export default function StorageEndpointsPage() {
           <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Region</p>
             <p className="font-semibold">{endpoint.region || "Default"}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
+            <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">TLS verification</p>
+            <p className={`font-semibold ${verifyTls ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+              {verifyTls ? "Enabled" : "Disabled (insecure)"}
+            </p>
           </div>
           <div className="rounded-xl bg-slate-50 px-4 py-3 ui-body text-slate-700 shadow-inner dark:bg-slate-800 dark:text-slate-100">
             <p className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">Admin key</p>
@@ -1066,6 +1079,23 @@ export default function StorageEndpointsPage() {
                   placeholder="us-east-1"
                 />
               </label>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/60">
+              <label className="flex items-center justify-between gap-4 ui-body font-semibold text-slate-700 dark:text-slate-100">
+                Insecure SSL (skip certificate validation)
+                <input
+                  type="checkbox"
+                  checked={!form.verify_tls}
+                  onChange={(e) => setForm((prev) => ({ ...prev, verify_tls: !e.target.checked }))}
+                  className={uiCheckboxClass}
+                />
+              </label>
+              {!form.verify_tls && (
+                <p className="mt-2 ui-caption text-amber-700 dark:text-amber-300">
+                  TLS certificate validation is disabled for this endpoint. Use only in trusted environments.
+                </p>
+              )}
             </div>
 
             {cephMode && (

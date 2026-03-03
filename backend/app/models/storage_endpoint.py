@@ -44,6 +44,7 @@ class StorageEndpointBase(BaseModel):
     endpoint_url: str
     admin_endpoint: Optional[str] = None
     region: Optional[str] = None
+    verify_tls: bool = True
     provider: StorageProvider = Field(default=StorageProvider.CEPH)
     admin_access_key: Optional[str] = None
     admin_secret_key: Optional[str] = None
@@ -70,6 +71,7 @@ class StorageEndpointUpdate(BaseModel):
     endpoint_url: Optional[str] = None
     admin_endpoint: Optional[str] = None
     region: Optional[str] = None
+    verify_tls: Optional[bool] = None
     provider: Optional[StorageProvider] = None
     admin_access_key: Optional[str] = None
     admin_secret_key: Optional[str] = None
@@ -127,6 +129,7 @@ class StorageEndpointFeatureDetectionRequest(BaseModel):
     endpoint_url: str
     admin_endpoint: Optional[str] = None
     region: Optional[str] = None
+    verify_tls: Optional[bool] = None
     admin_access_key: Optional[str] = None
     admin_secret_key: Optional[str] = None
     supervision_access_key: Optional[str] = None

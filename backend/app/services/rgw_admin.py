@@ -29,6 +29,7 @@ class RGWAdminClient:
         secret_key: Optional[str] = None,
         endpoint: Optional[str] = None,
         region: Optional[str] = None,
+        verify_tls: bool = True,
     ) -> None:
         resolved_endpoint = endpoint
         if not resolved_endpoint:
@@ -37,6 +38,7 @@ class RGWAdminClient:
         self.region = region or settings.seed_s3_region
         self.access_key = access_key
         self.secret_key = secret_key
+        self.verify_tls = bool(verify_tls)
         if not self.access_key or not self.secret_key:
             raise RGWAdminError("RGW admin credentials are not configured")
         self.auth = AWS4Auth(self.access_key, self.secret_key, self.region, "s3")
@@ -68,6 +70,7 @@ class RGWAdminClient:
                 headers=headers,
                 auth=self.auth,
                 timeout=10,
+                verify=self.verify_tls,
             )
             logger.debug(
                 "RGW request method=%s path=%s status=%s duration_ms=%.2f",
@@ -932,5 +935,12 @@ def get_rgw_admin_client(
     secret_key: Optional[str] = None,
     endpoint: Optional[str] = None,
     region: Optional[str] = None,
+    verify_tls: bool = True,
 ) -> RGWAdminClient:
-    return RGWAdminClient(access_key=access_key, secret_key=secret_key, endpoint=endpoint, region=region)
+    return RGWAdminClient(
+        access_key=access_key,
+        secret_key=secret_key,
+        endpoint=endpoint,
+        region=region,
+        verify_tls=verify_tls,
+    )

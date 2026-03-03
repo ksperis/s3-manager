@@ -43,6 +43,7 @@ export type StorageEndpoint = {
   endpoint_url: string;
   admin_endpoint?: string | null;
   region?: string | null;
+  verify_tls: boolean;
   provider: StorageProvider;
   admin_access_key?: string | null;
   has_admin_secret: boolean;
@@ -69,6 +70,7 @@ export type StorageEndpointPayload = {
   endpoint_url: string;
   admin_endpoint?: string | null;
   region?: string | null;
+  verify_tls?: boolean;
   provider?: StorageProvider;
   admin_access_key?: string | null;
   admin_secret_key?: string | null;
@@ -84,6 +86,7 @@ export type StorageEndpointFeatureDetectionPayload = {
   endpoint_url: string;
   admin_endpoint?: string | null;
   region?: string | null;
+  verify_tls?: boolean | null;
   admin_access_key?: string | null;
   admin_secret_key?: string | null;
   supervision_access_key?: string | null;

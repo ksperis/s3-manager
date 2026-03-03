@@ -81,6 +81,7 @@ class S3UsersService:
                 secret_key=endpoint.admin_secret_key,
                 endpoint=admin_endpoint,
                 region=endpoint.region,
+                verify_tls=bool(getattr(endpoint, "verify_tls", True)),
             )
         except Exception as exc:
             raise ValueError(f"Unable to build admin client for {endpoint.name}: {exc}") from exc

@@ -828,7 +828,7 @@ def _resolve_default_endpoint(db: Session) -> StorageEndpoint:
     return endpoint
 
 
-def _resolve_admin_rgw_context(db: Session, _user: User) -> tuple[str, str, str, Optional[str]]:
+def _resolve_admin_rgw_context(db: Session, _user: User) -> tuple[str, str, str, Optional[str], bool]:
     endpoint = _resolve_default_endpoint(db)
     if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
         raise HTTPException(
@@ -854,7 +854,7 @@ def _resolve_admin_rgw_context(db: Session, _user: User) -> tuple[str, str, str,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="RGW admin credentials are not configured",
         )
-    return access_key, secret_key, admin_endpoint, endpoint.region
+    return access_key, secret_key, admin_endpoint, endpoint.region, bool(getattr(endpoint, "verify_tls", True))
 
 
 def get_optional_super_admin_rgw_client(
@@ -862,12 +862,13 @@ def get_optional_super_admin_rgw_client(
     user: User = Depends(get_current_super_admin),
 ) -> Optional[RGWAdminClient]:
     try:
-        access_key, secret_key, admin_endpoint, region = _resolve_admin_rgw_context(db, user)
+        access_key, secret_key, admin_endpoint, region, verify_tls = _resolve_admin_rgw_context(db, user)
         return get_rgw_admin_client(
             access_key=access_key,
             secret_key=secret_key,
             endpoint=admin_endpoint,
             region=region,
+            verify_tls=verify_tls,
         )
     except RGWAdminError as exc:
         logger.warning("Unable to build RGW admin client: %s", exc)
@@ -883,12 +884,13 @@ def get_super_admin_rgw_client(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_super_admin),
 ) -> RGWAdminClient:
-    access_key, secret_key, admin_endpoint, region = _resolve_admin_rgw_context(db, user)
+    access_key, secret_key, admin_endpoint, region, verify_tls = _resolve_admin_rgw_context(db, user)
     return get_rgw_admin_client(
         access_key=access_key,
         secret_key=secret_key,
         endpoint=admin_endpoint,
         region=region,
+        verify_tls=verify_tls,
     )
 
 

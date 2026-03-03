@@ -107,3 +107,37 @@ def test_list_accounts_without_details_omits_include_details_params(monkeypatch)
     assert captured["path"] == "/admin/metadata/account"
     assert captured["params"] == {"format": "json"}
     assert payload == [{"account_id": "RGW01", "id": "RGW01"}]
+
+
+def test_request_uses_verify_tls_flag(monkeypatch):
+    client = RGWAdminClient(
+        access_key="AKIA-TEST",
+        secret_key="SECRET-TEST",
+        endpoint="https://rgw-admin.example.test",
+        region="us-east-1",
+        verify_tls=False,
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+        text = "{}"
+
+        @staticmethod
+        def json():
+            return {}
+
+    def fake_request(method: str, url: str, **kwargs):
+        captured["method"] = method
+        captured["url"] = url
+        captured["verify"] = kwargs.get("verify")
+        return FakeResponse()
+
+    monkeypatch.setattr(client.session, "request", fake_request)
+
+    payload = client._request("GET", "/admin/info")
+    assert payload == {}
+    assert captured["method"] == "GET"
+    assert captured["url"] == "https://rgw-admin.example.test/admin/info"
+    assert captured["verify"] is False
