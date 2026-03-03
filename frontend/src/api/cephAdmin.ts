@@ -508,9 +508,20 @@ export type CephAdminBucketCompareRequest = {
   target_bucket: string;
   include_content?: boolean;
   include_config?: boolean;
+  config_features?: CephAdminBucketCompareConfigFeature[];
   size_only?: boolean;
   diff_sample_limit?: number;
 };
+
+export type CephAdminBucketCompareConfigFeature =
+  | "versioning_status"
+  | "object_lock"
+  | "public_access_block"
+  | "lifecycle_rules"
+  | "cors_rules"
+  | "bucket_policy"
+  | "access_logging"
+  | "tags";
 
 export type CephAdminBucketObjectDiffEntry = {
   key: string;

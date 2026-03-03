@@ -1875,6 +1875,7 @@ def compare_bucket_pair(
                 source_account,
                 payload.target_bucket,
                 target_account,
+                include_sections=set(payload.config_features) if payload.config_features is not None else None,
             )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc

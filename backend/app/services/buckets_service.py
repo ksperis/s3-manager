@@ -716,6 +716,8 @@ class BucketsService:
         source_account: S3Account,
         target_bucket: str,
         target_account: S3Account,
+        *,
+        include_sections: Optional[Set[str]] = None,
     ) -> CephAdminBucketConfigDiff:
         def to_jsonable(value: Any) -> Any:
             if value is None:
@@ -726,35 +728,86 @@ class BucketsService:
                 return value.dict()
             return value
 
-        source_properties = self.get_bucket_properties(source_bucket, source_account)
-        target_properties = self.get_bucket_properties(target_bucket, target_account)
-        source_policy = self.get_policy(source_bucket, source_account)
-        target_policy = self.get_policy(target_bucket, target_account)
-        source_logging = to_jsonable(self.get_bucket_logging(source_bucket, source_account))
-        target_logging = to_jsonable(self.get_bucket_logging(target_bucket, target_account))
-        source_tags = self._normalize_tags_for_compare(self.get_bucket_tags(source_bucket, source_account))
-        target_tags = self._normalize_tags_for_compare(self.get_bucket_tags(target_bucket, target_account))
+        allowed_section_keys = {
+            "versioning_status",
+            "object_lock",
+            "public_access_block",
+            "lifecycle_rules",
+            "cors_rules",
+            "bucket_policy",
+            "access_logging",
+            "tags",
+        }
+        selected_section_keys = (
+            allowed_section_keys if include_sections is None else {key for key in include_sections if key in allowed_section_keys}
+        )
+        if not selected_section_keys:
+            return CephAdminBucketConfigDiff(changed=False, sections=[])
 
-        sections_data: list[tuple[str, str, Any, Any]] = [
-            ("versioning_status", "Versioning", source_properties.versioning_status, target_properties.versioning_status),
-            ("object_lock", "Object lock", to_jsonable(source_properties.object_lock), to_jsonable(target_properties.object_lock)),
-            (
-                "public_access_block",
-                "Public access block",
-                to_jsonable(source_properties.public_access_block),
-                to_jsonable(target_properties.public_access_block),
-            ),
-            (
-                "lifecycle_rules",
-                "Lifecycle rules",
-                [to_jsonable(rule) for rule in source_properties.lifecycle_rules],
-                [to_jsonable(rule) for rule in target_properties.lifecycle_rules],
-            ),
-            ("cors_rules", "CORS rules", source_properties.cors_rules or [], target_properties.cors_rules or []),
-            ("bucket_policy", "Bucket policy", source_policy, target_policy),
-            ("access_logging", "Access logging", source_logging, target_logging),
-            ("tags", "Tags", source_tags, target_tags),
-        ]
+        needs_properties = bool(
+            selected_section_keys & {"versioning_status", "object_lock", "public_access_block", "lifecycle_rules", "cors_rules"}
+        )
+        source_properties: Optional[BucketProperties] = None
+        target_properties: Optional[BucketProperties] = None
+        if needs_properties:
+            source_properties = self.get_bucket_properties(source_bucket, source_account)
+            target_properties = self.get_bucket_properties(target_bucket, target_account)
+            assert source_properties is not None
+            assert target_properties is not None
+
+        source_policy: Optional[dict] = None
+        target_policy: Optional[dict] = None
+        if "bucket_policy" in selected_section_keys:
+            source_policy = self.get_policy(source_bucket, source_account)
+            target_policy = self.get_policy(target_bucket, target_account)
+
+        source_logging: Any = None
+        target_logging: Any = None
+        if "access_logging" in selected_section_keys:
+            source_logging = to_jsonable(self.get_bucket_logging(source_bucket, source_account))
+            target_logging = to_jsonable(self.get_bucket_logging(target_bucket, target_account))
+
+        source_tags: list[dict[str, str]] = []
+        target_tags: list[dict[str, str]] = []
+        if "tags" in selected_section_keys:
+            source_tags = self._normalize_tags_for_compare(self.get_bucket_tags(source_bucket, source_account))
+            target_tags = self._normalize_tags_for_compare(self.get_bucket_tags(target_bucket, target_account))
+
+        sections_data: list[tuple[str, str, Any, Any]] = []
+        if "versioning_status" in selected_section_keys:
+            sections_data.append(
+                ("versioning_status", "Versioning", source_properties.versioning_status, target_properties.versioning_status)
+            )
+        if "object_lock" in selected_section_keys:
+            sections_data.append(
+                ("object_lock", "Object lock", to_jsonable(source_properties.object_lock), to_jsonable(target_properties.object_lock))
+            )
+        if "public_access_block" in selected_section_keys:
+            sections_data.append(
+                (
+                    "public_access_block",
+                    "Public access block",
+                    to_jsonable(source_properties.public_access_block),
+                    to_jsonable(target_properties.public_access_block),
+                )
+            )
+        if "lifecycle_rules" in selected_section_keys:
+            sections_data.append(
+                (
+                    "lifecycle_rules",
+                    "Lifecycle rules",
+                    [to_jsonable(rule) for rule in source_properties.lifecycle_rules],
+                    [to_jsonable(rule) for rule in target_properties.lifecycle_rules],
+                )
+            )
+        if "cors_rules" in selected_section_keys:
+            sections_data.append(("cors_rules", "CORS rules", source_properties.cors_rules or [], target_properties.cors_rules or []))
+        if "bucket_policy" in selected_section_keys:
+            sections_data.append(("bucket_policy", "Bucket policy", source_policy, target_policy))
+        if "access_logging" in selected_section_keys:
+            sections_data.append(("access_logging", "Access logging", source_logging, target_logging))
+        if "tags" in selected_section_keys:
+            sections_data.append(("tags", "Tags", source_tags, target_tags))
 
         changed = False
         sections: list[CephAdminBucketConfigDiffSection] = []

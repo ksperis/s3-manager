@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.models.ceph_admin import (
     CephAdminBucketCompareRequest,
@@ -166,3 +167,47 @@ def test_compare_bucket_pair_supports_config_only(monkeypatch):
     assert response.content_diff is None
     assert response.config_diff is not None
     assert response.has_differences is True
+
+
+def test_compare_bucket_pair_forwards_selected_config_features(monkeypatch):
+    payload = CephAdminBucketCompareRequest(
+        target_endpoint_id=2,
+        source_bucket="bucket-a",
+        target_bucket="bucket-b",
+        include_content=False,
+        include_config=True,
+        config_features=["tags", "versioning_status"],
+    )
+    monkeypatch.setattr(buckets_router, "_resolve_storage_endpoint", lambda _db, _endpoint_id: _build_target_endpoint(2))
+    captured: dict[str, object] = {}
+
+    def should_not_compare_content(*_args, **_kwargs):
+        raise AssertionError("compare_bucket_content should not be called in config-only mode")
+
+    def fake_compare_config(self, source_bucket, source_account, target_bucket, target_account, **kwargs):
+        captured["source_bucket"] = source_bucket
+        captured["target_bucket"] = target_bucket
+        captured["include_sections"] = kwargs.get("include_sections")
+        return CephAdminBucketConfigDiff(changed=False, sections=[])
+
+    monkeypatch.setattr(buckets_router.BucketsService, "compare_bucket_content", should_not_compare_content)
+    monkeypatch.setattr(buckets_router.BucketsService, "compare_bucket_configuration", fake_compare_config)
+
+    response = buckets_router.compare_bucket_pair(endpoint_id=1, payload=payload, db=SimpleNamespace(), ctx=_build_ctx(1))
+
+    assert response.has_differences is False
+    assert captured["source_bucket"] == "bucket-a"
+    assert captured["target_bucket"] == "bucket-b"
+    assert captured["include_sections"] == {"tags", "versioning_status"}
+
+
+def test_compare_request_rejects_empty_feature_list_when_config_scope_enabled():
+    with pytest.raises(ValidationError):
+        CephAdminBucketCompareRequest(
+            target_endpoint_id=2,
+            source_bucket="bucket-a",
+            target_bucket="bucket-b",
+            include_content=False,
+            include_config=True,
+            config_features=[],
+        )

@@ -338,6 +338,16 @@ BucketFeatureParam = Literal[
     "policy_has_conditions",
 ]
 BucketFeatureParamQuantifier = Literal["any", "none"]
+BucketCompareConfigFeature = Literal[
+    "versioning_status",
+    "object_lock",
+    "public_access_block",
+    "lifecycle_rules",
+    "cors_rules",
+    "bucket_policy",
+    "access_logging",
+    "tags",
+]
 
 
 class CephAdminBucketFilterRule(BaseModel):
@@ -429,6 +439,7 @@ class CephAdminBucketCompareRequest(BaseModel):
     target_bucket: str
     include_content: bool = True
     include_config: bool = False
+    config_features: Optional[list[BucketCompareConfigFeature]] = None
     size_only: bool = False
     diff_sample_limit: int = Field(default=200, ge=1, le=2000)
 
@@ -442,6 +453,10 @@ class CephAdminBucketCompareRequest(BaseModel):
             raise ValueError("target_bucket is required.")
         if not self.include_content and not self.include_config:
             raise ValueError("At least one comparison scope must be enabled.")
+        if self.config_features is not None:
+            self.config_features = list(dict.fromkeys(self.config_features))
+            if self.include_config and len(self.config_features) == 0:
+                raise ValueError("At least one config feature must be enabled when include_config is true.")
         return self
 
 

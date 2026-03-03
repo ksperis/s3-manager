@@ -13,6 +13,7 @@ import {
   CephAdminEndpoint,
   compareCephAdminBucketPair,
   listCephAdminBuckets,
+  type CephAdminBucketCompareConfigFeature,
 } from "../../api/cephAdmin";
 
 type CompareMapping = {
@@ -157,6 +158,19 @@ const parseRawMappingText = (value: string): ParsedRawMappingResult => {
   return { mapping, invalidLines };
 };
 
+const CONFIG_FEATURE_OPTIONS: Array<{ key: CephAdminBucketCompareConfigFeature; label: string }> = [
+  { key: "versioning_status", label: "Versioning" },
+  { key: "object_lock", label: "Object lock" },
+  { key: "public_access_block", label: "Public access block" },
+  { key: "lifecycle_rules", label: "Lifecycle rules" },
+  { key: "cors_rules", label: "CORS rules" },
+  { key: "bucket_policy", label: "Bucket policy" },
+  { key: "access_logging", label: "Access logging" },
+  { key: "tags", label: "Tags" },
+];
+
+const ALL_CONFIG_FEATURE_KEYS = CONFIG_FEATURE_OPTIONS.map((option) => option.key);
+
 const triggerDownload = (filename: string, content: string, mimeType: string) => {
   if (typeof window === "undefined") return;
   const blob = new Blob([content], { type: mimeType });
@@ -195,6 +209,9 @@ export default function CephAdminBucketCompareModal({
   const [rawMappingText, setRawMappingText] = useState("");
   const [includeContent, setIncludeContent] = useState(true);
   const [includeConfig, setIncludeConfig] = useState(false);
+  const [selectedConfigFeatures, setSelectedConfigFeatures] = useState<CephAdminBucketCompareConfigFeature[]>(
+    () => [...ALL_CONFIG_FEATURE_KEYS]
+  );
   const [sizeOnly, setSizeOnly] = useState(false);
   const [parallelism, setParallelism] = useState(4);
   const [running, setRunning] = useState(false);
@@ -428,11 +445,26 @@ export default function CephAdminBucketCompareModal({
     return Math.min(100, Math.round((progress.completed / progress.total) * 100));
   }, [progress.completed, progress.total]);
   const hasScopeSelected = includeContent || includeConfig;
+  const hasConfigFeatureSelected = selectedConfigFeatures.length > 0;
+  const canRunComparison =
+    !running && !comparePlan.error && Boolean(targetEndpointId) && hasScopeSelected && (!includeConfig || hasConfigFeatureSelected);
 
   useEffect(() => {
     if (includeContent) return;
     setSizeOnly(false);
   }, [includeContent]);
+
+  const toggleConfigFeature = (feature: CephAdminBucketCompareConfigFeature, enabled: boolean) => {
+    setSelectedConfigFeatures((prev) => {
+      const next = new Set(prev);
+      if (enabled) {
+        next.add(feature);
+      } else {
+        next.delete(feature);
+      }
+      return ALL_CONFIG_FEATURE_KEYS.filter((key) => next.has(key));
+    });
+  };
 
   const runCompare = async () => {
     if (!targetEndpointId) {
@@ -441,6 +473,10 @@ export default function CephAdminBucketCompareModal({
     }
     if (!hasScopeSelected) {
       setRunError("Select at least one comparison scope: content and/or configuration.");
+      return;
+    }
+    if (includeConfig && !hasConfigFeatureSelected) {
+      setRunError("Select at least one configuration feature or disable configuration scope.");
       return;
     }
     if (comparePlan.error) {
@@ -490,6 +526,7 @@ export default function CephAdminBucketCompareModal({
               target_bucket: mapping.targetBucket,
               include_content: includeContent,
               include_config: includeConfig,
+              config_features: includeConfig ? selectedConfigFeatures : undefined,
               size_only: sizeOnly,
             },
             { signal: controller.signal }
@@ -630,6 +667,7 @@ export default function CephAdminBucketCompareModal({
         mapping_mode: mappingMode,
         include_content: includeContent,
         include_config: includeConfig,
+        config_features: includeConfig ? selectedConfigFeatures : [],
         size_only: sizeOnly,
         parallelism,
       },
@@ -754,6 +792,57 @@ export default function CephAdminBucketCompareModal({
             Select at least one comparison scope to run.
           </p>
         )}
+        {includeConfig && (
+          <details className="rounded-lg border border-slate-200 dark:border-slate-800">
+            <summary className="cursor-pointer list-none px-3 py-2 ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Configuration features to compare
+            </summary>
+            <div className="space-y-3 border-t border-slate-200 px-3 py-3 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <UiButton
+                  type="button"
+                  onClick={() => setSelectedConfigFeatures([...ALL_CONFIG_FEATURE_KEYS])}
+                  disabled={running}
+                  variant="secondary"
+                  className="ui-caption"
+                >
+                  Select all
+                </UiButton>
+                <UiButton
+                  type="button"
+                  onClick={() => setSelectedConfigFeatures([])}
+                  disabled={running}
+                  variant="secondary"
+                  className="ui-caption"
+                >
+                  Clear
+                </UiButton>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {CONFIG_FEATURE_OPTIONS.map((option) => (
+                  <label
+                    key={option.key}
+                    className="flex items-center gap-2 rounded-md border border-slate-200 px-2 py-1.5 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedConfigFeatures.includes(option.key)}
+                      onChange={(event) => toggleConfigFeature(option.key, event.target.checked)}
+                      disabled={running}
+                      className={uiCheckboxClass}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+              {!hasConfigFeatureSelected && (
+                <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">
+                  Select at least one configuration feature.
+                </p>
+              )}
+            </div>
+          </details>
+        )}
         {mappingMode === "manual" && (
           <div className="space-y-3">
             <details className="rounded-lg border border-slate-200 dark:border-slate-800">
@@ -863,7 +952,7 @@ export default function CephAdminBucketCompareModal({
         <div className="flex flex-wrap items-center gap-2">
           <UiButton
             onClick={runCompare}
-            disabled={running || Boolean(comparePlan.error) || !targetEndpointId || !hasScopeSelected}
+            disabled={!canRunComparison}
             className="ui-body"
           >
             {running ? "Comparing..." : "Run comparison"}

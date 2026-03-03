@@ -172,3 +172,60 @@ def test_compare_bucket_configuration_detects_changes(monkeypatch):
     assert section_by_key["versioning_status"].changed is True
     assert section_by_key["bucket_policy"].changed is True
     assert section_by_key["tags"].changed is True
+
+
+def test_compare_bucket_configuration_filters_selected_sections(monkeypatch):
+    service = BucketsService()
+    source = _build_account("source")
+    target = _build_account("target")
+    call_counts = {"properties": 0, "policy": 0, "logging": 0, "tags": 0}
+
+    def fake_properties(_bucket_name, _account):
+        call_counts["properties"] += 1
+        return BucketProperties(
+            versioning_status="Enabled",
+            object_lock_enabled=True,
+            object_lock=BucketObjectLock(enabled=True, mode="GOVERNANCE", days=1, years=None),
+            public_access_block=BucketPublicAccessBlock(
+                block_public_acls=True,
+                ignore_public_acls=True,
+                block_public_policy=True,
+                restrict_public_buckets=True,
+            ),
+            lifecycle_rules=[LifecycleRule(id="rule-a", status="Enabled", prefix="logs/")],
+            cors_rules=[{"AllowedOrigins": ["*"], "AllowedMethods": ["GET"]}],
+        )
+
+    def fake_policy(_bucket_name, _account):
+        call_counts["policy"] += 1
+        return {"Statement": [{"Sid": "A"}]}
+
+    def fake_logging(_bucket_name, _account):
+        call_counts["logging"] += 1
+        return BucketLoggingConfiguration(enabled=True, target_bucket="logs", target_prefix="source/")
+
+    def fake_tags(bucket_name, _account):
+        call_counts["tags"] += 1
+        if bucket_name == "source-bucket":
+            return [BucketTag(key="env", value="prod")]
+        return [BucketTag(key="env", value="stage")]
+
+    monkeypatch.setattr(service, "get_bucket_properties", fake_properties)
+    monkeypatch.setattr(service, "get_policy", fake_policy)
+    monkeypatch.setattr(service, "get_bucket_logging", fake_logging)
+    monkeypatch.setattr(service, "get_bucket_tags", fake_tags)
+
+    diff = service.compare_bucket_configuration(
+        "source-bucket",
+        source,
+        "target-bucket",
+        target,
+        include_sections={"tags"},
+    )
+
+    assert diff.changed is True
+    assert [section.key for section in diff.sections] == ["tags"]
+    assert call_counts["properties"] == 0
+    assert call_counts["policy"] == 0
+    assert call_counts["logging"] == 0
+    assert call_counts["tags"] == 2
