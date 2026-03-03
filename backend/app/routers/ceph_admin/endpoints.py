@@ -173,8 +173,6 @@ def list_ceph_admin_endpoints(
         if str(endpoint.provider) != StorageProvider.CEPH.value:
             continue
         payload = build_ceph_admin_endpoint_payload(endpoint)
-        if not payload["capabilities"].get("admin"):
-            continue
         results.append(CephAdminEndpoint(**payload))
     return results
 

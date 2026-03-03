@@ -71,6 +71,20 @@ def test_list_ceph_admin_endpoints_does_not_validate_identity(monkeypatch):
     assert payload[0].id == 1
 
 
+def test_list_ceph_admin_endpoints_includes_ceph_even_when_admin_feature_disabled(monkeypatch):
+    endpoint = _build_endpoint(2, admin_enabled=False)
+
+    def _unexpected_validate(_endpoint):
+        raise AssertionError("validate_ceph_admin_service_identity should not be called from list")
+
+    monkeypatch.setattr(endpoints_router, "validate_ceph_admin_service_identity", _unexpected_validate)
+
+    payload = endpoints_router.list_ceph_admin_endpoints(db=_FakeSession([endpoint]), _=SimpleNamespace())
+
+    assert len(payload) == 1
+    assert payload[0].id == 2
+
+
 def test_get_ceph_admin_endpoint_access_reports_warning_and_metrics_capability(monkeypatch):
     endpoint = _build_endpoint(11, usage_enabled=False, metrics_enabled=True, has_supervision_credentials=True)
 

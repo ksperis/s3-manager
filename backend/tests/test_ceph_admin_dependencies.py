@@ -33,3 +33,37 @@ features:
 
     assert detail is not None
     assert "unable to validate credentials" in detail
+
+
+class _FakeQuery:
+    def __init__(self, endpoint):
+        self._endpoint = endpoint
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return self._endpoint
+
+
+class _FakeSession:
+    def __init__(self, endpoint):
+        self._endpoint = endpoint
+
+    def query(self, _model):
+        return _FakeQuery(self._endpoint)
+
+
+def test_resolve_ceph_admin_workspace_endpoint_does_not_require_admin_feature_enabled():
+    endpoint = SimpleNamespace(
+        id=9,
+        provider=StorageProvider.CEPH.value,
+        features_config="""
+features:
+  admin:
+    enabled: false
+""",
+    )
+
+    resolved = deps._resolve_ceph_admin_workspace_endpoint(_FakeSession(endpoint), endpoint_id=9)
+    assert resolved is endpoint

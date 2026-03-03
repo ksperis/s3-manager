@@ -675,6 +675,7 @@ export default function UsersPage() {
   const MAX_VISIBLE_OPTIONS = 10;
   const { generalSettings } = useGeneralSettings();
   const currentUser = useMemo(() => readStoredUser(), []);
+  const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
   const currentIsSuperAdmin = isSuperAdminRole(currentUser?.role);
   const portalEnabled = generalSettings.portal_enabled;
   const cephAdminFeatureEnabled = generalSettings.ceph_admin_enabled;
@@ -1441,6 +1442,11 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (userId: number) => {
+    if (currentUserId !== null && userId === currentUserId) {
+      setActionError("You cannot delete your own user.");
+      setActionMessage(null);
+      return;
+    }
     const confirmDelete = window.confirm("Delete this user?");
     if (!confirmDelete) return;
     setBusyId(userId);
@@ -1751,7 +1757,9 @@ export default function UsersPage() {
               )}
               {!loading &&
                 !error &&
-                users.map((user) => (
+                users.map((user) => {
+                  const isCurrentUser = currentUserId !== null && user.id === currentUserId;
+                  return (
                   <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
                       <div className="flex flex-col gap-1">
@@ -1791,14 +1799,16 @@ export default function UsersPage() {
                         <button
                           onClick={() => handleDelete(user.id)}
                           className={tableDeleteActionClasses}
-                          disabled={busyId === user.id}
+                          disabled={busyId === user.id || isCurrentUser}
+                          title={isCurrentUser ? "You cannot delete your own user." : undefined}
                         >
-                          {busyId === user.id ? "Deleting..." : "Delete"}
+                          {busyId === user.id ? "Deleting..." : isCurrentUser ? "Delete (self)" : "Delete"}
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
             </tbody>
           </table>
         </div>

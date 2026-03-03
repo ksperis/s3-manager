@@ -13,7 +13,7 @@ from app.db import StorageEndpoint, StorageProvider, User
 from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.utils.s3_endpoint import normalize_s3_endpoint
-from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags, features_to_capabilities, normalize_features_config
+from app.utils.storage_endpoint_features import resolve_admin_endpoint, features_to_capabilities, normalize_features_config
 
 
 @dataclass(frozen=True)
@@ -90,12 +90,6 @@ def _resolve_storage_endpoint(db: Session, endpoint_id: int) -> StorageEndpoint:
     provider = StorageProvider(str(endpoint.provider))
     if provider != StorageProvider.CEPH:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage endpoint is not a Ceph provider")
-    flags = resolve_feature_flags(endpoint)
-    if not flags.admin_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Admin operations are disabled for this endpoint",
-        )
     admin_endpoint = resolve_admin_endpoint(endpoint)
     if not admin_endpoint:
         raise HTTPException(
@@ -131,12 +125,6 @@ def _resolve_ceph_admin_workspace_endpoint(db: Session, endpoint_id: int) -> Sto
     provider = StorageProvider(str(endpoint.provider))
     if provider != StorageProvider.CEPH:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Storage endpoint is not a Ceph provider")
-    flags = resolve_feature_flags(endpoint)
-    if not flags.admin_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Admin operations are disabled for this endpoint",
-        )
     return endpoint
 
 

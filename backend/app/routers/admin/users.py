@@ -136,6 +136,8 @@ def delete_user(
     current_user: DbUser = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
+    if current_user.id == user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete your own user")
     try:
         users_service.delete_user(user_id)
         audit_service.record_action(

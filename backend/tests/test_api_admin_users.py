@@ -208,3 +208,19 @@ def test_admin_update_user_rejects_short_password(client: TestClient, db_session
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Password must be at least 12 characters long"
+
+
+def test_admin_cannot_delete_own_user(client: TestClient):
+    admin_user = User(
+        id=1005,
+        email="self-delete-admin@example.com",
+        full_name="Admin",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    app.dependency_overrides[dependencies.get_current_super_admin] = lambda: admin_user
+
+    response = client.delete(f"/api/admin/users/{admin_user.id}")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "You cannot delete your own user"

@@ -200,6 +200,12 @@ function extractError(err: unknown): string {
   return "An error occurred.";
 }
 
+function isMethodNotAllowedError(message?: string | null): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return normalized.includes("405") || normalized.includes("methodnotallowed") || normalized.includes("method not allowed");
+}
+
 function ProviderBadge({ provider }: { provider: StorageProvider }) {
   const isCeph = provider === "ceph";
   return (
@@ -423,13 +429,16 @@ export default function StorageEndpointsPage() {
         if (Array.isArray(detection.warnings)) {
           warnings.push(...detection.warnings.filter((item) => typeof item === "string" && item.trim()));
         }
-        setFeatureDetectWarnings(warnings);
         const errorParts: string[] = [];
         if (hasAdminCredentials && !detection.admin && detection.admin_error) {
           errorParts.push(`Admin: ${detection.admin_error}`);
         }
         if (hasAdminCredentials && !detection.account && detection.account_error) {
-          errorParts.push(`Account API: ${detection.account_error}`);
+          if (isMethodNotAllowedError(detection.account_error)) {
+            warnings.push("Account API is not available on this endpoint (optional capability).");
+          } else {
+            errorParts.push(`Account API: ${detection.account_error}`);
+          }
         }
         if (hasSupervisionCredentials && !detection.metrics && detection.metrics_error) {
           errorParts.push(`Metrics: ${detection.metrics_error}`);
@@ -437,6 +446,7 @@ export default function StorageEndpointsPage() {
         if (hasSupervisionCredentials && !detection.usage && detection.usage_error) {
           errorParts.push(`Usage Log: ${detection.usage_error}`);
         }
+        setFeatureDetectWarnings(warnings);
         setFeatureDetectError(errorParts.length > 0 ? errorParts.join(" | ") : null);
         setForm((prev) => {
           if (prev.provider !== "ceph") return prev;
@@ -973,6 +983,26 @@ export default function StorageEndpointsPage() {
     Boolean(form.endpoint_url.trim()) &&
     Boolean(form.supervision_access_key.trim() || form.has_supervision_secret) &&
     !form.features.usage.enabled;
+  const hasSupervisionCredentialsForSignedProbe = Boolean(
+    form.supervision_access_key.trim() && (form.supervision_secret_key.trim() || form.has_supervision_secret)
+  );
+  const signedProbeBlockedReason = !cephMode
+    ? "S3 signed probe is available only for Ceph endpoints."
+    : !hasSupervisionCredentialsForSignedProbe
+    ? "S3 signed probe requires Supervision credentials (access key + secret key)."
+    : null;
+
+  useEffect(() => {
+    if (signedProbeBlockedReason && form.features.healthcheck.mode === "s3") {
+      updateFeatures((current) => ({
+        ...current,
+        healthcheck: {
+          ...current.healthcheck,
+          mode: "http",
+        },
+      }));
+    }
+  }, [form.features.healthcheck.mode, signedProbeBlockedReason, updateFeatures]);
 
   return (
     <div className="space-y-4 ui-caption leading-relaxed">
@@ -1198,6 +1228,10 @@ export default function StorageEndpointsPage() {
                     <p className="mt-2">
                       These credentials are used only by the <code>/ceph-admin</code> workspace (advanced
                       cluster-wide operations). They are isolated from Admin Ops credentials.
+                    </p>
+                    <p className="mt-1 ui-caption opacity-80">
+                      Note: access to <code>/ceph-admin</code> uses these dedicated credentials and does not depend on the
+                      <code> admin.enabled</code> endpoint feature flag.
                     </p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <input
@@ -1434,6 +1468,7 @@ export default function StorageEndpointsPage() {
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                       placeholder="https://sts.example.com"
                       disabled={!form.features.sts.enabled}
+                      title={!form.features.sts.enabled ? "Enable STS first to define a dedicated STS endpoint." : undefined}
                     />
                   </label>
                   <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100">
@@ -1451,9 +1486,12 @@ export default function StorageEndpointsPage() {
                       }
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 ui-body font-normal text-slate-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                       disabled={!cephMode}
+                      title={!cephMode ? "Healthcheck signed mode is available only for Ceph endpoints." : signedProbeBlockedReason ?? undefined}
                     >
                       <option value="http">HTTP probe</option>
-                      <option value="s3">S3 signed probe</option>
+                      <option value="s3" disabled={Boolean(signedProbeBlockedReason)} title={signedProbeBlockedReason ?? undefined}>
+                        S3 signed probe{signedProbeBlockedReason ? " (requires supervision credentials)" : ""}
+                      </option>
                     </select>
                   </label>
                   <label className="space-y-1 ui-caption font-semibold text-slate-700 dark:text-slate-100 sm:col-span-2">
@@ -1490,6 +1528,7 @@ export default function StorageEndpointsPage() {
               <button
                 type="submit"
                 disabled={saving}
+                title={saving ? "Save in progress." : undefined}
                 className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? "Saving..." : editingId ? "Update" : "Create"}
