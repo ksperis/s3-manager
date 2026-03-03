@@ -45,6 +45,8 @@ export type BrowserSettings = {
 
 export type BrowserObjectsQuery = {
   query?: string;
+  exactMatch?: boolean;
+  caseSensitive?: boolean;
   type?: "all" | "file" | "folder";
   storageClass?: string;
   recursive?: boolean;
@@ -329,6 +331,8 @@ export async function listBrowserObjects(
       continuation_token: options?.continuationToken ?? undefined,
       max_keys: options?.maxKeys ?? undefined,
       query: options?.query?.trim() || undefined,
+      query_exact: options?.exactMatch ? true : undefined,
+      query_case_sensitive: options?.caseSensitive ? true : undefined,
       item_type: options?.type && options.type !== "all" ? options.type : undefined,
       storage_class: options?.storageClass && options.storageClass !== "all" ? options.storageClass : undefined,
       recursive: options?.recursive ? true : undefined,

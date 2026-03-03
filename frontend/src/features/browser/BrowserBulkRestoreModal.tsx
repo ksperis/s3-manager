@@ -74,23 +74,7 @@ export default function BrowserBulkRestoreModal({
           <p className="font-semibold text-emerald-600 dark:text-emerald-200">{bulkRestoreSummary}</p>
         )}
         <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-          <label className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Target date</label>
-          <input
-            type="datetime-local"
-            className={`${formInputClasses} mt-2`}
-            value={bulkRestoreDate}
-            onChange={(event) => setBulkRestoreDate(event.target.value)}
-          />
-          <label className="mt-3 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
-            <input
-              type="checkbox"
-              checked={bulkRestoreDeleteMissing}
-              onChange={(event) => setBulkRestoreDeleteMissing(event.target.checked)}
-              className={uiCheckboxClass}
-            />
-            Delete objects not present at the selected date
-          </label>
-          <label className="mt-3 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
+          <label className="flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
             <input
               type="checkbox"
               checked={bulkRestoreRestoreDeleted}
@@ -98,6 +82,33 @@ export default function BrowserBulkRestoreModal({
               className={uiCheckboxClass}
             />
             Restore deleted objects to their latest version
+          </label>
+          <div className={`mt-3 space-y-2 ${bulkRestoreRestoreDeleted ? "opacity-60" : ""}`}>
+            <label className="ui-caption font-semibold text-slate-500 dark:text-slate-400">Target date</label>
+            <input
+              type="datetime-local"
+              className={formInputClasses}
+              value={bulkRestoreDate}
+              onChange={(event) => setBulkRestoreDate(event.target.value)}
+              disabled={bulkRestoreRestoreDeleted}
+            />
+            {bulkRestoreRestoreDeleted && (
+              <p className="ui-caption text-slate-400">Date is ignored while latest deleted-object restore is enabled.</p>
+            )}
+          </div>
+          <label
+            className={`mt-3 flex items-center gap-2 ui-caption ${
+              bulkRestoreRestoreDeleted ? "text-slate-400 dark:text-slate-500" : "text-slate-500 dark:text-slate-400"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={bulkRestoreDeleteMissing}
+              onChange={(event) => setBulkRestoreDeleteMissing(event.target.checked)}
+              disabled={bulkRestoreRestoreDeleted}
+              className={uiCheckboxClass}
+            />
+            Delete objects not present at the selected date
           </label>
           <label className="mt-3 flex items-center gap-2 ui-caption text-slate-500 dark:text-slate-400">
             <input
@@ -172,8 +183,9 @@ export default function BrowserBulkRestoreModal({
           </div>
         )}
         <p className="ui-caption text-slate-500 dark:text-slate-400">
-          Restores the latest version at or before the selected date. Objects with a delete marker at that date are
-          skipped unless deletion is enabled or deleted-object restore is selected.
+          {bulkRestoreRestoreDeleted
+            ? "Restores deleted objects to their latest non-delete-marker version. Target date is ignored in this mode."
+            : "Restores the latest version at or before the selected date. Objects with a delete marker at that date are skipped unless deletion is enabled or deleted-object restore is selected."}
         </p>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <button type="button" className={bulkActionClasses} onClick={onClose}>

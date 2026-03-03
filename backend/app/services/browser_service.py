@@ -591,13 +591,16 @@ class BrowserService:
         continuation_token: Optional[str] = None,
         max_keys: int = 1000,
         query: Optional[str] = None,
+        query_exact: bool = False,
+        query_case_sensitive: bool = False,
         item_type: Optional[str] = None,
         storage_class: Optional[str] = None,
         recursive: bool = False,
     ) -> ListBrowserObjectsResponse:
         client = self._client(account)
         normalized_prefix = prefix or ""
-        query_value = (query or "").strip().lower()
+        query_value_raw = (query or "").strip()
+        query_value = query_value_raw if query_case_sensitive else query_value_raw.lower()
         type_filter = (item_type or "all").lower()
         if type_filter not in {"all", "file", "folder"}:
             type_filter = "all"
@@ -611,7 +614,10 @@ class BrowserService:
                 relative = relative[len(normalized_prefix):]
             if relative.endswith("/"):
                 relative = relative[:-1]
-            return query_value in relative.lower()
+            comparable_value = relative if query_case_sensitive else relative.lower()
+            if query_exact:
+                return comparable_value == query_value
+            return query_value in comparable_value
 
         kwargs = {
             "Bucket": bucket_name,
@@ -627,13 +633,31 @@ class BrowserService:
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to list objects for '{bucket_name}': {exc}") from exc
         objects: list[BrowserObject] = []
+        recursive_prefixes: set[str] = set()
         for obj in resp.get("Contents", []):
-            if type_filter == "folder":
-                continue
             key = obj.get("Key")
             if not key:
                 continue
-            if prefix and key.rstrip("/") == prefix.rstrip("/") and obj.get("Size", 0) == 0:
+            size = int(obj.get("Size") or 0)
+            if prefix and key.rstrip("/") == prefix.rstrip("/") and size == 0:
+                continue
+            is_folder_marker = key.endswith("/") and size == 0
+            if recursive and type_filter != "file":
+                if is_folder_marker and key != normalized_prefix:
+                    recursive_prefixes.add(key)
+                if normalized_prefix and key.startswith(normalized_prefix):
+                    relative = key[len(normalized_prefix):]
+                else:
+                    relative = key
+                segments = [segment for segment in relative.split("/") if segment]
+                if len(segments) > 1:
+                    running = normalized_prefix
+                    for segment in segments[:-1]:
+                        running = f"{running}{segment}/"
+                        recursive_prefixes.add(running)
+            if type_filter == "folder":
+                continue
+            if recursive and is_folder_marker:
                 continue
             if not matches_query(key):
                 continue
@@ -655,6 +679,11 @@ class BrowserService:
                 prefix_value = entry.get("Prefix")
                 if not prefix_value:
                     continue
+                if not matches_query(prefix_value):
+                    continue
+                prefixes.append(prefix_value)
+        if recursive and type_filter != "file":
+            for prefix_value in sorted(recursive_prefixes):
                 if not matches_query(prefix_value):
                     continue
                 prefixes.append(prefix_value)
@@ -872,7 +901,7 @@ class BrowserService:
                 scanned_delete_markers=scanned_delete_markers,
             )
         except (ClientError, BotoCoreError) as exc:
-            raise RuntimeError(f"Unable to clean versions for '{bucket_name}': {exc}") from exc
+            raise RuntimeError(f"Unable to clean old versions for '{bucket_name}': {exc}") from exc
 
     def head_object(
         self,

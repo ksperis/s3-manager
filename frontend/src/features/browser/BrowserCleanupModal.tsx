@@ -36,7 +36,7 @@ export default function BrowserCleanupModal({
   onClose,
 }: BrowserCleanupModalProps) {
   return (
-    <Modal title="Clean versions" onClose={onClose} maxWidthClass="max-w-2xl">
+    <Modal title="Clean old versions" onClose={onClose} maxWidthClass="max-w-2xl">
       <div className="space-y-4 ui-caption text-slate-600 dark:text-slate-300">
         <div className="space-y-1">
           <p className="font-semibold text-slate-800 dark:text-slate-100">Context</p>

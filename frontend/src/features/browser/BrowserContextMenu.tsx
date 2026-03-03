@@ -116,7 +116,7 @@ export default function BrowserContextMenu({
     <div
       ref={contextMenuRef}
       role="menu"
-      className="fixed z-50 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
+      className="fixed z-50 min-w-[220px] max-h-[calc(100vh-16px)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 ui-caption shadow-lg dark:border-slate-700 dark:bg-slate-900"
       style={{ left: contextMenu.x, top: contextMenu.y }}
     >
       {contextMenu.kind === "path" && (
@@ -205,7 +205,7 @@ export default function BrowserContextMenu({
                 disabled={!bucketName || !hasS3AccountContext}
               >
                 <TrashIcon className="h-3.5 w-3.5" />
-                Clean versions
+                Clean old versions
               </button>
             </>
           )}

@@ -111,7 +111,6 @@ import {
   DEFAULT_QUEUED_VISIBLE_COUNT,
   MULTIPART_CONCURRENCY,
   MULTIPART_THRESHOLD,
-  NAME_COLUMN_CONTROLS_MIN_WIDTH,
   OBJECTS_PAGE_SIZE,
   PART_SIZE,
   VERSIONS_PAGE_SIZE,
@@ -225,6 +224,7 @@ type PathDraftContext = {
   parentPrefix: string;
   fragment: string;
 };
+type SearchScope = "prefix" | "bucket";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
@@ -236,6 +236,9 @@ const PATH_HISTORY_LIMIT = 20;
 const PATH_HISTORY_STORAGE_KEY = "browser:path-history:v1";
 const PANELS_DISABLE_MAX_WIDTH_PX = 1023;
 const PANELS_DISABLE_MEDIA_QUERY = `(max-width: ${PANELS_DISABLE_MAX_WIDTH_PX}px)`;
+const CONTEXT_MENU_PADDING_PX = 8;
+const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
+const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
 const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
   history: 300,
   local: 200,
@@ -486,6 +489,11 @@ export default function BrowserPage({
   const [corsFixing, setCorsFixing] = useState(false);
   const [corsFixError, setCorsFixError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
+  const [searchScope, setSearchScope] = useState<SearchScope>("prefix");
+  const [searchRecursive, setSearchRecursive] = useState(false);
+  const [searchExactMatch, setSearchExactMatch] = useState(false);
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
   const [contextCounts, setContextCounts] = useState<{
     objects: number;
     versions: number;
@@ -550,7 +558,6 @@ export default function BrowserPage({
   const [pathSuggestionsLoading, setPathSuggestionsLoading] = useState(false);
   const [pathSuggestionIndex, setPathSuggestionIndex] = useState(-1);
   const [pathHistory, setPathHistory] = useState<string[]>([]);
-  const [showNameColumnControls, setShowNameColumnControls] = useState(true);
   const [selectionStats, setSelectionStats] = useState<SelectionStats | null>(null);
   const [selectionStatsLoading, setSelectionStatsLoading] = useState(false);
   const [selectionStatsError, setSelectionStatsError] = useState<string | null>(null);
@@ -612,8 +619,8 @@ export default function BrowserPage({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const bucketMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchOptionsMenuRef = useRef<HTMLDivElement | null>(null);
   const bucketFilterRef = useRef<HTMLInputElement | null>(null);
-  const nameHeaderRef = useRef<HTMLTableCellElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const newFolderInputRef = useRef<HTMLInputElement | null>(null);
@@ -946,6 +953,49 @@ export default function BrowserPage({
     stsExpirationLabel,
     useProxyTransfers,
   ]);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const clampContextMenuPosition = useCallback(
+    (
+      x: number,
+      y: number,
+      menuWidth = CONTEXT_MENU_FALLBACK_WIDTH_PX,
+      menuHeight = CONTEXT_MENU_FALLBACK_HEIGHT_PX
+    ) => {
+      if (typeof window === "undefined") {
+        return { x, y };
+      }
+      const safeWidth = Number.isFinite(menuWidth) && menuWidth > 0 ? menuWidth : CONTEXT_MENU_FALLBACK_WIDTH_PX;
+      const safeHeight = Number.isFinite(menuHeight) && menuHeight > 0 ? menuHeight : CONTEXT_MENU_FALLBACK_HEIGHT_PX;
+      const maxX = Math.max(CONTEXT_MENU_PADDING_PX, window.innerWidth - safeWidth - CONTEXT_MENU_PADDING_PX);
+      const maxY = Math.max(CONTEXT_MENU_PADDING_PX, window.innerHeight - safeHeight - CONTEXT_MENU_PADDING_PX);
+      const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+      return {
+        x: clamp(x, CONTEXT_MENU_PADDING_PX, maxX),
+        y: clamp(y, CONTEXT_MENU_PADDING_PX, maxY),
+      };
+    },
+    []
+  );
+  const repositionContextMenu = useCallback(() => {
+    setContextMenu((previous) => {
+      if (!previous) return previous;
+      const menuNode = contextMenuRef.current;
+      if (!menuNode) return previous;
+      const menuRect = menuNode.getBoundingClientRect();
+      const nextPosition = clampContextMenuPosition(previous.x, previous.y, menuRect.width, menuRect.height);
+      if (Math.abs(nextPosition.x - previous.x) < 0.5 && Math.abs(nextPosition.y - previous.y) < 0.5) {
+        return previous;
+      }
+      return { ...previous, ...nextPosition };
+    });
+  }, [clampContextMenuPosition]);
+  const getContextMenuPosition = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      const { clientX, clientY } = event;
+      return clampContextMenuPosition(clientX, clientY);
+    },
+    [clampContextMenuPosition]
+  );
 
   useEffect(() => {
     if (!folderInputRef.current) return;
@@ -1028,6 +1078,10 @@ export default function BrowserPage({
   }, [bucketName, prefix]);
 
   useEffect(() => {
+    setShowSearchOptionsMenu(false);
+  }, [bucketName, prefix]);
+
+  useEffect(() => {
     bucketInspectorRequestIdRef.current += 1;
     setBucketInspectorLoading(false);
     setBucketInspectorError(null);
@@ -1060,19 +1114,24 @@ export default function BrowserPage({
   }, [showBucketMenu]);
 
   useEffect(() => {
-    const header = nameHeaderRef.current;
-    if (!header || typeof ResizeObserver === "undefined") return;
-    const updateControls = () => {
-      const width = header.getBoundingClientRect().width;
-      setShowNameColumnControls(width >= NAME_COLUMN_CONTROLS_MIN_WIDTH);
+    if (!showSearchOptionsMenu) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      if (searchOptionsMenuRef.current && !searchOptionsMenuRef.current.contains(event.target as Node)) {
+        setShowSearchOptionsMenu(false);
+      }
     };
-    updateControls();
-    const observer = new ResizeObserver(() => updateControls());
-    observer.observe(header);
-    return () => observer.disconnect();
-  }, []);
-
-
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowSearchOptionsMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showSearchOptionsMenu]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -1098,6 +1157,18 @@ export default function BrowserPage({
       window.removeEventListener("scroll", handleScroll, true);
     };
   }, [contextMenu]);
+
+  useEffect(() => {
+    if (!contextMenu || typeof window === "undefined") return;
+    const frame = window.requestAnimationFrame(() => {
+      repositionContextMenu();
+    });
+    window.addEventListener("resize", repositionContextMenu);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", repositionContextMenu);
+    };
+  }, [contextMenu, repositionContextMenu]);
 
   useEffect(() => {
     if (operations.length === 0) return;
@@ -1210,7 +1281,12 @@ export default function BrowserPage({
     targetPrefix: string,
     existingObjects: BrowserObject[],
     existingPrefixes: string[],
-    queryValue: string
+    queryValue: string,
+    opts?: {
+      recursive?: boolean;
+      exactMatch?: boolean;
+      caseSensitive?: boolean;
+    }
   ) => {
     if (!bucketName || !hasS3AccountContext || !isVersioningEnabled || !showDeletedObjects) {
       return { deletedObjects: [] as BrowserObject[], deletedPrefixes: [] as string[] };
@@ -1226,9 +1302,13 @@ export default function BrowserPage({
     let versionIdMarker: string | null = null;
     let hasMore = true;
     let pageGuard = 0;
+    const isRecursiveSearch = Boolean(opts?.recursive);
+    const exactMatch = Boolean(opts?.exactMatch);
+    const caseSensitive = Boolean(opts?.caseSensitive);
+    const normalizedQuery = caseSensitive ? queryValue : queryValue.toLowerCase();
 
     const matchesQuery = (key: string) => {
-      if (!queryValue) return true;
+      if (!normalizedQuery) return true;
       let relative = key;
       if (targetPrefix && relative.startsWith(targetPrefix)) {
         relative = relative.slice(targetPrefix.length);
@@ -1236,7 +1316,11 @@ export default function BrowserPage({
       if (relative.endsWith("/")) {
         relative = relative.slice(0, -1);
       }
-      return relative.toLowerCase().includes(queryValue);
+      const comparable = caseSensitive ? relative : relative.toLowerCase();
+      if (exactMatch) {
+        return comparable === normalizedQuery;
+      }
+      return comparable.includes(normalizedQuery);
     };
 
     while (hasMore) {
@@ -1251,7 +1335,8 @@ export default function BrowserPage({
         if (!marker.key || !marker.key.startsWith(targetPrefix)) return;
         const relative = marker.key.slice(targetPrefix.length);
         if (!relative) return;
-        if (relative.includes("/")) {
+        const isFolderMarker = marker.key.endsWith("/");
+        if (relative.includes("/") && !isRecursiveSearch) {
           if (typeFilter === "file") return;
           const child = relative.split("/")[0];
           if (!child) return;
@@ -1261,7 +1346,27 @@ export default function BrowserPage({
           markerPrefixes.add(childPrefix);
           return;
         }
+        if (typeFilter !== "file") {
+          if (isRecursiveSearch) {
+            const segments = relative.split("/").filter(Boolean);
+            if (segments.length > 1) {
+              let running = targetPrefix;
+              for (const segment of segments.slice(0, -1)) {
+                running = `${running}${segment}/`;
+                if (activePrefixes.has(running)) continue;
+                if (!matchesQuery(running)) continue;
+                markerPrefixes.add(running);
+              }
+            }
+            if (isFolderMarker) {
+              if (!activePrefixes.has(marker.key) && matchesQuery(marker.key)) {
+                markerPrefixes.add(marker.key);
+              }
+            }
+          }
+        }
         if (typeFilter === "folder") return;
+        if (isFolderMarker) return;
         if (activeKeys.has(marker.key)) return;
         if (!matchesQuery(marker.key)) return;
         latestMarkersByKey.set(marker.key, marker);
@@ -1316,14 +1421,20 @@ export default function BrowserPage({
       setObjectsLoadingMore(true);
     }
     const query = filter.trim();
+    const searchFromBucket = searchScope === "bucket" && Boolean(query);
+    const requestPrefix = searchFromBucket ? "" : targetPrefix;
+    const requestRecursive = Boolean(query) && (searchFromBucket || searchRecursive);
     try {
       const data = await listBrowserObjects(accountIdForApi, bucketName, {
-        prefix: targetPrefix,
+        prefix: requestPrefix,
         continuationToken: opts?.continuationToken ?? undefined,
         maxKeys: OBJECTS_PAGE_SIZE,
         query: query || undefined,
+        exactMatch: searchExactMatch,
+        caseSensitive: searchCaseSensitive,
         type: typeFilter,
         storageClass: storageFilter,
+        recursive: requestRecursive,
       });
       let deletedObjectsResult: BrowserObject[] = [];
       let deletedPrefixesResult: string[] = [];
@@ -1331,10 +1442,15 @@ export default function BrowserPage({
         if (showDeletedObjects && isVersioningEnabled && storageFilter === "all") {
           try {
             const deletedResult = await listDeletedObjectsForPrefix(
-              targetPrefix,
+              requestPrefix,
               data.objects,
               data.prefixes,
-              query.toLowerCase()
+              query,
+              {
+                recursive: requestRecursive,
+                exactMatch: searchExactMatch,
+                caseSensitive: searchCaseSensitive,
+              }
             );
             deletedObjectsResult = deletedResult.deletedObjects;
             deletedPrefixesResult = deletedResult.deletedPrefixes;
@@ -1525,7 +1641,23 @@ export default function BrowserPage({
       return;
     }
     loadObjects({ prefixOverride: prefix });
-  }, [accountIdForApi, accessMode, bucketName, filter, hasS3AccountContext, isVersioningEnabled, prefix, showDeletedObjects, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [accountIdForApi, accessMode, bucketName, filter, hasS3AccountContext, isVersioningEnabled, prefix, searchCaseSensitive, searchExactMatch, searchRecursive, searchScope, showDeletedObjects, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (filter.trim()) return;
+    if (searchScope !== "prefix") {
+      setSearchScope("prefix");
+    }
+    if (searchRecursive) {
+      setSearchRecursive(false);
+    }
+    if (searchExactMatch) {
+      setSearchExactMatch(false);
+    }
+    if (searchCaseSensitive) {
+      setSearchCaseSensitive(false);
+    }
+  }, [filter, searchCaseSensitive, searchExactMatch, searchRecursive, searchScope]);
 
   useEffect(() => {
     if (!showPrefixVersions || !bucketName || !hasS3AccountContext || !isVersioningEnabled) {
@@ -1740,11 +1872,19 @@ export default function BrowserPage({
     setUseProxyTransfers(false);
   }, [bucketName, corsStatus, hasS3AccountContext, proxyAllowed]);
 
+  const displayPrefixForItems = useMemo(() => {
+    const query = filter.trim();
+    if (!query || searchScope !== "bucket") {
+      return normalizedPrefix;
+    }
+    return "";
+  }, [filter, normalizedPrefix, searchScope]);
+
   const items = useMemo(() => {
     const activePrefixSet = new Set(prefixes);
     const combinedPrefixes = Array.from(new Set([...prefixes, ...deletedPrefixes]));
     const folderItems = combinedPrefixes.map((prefixKey) => {
-      const rawName = shortName(prefixKey, normalizedPrefix);
+      const rawName = shortName(prefixKey, displayPrefixForItems);
       const name = rawName.endsWith("/") ? rawName.slice(0, -1) : rawName;
       const isDeletedFolder = !activePrefixSet.has(prefixKey);
       return {
@@ -1765,7 +1905,7 @@ export default function BrowserPage({
       return {
         id: obj.key,
         key: obj.key,
-        name: shortName(obj.key, normalizedPrefix),
+        name: shortName(obj.key, displayPrefixForItems),
         type: "file",
         size: formatBytes(obj.size),
         sizeBytes: obj.size,
@@ -1780,7 +1920,7 @@ export default function BrowserPage({
       return {
         id: `${obj.key}::deleted::${obj.version_id ?? "null"}`,
         key: obj.key,
-        name: shortName(obj.key, normalizedPrefix),
+        name: shortName(obj.key, displayPrefixForItems),
         type: "file",
         isDeleted: true,
         deleteMarkerVersionId: obj.version_id ?? null,
@@ -1792,7 +1932,7 @@ export default function BrowserPage({
       } satisfies BrowserItem;
     });
     return [...folderItems, ...objectItems, ...deletedItemRows];
-  }, [deletedObjects, deletedPrefixes, normalizedPrefix, objects, prefixes]);
+  }, [deletedObjects, deletedPrefixes, displayPrefixForItems, objects, prefixes]);
 
   const sortOptions = [
     { id: "name-asc", label: "Name (A-Z)", key: "name", direction: "asc" as const },
@@ -1825,6 +1965,32 @@ export default function BrowserPage({
     () => (showFolderItems ? filteredItems : filteredItems.filter((item) => item.type !== "folder")),
     [filteredItems, showFolderItems]
   );
+  const normalizedSearchQuery = filter.trim();
+  const hasSearchQuery = normalizedSearchQuery.length > 0;
+  const isSearchingInWholeBucket = hasSearchQuery && searchScope === "bucket";
+  const hasAdvancedSearchOptionsActive =
+    searchScope !== "prefix" ||
+    searchRecursive ||
+    searchExactMatch ||
+    searchCaseSensitive ||
+    typeFilter !== "all" ||
+    storageFilter !== "all";
+  const hasActiveSearchFilters =
+    hasSearchQuery ||
+    searchScope === "bucket" ||
+    searchRecursive ||
+    searchExactMatch ||
+    searchCaseSensitive ||
+    typeFilter !== "all" ||
+    storageFilter !== "all";
+  const canResetSearchFilters =
+    hasSearchQuery ||
+    searchScope !== "prefix" ||
+    searchRecursive ||
+    searchExactMatch ||
+    searchCaseSensitive ||
+    typeFilter !== "all" ||
+    storageFilter !== "all";
 
   const prefixParts = useMemo(() => prefix.split("/").filter(Boolean), [prefix]);
   const bucketOptions = useMemo(() => buckets.map((bucket) => bucket.name), [buckets]);
@@ -1888,6 +2054,14 @@ export default function BrowserPage({
     });
     return Array.from(classes);
   }, [items]);
+  const searchableStorageClasses = useMemo(() => {
+    const ordered = storageClassOptions.map((option) => option.value);
+    const known = new Set(ordered);
+    const unknown = availableStorageClasses
+      .filter((value) => !known.has(value))
+      .sort((a, b) => a.localeCompare(b));
+    return [...ordered, ...unknown];
+  }, [availableStorageClasses]);
 
   const pathStats = useMemo(() => {
     let totalBytes = 0;
@@ -2027,24 +2201,6 @@ export default function BrowserPage({
     return `${bucketName}/${trimmed}`;
   }, [bucketName, prefix]);
   const inspectedPath = inspectedItem ? `${bucketName}/${inspectedItem.key}` : currentPath;
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
-
-  const getContextMenuPosition = (event: ReactMouseEvent<HTMLElement>) => {
-    const { clientX, clientY } = event;
-    if (typeof window === "undefined") {
-      return { x: clientX, y: clientY };
-    }
-    const menuWidth = 240;
-    const menuHeight = 320;
-    const padding = 8;
-    const maxX = Math.max(padding, window.innerWidth - menuWidth - padding);
-    const maxY = Math.max(padding, window.innerHeight - menuHeight - padding);
-    const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-    return {
-      x: clamp(clientX, padding, maxX),
-      y: clamp(clientY, padding, maxY),
-    };
-  };
 
   const openItemDetails = (item: BrowserItem) => {
     setActiveItem(item);
@@ -2333,10 +2489,10 @@ export default function BrowserPage({
   }, [activeItem, items]);
 
   useEffect(() => {
-    if (storageFilter !== "all" && !availableStorageClasses.includes(storageFilter)) {
+    if (storageFilter !== "all" && !searchableStorageClasses.includes(storageFilter)) {
       setStorageFilter("all");
     }
-  }, [availableStorageClasses, storageFilter]);
+  }, [searchableStorageClasses, storageFilter]);
 
   useEffect(() => {
     if (!bucketName || !inspectedItem || inspectedItem.type === "folder" || !hasS3AccountContext) {
@@ -3274,6 +3430,13 @@ export default function BrowserPage({
       setBulkRestoreTargetPath(currentPath || bucketName);
     }
     setShowBulkRestoreModal(true);
+  };
+
+  const handleBulkRestoreRestoreDeletedChange = (value: boolean) => {
+    setBulkRestoreRestoreDeleted(value);
+    if (value) {
+      setBulkRestoreDeleteMissing(false);
+    }
   };
 
   const openObjectVersionsModal = (item: BrowserItem) => {
@@ -4891,8 +5054,10 @@ export default function BrowserPage({
       setBulkRestoreError("Versioning is not enabled for this bucket.");
       return;
     }
+    const isLatestRestoreMode = bulkRestoreRestoreDeleted;
+    const allowDeleteMissing = !isLatestRestoreMode && bulkRestoreDeleteMissing;
     const targetTime = bulkRestoreDate ? new Date(bulkRestoreDate).getTime() : Number.NaN;
-    if (!bulkRestoreDate || Number.isNaN(targetTime)) {
+    if (!isLatestRestoreMode && (!bulkRestoreDate || Number.isNaN(targetTime))) {
       setBulkRestoreError("Select a valid date.");
       return;
     }
@@ -4912,9 +5077,17 @@ export default function BrowserPage({
         for (const item of fileItems) {
           const { versions, deleteMarkers } = await listAllVersionsForKey(item.key);
           const allEntries = [...versions, ...deleteMarkers];
-          const match = findVersionForDate(allEntries, targetTime);
           const latest = allEntries.find((entry) => entry.is_latest);
           const latestRestorable = findLatestRestorableVersion(allEntries);
+
+          if (isLatestRestoreMode) {
+            if (latest?.is_delete_marker && latestRestorable?.version_id) {
+              restoreCandidates.set(item.key, latestRestorable.version_id);
+            }
+            continue;
+          }
+
+          const match = findVersionForDate(allEntries, targetTime);
           if (match && !match.is_delete_marker && match.version_id) {
             if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
               unchangedKeys.add(item.key);
@@ -4924,7 +5097,7 @@ export default function BrowserPage({
             presentAtDate.add(item.key);
           } else if (bulkRestoreRestoreDeleted && latest?.is_delete_marker && latestRestorable?.version_id) {
             restoreCandidates.set(item.key, latestRestorable.version_id);
-          } else if (bulkRestoreDeleteMissing) {
+          } else if (allowDeleteMissing) {
             deleteCandidates.add(item.key);
           }
         }
@@ -4939,9 +5112,17 @@ export default function BrowserPage({
             byKey.set(entry.key, list);
           });
           byKey.forEach((entries, key) => {
-            const match = findVersionForDate(entries, targetTime);
             const latest = entries.find((entry) => entry.is_latest);
             const latestRestorable = findLatestRestorableVersion(entries);
+
+            if (isLatestRestoreMode) {
+              if (latest?.is_delete_marker && latestRestorable?.version_id) {
+                restoreCandidates.set(key, latestRestorable.version_id);
+              }
+              return;
+            }
+
+            const match = findVersionForDate(entries, targetTime);
             if (match && !match.is_delete_marker && match.version_id) {
               if (latest && !latest.is_delete_marker && latest.version_id === match.version_id) {
                 unchangedKeys.add(key);
@@ -4953,7 +5134,7 @@ export default function BrowserPage({
               restoreCandidates.set(key, latestRestorable.version_id);
             }
           });
-          if (bulkRestoreDeleteMissing) {
+          if (allowDeleteMissing) {
             const currentObjects = await listAllObjectsForPrefix(folderPrefix);
             currentObjects.forEach((obj) => {
               if (!presentAtDate.has(obj.key)) {
@@ -4967,7 +5148,7 @@ export default function BrowserPage({
           key,
           versionId,
         }));
-        const deleteList = bulkRestoreDeleteMissing ? Array.from(deleteCandidates) : [];
+        const deleteList = allowDeleteMissing ? Array.from(deleteCandidates) : [];
         return { restoreList, deleteList, unchangedKeys };
       };
 
@@ -4992,7 +5173,11 @@ export default function BrowserPage({
             });
           }
         } else {
-          setBulkRestoreError("No objects matched the selected date.");
+          setBulkRestoreError(
+            isLatestRestoreMode
+              ? "No deleted objects can be restored to their latest version."
+              : "No objects matched the selected date."
+          );
         }
         return;
       }
@@ -5109,7 +5294,7 @@ export default function BrowserPage({
     setCleanupError(null);
     setCleanupSummary(null);
     setShowOperationsModal(true);
-    const operationId = startOperation("deleting", "Cleaning versions", currentPath || bucketName, { kind: "other" }, 0);
+    const operationId = startOperation("deleting", "Cleaning old versions", currentPath || bucketName, { kind: "other" }, 0);
     let cleanupCompletionStatus: OperationCompletionStatus = "done";
     let cleanupCompletionError: string | undefined;
     try {
@@ -5125,8 +5310,8 @@ export default function BrowserPage({
       requestObjectsRefresh(prefix);
     } catch (err) {
       cleanupCompletionStatus = "failed";
-      cleanupCompletionError = "Unable to clean versions for this prefix.";
-      setCleanupError("Unable to clean versions for this prefix.");
+      cleanupCompletionError = "Unable to clean old versions for this prefix.";
+      setCleanupError("Unable to clean old versions for this prefix.");
     } finally {
       completeOperation(operationId, cleanupCompletionStatus, cleanupCompletionError);
       setCleanupLoading(false);
@@ -6176,7 +6361,10 @@ export default function BrowserPage({
         .filter(
           (op) =>
             op.completedAt &&
-            (!op.completionStatus || op.completionStatus === "done" || op.completionStatus === "failed")
+            (!op.completionStatus ||
+              op.completionStatus === "done" ||
+              op.completionStatus === "failed" ||
+              op.completionStatus === "cancelled")
         )
         .map((op) => op.id)
     );
@@ -6675,6 +6863,21 @@ export default function BrowserPage({
                         </div>
                       </div>
                     )}
+                    {bucketName && hasActiveSearchFilters && (
+                      <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-3 py-1.5 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
+                        {objectsLoading
+                          ? "Searching..."
+                          : `${listItems.length} result${listItems.length === 1 ? "" : "s"} · ${
+                              hasSearchQuery
+                                ? isSearchingInWholeBucket
+                                  ? "scope: whole bucket"
+                                  : searchRecursive
+                                    ? "scope: current path + subfolders"
+                                    : "scope: current path"
+                                : "filters applied"
+                            }`}
+                      </div>
+                    )}
                     <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto" onClick={handleListBackgroundClick}>
                         <table className="manager-table min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
                           <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -6689,7 +6892,6 @@ export default function BrowserPage({
                                 />
                               </th>
                               <th
-                                ref={nameHeaderRef}
                                 className={`px-4 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}
                               >
                                 <div className="flex min-w-0 items-center gap-2">
@@ -6705,23 +6907,145 @@ export default function BrowserPage({
                                       } ${sortKey === "name" && sortDirection === "asc" ? "-rotate-180" : ""}`}
                                     />
                                   </button>
-                                  {showNameColumnControls && (
-                                    <div className="flex min-w-0 flex-1 items-center gap-2 normal-case">
-                                      <div className="relative w-full max-w-[180px] flex-1">
-                                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">
-                                          <SearchIcon className="h-3 w-3" />
-                                        </span>
-                                        <input
-                                          type="text"
-                                          value={filter}
-                                          onChange={(event) => setFilter(event.target.value)}
-                                          placeholder="Filter"
-                                          aria-label="Filter by name"
-                                          className="h-6 w-full rounded-md border border-slate-200 bg-white pl-6 pr-2 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 normal-case"
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
+                                  <div ref={searchOptionsMenuRef} className="relative w-44 sm:w-52 md:w-60 normal-case">
+                                      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">
+                                        <SearchIcon className="h-3 w-3" />
+                                      </span>
+                                      <input
+                                        type="text"
+                                        value={filter}
+                                        onChange={(event) => setFilter(event.target.value)}
+                                        placeholder="Search objects"
+                                        aria-label="Search objects"
+                                        className="h-6 w-full rounded-md border border-slate-200 bg-white pl-6 pr-7 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 normal-case"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => setShowSearchOptionsMenu((prev) => !prev)}
+                                        className={`absolute right-1 top-1/2 -translate-y-1/2 inline-flex h-5 w-5 items-center justify-center rounded transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+                                          hasAdvancedSearchOptionsActive
+                                            ? "text-primary-700 hover:bg-primary-100 dark:text-primary-200 dark:hover:bg-primary-500/20"
+                                            : "text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                                        }`}
+                                        aria-haspopup="menu"
+                                        aria-expanded={showSearchOptionsMenu}
+                                        aria-label="Search options"
+                                      >
+                                        <SlidersIcon className="h-3 w-3" />
+                                      </button>
+                                      {showSearchOptionsMenu && (
+                                        <div className="absolute right-0 z-40 mt-1 w-64 space-y-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                                          <label className="block space-y-1">
+                                            <span className="ui-caption font-semibold text-slate-500 dark:text-slate-300">Scope</span>
+                                            <select
+                                              value={searchScope}
+                                              onChange={(event) => {
+                                                const scope = event.target.value as SearchScope;
+                                                setSearchScope(scope);
+                                                if (scope === "bucket") {
+                                                  setSearchRecursive(false);
+                                                }
+                                              }}
+                                              className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                              aria-label="Search scope"
+                                              disabled={!hasSearchQuery}
+                                            >
+                                              <option value="prefix">Current path</option>
+                                              <option value="bucket">Whole bucket</option>
+                                            </select>
+                                          </label>
+                                          <label className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                                            <input
+                                              type="checkbox"
+                                              checked={searchRecursive}
+                                              onChange={(event) => setSearchRecursive(event.target.checked)}
+                                              disabled={!hasSearchQuery || searchScope === "bucket"}
+                                              className={uiCheckboxClass}
+                                              aria-label="Search recursively in subfolders"
+                                            />
+                                            <span>Recursive</span>
+                                          </label>
+                                          <label className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                                            <input
+                                              type="checkbox"
+                                              checked={searchExactMatch}
+                                              onChange={(event) => setSearchExactMatch(event.target.checked)}
+                                              disabled={!hasSearchQuery}
+                                              className={uiCheckboxClass}
+                                              aria-label="Use exact match"
+                                            />
+                                            <span>Exact match</span>
+                                          </label>
+                                          <label className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                                            <input
+                                              type="checkbox"
+                                              checked={searchCaseSensitive}
+                                              onChange={(event) => setSearchCaseSensitive(event.target.checked)}
+                                              disabled={!hasSearchQuery}
+                                              className={uiCheckboxClass}
+                                              aria-label="Case-sensitive search"
+                                            />
+                                            <span>Case-sensitive</span>
+                                          </label>
+                                          <label className="block space-y-1">
+                                            <span className="ui-caption font-semibold text-slate-500 dark:text-slate-300">Type</span>
+                                            <select
+                                              value={typeFilter}
+                                              onChange={(event) =>
+                                                setTypeFilter(event.target.value as "all" | "file" | "folder")
+                                              }
+                                              className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                              aria-label="Object type filter"
+                                            >
+                                              <option value="all">All</option>
+                                              <option value="file">Files</option>
+                                              <option value="folder">Folders</option>
+                                            </select>
+                                          </label>
+                                          <label className="block space-y-1">
+                                            <span className="ui-caption font-semibold text-slate-500 dark:text-slate-300">Storage class</span>
+                                            <select
+                                              value={storageFilter}
+                                              onChange={(event) => setStorageFilter(event.target.value)}
+                                              className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                              aria-label="Storage class filter"
+                                            >
+                                              <option value="all">All classes</option>
+                                              {searchableStorageClasses.map((value) => (
+                                                <option key={value} value={value}>
+                                                  {value}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </label>
+                                          <div className="flex items-center justify-end gap-1.5 pt-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setFilter("");
+                                                setSearchScope("prefix");
+                                                setSearchRecursive(false);
+                                                setSearchExactMatch(false);
+                                                setSearchCaseSensitive(false);
+                                                setTypeFilter("all");
+                                                setStorageFilter("all");
+                                              }}
+                                              className={filterChipClasses}
+                                              disabled={!canResetSearchFilters}
+                                            >
+                                              Clear
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setShowSearchOptionsMenu(false)}
+                                              className={filterChipClasses}
+                                            >
+                                              Close
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                  </div>
                                 </div>
                               </th>
                               <th className={`w-20 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
@@ -6758,7 +7082,7 @@ export default function BrowserPage({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                            {canGoUp && bucketName && showFolderItems && (
+                            {canGoUp && bucketName && showFolderItems && !isSearchingInWholeBucket && (
                               <tr className={`${rowHeightClasses} text-slate-600 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/40`}>
                                 <td className={`w-9 px-2 ${rowCellClasses} !align-middle`} />
                                 <td
@@ -6788,7 +7112,14 @@ export default function BrowserPage({
                               <TableEmptyState colSpan={5} message={objectsError} />
                             )}
                             {!objectsLoading && bucketName && !objectsError && listItems.length === 0 && (
-                              <TableEmptyState colSpan={5} message="No objects found for this path." />
+                              <TableEmptyState
+                                colSpan={5}
+                                message={
+                                  hasActiveSearchFilters
+                                    ? "No objects matched this search."
+                                    : "No objects found for this path."
+                                }
+                              />
                             )}
                             {listItems.map((item) => {
                               const isFocused = inspectedItem?.id === item.id;
@@ -7126,7 +7457,7 @@ export default function BrowserPage({
                                         disabled={!bucketName || !hasS3AccountContext}
                                       >
                                         <TrashIcon className="h-3.5 w-3.5" />
-                                        Clean versions
+                                        Clean old versions
                                       </button>
                                     </>
                                   )}
@@ -7973,7 +8304,7 @@ export default function BrowserPage({
           bulkRestoreDeleteMissing={bulkRestoreDeleteMissing}
           setBulkRestoreDeleteMissing={setBulkRestoreDeleteMissing}
           bulkRestoreRestoreDeleted={bulkRestoreRestoreDeleted}
-          setBulkRestoreRestoreDeleted={setBulkRestoreRestoreDeleted}
+          setBulkRestoreRestoreDeleted={handleBulkRestoreRestoreDeletedChange}
           bulkRestoreLoading={bulkRestoreLoading}
           onApply={handleBulkRestoreApply}
           onClose={() => setShowBulkRestoreModal(false)}
