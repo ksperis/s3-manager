@@ -56,6 +56,7 @@ const loadManagerGroupPoliciesPage = () => import("./features/manager/ManagerGro
 const loadManagerMetricsPage = () => import("./features/manager/ManagerMetricsPage");
 const loadTopicsPage = () => import("./features/manager/TopicsPage");
 const loadManagerMigrationsPage = () => import("./features/manager/ManagerMigrationsPage");
+const loadManagerBucketComparePage = () => import("./features/manager/ManagerBucketComparePage");
 const loadPortalLayout = () => import("./features/portal/PortalLayout");
 const loadPortalDashboard = () => import("./features/portal/PortalDashboard");
 const loadPortalBucketsPage = () => import("./features/portal/PortalBucketsPage");
@@ -114,6 +115,7 @@ const ManagerGroupPoliciesPage = lazy(loadManagerGroupPoliciesPage);
 const ManagerMetricsPage = lazy(loadManagerMetricsPage);
 const TopicsPage = lazy(loadTopicsPage);
 const ManagerMigrationsPage = lazy(loadManagerMigrationsPage);
+const ManagerBucketComparePage = lazy(loadManagerBucketComparePage);
 const PortalLayout = lazy(loadPortalLayout);
 const PortalDashboard = lazy(loadPortalDashboard);
 const PortalBucketsPage = lazy(loadPortalBucketsPage);
@@ -355,6 +357,15 @@ function canAccessManagerMigration(
   return user.role === USER_ROLE && generalSettings.allow_ui_user_bucket_migration;
 }
 
+function canAccessManagerBucketCompare(
+  generalSettings: ReturnType<typeof useGeneralSettings>["generalSettings"],
+  user: SessionUser | null
+): boolean {
+  if (!generalSettings.bucket_compare_enabled || !user?.role) return false;
+  if (!(isAdminLikeRole(user.role) || user.role === USER_ROLE)) return false;
+  return user.capabilities?.can_manage_buckets !== false;
+}
+
 function RequireManagerMigrationFeature() {
   const { generalSettings } = useGeneralSettings();
   const user = getStoredUser();
@@ -362,6 +373,22 @@ function RequireManagerMigrationFeature() {
     return <FeatureDisabledPage feature="Bucket Migration" />;
   }
   if (canAccessManagerMigration(generalSettings, user)) {
+    return <Outlet />;
+  }
+  return <Navigate to="/unauthorized" replace />;
+}
+
+function RequireManagerBucketCompareFeature() {
+  const { generalSettings } = useGeneralSettings();
+  const { requiresS3AccountSelection } = useS3AccountContext();
+  const user = getStoredUser();
+  if (!generalSettings.bucket_compare_enabled) {
+    return <FeatureDisabledPage feature="Bucket Compare" />;
+  }
+  if (!requiresS3AccountSelection) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  if (canAccessManagerBucketCompare(generalSettings, user)) {
     return <Outlet />;
   }
   return <Navigate to="/unauthorized" replace />;
@@ -441,6 +468,9 @@ export default function AppRouter() {
                   <Route path="iam/policies" element={<PoliciesPage />} />
                 </Route>
                 <Route path="topics" element={<TopicsPage />} />
+                <Route element={<RequireManagerBucketCompareFeature />}>
+                  <Route path="bucket-compare" element={<ManagerBucketComparePage />} />
+                </Route>
                 <Route element={<RequireManagerMigrationFeature />}>
                   <Route path="migrations" element={<ManagerMigrationsPage />} />
                 </Route>

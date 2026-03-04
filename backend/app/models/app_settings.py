@@ -134,6 +134,7 @@ class GeneralSettings(BaseModel):
     billing_enabled: bool = False
     endpoint_status_enabled: bool = False
     bucket_migration_enabled: bool = True
+    bucket_compare_enabled: bool = True
     allow_ui_user_bucket_migration: bool = False
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False

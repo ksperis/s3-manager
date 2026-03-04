@@ -1,7 +1,9 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
 from app.db import S3Account, User
 from app.models.bucket import (
     Bucket,
@@ -25,6 +27,7 @@ from app.models.bucket import (
     BucketTagsUpdate,
     BucketWebsiteConfiguration,
 )
+from app.models.manager_bucket_compare import ManagerBucketCompareRequest, ManagerBucketCompareResult
 from app.services.audit_service import AuditService
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.s3_client import BucketNotEmptyError
@@ -34,6 +37,7 @@ from app.routers.dependencies import (
     get_audit_logger,
     get_current_account_admin,
     get_current_super_admin,
+    require_bucket_compare_enabled,
 )
 
 router = APIRouter(prefix="/manager/buckets", tags=["manager-buckets"])
@@ -48,6 +52,29 @@ def _require_sse_feature(account: S3Account) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Server-side encryption is disabled for this endpoint",
         )
+
+
+def _context_id_from_account(account: S3Account, *, fallback: str | None = None) -> str:
+    connection_id = getattr(account, "s3_connection_id", None)
+    if isinstance(connection_id, int) and connection_id > 0:
+        return f"conn-{connection_id}"
+
+    s3_user_id = getattr(account, "s3_user_id", None)
+    if isinstance(s3_user_id, int) and s3_user_id > 0:
+        return f"s3u-{s3_user_id}"
+
+    account_id = getattr(account, "id", None)
+    if isinstance(account_id, int):
+        if account_id <= -2_000_000:
+            return f"ceph-admin-{abs(account_id) - 2_000_000}"
+        if account_id <= -1_000_000:
+            return f"conn-{abs(account_id) - 1_000_000}"
+        if account_id <= -100_000:
+            return f"s3u-{abs(account_id) - 100_000}"
+        return str(account_id)
+
+    normalized_fallback = (fallback or "").strip()
+    return normalized_fallback
 
 
 @router.get("", response_model=list[Bucket])
@@ -70,6 +97,81 @@ def list_buckets(
         return service.list_buckets(account, include=include_set, with_stats=with_stats)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
+@router.post("/compare", response_model=ManagerBucketCompareResult)
+def compare_bucket_pair(
+    payload: ManagerBucketCompareRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    source_account: S3Account = Depends(get_account_context),
+    actor=Depends(get_current_account_admin),
+    service: BucketsService = Depends(get_buckets_service),
+    _: None = Depends(require_bucket_compare_enabled),
+) -> ManagerBucketCompareResult:
+    target_account = get_account_context(
+        request=request,
+        account_ref=payload.target_context_id,
+        actor=actor,
+        db=db,
+    )
+
+    source_context_id = _context_id_from_account(
+        source_account,
+        fallback=request.query_params.get("account_id"),
+    )
+    target_context_id = _context_id_from_account(target_account, fallback=payload.target_context_id)
+    same_context = bool(source_context_id and target_context_id and source_context_id == target_context_id)
+    if same_context and payload.source_bucket == payload.target_bucket:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="When source and target contexts are the same, source_bucket and target_bucket must differ.",
+        )
+
+    content_diff = None
+    config_diff = None
+    try:
+        if payload.include_content:
+            content_diff = service.compare_bucket_content(
+                payload.source_bucket,
+                source_account,
+                payload.target_bucket,
+                target_account,
+                size_only=payload.size_only,
+                diff_sample_limit=payload.diff_sample_limit,
+            )
+        if payload.include_config:
+            config_diff = service.compare_bucket_configuration(
+                payload.source_bucket,
+                source_account,
+                payload.target_bucket,
+                target_account,
+                include_sections=set(payload.config_features) if payload.config_features is not None else None,
+            )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    has_differences = bool(
+        (
+            content_diff is not None
+            and (
+                content_diff.different_count > 0
+                or content_diff.only_source_count > 0
+                or content_diff.only_target_count > 0
+            )
+        )
+        or (config_diff.changed if config_diff else False)
+    )
+    return ManagerBucketCompareResult(
+        source_context_id=source_context_id,
+        target_context_id=target_context_id,
+        source_bucket=payload.source_bucket,
+        target_bucket=payload.target_bucket,
+        compare_mode=content_diff.compare_mode if content_diff else None,
+        has_differences=has_differences,
+        content_diff=content_diff,
+        config_diff=config_diff,
+    )
 
 
 @router.get("/{bucket_name}/properties", response_model=BucketProperties)

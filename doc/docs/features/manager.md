@@ -15,6 +15,7 @@ The Manager surface is intended for account-scoped administration aligned with S
 - IAM resources:
   - users, groups, roles
   - policies and attachments
+- Bucket comparison operations from **Tools > Compare**
 - Bucket migration operations from **Tools > Migration**
 
 ## Implementation pointers

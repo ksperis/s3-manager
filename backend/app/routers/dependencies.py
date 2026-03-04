@@ -781,6 +781,12 @@ def get_current_bucket_migration_user(user: User = Depends(get_current_user)) ->
     return user
 
 
+def require_bucket_compare_enabled() -> None:
+    app_settings = load_app_settings()
+    if not app_settings.general.bucket_compare_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket compare feature is disabled")
+
+
 def require_manager_enabled() -> None:
     settings = load_app_settings()
     if not settings.general.manager_enabled:

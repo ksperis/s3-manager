@@ -53,6 +53,7 @@ function buildSettings(): AppSettings {
       billing_enabled: false,
       endpoint_status_enabled: false,
       bucket_migration_enabled: true,
+      bucket_compare_enabled: true,
       allow_ui_user_bucket_migration: false,
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
@@ -173,5 +174,21 @@ describe("GeneralSettingsPage branding", () => {
 
     await user.click(await screen.findByLabelText("Custom login endpoint"));
     expect(screen.getByText(/custom endpoints are intended for trusted\/local environments/i)).toBeInTheDocument();
+  });
+
+  it("renders and updates bucket compare toggle", async () => {
+    const user = userEvent.setup();
+    render(<GeneralSettingsPage />);
+
+    const toggle = await screen.findByLabelText("Bucket compare tool");
+    expect(toggle).toBeInTheDocument();
+    await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(updateAppSettingsMock).toHaveBeenCalled();
+    });
+    const lastPayload = updateAppSettingsMock.mock.calls.at(-1)?.[0] as AppSettings;
+    expect(lastPayload.general.bucket_compare_enabled).toBe(false);
   });
 });

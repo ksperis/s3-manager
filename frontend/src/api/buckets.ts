@@ -151,10 +151,93 @@ export type BucketProperties = {
   cors_rules?: Record<string, unknown>[] | null;
 };
 
+export type ManagerBucketCompareConfigFeature =
+  | "versioning_status"
+  | "object_lock"
+  | "public_access_block"
+  | "lifecycle_rules"
+  | "cors_rules"
+  | "bucket_policy"
+  | "access_logging"
+  | "tags";
+
+export type ManagerBucketCompareRequest = {
+  target_context_id: string;
+  source_bucket: string;
+  target_bucket: string;
+  include_content?: boolean;
+  include_config?: boolean;
+  config_features?: ManagerBucketCompareConfigFeature[];
+  size_only?: boolean;
+  diff_sample_limit?: number;
+};
+
+export type ManagerBucketObjectDiffEntry = {
+  key: string;
+  source_size?: number | null;
+  target_size?: number | null;
+  source_etag?: string | null;
+  target_etag?: string | null;
+  compare_by: "md5" | "size";
+};
+
+export type ManagerBucketContentDiff = {
+  compare_mode: "size_only" | "md5_or_size";
+  source_count: number;
+  target_count: number;
+  matched_count: number;
+  different_count: number;
+  only_source_count: number;
+  only_target_count: number;
+  only_source_sample: string[];
+  only_target_sample: string[];
+  different_sample: ManagerBucketObjectDiffEntry[];
+};
+
+export type ManagerBucketConfigDiffSection = {
+  key: string;
+  label: string;
+  source?: unknown;
+  target?: unknown;
+  changed: boolean;
+};
+
+export type ManagerBucketConfigDiff = {
+  changed: boolean;
+  sections: ManagerBucketConfigDiffSection[];
+};
+
+export type ManagerBucketCompareResult = {
+  source_context_id: string;
+  target_context_id: string;
+  source_bucket: string;
+  target_bucket: string;
+  compare_mode?: "size_only" | "md5_or_size" | null;
+  has_differences: boolean;
+  content_diff?: ManagerBucketContentDiff | null;
+  config_diff?: ManagerBucketConfigDiff | null;
+};
+
 export async function getBucketProperties(accountId: S3AccountSelector, bucketName: string): Promise<BucketProperties> {
   const { data } = await client.get<BucketProperties>(`${bucketPath(bucketName)}/properties`, {
     params: withS3AccountParam(undefined, accountId),
   });
+  return data;
+}
+
+export async function compareManagerBucketPair(
+  sourceContextId: S3AccountSelector,
+  payload: ManagerBucketCompareRequest,
+  options?: { signal?: AbortSignal }
+): Promise<ManagerBucketCompareResult> {
+  const { data } = await client.post<ManagerBucketCompareResult>(
+    `${bucketBasePath()}/compare`,
+    payload,
+    {
+      params: withS3AccountParam(undefined, sourceContextId),
+      signal: options?.signal,
+    }
+  );
   return data;
 }
 

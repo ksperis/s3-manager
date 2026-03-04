@@ -52,6 +52,7 @@ type FeatureField = (typeof FEATURE_FIELDS)[number];
 type ToggleField =
   | FeatureField
   | "bucket_migration_enabled"
+  | "bucket_compare_enabled"
   | "allow_ui_user_bucket_migration"
   | "allow_login_access_keys"
   | "allow_login_endpoint_list"
@@ -379,6 +380,17 @@ export default function GeneralSettingsPage() {
                         }
                       }}
                       ariaLabel="Bucket migration tool"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Bucket compare tool"
+                  description="Enables the Manager bucket compare tool."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.bucket_compare_enabled)}
+                      onChange={(value) => handleToggle("bucket_compare_enabled", value)}
+                      ariaLabel="Bucket compare tool"
                     />
                   }
                 />
