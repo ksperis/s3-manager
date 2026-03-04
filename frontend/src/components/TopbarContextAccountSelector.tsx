@@ -50,6 +50,12 @@ export function getContextAccessModeVisual(mode: ContextAccessMode): {
   };
 }
 
+function contextKindRank(kind: ExecutionContext["kind"]): number {
+  if (kind === "account") return 0;
+  if (kind === "legacy_user") return 1;
+  return 2;
+}
+
 type TopbarContextAccountSelectorProps = {
   contexts: ExecutionContext[];
   selectedContextId: string | null;
@@ -96,26 +102,39 @@ export default function TopbarContextAccountSelector({
 
   const contextItems = useMemo(
     () =>
-      contexts.map((context) => {
-        const label = formatAccountLabel(context, defaultEndpointId, defaultEndpointName);
-        const description =
-          context.kind === "connection"
-            ? "Private connection"
-            : context.kind === "legacy_user"
-              ? "Legacy S3 user identity"
-              : "RGW account";
-        const haystack = [label, context.display_name, context.endpoint_name, context.endpoint_url, description]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return {
-          id: context.id,
-          label,
-          description,
-          haystack,
-          endpointUrl: context.endpoint_url ?? null,
-        };
-      }),
+      contexts
+        .map((context) => {
+          const label = formatAccountLabel(context, defaultEndpointId, defaultEndpointName);
+          const description =
+            context.kind === "connection"
+              ? "Private connection"
+              : context.kind === "legacy_user"
+                ? "Legacy S3 user identity"
+                : "RGW account";
+          const displayName = context.display_name.trim();
+          const haystack = [label, context.display_name, context.endpoint_name, context.endpoint_url, description]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return {
+            id: context.id,
+            kind: context.kind,
+            typeRank: contextKindRank(context.kind),
+            displayName,
+            label,
+            description,
+            haystack,
+            endpointUrl: context.endpoint_url ?? null,
+          };
+        })
+        .sort((a, b) => {
+          if (a.typeRank !== b.typeRank) return a.typeRank - b.typeRank;
+          const byDisplayName = a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" });
+          if (byDisplayName !== 0) return byDisplayName;
+          const byLabel = a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+          if (byLabel !== 0) return byLabel;
+          return a.id.localeCompare(b.id, undefined, { sensitivity: "base" });
+        }),
     [contexts, defaultEndpointId, defaultEndpointName]
   );
 
