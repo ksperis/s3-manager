@@ -248,13 +248,7 @@ export default function ManagerBucketCompareModal({
   const sortedSourceBuckets = useMemo(() => [...sourceBuckets].sort((a, b) => a.localeCompare(b)), [sourceBuckets]);
   const sourceBucketNameSet = useMemo(() => new Set(sortedSourceBuckets), [sortedSourceBuckets]);
   const targetContextOptions = useMemo(() => contexts, [contexts]);
-  const [targetContextId, setTargetContextId] = useState<string | null>(
-    (() => {
-      if (targetContextOptions.length === 0) return null;
-      const preferred = targetContextOptions.find((context) => context.id !== sourceContextId);
-      return (preferred ?? targetContextOptions[0]).id;
-    })()
-  );
+  const [targetContextId, setTargetContextId] = useState<string | null>(null);
   const [targetBucketNames, setTargetBucketNames] = useState<string[]>([]);
   const [targetBucketsLoading, setTargetBucketsLoading] = useState(false);
   const [targetBucketsError, setTargetBucketsError] = useState<string | null>(null);
@@ -303,10 +297,9 @@ export default function ManagerBucketCompareModal({
       if (prev !== null && targetContextOptions.some((context) => context.id === prev)) {
         return prev;
       }
-      const preferred = targetContextOptions.find((context) => context.id !== sourceContextId);
-      return (preferred ?? targetContextOptions[0]).id;
+      return null;
     });
-  }, [sourceContextId, targetContextOptions]);
+  }, [targetContextOptions]);
 
   useEffect(() => {
     if (sameContextSelected && mappingMode !== "manual") {
@@ -939,6 +932,7 @@ export default function ManagerBucketCompareModal({
               disabled={running || targetContextOptions.length === 0}
               className={controlClass}
             >
+              {targetContextOptions.length > 0 && <option value="">Select a target context</option>}
               {targetContextOptions.length === 0 && <option value="">No other context available</option>}
               {targetContextOptions.map((context) => (
                 <option key={context.id} value={context.id}>

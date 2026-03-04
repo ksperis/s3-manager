@@ -194,13 +194,7 @@ export default function CephAdminBucketCompareModal({
   const sortedSourceBuckets = useMemo(() => [...sourceBuckets].sort((a, b) => a.localeCompare(b)), [sourceBuckets]);
   const sourceBucketNameSet = useMemo(() => new Set(sortedSourceBuckets), [sortedSourceBuckets]);
   const targetEndpointOptions = useMemo(() => endpoints, [endpoints]);
-  const [targetEndpointId, setTargetEndpointId] = useState<number | null>(
-    (() => {
-      if (targetEndpointOptions.length === 0) return null;
-      const preferred = targetEndpointOptions.find((endpoint) => endpoint.id !== sourceEndpointId);
-      return (preferred ?? targetEndpointOptions[0]).id;
-    })()
-  );
+  const [targetEndpointId, setTargetEndpointId] = useState<number | null>(null);
   const [targetBucketNames, setTargetBucketNames] = useState<string[]>([]);
   const [targetBucketsLoading, setTargetBucketsLoading] = useState(false);
   const [targetBucketsError, setTargetBucketsError] = useState<string | null>(null);
@@ -239,10 +233,9 @@ export default function CephAdminBucketCompareModal({
       if (prev !== null && targetEndpointOptions.some((endpoint) => endpoint.id === prev)) {
         return prev;
       }
-      const preferred = targetEndpointOptions.find((endpoint) => endpoint.id !== sourceEndpointId);
-      return (preferred ?? targetEndpointOptions[0]).id;
+      return null;
     });
-  }, [sourceEndpointId, targetEndpointOptions]);
+  }, [targetEndpointOptions]);
 
   useEffect(() => {
     if (sameEndpointSelected && mappingMode !== "manual") {
@@ -708,6 +701,7 @@ export default function CephAdminBucketCompareModal({
               disabled={running || targetEndpointOptions.length === 0}
               className={controlClass}
             >
+              {targetEndpointOptions.length > 0 && <option value="">Select a target endpoint</option>}
               {targetEndpointOptions.length === 0 && <option value="">No other endpoint available</option>}
               {targetEndpointOptions.map((endpoint) => (
                 <option key={endpoint.id} value={endpoint.id}>

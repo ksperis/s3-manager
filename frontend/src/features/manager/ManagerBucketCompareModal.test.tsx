@@ -97,8 +97,13 @@ async function runInitialComparison() {
     />
   );
 
+  const [targetContextSelect] = screen.getAllByRole("combobox");
+  await user.selectOptions(targetContextSelect, "ctx-target");
   await waitFor(() => {
     expect(listBucketsMock).toHaveBeenCalled();
+  });
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /run comparison/i })).toBeEnabled();
   });
   await user.click(screen.getByRole("button", { name: /run comparison/i }));
   await waitFor(() => {
