@@ -8,6 +8,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -42,9 +43,14 @@ import {
   StatusPill,
   toTimestampMs,
 } from "./endpointStatusShared";
+import {
+  buildLatencyChartPoints,
+  buildLatencyStatusBands,
+  downsampleLatencySeries,
+  type LatencyChartPoint,
+} from "./endpointStatusLatencyChart";
 
 type WindowOption = { label: string; value: "day" | "week" | "month" | "quarter" | "half_year"; helper: string };
-type LatencySeriesPoint = { timestampMs: number; latency_ms: number | null; p95_latency_ms: number | null };
 
 const WINDOW_OPTIONS: WindowOption[] = [
   { label: "24h", value: "day", helper: "Last 24 hours" },
@@ -54,25 +60,6 @@ const WINDOW_OPTIONS: WindowOption[] = [
   { label: "6m", value: "half_year", helper: "Last 6 months" },
 ];
 const RAW_CHECKS_PAGE_SIZE = 25;
-
-function downsampleLatencySeries(points: LatencySeriesPoint[], maxPoints = 1200) {
-  if (points.length <= maxPoints) return points;
-  const chunkSize = Math.max(1, Math.ceil(points.length / maxPoints));
-  const output: LatencySeriesPoint[] = [];
-  for (let index = 0; index < points.length; index += chunkSize) {
-    const chunk = points.slice(index, index + chunkSize);
-    if (chunk.length === 0) continue;
-    const timestampMs = chunk[Math.floor(chunk.length / 2)]?.timestampMs ?? chunk[0].timestampMs;
-    const latencies = chunk.map((point) => point.latency_ms).filter((value): value is number => value != null);
-    const p95Values = chunk.map((point) => point.p95_latency_ms).filter((value): value is number => value != null);
-    output.push({
-      timestampMs,
-      latency_ms: latencies.length > 0 ? Math.round(latencies.reduce((acc, value) => acc + value, 0) / latencies.length) : null,
-      p95_latency_ms: p95Values.length > 0 ? Math.max(...p95Values) : null,
-    });
-  }
-  return output;
-}
 
 export default function EndpointStatusDetailPage() {
   const params = useParams();
@@ -209,27 +196,30 @@ export default function EndpointStatusDetailPage() {
     return summary?.find((entry) => entry.endpoint_id === endpointId) ?? null;
   }, [endpointId, summary]);
 
-  const useRollupLatencySeries = useMemo(() => (series?.series.length ?? 0) > 0, [series]);
+  const latencyChartData = useMemo(() => buildLatencyChartPoints(series, windowValue), [series, windowValue]);
+  const latencyDisplayMode = latencyChartData.mode;
+  const latencyPoints = latencyChartData.points;
 
-  const latencySeries = useMemo<LatencySeriesPoint[]>(() => {
-    if (!series) return [];
-    if ((series.series.length ?? 0) > 0) {
-      const rollupSeries = series.series
-        .map((point) => ({ timestampMs: toTimestampMs(point.timestamp), latency_ms: point.latency_ms ?? null, p95_latency_ms: null }))
-        .filter((point): point is LatencySeriesPoint => point.timestampMs != null)
-        .sort((a, b) => a.timestampMs - b.timestampMs);
-      return downsampleLatencySeries(rollupSeries, windowValue === "day" ? 900 : 1200);
-    }
-    const dailySeries = series.daily
-      .map((point) => ({ timestampMs: toTimestampMs(point.day), latency_ms: point.avg_latency_ms ?? null, p95_latency_ms: point.p95_latency_ms ?? null }))
-      .filter((point): point is LatencySeriesPoint => point.timestampMs != null)
-      .sort((a, b) => a.timestampMs - b.timestampMs);
-    return downsampleLatencySeries(dailySeries, windowValue === "day" ? 900 : 1200);
-  }, [series, windowValue]);
+  const latencySeries = useMemo(
+    () => downsampleLatencySeries(latencyPoints, windowValue === "day" ? 900 : 1200),
+    [latencyPoints, windowValue]
+  );
+
+  const latencyRangeStartMs = useMemo(() => toTimestampMs(series?.start ?? ""), [series?.start]);
+  const latencyRangeEndMs = useMemo(() => toTimestampMs(series?.end ?? ""), [series?.end]);
+
+  const latencyStatusBands = useMemo(
+    () =>
+      buildLatencyStatusBands(latencyPoints, {
+        rangeStartMs: latencyRangeStartMs,
+        rangeEndMs: latencyRangeEndMs,
+      }),
+    [latencyPoints, latencyRangeEndMs, latencyRangeStartMs]
+  );
 
   const windowAvailability = useMemo(() => {
     if (!series) return null;
-    if ((series?.series.length ?? 0) > 0) {
+    if (latencyDisplayMode === "rollup") {
       const knownStatuses = series.series.filter((point) => point.status !== "unknown");
       if (knownStatuses.length === 0) return null;
       const upChecks = knownStatuses.filter((point) => point.status === "up").length;
@@ -245,13 +235,13 @@ export default function EndpointStatusDetailPage() {
     );
     if (totals.total === 0) return null;
     return (totals.ok / totals.total) * 100;
-  }, [series]);
+  }, [latencyDisplayMode, series]);
 
   const windowAverageLatency = useMemo(() => {
-    const values = latencySeries.map((point) => point.latency_ms).filter((value): value is number => value != null);
+    const values = latencyPoints.map((point) => point.latency_ms).filter((value): value is number => value != null);
     if (values.length === 0) return null;
     return Math.round(values.reduce((acc, value) => acc + value, 0) / values.length);
-  }, [latencySeries]);
+  }, [latencyPoints]);
 
   const windowP95Latency = useMemo(() => {
     if (!series) return null;
@@ -261,13 +251,11 @@ export default function EndpointStatusDetailPage() {
   }, [series]);
 
   const latencyXAxisDomain = useMemo<[number, number]>(() => {
-    const rangeStartMs = toTimestampMs(series?.start ?? "");
-    const rangeEndMs = toTimestampMs(series?.end ?? "");
-    if (rangeStartMs != null && rangeEndMs != null && rangeEndMs > rangeStartMs) {
-      return [rangeStartMs, rangeEndMs];
+    if (latencyRangeStartMs != null && latencyRangeEndMs != null && latencyRangeEndMs > latencyRangeStartMs) {
+      return [latencyRangeStartMs, latencyRangeEndMs];
     }
-    if (latencySeries.length === 0) return [0, 1];
-    const timestamps = latencySeries.map((point) => point.timestampMs);
+    if (latencyPoints.length === 0) return [0, 1];
+    const timestamps = latencyPoints.map((point) => point.timestampMs);
     const minTs = Math.min(...timestamps);
     const maxTs = Math.max(...timestamps);
     if (minTs === maxTs) {
@@ -275,7 +263,72 @@ export default function EndpointStatusDetailPage() {
       return [minTs - padMs, maxTs + padMs];
     }
     return [minTs, maxTs];
-  }, [latencySeries, series?.end, series?.start, windowValue]);
+  }, [latencyPoints, latencyRangeEndMs, latencyRangeStartMs, windowValue]);
+
+  const latencySamplesCount = useMemo(
+    () => latencyPoints.filter((point) => point.latency_ms != null).length,
+    [latencyPoints]
+  );
+
+  const latencyXAxisTickCount = useMemo(() => {
+    if (windowValue === "day") return 8;
+    if (windowValue === "week") return 8;
+    return 6;
+  }, [windowValue]);
+
+  const latencyXAxisMinTickGap = useMemo(() => {
+    if (windowValue === "day") return 28;
+    if (windowValue === "week") return 36;
+    return 44;
+  }, [windowValue]);
+
+  const formatLatencyTick = useCallback(
+    (value: number) => (latencyDisplayMode === "rollup" ? formatChartTime(value) : formatChartDay(value)),
+    [latencyDisplayMode]
+  );
+
+  const renderLatencyTooltip = useCallback(
+    ({
+      active,
+      payload,
+      label,
+    }: {
+      active?: boolean;
+      payload?: Array<{ payload: LatencyChartPoint }>;
+      label?: number;
+    }) => {
+      if (!active || !payload || payload.length === 0) return null;
+      const point = payload[0]?.payload;
+      if (!point) return null;
+      const statusLabel = STATUS_LABELS[point.status];
+      const missingLatencyMessage =
+        point.latency_ms == null && (point.status === "down" || point.status === "degraded")
+          ? "No latency sample during outage/degradation."
+          : null;
+
+      return (
+        <div className="rounded-md border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
+            {typeof label === "number" ? formatLatencyTick(label) : "-"}
+          </p>
+          <p className="ui-caption text-slate-600 dark:text-slate-300">
+            Status: <span className={`font-semibold ${statusTextClass(point.status)}`}>{statusLabel}</span>
+          </p>
+          <p className="ui-caption text-slate-600 dark:text-slate-300">
+            {latencyDisplayMode === "rollup" ? "Rollup latency" : "Average latency"}:{" "}
+            <span className="font-semibold">{formatLatency(point.latency_ms)}</span>
+          </p>
+          {latencyDisplayMode === "daily" && (
+            <p className="ui-caption text-slate-600 dark:text-slate-300">
+              P95 latency: <span className="font-semibold">{formatLatency(point.p95_latency_ms)}</span>
+            </p>
+          )}
+          {missingLatencyMessage && <p className="ui-caption text-slate-500 dark:text-slate-400">{missingLatencyMessage}</p>}
+        </div>
+      );
+    },
+    [formatLatencyTick, latencyDisplayMode]
+  );
 
   const rawChecksTotalPages = useMemo(() => {
     if (rawChecksTotal <= 0) return 1;
@@ -502,56 +555,97 @@ export default function EndpointStatusDetailPage() {
               <div>
                 <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Latency (ms)</p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  {formatCheckMode(series?.check_mode ?? selectedEndpoint?.check_mode)} latency from {useRollupLatencySeries ? "5-minute rollups" : "daily aggregates"}.
+                  {formatCheckMode(series?.check_mode ?? selectedEndpoint?.check_mode)} latency from{" "}
+                  {latencyDisplayMode === "rollup" ? "5-minute rollups" : "daily aggregates"}.
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 ui-caption text-slate-500 dark:text-slate-400">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-0.5 w-4 rounded bg-blue-500" />
+                    {latencyDisplayMode === "rollup" ? "Rollup latency" : "Average latency"}
+                  </span>
+                  {latencyDisplayMode === "daily" && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-0.5 w-4 border-t border-dashed border-orange-500" />
+                      P95 latency
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2.5 w-4 rounded-sm border border-amber-500/60 bg-amber-400/30" />
+                    Degraded window
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2.5 w-4 rounded-sm border border-rose-500/60 bg-rose-400/30" />
+                    Down window
+                  </span>
+                </div>
                 <div className="mt-3 h-64">
-                  {latencySeries.length === 0 ? (
+                  {latencyPoints.length === 0 ? (
                     <p className="ui-caption text-slate-500 dark:text-slate-400">No latency data for this range.</p>
                   ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={latencySeries}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                        <XAxis
-                          dataKey="timestampMs"
-                          type="number"
-                          scale="time"
-                          domain={latencyXAxisDomain}
-                          tickFormatter={windowValue === "day" ? formatChartTime : formatChartDay}
-                          stroke="#94A3B8"
-                        />
-                        <YAxis tickFormatter={(value) => `${value} ms`} stroke="#94A3B8" />
-                        <Tooltip
-                          formatter={(value, name) => {
-                            const numericValue = typeof value === "number" ? value : Number(value);
-                            if (Number.isNaN(numericValue)) return ["-", String(name)];
-                            if (name === "p95_latency_ms") return [`${numericValue} ms`, "P95 latency"];
-                            return [`${numericValue} ms`, useRollupLatencySeries ? "Rollup latency" : "Average latency"];
-                          }}
-                          labelFormatter={(value) => (windowValue === "day" ? formatChartTime(Number(value)) : formatChartDay(Number(value)))}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="latency_ms"
-                          name={useRollupLatencySeries ? "Rollup latency" : "Average latency"}
-                          stroke="#3B82F6"
-                          strokeWidth={2}
-                          dot={latencySeries.length === 1 ? { r: 3 } : false}
-                          connectNulls
-                        />
-                        {!useRollupLatencySeries && (
+                    <>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={latencySeries}>
+                          {latencyStatusBands.map((band, index) => (
+                            <ReferenceArea
+                              key={`${band.status}-${band.startMs}-${band.endMs}-${index}`}
+                              x1={band.startMs}
+                              x2={band.endMs}
+                              fill={band.status === "down" ? "rgba(244, 63, 94, 0.20)" : "rgba(245, 158, 11, 0.18)"}
+                              strokeOpacity={0}
+                              ifOverflow="extendDomain"
+                            />
+                          ))}
+                          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                          <XAxis
+                            dataKey="timestampMs"
+                            type="number"
+                            scale="time"
+                            domain={latencyXAxisDomain}
+                            tickFormatter={formatLatencyTick}
+                            tickCount={latencyXAxisTickCount}
+                            minTickGap={latencyXAxisMinTickGap}
+                            interval="preserveStartEnd"
+                            stroke="#94A3B8"
+                          />
+                          <YAxis
+                            tickFormatter={(value) => `${value} ms`}
+                            stroke="#94A3B8"
+                            allowDecimals={false}
+                            domain={[
+                              0,
+                              (dataMax: number) => (Number.isFinite(dataMax) && dataMax > 0 ? Math.ceil(dataMax * 1.1) : 100),
+                            ]}
+                          />
+                          <Tooltip content={renderLatencyTooltip} />
                           <Line
                             type="monotone"
-                            dataKey="p95_latency_ms"
-                            name="P95 latency"
-                            stroke="#F97316"
+                            dataKey="latency_ms"
+                            name={latencyDisplayMode === "rollup" ? "Rollup latency" : "Average latency"}
+                            stroke="#3B82F6"
                             strokeWidth={2}
-                            strokeDasharray="5 5"
-                            dot={false}
-                            connectNulls
+                            dot={latencySeries.length === 1 ? { r: 3 } : false}
+                            connectNulls={false}
                           />
-                        )}
-                      </LineChart>
-                    </ResponsiveContainer>
+                          {latencyDisplayMode === "daily" && (
+                            <Line
+                              type="monotone"
+                              dataKey="p95_latency_ms"
+                              name="P95 latency"
+                              stroke="#F97316"
+                              strokeWidth={2}
+                              strokeDasharray="5 5"
+                              dot={false}
+                              connectNulls={false}
+                            />
+                          )}
+                        </LineChart>
+                      </ResponsiveContainer>
+                      {latencySamplesCount === 0 && latencyStatusBands.length > 0 && (
+                        <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                          No measurable latency in this range (endpoint unavailable or degraded).
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
