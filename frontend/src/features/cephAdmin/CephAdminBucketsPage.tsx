@@ -13,6 +13,7 @@ import TableEmptyState from "../../components/TableEmptyState";
 import SortableHeader from "../../components/SortableHeader";
 import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
+import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
@@ -1037,7 +1038,6 @@ const FEATURE_DETAIL_COLUMN_OPTIONS: FeatureDetailColumnOption[] = [
     include: "lifecycle_abort_multipart_days",
   },
 ];
-const FEATURE_DETAIL_COLUMN_IDS = FEATURE_DETAIL_COLUMN_OPTIONS.map((option) => option.id);
 const BOOLEAN_FILTER_OPTIONS: Array<{ value: "any" | "true" | "false"; label: string }> = [
   { value: "any", label: "Any" },
   { value: "true", label: "Yes" },
@@ -1296,6 +1296,19 @@ const BUCKET_UI_TAG_KEY_SEPARATOR = "\u001f";
 const DEFAULT_PAGE_SIZE = 25;
 const DEFAULT_SORT: { field: SortField; direction: "asc" | "desc" } = { field: "name", direction: "asc" };
 const defaultVisibleColumns: ColumnId[] = ["ui_tags", "owner", "used_bytes", "object_count"];
+const BUCKET_CORE_COLUMN_OPTIONS: Array<{ id: ColumnId; label: string }> = [
+  { id: "ui_tags", label: "UI tags" },
+  { id: "tenant", label: "Tenant" },
+  { id: "owner", label: "Owner" },
+  { id: "owner_name", label: "Owner name" },
+  { id: "used_bytes", label: "Used" },
+  { id: "object_count", label: "Objects" },
+  { id: "quota_max_size_bytes", label: "Quota" },
+  { id: "quota_max_objects", label: "Object quota" },
+  { id: "quota_usage_percent", label: "Quota usage %" },
+  { id: "quota_status", label: "Quota status" },
+  { id: "tags", label: "S3 Tags" },
+];
 
 const loadVisibleColumns = (): ColumnId[] => {
   if (typeof window === "undefined") return defaultVisibleColumns;
@@ -1740,9 +1753,6 @@ export default function CephAdminBucketsPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(loadVisibleColumns);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
-  const [expandedFeatureColumnGroups, setExpandedFeatureColumnGroups] = useState<Partial<Record<FeatureKey, boolean>>>({
-    lifecycle_rules: true,
-  });
   const columnPickerRef = useRef<HTMLDivElement | null>(null);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [advancedDraft, setAdvancedDraft] = useState<AdvancedFilterState>(defaultAdvancedFilter);
@@ -2241,9 +2251,6 @@ export default function CephAdminBucketsPage() {
 
   const toggleColumn = (id: ColumnId) => {
     setVisibleColumns((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
-  };
-  const toggleFeatureColumnGroup = (feature: FeatureKey) => {
-    setExpandedFeatureColumnGroups((prev) => ({ ...prev, [feature]: !prev[feature] }));
   };
 
   const resetColumns = () => {
@@ -6163,97 +6170,35 @@ export default function CephAdminBucketsPage() {
                   </button>
                   {showColumnPicker && (
                     <div className="absolute right-0 z-30 mt-2 w-96 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Visible columns</p>
-                        <button
-                          type="button"
-                          onClick={resetColumns}
-                          className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                        >
-                          Reset
-                        </button>
-                      </div>
-
-                      <div className="mt-3 space-y-3">
-                        <div className="space-y-2">
-                          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Core</p>
-                          {[
-                            { id: "ui_tags" as const, label: "UI tags" },
-                            { id: "tenant" as const, label: "Tenant" },
-                            { id: "owner" as const, label: "Owner" },
-                            { id: "owner_name" as const, label: "Owner name" },
-                            { id: "used_bytes" as const, label: "Used" },
-                            { id: "object_count" as const, label: "Objects" },
-                            { id: "quota_max_size_bytes" as const, label: "Quota" },
-                            { id: "quota_max_objects" as const, label: "Object quota" },
-                            { id: "quota_usage_percent" as const, label: "Quota usage %" },
-                            { id: "quota_status" as const, label: "Quota status" },
-                            { id: "tags" as const, label: "S3 Tags" },
-                          ].map((opt) => (
-                            <UiCheckboxField
-                              key={opt.id}
-                              checked={visibleColumns.includes(opt.id)}
-                              onChange={() => toggleColumn(opt.id)}
-                              className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200"
-                              inputPosition="end"
-                            >
-                              <span>{opt.label}</span>
-                            </UiCheckboxField>
-                          ))}
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Features</p>
-                          <div className="space-y-1.5">
-                            {featureColumnOptions.map((opt) => {
-                              const detailOptions = featureDetailColumnsByFeature[opt.id] ?? [];
-                              const expanded = expandedFeatureColumnGroups[opt.id] === true;
-                              return (
-                                <div key={opt.id} className="rounded-lg border border-slate-200 p-2 dark:border-slate-700">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <UiCheckboxField
-                                      checked={visibleColumns.includes(opt.id)}
-                                      onChange={() => toggleColumn(opt.id)}
-                                      className="flex-1 ui-body text-slate-700 dark:text-slate-200"
-                                      inputPosition="end"
-                                    >
-                                      <span>{opt.label}</span>
-                                    </UiCheckboxField>
-                                    {detailOptions.length > 0 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleFeatureColumnGroup(opt.id)}
-                                        className="rounded-md border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                                        aria-expanded={expanded}
-                                      >
-                                        {expanded ? "Details ▾" : "Details ▸"}
-                                      </button>
-                                    )}
-                                  </div>
-                                  {detailOptions.length > 0 && expanded && (
-                                    <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 dark:border-slate-700">
-                                      {detailOptions.map((detail) => (
-                                        <UiCheckboxField
-                                          key={detail.id}
-                                          checked={visibleColumns.includes(detail.id)}
-                                          onChange={() => toggleColumn(detail.id)}
-                                          className="flex items-center justify-between ui-caption text-slate-600 dark:text-slate-300"
-                                          inputPosition="end"
-                                        >
-                                          <span>{detail.label}</span>
-                                        </UiCheckboxField>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">
-                            Feature checks and detail values are loaded only for enabled columns.
-                          </p>
-                        </div>
-                      </div>
+                      <ColumnVisibilityPicker
+                        selectedCount={visibleColumns.length}
+                        onReset={resetColumns}
+                        coreGroups={[
+                          {
+                            id: "core",
+                            label: "Core",
+                            options: BUCKET_CORE_COLUMN_OPTIONS.map((option) => ({
+                              id: option.id,
+                              label: option.label,
+                              checked: visibleColumns.includes(option.id),
+                              onToggle: () => toggleColumn(option.id),
+                            })),
+                          },
+                        ]}
+                        featureGroups={featureColumnOptions.map((option) => ({
+                          id: option.id,
+                          label: option.label,
+                          checked: visibleColumns.includes(option.id),
+                          onToggle: () => toggleColumn(option.id),
+                          details: (featureDetailColumnsByFeature[option.id] ?? []).map((detail) => ({
+                            id: detail.id,
+                            label: detail.label,
+                            checked: visibleColumns.includes(detail.id),
+                            onToggle: () => toggleColumn(detail.id),
+                          })),
+                        }))}
+                        footerNote="Feature checks and detail values are loaded only for enabled columns."
+                      />
                     </div>
                   )}
                 </div>

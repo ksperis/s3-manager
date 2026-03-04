@@ -11,12 +11,12 @@ import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
+import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import { CephAdminRgwAccount, CephAdminRgwAccountDetail, listCephAdminAccounts } from "../../api/cephAdmin";
 import { tableActionMenuItemClasses } from "../../components/tableActionClasses";
 import CephAdminAccountCreateModal from "./CephAdminAccountCreateModal";
 import CephAdminAccountEditModal from "./CephAdminAccountEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
-import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   FILTER_COST_LABEL,
   buildTextFieldRules,
@@ -118,6 +118,34 @@ type ActiveFilterSummaryItem = {
 const COLUMNS_STORAGE_KEY = "ceph-admin.account_list.columns.v1";
 const defaultVisibleColumns: ColumnId[] = [];
 const DEFAULT_SORT: { field: SortField; direction: "asc" | "desc" } = { field: "account_id", direction: "asc" };
+const ACCOUNT_COLUMN_GROUPS: Array<{ id: string; label: string; options: Array<{ id: ColumnId; label: string }> }> = [
+  {
+    id: "identity",
+    label: "Identity",
+    options: [
+      { id: "account_name", label: "Name" },
+      { id: "email", label: "Email" },
+    ],
+  },
+  {
+    id: "limits_quotas",
+    label: "Limits & quotas",
+    options: [
+      { id: "max_users", label: "Max users" },
+      { id: "max_buckets", label: "Max buckets" },
+      { id: "quota_max_size_bytes", label: "Quota (size)" },
+      { id: "quota_max_objects", label: "Quota (objects)" },
+    ],
+  },
+  {
+    id: "usage",
+    label: "Usage",
+    options: [
+      { id: "bucket_count", label: "Buckets" },
+      { id: "user_count", label: "Users" },
+    ],
+  },
+];
 
 const defaultAdvancedFilter: AdvancedFilterState = {
   accountName: "",
@@ -864,76 +892,20 @@ export default function CephAdminAccountsPage() {
                 </button>
                 {showColumnPicker && (
                   <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Visible columns</p>
-                      <button
-                        type="button"
-                        onClick={resetColumns}
-                        className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                      >
-                        Reset
-                      </button>
-                    </div>
-
-                    <div className="mt-3 space-y-3">
-                      <div className="space-y-2">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Identity</p>
-                        {[
-                          { id: "account_name" as const, label: "Name" },
-                          { id: "email" as const, label: "Email" },
-                        ].map((opt) => (
-                          <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
-                            <span>{opt.label}</span>
-                            <input
-                              type="checkbox"
-                              checked={visibleColumns.includes(opt.id)}
-                              onChange={() => toggleColumn(opt.id)}
-                              className={uiCheckboxClass}
-                            />
-                          </label>
-                        ))}
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Limits & quotas
-                        </p>
-                        {[
-                          { id: "max_users" as const, label: "Max users" },
-                          { id: "max_buckets" as const, label: "Max buckets" },
-                          { id: "quota_max_size_bytes" as const, label: "Quota (size)" },
-                          { id: "quota_max_objects" as const, label: "Quota (objects)" },
-                        ].map((opt) => (
-                          <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
-                            <span>{opt.label}</span>
-                            <input
-                              type="checkbox"
-                              checked={visibleColumns.includes(opt.id)}
-                              onChange={() => toggleColumn(opt.id)}
-                              className={uiCheckboxClass}
-                            />
-                          </label>
-                        ))}
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Usage</p>
-                        {[
-                          { id: "bucket_count" as const, label: "Buckets" },
-                          { id: "user_count" as const, label: "Users" },
-                        ].map((opt) => (
-                          <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
-                            <span>{opt.label}</span>
-                            <input
-                              type="checkbox"
-                              checked={visibleColumns.includes(opt.id)}
-                              onChange={() => toggleColumn(opt.id)}
-                              className={uiCheckboxClass}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </div>
+                    <ColumnVisibilityPicker
+                      selectedCount={visibleColumns.length}
+                      onReset={resetColumns}
+                      coreGroups={ACCOUNT_COLUMN_GROUPS.map((group) => ({
+                        id: group.id,
+                        label: group.label,
+                        options: group.options.map((option) => ({
+                          id: option.id,
+                          label: option.label,
+                          checked: visibleColumns.includes(option.id),
+                          onToggle: () => toggleColumn(option.id),
+                        })),
+                      }))}
+                    />
                   </div>
                 )}
               </div>

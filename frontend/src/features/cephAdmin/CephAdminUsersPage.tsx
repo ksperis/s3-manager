@@ -11,12 +11,12 @@ import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
+import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import { CephAdminRgwUser, CephAdminRgwUserDetail, listCephAdminUsers } from "../../api/cephAdmin";
 import { tableActionMenuItemClasses } from "../../components/tableActionClasses";
 import CephAdminUserCreateModal from "./CephAdminUserCreateModal";
 import CephAdminUserEditModal from "./CephAdminUserEditModal";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
-import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   FILTER_COST_LABEL,
   buildTextFieldRules,
@@ -115,6 +115,28 @@ type ActiveFilterSummaryItem = {
 const COLUMNS_STORAGE_KEY = "ceph-admin.user_list.columns.v2";
 const defaultVisibleColumns: ColumnId[] = ["tenant"];
 const DEFAULT_SORT: { field: SortField; direction: "asc" | "desc" } = { field: "uid", direction: "asc" };
+const USER_COLUMN_GROUPS: Array<{ id: string; label: string; options: Array<{ id: ColumnId; label: string }> }> = [
+  {
+    id: "identity",
+    label: "Identity",
+    options: [
+      { id: "tenant", label: "Tenant" },
+      { id: "account_name", label: "Account name" },
+      { id: "full_name", label: "Full name" },
+      { id: "email", label: "Email" },
+      { id: "suspended", label: "Suspended" },
+    ],
+  },
+  {
+    id: "limits_quotas",
+    label: "Limits & quotas",
+    options: [
+      { id: "max_buckets", label: "Max buckets" },
+      { id: "quota_max_size_bytes", label: "Quota (size)" },
+      { id: "quota_max_objects", label: "Quota (objects)" },
+    ],
+  },
+];
 
 const defaultAdvancedFilter: AdvancedFilterState = {
   tenant: "",
@@ -960,62 +982,20 @@ export default function CephAdminUsersPage() {
                 </button>
                 {showColumnPicker && (
                   <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Visible columns</p>
-                      <button
-                        type="button"
-                        onClick={resetColumns}
-                        className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                      >
-                        Reset
-                      </button>
-                    </div>
-
-                    <div className="mt-3 space-y-3">
-                      <div className="space-y-2">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Identity
-                        </p>
-                        {[
-                          { id: "tenant" as const, label: "Tenant" },
-                          { id: "account_name" as const, label: "Account name" },
-                          { id: "full_name" as const, label: "Full name" },
-                          { id: "email" as const, label: "Email" },
-                          { id: "suspended" as const, label: "Suspended" },
-                        ].map((opt) => (
-                          <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
-                            <span>{opt.label}</span>
-                            <input
-                              type="checkbox"
-                              checked={visibleColumns.includes(opt.id)}
-                              onChange={() => toggleColumn(opt.id)}
-                              className={uiCheckboxClass}
-                            />
-                          </label>
-                        ))}
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Limits & quotas
-                        </p>
-                        {[
-                          { id: "max_buckets" as const, label: "Max buckets" },
-                          { id: "quota_max_size_bytes" as const, label: "Quota (size)" },
-                          { id: "quota_max_objects" as const, label: "Quota (objects)" },
-                        ].map((opt) => (
-                          <label key={opt.id} className="flex items-center justify-between ui-body text-slate-700 dark:text-slate-200">
-                            <span>{opt.label}</span>
-                            <input
-                              type="checkbox"
-                              checked={visibleColumns.includes(opt.id)}
-                              onChange={() => toggleColumn(opt.id)}
-                              className={uiCheckboxClass}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </div>
+                    <ColumnVisibilityPicker
+                      selectedCount={visibleColumns.length}
+                      onReset={resetColumns}
+                      coreGroups={USER_COLUMN_GROUPS.map((group) => ({
+                        id: group.id,
+                        label: group.label,
+                        options: group.options.map((option) => ({
+                          id: option.id,
+                          label: option.label,
+                          checked: visibleColumns.includes(option.id),
+                          onToggle: () => toggleColumn(option.id),
+                        })),
+                      }))}
+                    />
                   </div>
                 )}
               </div>
