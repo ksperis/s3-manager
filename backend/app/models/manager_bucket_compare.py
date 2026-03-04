@@ -10,6 +10,8 @@ from app.models.ceph_admin import (
     CephAdminBucketContentDiff,
 )
 
+ManagerBucketCompareAction = Literal["sync_source_only", "sync_different", "delete_target_only"]
+
 
 class ManagerBucketCompareRequest(BaseModel):
     target_context_id: str
@@ -50,3 +52,38 @@ class ManagerBucketCompareResult(BaseModel):
     has_differences: bool = False
     content_diff: Optional[CephAdminBucketContentDiff] = None
     config_diff: Optional[CephAdminBucketConfigDiff] = None
+
+
+class ManagerBucketCompareActionRequest(BaseModel):
+    target_context_id: str
+    source_bucket: str
+    target_bucket: str
+    action: ManagerBucketCompareAction
+    size_only: bool = False
+    parallelism: int = Field(default=4, ge=1, le=32)
+
+    @model_validator(mode="after")
+    def validate_names(self):
+        self.target_context_id = (self.target_context_id or "").strip()
+        self.source_bucket = (self.source_bucket or "").strip()
+        self.target_bucket = (self.target_bucket or "").strip()
+        if not self.target_context_id:
+            raise ValueError("target_context_id is required.")
+        if not self.source_bucket:
+            raise ValueError("source_bucket is required.")
+        if not self.target_bucket:
+            raise ValueError("target_bucket is required.")
+        return self
+
+
+class ManagerBucketCompareActionResult(BaseModel):
+    action: ManagerBucketCompareAction
+    source_context_id: str
+    target_context_id: str
+    source_bucket: str
+    target_bucket: str
+    planned_count: int = 0
+    succeeded_count: int = 0
+    failed_count: int = 0
+    failed_keys_sample: list[str] = Field(default_factory=list)
+    message: str

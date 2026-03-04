@@ -27,7 +27,12 @@ from app.models.bucket import (
     BucketTagsUpdate,
     BucketWebsiteConfiguration,
 )
-from app.models.manager_bucket_compare import ManagerBucketCompareRequest, ManagerBucketCompareResult
+from app.models.manager_bucket_compare import (
+    ManagerBucketCompareActionRequest,
+    ManagerBucketCompareActionResult,
+    ManagerBucketCompareRequest,
+    ManagerBucketCompareResult,
+)
 from app.services.audit_service import AuditService
 from app.services.buckets_service import BucketsService, get_buckets_service
 from app.services.s3_client import BucketNotEmptyError
@@ -171,6 +176,77 @@ def compare_bucket_pair(
         has_differences=has_differences,
         content_diff=content_diff,
         config_diff=config_diff,
+    )
+
+
+@router.post("/compare/action", response_model=ManagerBucketCompareActionResult)
+def run_compare_bucket_action(
+    payload: ManagerBucketCompareActionRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    source_account: S3Account = Depends(get_account_context),
+    actor=Depends(get_current_account_admin),
+    service: BucketsService = Depends(get_buckets_service),
+    _: None = Depends(require_bucket_compare_enabled),
+) -> ManagerBucketCompareActionResult:
+    target_account = get_account_context(
+        request=request,
+        account_ref=payload.target_context_id,
+        actor=actor,
+        db=db,
+    )
+
+    source_context_id = _context_id_from_account(
+        source_account,
+        fallback=request.query_params.get("account_id"),
+    )
+    target_context_id = _context_id_from_account(target_account, fallback=payload.target_context_id)
+    same_context = bool(source_context_id and target_context_id and source_context_id == target_context_id)
+    if same_context and payload.source_bucket == payload.target_bucket:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="When source and target contexts are the same, source_bucket and target_bucket must differ.",
+        )
+
+    try:
+        action_result = service.run_compare_content_remediation(
+            payload.source_bucket,
+            source_account,
+            payload.target_bucket,
+            target_account,
+            action=payload.action,
+            size_only=payload.size_only,
+            parallelism=payload.parallelism,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    if action_result.planned_count == 0:
+        message = "No object matched this remediation action."
+    elif action_result.failed_count <= 0:
+        message = (
+            f"Action '{payload.action}' completed successfully: "
+            f"{action_result.succeeded_count}/{action_result.planned_count} object(s) processed."
+        )
+    elif action_result.succeeded_count <= 0:
+        message = f"Action '{payload.action}' failed for all {action_result.planned_count} object(s)."
+    else:
+        message = (
+            f"Action '{payload.action}' partially succeeded: {action_result.succeeded_count}/"
+            f"{action_result.planned_count} object(s) processed, {action_result.failed_count} failed."
+        )
+
+    return ManagerBucketCompareActionResult(
+        action=action_result.action,
+        source_context_id=source_context_id,
+        target_context_id=target_context_id,
+        source_bucket=payload.source_bucket,
+        target_bucket=payload.target_bucket,
+        planned_count=action_result.planned_count,
+        succeeded_count=action_result.succeeded_count,
+        failed_count=action_result.failed_count,
+        failed_keys_sample=action_result.failed_keys_sample,
+        message=message,
     )
 
 

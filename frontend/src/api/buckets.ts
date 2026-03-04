@@ -218,6 +218,30 @@ export type ManagerBucketCompareResult = {
   config_diff?: ManagerBucketConfigDiff | null;
 };
 
+export type ManagerBucketCompareAction = "sync_source_only" | "sync_different" | "delete_target_only";
+
+export type ManagerBucketCompareActionRequest = {
+  target_context_id: string;
+  source_bucket: string;
+  target_bucket: string;
+  action: ManagerBucketCompareAction;
+  size_only?: boolean;
+  parallelism?: number;
+};
+
+export type ManagerBucketCompareActionResult = {
+  action: ManagerBucketCompareAction;
+  source_context_id: string;
+  target_context_id: string;
+  source_bucket: string;
+  target_bucket: string;
+  planned_count: number;
+  succeeded_count: number;
+  failed_count: number;
+  failed_keys_sample: string[];
+  message: string;
+};
+
 export async function getBucketProperties(accountId: S3AccountSelector, bucketName: string): Promise<BucketProperties> {
   const { data } = await client.get<BucketProperties>(`${bucketPath(bucketName)}/properties`, {
     params: withS3AccountParam(undefined, accountId),
@@ -232,6 +256,22 @@ export async function compareManagerBucketPair(
 ): Promise<ManagerBucketCompareResult> {
   const { data } = await client.post<ManagerBucketCompareResult>(
     `${bucketBasePath()}/compare`,
+    payload,
+    {
+      params: withS3AccountParam(undefined, sourceContextId),
+      signal: options?.signal,
+    }
+  );
+  return data;
+}
+
+export async function runManagerBucketCompareAction(
+  sourceContextId: S3AccountSelector,
+  payload: ManagerBucketCompareActionRequest,
+  options?: { signal?: AbortSignal }
+): Promise<ManagerBucketCompareActionResult> {
+  const { data } = await client.post<ManagerBucketCompareActionResult>(
+    `${bucketBasePath()}/compare/action`,
     payload,
     {
       params: withS3AccountParam(undefined, sourceContextId),

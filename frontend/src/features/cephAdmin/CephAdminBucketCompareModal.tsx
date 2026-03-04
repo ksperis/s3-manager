@@ -1113,7 +1113,7 @@ export default function CephAdminBucketCompareModal({
                               Content diff ({content.compare_mode === "size_only" ? "size only" : "md5 or size"})
                             </span>
                             <UiBadge tone={getChangedTone(contentHasDifferences)} className="px-2 text-[10px]">
-                              {contentHasDifferences ? "Changed" : "Unchanged"}
+                              {contentHasDifferences ? "Different" : "Identical"}
                             </UiBadge>
                           </div>
                         </summary>
@@ -1128,7 +1128,7 @@ export default function CephAdminBucketCompareModal({
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
                                   <UiBadge tone={getChangedTone(section.changed)} className="px-2 text-[10px]">
-                                    {section.changed ? "Changed" : "Unchanged"}
+                                    {section.changed ? "Different" : "Identical"}
                                   </UiBadge>
                                 </div>
                               </summary>
@@ -1160,7 +1160,7 @@ export default function CephAdminBucketCompareModal({
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Config diff</span>
                             <UiBadge tone={getChangedTone(configHasDifferences)} className="px-2 text-[10px]">
-                              {configHasDifferences ? "Changed" : "Unchanged"}
+                              {configHasDifferences ? "Different" : "Identical"}
                             </UiBadge>
                           </div>
                         </summary>
@@ -1175,7 +1175,7 @@ export default function CephAdminBucketCompareModal({
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">{section.label}</span>
                                   <UiBadge tone={getChangedTone(section.changed)} className="px-2 text-[10px]">
-                                    {section.changed ? "Changed" : "Unchanged"}
+                                    {section.changed ? "Different" : "Identical"}
                                   </UiBadge>
                                 </div>
                               </summary>
