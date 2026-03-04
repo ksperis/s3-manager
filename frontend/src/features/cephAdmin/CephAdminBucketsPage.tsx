@@ -4,7 +4,7 @@
  */
 import axios from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
@@ -15,6 +15,7 @@ import PaginationControls from "../../components/PaginationControls";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
+import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
   BucketProperties,
@@ -116,6 +117,8 @@ const triggerDownload = (filename: string, content: string, mimeType: string) =>
   link.remove();
   window.URL.revokeObjectURL(url);
 };
+
+const toAnchorRef = (node: HTMLElement | null): RefObject<HTMLElement | null> => ({ current: node });
 
 function SpinnerIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
@@ -1830,12 +1833,17 @@ export default function CephAdminBucketsPage() {
   const [tagSuggestionBucket, setTagSuggestionBucket] = useState<string | null>(null);
   const [tagDrafts, setTagDrafts] = useState<Record<string, string>>({});
   const [activeOwnerTooltipKey, setActiveOwnerTooltipKey] = useState<string | null>(null);
+  const ownerTooltipAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [ownerTooltipState, setOwnerTooltipState] = useState<Record<string, OwnerTooltipState>>({});
   const ownerTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
   const ownerNameCacheRef = useRef<Record<string, string | null>>({});
   const [activeFeatureTooltipKey, setActiveFeatureTooltipKey] = useState<string | null>(null);
+  const featureTooltipAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [featureTooltipState, setFeatureTooltipState] = useState<Record<string, FeatureTooltipState>>({});
   const featureTooltipInflightRef = useRef<Record<string, Promise<void>>>({});
+  const [activeActionMenuKey, setActiveActionMenuKey] = useState<string | null>(null);
+  const actionMenuAnchorRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const actionMenuSurfaceRef = useRef<HTMLDivElement | null>(null);
   const bucketPropertiesCacheRef = useRef<Record<string, BucketProperties>>({});
   const bucketPropertiesInflightRef = useRef<Record<string, Promise<BucketProperties>>>({});
   const selectionHeaderRef = useRef<HTMLInputElement | null>(null);
@@ -1885,6 +1893,41 @@ export default function CephAdminBucketsPage() {
     setAdvancedDraft((prev) => stripUnsupportedAdvancedFeatureFilters(prev, featureSupport));
     setAdvancedApplied((prev) => (prev ? stripUnsupportedAdvancedFeatureFilters(prev, featureSupport) : prev));
   }, [featureSupport]);
+
+  useEffect(() => {
+    if (!activeActionMenuKey) {
+      actionMenuSurfaceRef.current = null;
+      return;
+    }
+    const closeMenu = () => setActiveActionMenuKey(null);
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      const trigger = actionMenuAnchorRefs.current[activeActionMenuKey];
+      if (trigger?.contains(target)) return;
+      if (actionMenuSurfaceRef.current?.contains(target)) return;
+      closeMenu();
+    };
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      const trigger = actionMenuAnchorRefs.current[activeActionMenuKey];
+      if (trigger?.contains(target)) return;
+      if (actionMenuSurfaceRef.current?.contains(target)) return;
+      closeMenu();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("focusin", handleFocusIn);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("focusin", handleFocusIn);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeActionMenuKey]);
 
   useEffect(() => {
     setVisibleColumns((prev) => {
@@ -5699,6 +5742,9 @@ export default function CephAdminBucketsPage() {
         }}
       >
         <button
+          ref={(node) => {
+            ownerTooltipAnchorRefs.current[tooltipKey] = node;
+          }}
           type="button"
           className="inline-flex cursor-help text-left decoration-dotted underline-offset-2 hover:underline focus:underline"
           onFocus={() => {
@@ -5712,8 +5758,15 @@ export default function CephAdminBucketsPage() {
         >
           {owner}
         </button>
-        {isTooltipVisible && (
-          <div className="pointer-events-none absolute left-0 top-full z-40 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+        <AnchoredPortalMenu
+          open={isTooltipVisible}
+          anchorRef={toAnchorRef(ownerTooltipAnchorRefs.current[tooltipKey])}
+          placement="bottom-start"
+          offset={4}
+          minWidth={288}
+          className="pointer-events-none w-72 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        >
+          <div>
             <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">Owner</p>
             <p className="mt-1 ui-caption text-slate-600 dark:text-slate-300">UID: {owner}</p>
             {(!tooltip || tooltip.status === "loading") && (
@@ -5731,7 +5784,7 @@ export default function CephAdminBucketsPage() {
               </p>
             )}
           </div>
-        )}
+        </AnchoredPortalMenu>
       </div>
     );
   };
@@ -5754,6 +5807,9 @@ export default function CephAdminBucketsPage() {
         }}
       >
         <button
+          ref={(node) => {
+            featureTooltipAnchorRefs.current[tooltipKey] = node;
+          }}
           type="button"
           className="inline-flex cursor-default"
           onFocus={() => {
@@ -5767,8 +5823,15 @@ export default function CephAdminBucketsPage() {
         >
           <PropertySummaryChip compact state={status.state} tone={status.tone} />
         </button>
-        {isTooltipVisible && (
-          <div className="pointer-events-none absolute left-0 top-full z-40 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+        <AnchoredPortalMenu
+          open={isTooltipVisible}
+          anchorRef={toAnchorRef(featureTooltipAnchorRefs.current[tooltipKey])}
+          placement="bottom-start"
+          offset={4}
+          minWidth={288}
+          className="pointer-events-none w-72 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        >
+          <div>
             <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">{FEATURE_LABELS[featureKey]}</p>
             {(!tooltip || tooltip.status === "loading") && (
               <div className="mt-1.5 inline-flex items-center gap-1.5 ui-caption text-slate-500 dark:text-slate-300">
@@ -5789,7 +5852,7 @@ export default function CephAdminBucketsPage() {
               </div>
             )}
           </div>
-        )}
+        </AnchoredPortalMenu>
       </div>
     );
   };
@@ -6065,55 +6128,79 @@ export default function CephAdminBucketsPage() {
       align: "right",
       headerClassName: "w-16",
       cellClassName: "!py-1.5",
-      render: (bucket) => (
-        <div className="inline-flex items-center">
-          <details className="relative">
-            <summary
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100 list-none [&::-webkit-details-marker]:hidden"
+      render: (bucket) => {
+        const actionMenuKey = `${bucketTooltipCacheKey(bucket)}:actions`;
+        const menuOpen = activeActionMenuKey === actionMenuKey;
+        return (
+          <div className="inline-flex items-center">
+            <button
+              ref={(node) => {
+                actionMenuAnchorRefs.current[actionMenuKey] = node;
+              }}
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100"
               aria-label="More actions"
               title="More actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => {
+                setActiveActionMenuKey((prev) => (prev === actionMenuKey ? null : actionMenuKey));
+              }}
             >
               ⋮
-            </summary>
-            <div className="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-              <button
-                type="button"
-                disabled={!selectedEndpointId || !cephAdminBrowserEnabled}
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
-                title={
-                  selectedEndpointId && cephAdminBrowserEnabled
-                    ? "Open this bucket in Ceph Admin Browser"
-                    : "Ceph Admin Browser is disabled in application settings"
-                }
-                onClick={(event) => {
-                  event.preventDefault();
-                  if (!selectedEndpointId || !cephAdminBrowserEnabled) return;
-                  const params = new URLSearchParams();
-                  params.set("ep", String(selectedEndpointId));
-                  params.set("bucket", bucket.name);
-                  navigate({ pathname: "/ceph-admin/browser", search: `?${params.toString()}` });
-                  const parent = event.currentTarget.closest("details");
-                  if (parent) parent.removeAttribute("open");
+            </button>
+            <AnchoredPortalMenu
+              open={menuOpen}
+              anchorRef={toAnchorRef(actionMenuAnchorRefs.current[actionMenuKey])}
+              placement="bottom-end"
+              offset={4}
+              minWidth={176}
+              className="w-44 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+            >
+              <div
+                ref={(node) => {
+                  if (menuOpen) actionMenuSurfaceRef.current = node;
                 }}
+                role="menu"
+                aria-label={`Actions for bucket ${bucket.name}`}
               >
-                Open in Browser
-              </button>
-              <button
-                type="button"
-                className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  setEditingBucketName(bucket.name);
-                  const parent = event.currentTarget.closest("details");
-                  if (parent) parent.removeAttribute("open");
-                }}
-              >
-                Configure
-              </button>
-            </div>
-          </details>
-        </div>
-      ),
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!selectedEndpointId || !cephAdminBrowserEnabled}
+                  className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
+                  title={
+                    selectedEndpointId && cephAdminBrowserEnabled
+                      ? "Open this bucket in Ceph Admin Browser"
+                      : "Ceph Admin Browser is disabled in application settings"
+                  }
+                  onClick={() => {
+                    if (!selectedEndpointId || !cephAdminBrowserEnabled) return;
+                    const params = new URLSearchParams();
+                    params.set("ep", String(selectedEndpointId));
+                    params.set("bucket", bucket.name);
+                    navigate({ pathname: "/ceph-admin/browser", search: `?${params.toString()}` });
+                    setActiveActionMenuKey(null);
+                  }}
+                >
+                  Open in Browser
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`${tableActionMenuItemClasses} !px-2 !py-1 !text-[11px]`}
+                  onClick={() => {
+                    setEditingBucketName(bucket.name);
+                    setActiveActionMenuKey(null);
+                  }}
+                >
+                  Configure
+                </button>
+              </div>
+            </AnchoredPortalMenu>
+          </div>
+        );
+      },
     });
 
     return cols;
