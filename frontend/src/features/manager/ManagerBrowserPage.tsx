@@ -3,25 +3,34 @@
  * Licensed under the Apache License, Version 2.0
  */
 import PageHeader from "../../components/PageHeader";
+import PageBanner from "../../components/PageBanner";
 import BrowserEmbed from "../browser/BrowserEmbed";
 import { useS3AccountContext } from "./S3AccountContext";
 
 export default function ManagerBrowserPage() {
-  const { accountIdForApi, hasS3AccountContext, accounts, selectedS3AccountId } = useS3AccountContext();
+  const { accountIdForApi, hasS3AccountContext, accounts, selectedS3AccountId, managerBrowserEnabled } = useS3AccountContext();
   const selected = accounts.find((account) => account.id === selectedS3AccountId) ?? null;
+  const browserBlockedForContext = managerBrowserEnabled === false;
 
   return (
     <>
       <PageHeader title="Browser" />
+      {browserBlockedForContext && (
+        <PageBanner tone="warning">
+          Browser access is disabled for this S3 connection. Enable browser access in the S3 connection settings.
+        </PageBanner>
+      )}
       <div className="min-h-0 flex-1">
-        <BrowserEmbed
-          accountIdForApi={accountIdForApi}
-          hasContext={hasS3AccountContext}
-          storageEndpointCapabilities={selected?.storage_endpoint_capabilities ?? null}
-          endpointProvider={selected?.endpoint_provider ?? null}
-          quotaMaxSizeGb={selected?.quota_max_size_gb ?? null}
-          quotaMaxObjects={selected?.quota_max_objects ?? null}
-        />
+        {!browserBlockedForContext && (
+          <BrowserEmbed
+            accountIdForApi={accountIdForApi}
+            hasContext={hasS3AccountContext}
+            storageEndpointCapabilities={selected?.storage_endpoint_capabilities ?? null}
+            endpointProvider={selected?.endpoint_provider ?? null}
+            quotaMaxSizeGb={selected?.quota_max_size_gb ?? null}
+            quotaMaxObjects={selected?.quota_max_objects ?? null}
+          />
+        )}
       </div>
     </>
   );

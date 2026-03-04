@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import AccountIAMUser, AccountRole, User, UserS3Account
+from app.db import AccountIAMUser, AccountRole, S3Connection, User, UserS3Account
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_account_context, get_current_actor
 from app.services.app_settings_service import load_app_settings
@@ -22,6 +22,7 @@ class ManagerContext(BaseModel):
     iam_identity: Optional[str] = None
     can_switch_access: bool = False
     manager_stats_enabled: bool = False
+    manager_browser_enabled: bool = True
 
 
 def _manager_stats_enabled(account, actor) -> bool:
@@ -63,6 +64,14 @@ def get_manager_context(
 
     iam_identity: Optional[str] = None
     can_switch_access = False
+    manager_browser_enabled = True
+    if s3_connection_id is not None:
+        connection = (
+            db.query(S3Connection.id, S3Connection.access_browser)
+            .filter(S3Connection.id == s3_connection_id)
+            .first()
+        )
+        manager_browser_enabled = bool(connection.access_browser) if connection else False
     if access_mode == "admin":
         iam_identity = resolve_admin_uid(getattr(account, "rgw_account_id", None), getattr(account, "rgw_user_uid", None))
     elif access_mode == "portal" and isinstance(actor, User):
@@ -101,4 +110,5 @@ def get_manager_context(
         iam_identity=iam_identity,
         can_switch_access=can_switch_access,
         manager_stats_enabled=_manager_stats_enabled(account, actor),
+        manager_browser_enabled=manager_browser_enabled,
     )

@@ -27,6 +27,7 @@ type S3AccountContextType = {
   setAccessMode: (mode: ManagerAccessMode) => void;
   canSwitchAccess: boolean;
   managerStatsEnabled: boolean | null;
+  managerBrowserEnabled: boolean | null;
 };
 
 const S3AccountContext = createContext<S3AccountContextType>({
@@ -44,6 +45,7 @@ const S3AccountContext = createContext<S3AccountContextType>({
   setAccessMode: () => {},
   canSwitchAccess: false,
   managerStatsEnabled: null,
+  managerBrowserEnabled: null,
 });
 
 type SessionInfo = {
@@ -97,6 +99,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
   const [accessMode, setAccessModeState] = useState<ManagerAccessMode | null>(null);
   const [canSwitchAccess, setCanSwitchAccess] = useState(false);
   const [managerStatsEnabled, setManagerStatsEnabled] = useState<boolean | null>(null);
+  const [managerBrowserEnabled, setManagerBrowserEnabled] = useState<boolean | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -109,7 +112,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
       try {
         const data = await listExecutionContexts(scope);
         setS3Accounts(data);
-      } catch (err) {
+      } catch {
         setS3Accounts([]);
         setAccessError(
           scope === "browser"
@@ -213,10 +216,12 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
       setIamIdentity(null);
       setCanSwitchAccess(false);
       setManagerStatsEnabled(null);
+      setManagerBrowserEnabled(null);
       return;
     }
     let isMounted = true;
     setManagerStatsEnabled(null);
+    setManagerBrowserEnabled(null);
     fetchManagerContext(accountIdForApi)
       .then((data) => {
         if (!isMounted) return;
@@ -224,6 +229,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         setCanSwitchAccess(Boolean(data.can_switch_access));
         setAccessModeState(data.access_mode);
         setManagerStatsEnabled(Boolean(data.manager_stats_enabled));
+        setManagerBrowserEnabled(data.manager_browser_enabled !== false);
         if (selectedS3AccountId && (data.access_mode === "admin" || data.access_mode === "portal")) {
           localStorage.setItem(`managerAccessMode:${selectedS3AccountId}`, data.access_mode);
         }
@@ -233,6 +239,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         setIamIdentity(null);
         setCanSwitchAccess(false);
         setManagerStatsEnabled(null);
+        setManagerBrowserEnabled(null);
       });
     return () => {
       isMounted = false;
@@ -256,6 +263,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         setAccessMode,
         canSwitchAccess,
         managerStatsEnabled,
+        managerBrowserEnabled,
       }}
     >
       {children}

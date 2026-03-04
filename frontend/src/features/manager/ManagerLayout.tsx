@@ -62,6 +62,7 @@ function ManagerShell() {
     setAccessMode,
     canSwitchAccess,
     managerStatsEnabled,
+    managerBrowserEnabled,
   } = useS3AccountContext();
   const { generalSettings } = useGeneralSettings();
   const navigate = useNavigate();
@@ -92,6 +93,7 @@ function ManagerShell() {
   const metricsFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
   const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
   const canViewMetricsMenu = Boolean(managerStatsEnabled) && (usageFeatureEnabled || metricsFeatureEnabled);
+  const managerBrowserAvailable = managerBrowserEnabled !== false;
   const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
   const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
   const modeVisual = getContextAccessModeVisual(accessMode);
@@ -194,7 +196,7 @@ function ManagerShell() {
       label: "Storage",
       links: [
         { to: "/manager/buckets", label: "Buckets" },
-        ...(generalSettings.browser_enabled && generalSettings.browser_manager_enabled
+        ...(generalSettings.browser_enabled && generalSettings.browser_manager_enabled && managerBrowserAvailable
           ? [{ to: "/manager/browser", label: "Browser" }]
           : []),
       ],

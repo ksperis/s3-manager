@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from app.db import AccountRole, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
 from app.models.app_settings import AppSettings
 from app.routers import dependencies
+from app.routers.manager import context as manager_context_router
 
 
 def _request(path: str):
@@ -114,6 +115,39 @@ def test_manager_workspace_rejects_connection_without_manager_access(db_session)
         )
     assert exc.value.status_code == 403
     assert "cannot be used in manager workspace" in str(exc.value.detail)
+
+
+def test_manager_context_exposes_browser_access_flag_for_connection(db_session):
+    user = User(
+        email="manager-context-connection-browser-flag@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    connection = S3Connection(
+        owner_user_id=None,
+        is_public=True,
+        name="manager-connection-browser-disabled",
+        access_manager=True,
+        access_browser=False,
+        capabilities_json=json.dumps({"can_manage_iam": False}),
+        access_key_id="AK-CONN3",
+        secret_access_key="SK-CONN3",
+    )
+    db_session.add_all([user, connection])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(connection)
+
+    account = dependencies.get_account_context(
+        request=_request("/api/manager/context"),
+        account_ref=f"conn-{connection.id}",
+        actor=user,
+        db=db_session,
+    )
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.access_mode == "connection"
+    assert payload.manager_browser_enabled is False
 
 
 @pytest.mark.parametrize("path", ["/api/manager/buckets", "/api/browser/buckets"])
