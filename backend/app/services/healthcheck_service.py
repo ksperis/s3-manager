@@ -69,6 +69,7 @@ class EndpointCheckTarget:
     endpoint_id: int
     name: str
     endpoint_url: str
+    verify_tls: bool
     region: Optional[str]
     supervision_access_key: Optional[str]
     supervision_secret_key: Optional[str]
@@ -221,6 +222,7 @@ class HealthCheckService:
             endpoint_id=endpoint.id,
             name=endpoint.name,
             endpoint_url=(endpoint.endpoint_url or "").strip(),
+            verify_tls=bool(getattr(endpoint, "verify_tls", True)),
             region=endpoint.region,
             supervision_access_key=endpoint.supervision_access_key,
             supervision_secret_key=endpoint.supervision_secret_key,
@@ -990,12 +992,16 @@ class HealthCheckService:
             return False
         return latency_ms >= int(round(baseline_latency_ms * ratio)) and (latency_ms - baseline_latency_ms) >= min_delta
 
-    def _http_probe(self, url: str) -> tuple[Optional[int], Optional[str]]:
+    @staticmethod
+    def _resolve_verify_ssl(target: EndpointCheckTarget) -> bool:
+        return bool(settings.healthcheck_verify_ssl) and bool(target.verify_tls)
+
+    def _http_probe(self, target: EndpointCheckTarget, url: str) -> tuple[Optional[int], Optional[str]]:
         try:
             response = requests.get(
                 url,
                 timeout=settings.healthcheck_timeout_seconds,
-                verify=settings.healthcheck_verify_ssl,
+                verify=self._resolve_verify_ssl(target),
                 allow_redirects=True,
                 headers={"User-Agent": "s3-manager-healthcheck"},
             )
@@ -1016,7 +1022,7 @@ class HealthCheckService:
                 secret_key=secret_key,
                 endpoint=url,
                 region=target.region,
-                verify_tls=settings.healthcheck_verify_ssl,
+                verify_tls=self._resolve_verify_ssl(target),
             )
             response = s3_client.list_buckets()
             meta = response.get("ResponseMetadata", {}) if isinstance(response, dict) else {}
@@ -1061,7 +1067,7 @@ class HealthCheckService:
             if profile.mode == "s3":
                 http_status, error_message = self._s3_probe(target, url)
             else:
-                http_status, error_message = self._http_probe(url)
+                http_status, error_message = self._http_probe(target, url)
         finally:
             latency_ms = int((time.monotonic() - start) * 1000)
 
