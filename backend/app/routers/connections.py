@@ -10,12 +10,15 @@ from app.models.s3_connection import (
     S3Connection,
     S3ConnectionCreate,
     S3ConnectionCredentialsUpdate,
+    S3ConnectionCredentialsValidationRequest,
+    S3ConnectionCredentialsValidationResult,
     S3ConnectionUpdate,
 )
 from app.routers.dependencies import get_current_account_user
 from app.services.app_settings_service import load_app_settings
 from app.services.audit_service import AuditService
 from app.services.s3_connections_service import S3ConnectionsService
+from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.utils.s3_connection_visibility import normalize_visibility
 
 router = APIRouter(prefix="/connections", tags=["connections"])
@@ -40,6 +43,23 @@ def list_connections(
     _ensure_private_connections_allowed(user)
     service = S3ConnectionsService(db)
     return service.list_owned_private(user.id)
+
+
+@router.post("/validate-credentials", response_model=S3ConnectionCredentialsValidationResult)
+def validate_connection_credentials(
+    payload: S3ConnectionCredentialsValidationRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_account_user),
+):
+    _ensure_private_connections_allowed(user)
+    service = S3ConnectionValidationService(db)
+    try:
+        return service.validate_credentials(payload)
+    except KeyError as exc:
+        detail = exc.args[0] if exc.args else "Storage endpoint not found"
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post("", response_model=S3Connection, status_code=status.HTTP_201_CREATED)

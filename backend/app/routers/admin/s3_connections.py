@@ -12,7 +12,13 @@ from sqlalchemy.orm import Session, aliased
 
 from app.core.database import get_db
 from app.db import S3Connection, StorageEndpoint, User, UserS3Connection
-from app.models.s3_connection import S3ConnectionCreate, S3ConnectionUpdate, S3ConnectionCredentialsUpdate
+from app.models.s3_connection import (
+    S3ConnectionCreate,
+    S3ConnectionCredentialsUpdate,
+    S3ConnectionCredentialsValidationRequest,
+    S3ConnectionCredentialsValidationResult,
+    S3ConnectionUpdate,
+)
 from app.models.s3_connection_admin import (
     PaginatedS3ConnectionsResponse,
     S3ConnectionAdminItem,
@@ -23,6 +29,7 @@ from app.models.s3_connection_admin import (
 from app.routers.dependencies import get_audit_logger, get_current_super_admin
 from app.services.audit_service import AuditService
 from app.services.s3_connection_capabilities_service import refresh_connection_detected_capabilities
+from app.services.s3_connection_validation_service import S3ConnectionValidationService
 from app.utils.s3_connection_capabilities import (
     parse_s3_connection_capabilities,
     s3_connection_can_manage_iam,
@@ -240,6 +247,22 @@ def list_s3_connections_minimal(
         )
         for row in rows
     ]
+
+
+@router.post("/validate-credentials", response_model=S3ConnectionCredentialsValidationResult)
+def validate_s3_connection_credentials(
+    payload: S3ConnectionCredentialsValidationRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_super_admin),
+) -> S3ConnectionCredentialsValidationResult:
+    service = S3ConnectionValidationService(db)
+    try:
+        return service.validate_credentials(payload)
+    except KeyError as exc:
+        detail = exc.args[0] if exc.args else "Storage endpoint not found"
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post("", response_model=S3ConnectionAdminItem, status_code=status.HTTP_201_CREATED)

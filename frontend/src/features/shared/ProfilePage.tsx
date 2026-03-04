@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
@@ -20,9 +20,11 @@ import {
   listConnections,
   rotateConnectionCredentials,
   updateConnection,
+  validateConnectionCredentials,
 } from "../../api/connections";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
 import {
   WORKSPACE_STORAGE_KEY,
   isAdminLikeRole,
@@ -187,6 +189,51 @@ export default function ProfilePage({
     !isS3Session &&
     (isAdminLikeRole(storedUser?.role) ||
       (storedUser?.role === "ui_user" && generalSettings.allow_user_private_connections));
+
+  const createConnectionValidationPayload = useMemo(() => {
+    const accessKeyId = createConnectionForm.access_key_id.trim();
+    const secretAccessKey = createConnectionForm.secret_access_key.trim();
+    if (!accessKeyId || !secretAccessKey) return null;
+    if (createConnectionEndpointMode === "preset") {
+      if (!createConnectionEndpointId) return null;
+      return {
+        storage_endpoint_id: Number(createConnectionEndpointId),
+        access_key_id: accessKeyId,
+        secret_access_key: secretAccessKey,
+      };
+    }
+    const endpointUrl = createConnectionForm.endpoint_url.trim();
+    if (!endpointUrl) return null;
+    return {
+      endpoint_url: endpointUrl,
+      region: createConnectionForm.region.trim() || null,
+      access_key_id: accessKeyId,
+      secret_access_key: secretAccessKey,
+      force_path_style: createConnectionForm.force_path_style,
+      verify_tls: createConnectionForm.verify_tls,
+    };
+  }, [
+    createConnectionEndpointId,
+    createConnectionEndpointMode,
+    createConnectionForm.access_key_id,
+    createConnectionForm.endpoint_url,
+    createConnectionForm.force_path_style,
+    createConnectionForm.region,
+    createConnectionForm.secret_access_key,
+    createConnectionForm.verify_tls,
+  ]);
+
+  const validatePrivateCreateCredentials = useCallback(
+    (payload: S3CredentialsValidationPayload) => validateConnectionCredentials(payload),
+    []
+  );
+
+  const createConnectionValidation = useLiveS3CredentialsValidation({
+    enabled: showCreateConnectionModal && canManagePrivateConnections,
+    payload: createConnectionValidationPayload,
+    validate: validatePrivateCreateCredentials,
+    debounceMs: 450,
+  });
 
   const sortedConnections = useMemo(
     () =>
@@ -1264,6 +1311,26 @@ export default function ProfilePage({
                   placeholder="********"
                 />
               </label>
+              <div className="sm:col-span-2">
+                {createConnectionValidation.status === "loading" && (
+                  <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 ui-caption text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-100">
+                    Validating credentials...
+                  </p>
+                )}
+                {createConnectionValidation.status === "done" && createConnectionValidation.result && (
+                  <p
+                    className={`rounded-md px-3 py-2 ui-caption ${
+                      createConnectionValidation.result.severity === "success"
+                        ? "border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200"
+                        : createConnectionValidation.result.severity === "warning"
+                          ? "border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100"
+                          : "border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200"
+                    }`}
+                  >
+                    {createConnectionValidation.result.message}
+                  </p>
+                )}
+              </div>
               <div className="sm:col-span-2 space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace access</p>
                 <div className="flex flex-wrap items-center gap-4">

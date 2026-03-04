@@ -68,6 +68,23 @@ export type RotateConnectionCredentialsPayload = {
   secret_access_key: string;
 };
 
+export type ValidateConnectionCredentialsPayload = {
+  storage_endpoint_id?: number | null;
+  endpoint_url?: string | null;
+  region?: string | null;
+  access_key_id: string;
+  secret_access_key: string;
+  force_path_style?: boolean;
+  verify_tls?: boolean;
+};
+
+export type ConnectionCredentialsValidationResult = {
+  ok: boolean;
+  severity: "success" | "warning" | "error";
+  code?: string | null;
+  message: string;
+};
+
 export async function listConnections(): Promise<S3Connection[]> {
   const { data } = await client.get<S3Connection[]>("/connections");
   return data;
@@ -93,4 +110,11 @@ export async function rotateConnectionCredentials(
 
 export async function deleteConnection(connectionId: number): Promise<void> {
   await client.delete(`/connections/${connectionId}`);
+}
+
+export async function validateConnectionCredentials(
+  payload: ValidateConnectionCredentialsPayload
+): Promise<ConnectionCredentialsValidationResult> {
+  const { data } = await client.post<ConnectionCredentialsValidationResult>("/connections/validate-credentials", payload);
+  return data;
 }

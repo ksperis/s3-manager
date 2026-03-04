@@ -91,6 +91,23 @@ export type RotateS3ConnectionCredentialsPayload = {
   secret_access_key: string;
 };
 
+export type ValidateS3ConnectionCredentialsPayload = {
+  storage_endpoint_id?: number | null;
+  endpoint_url?: string | null;
+  region?: string | null;
+  access_key_id: string;
+  secret_access_key: string;
+  force_path_style?: boolean;
+  verify_tls?: boolean;
+};
+
+export type S3ConnectionCredentialsValidationResult = {
+  ok: boolean;
+  severity: "success" | "warning" | "error";
+  code?: string | null;
+  message: string;
+};
+
 export type S3ConnectionUserLink = {
   user_id: number;
   email?: string | null;
@@ -159,4 +176,14 @@ export async function updateS3ConnectionUser(
 
 export async function removeS3ConnectionUser(connectionId: number, userId: number): Promise<void> {
   await client.delete(`/admin/s3-connections/${connectionId}/users/${userId}`);
+}
+
+export async function validateAdminS3ConnectionCredentials(
+  payload: ValidateS3ConnectionCredentialsPayload
+): Promise<S3ConnectionCredentialsValidationResult> {
+  const { data } = await client.post<S3ConnectionCredentialsValidationResult>(
+    "/admin/s3-connections/validate-credentials",
+    payload
+  );
+  return data;
 }

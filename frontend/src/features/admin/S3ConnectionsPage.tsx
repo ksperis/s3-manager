@@ -18,9 +18,11 @@ import {
   listAdminS3Connections,
   rotateAdminS3ConnectionCredentials,
   updateAdminS3Connection,
+  validateAdminS3ConnectionCredentials,
 } from "../../api/s3ConnectionsAdmin";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
+import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 
 const providerHintOptions = [
   { value: "", label: "(auto)" },
@@ -188,6 +190,51 @@ export default function S3ConnectionsPage() {
 
   const createHasPreset = Boolean(createEndpointPresetId);
   const editHasPreset = Boolean(editEndpointPresetId);
+
+  const createValidationPayload = useMemo(() => {
+    const accessKeyId = createForm.access_key_id.trim();
+    const secretAccessKey = createForm.secret_access_key.trim();
+    if (!accessKeyId || !secretAccessKey) return null;
+    if (createHasPreset) {
+      if (!createEndpointPresetId) return null;
+      return {
+        storage_endpoint_id: Number(createEndpointPresetId),
+        access_key_id: accessKeyId,
+        secret_access_key: secretAccessKey,
+      };
+    }
+    const endpointUrl = createForm.endpoint_url.trim();
+    if (!endpointUrl) return null;
+    return {
+      endpoint_url: endpointUrl,
+      region: createForm.region.trim() || null,
+      access_key_id: accessKeyId,
+      secret_access_key: secretAccessKey,
+      force_path_style: createForm.force_path_style,
+      verify_tls: createForm.verify_tls,
+    };
+  }, [
+    createEndpointPresetId,
+    createForm.access_key_id,
+    createForm.endpoint_url,
+    createForm.force_path_style,
+    createForm.region,
+    createForm.secret_access_key,
+    createForm.verify_tls,
+    createHasPreset,
+  ]);
+
+  const validateCreateCredentials = useCallback(
+    (payload: S3CredentialsValidationPayload) => validateAdminS3ConnectionCredentials(payload),
+    []
+  );
+
+  const createCredentialsValidation = useLiveS3CredentialsValidation({
+    enabled: showCreateModal,
+    payload: createValidationPayload,
+    validate: validateCreateCredentials,
+    debounceMs: 450,
+  });
 
   const defaultEndpoint = storageEndpoints.find((ep) => ep.is_default);
   const endpointNameById = useMemo(() => {
@@ -715,6 +762,24 @@ export default function S3ConnectionsPage() {
                 />
               </div>
             </div>
+            {createCredentialsValidation.status === "loading" && (
+              <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 ui-caption text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-100">
+                Validating credentials...
+              </div>
+            )}
+            {createCredentialsValidation.status === "done" && createCredentialsValidation.result && (
+              <div
+                className={`rounded-md px-3 py-2 ui-caption ${
+                  createCredentialsValidation.result.severity === "success"
+                    ? "border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200"
+                    : createCredentialsValidation.result.severity === "warning"
+                      ? "border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100"
+                      : "border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200"
+                }`}
+              >
+                {createCredentialsValidation.result.message}
+              </div>
+            )}
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"

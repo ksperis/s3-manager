@@ -80,5 +80,22 @@ class S3ConnectionCredentialsUpdate(BaseModel):
     secret_access_key: str
 
 
+class S3ConnectionCredentialsValidationRequest(BaseModel):
+    storage_endpoint_id: Optional[int] = None
+    endpoint_url: Optional[str] = None
+    region: Optional[str] = None
+    access_key_id: str
+    secret_access_key: str
+    force_path_style: bool = False
+    verify_tls: bool = True
+
+
+class S3ConnectionCredentialsValidationResult(BaseModel):
+    ok: bool
+    severity: Literal["success", "warning", "error"]
+    code: Optional[str] = None
+    message: str
+
+
 class PaginatedS3ConnectionsResponse(PaginatedResponse):
     items: list[S3Connection]
