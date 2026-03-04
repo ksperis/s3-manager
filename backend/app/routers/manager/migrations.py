@@ -2,10 +2,15 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+from time import monotonic
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
@@ -24,6 +29,50 @@ from app.services.audit_service import AuditService
 from app.services.bucket_migration_service import BucketMigrationService, get_bucket_migration_worker
 
 router = APIRouter(prefix="/manager/migrations", tags=["manager-migrations"])
+logger = logging.getLogger(__name__)
+
+_MIGRATION_STREAM_POLL_INTERVAL_SECONDS = 1.0
+_MIGRATION_STREAM_KEEPALIVE_INTERVAL_SECONDS = 15.0
+
+
+def _format_sse_event(event: str, payload: dict[str, object], *, event_id: Optional[int] = None) -> str:
+    lines: list[str] = []
+    if event_id is not None:
+        lines.append(f"id: {event_id}")
+    lines.append(f"event: {event}")
+    payload_json = json.dumps(payload, separators=(",", ":"), ensure_ascii=False, default=str)
+    for entry in payload_json.splitlines() or [payload_json]:
+        lines.append(f"data: {entry}")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _is_final_migration_status(status_value: str) -> bool:
+    return status_value in {"completed", "completed_with_errors", "failed", "canceled", "rolled_back"}
+
+
+def _compute_migration_stream_signature(
+    db: Session,
+    migration_id: int,
+    *,
+    migration: Optional[BucketMigration] = None,
+) -> tuple[str, str, int]:
+    max_item_updated_at = (
+        db.query(func.max(BucketMigrationItem.updated_at))
+        .filter(BucketMigrationItem.migration_id == migration_id)
+        .scalar()
+    )
+    max_event_id = (
+        db.query(func.max(BucketMigrationEvent.id))
+        .filter(BucketMigrationEvent.migration_id == migration_id)
+        .scalar()
+    )
+    migration_updated_at = migration.updated_at if migration is not None else None
+    return (
+        migration_updated_at.isoformat() if migration_updated_at else "",
+        max_item_updated_at.isoformat() if max_item_updated_at else "",
+        int(max_event_id or 0),
+    )
 
 
 def _load_json(value: Optional[str]) -> Optional[dict]:
@@ -150,6 +199,95 @@ def get_migration(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _migration_to_detail(migration, events_limit)
+
+
+@router.get("/{migration_id}/stream")
+async def stream_migration(
+    migration_id: int,
+    request: Request,
+    events_limit: int = Query(default=200, ge=1, le=1000),
+    _: User = Depends(get_current_bucket_migration_user),
+) -> StreamingResponse:
+    with SessionLocal() as db:
+        service = BucketMigrationService(db)
+        try:
+            service.get_migration(migration_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    async def event_generator():
+        stream_event_id = 0
+        last_signature: Optional[tuple[str, str, int]] = None
+        last_keepalive_at = monotonic()
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            try:
+                with SessionLocal() as db:
+                    service = BucketMigrationService(db)
+                    migration = service.get_migration(migration_id)
+                    signature = _compute_migration_stream_signature(db, migration_id, migration=migration)
+                    if signature != last_signature:
+                        detail = _migration_to_detail(migration, events_limit)
+                        stream_event_id += 1
+                        yield _format_sse_event(
+                            "snapshot",
+                            detail.model_dump(mode="json"),
+                            event_id=stream_event_id,
+                        )
+                        last_signature = signature
+                        last_keepalive_at = monotonic()
+
+                        if _is_final_migration_status(detail.status):
+                            stream_event_id += 1
+                            yield _format_sse_event(
+                                "done",
+                                {
+                                    "migration_id": migration_id,
+                                    "status": detail.status,
+                                    "reason": "final_state",
+                                },
+                                event_id=stream_event_id,
+                            )
+                            break
+            except ValueError:
+                stream_event_id += 1
+                yield _format_sse_event(
+                    "error",
+                    {"detail": "Migration not found"},
+                    event_id=stream_event_id,
+                )
+                break
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # pragma: no cover
+                logger.exception("Bucket migration stream failed for migration %s", migration_id)
+                stream_event_id += 1
+                yield _format_sse_event(
+                    "error",
+                    {"detail": str(exc) or "Bucket migration stream failed"},
+                    event_id=stream_event_id,
+                )
+                break
+
+            now = monotonic()
+            if (now - last_keepalive_at) >= _MIGRATION_STREAM_KEEPALIVE_INTERVAL_SECONDS:
+                yield ": keepalive\n\n"
+                last_keepalive_at = now
+
+            await asyncio.sleep(_MIGRATION_STREAM_POLL_INTERVAL_SECONDS)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.delete("/{migration_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)

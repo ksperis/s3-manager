@@ -3,7 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import axios from "axios";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { listBuckets, type Bucket } from "../../api/buckets";
 import { listExecutionContexts, type ExecutionContext } from "../../api/executionContexts";
@@ -23,6 +23,7 @@ import {
   runManagerMigrationPrecheck,
   startManagerMigration,
   stopManagerMigration,
+  streamManagerMigration,
   updateManagerMigration,
   type BucketMigrationDetail,
   type BucketMigrationPrecheckStatus,
@@ -401,6 +402,7 @@ export default function ManagerMigrationsPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+  const detailStreamAbortRef = useRef<AbortController | null>(null);
 
   const sourceContext = useMemo(
     () => contexts.find((entry) => entry.id === sourceContextId) ?? null,
@@ -530,16 +532,47 @@ export default function ManagerMigrationsPage() {
 
   useEffect(() => {
     if (!selectedMigrationId) {
+      detailStreamAbortRef.current?.abort();
+      detailStreamAbortRef.current = null;
       setMigrationDetail(null);
+      setDetailLoading(false);
       return;
     }
+
     let canceled = false;
+    let fallbackInterval: number | null = null;
+
+    const applyDetail = (detail: BucketMigrationDetail) => {
+      if (canceled) return;
+      setMigrationDetail(detail);
+      setMigrations((current) => current.map((entry) => (entry.id === detail.id ? { ...entry, ...detail } : entry)));
+    };
+
+    const runFallbackPolling = () => {
+      if (fallbackInterval != null) return;
+      void getManagerMigration(selectedMigrationId)
+        .then((detail) => {
+          if (!canceled) applyDetail(detail);
+        })
+        .catch(() => {});
+      fallbackInterval = window.setInterval(() => {
+        getManagerMigration(selectedMigrationId)
+          .then((detail) => {
+            if (!canceled) applyDetail(detail);
+          })
+          .catch(() => {});
+      }, 3000);
+    };
+
+    detailStreamAbortRef.current?.abort();
+    const streamAbortController = new AbortController();
+    detailStreamAbortRef.current = streamAbortController;
+
     setDetailLoading(true);
     setDetailError(null);
     getManagerMigration(selectedMigrationId)
       .then((detail) => {
-        if (canceled) return;
-        setMigrationDetail(detail);
+        applyDetail(detail);
       })
       .catch((error) => {
         if (canceled) return;
@@ -549,17 +582,27 @@ export default function ManagerMigrationsPage() {
         if (!canceled) setDetailLoading(false);
       });
 
-    const interval = window.setInterval(() => {
-      getManagerMigration(selectedMigrationId)
-        .then((detail) => {
-          if (!canceled) setMigrationDetail(detail);
-        })
-        .catch(() => {});
-    }, 3000);
+    void streamManagerMigration(selectedMigrationId, {
+      signal: streamAbortController.signal,
+      onSnapshot: (detail) => {
+        if (canceled) return;
+        setDetailLoading(false);
+        applyDetail(detail);
+      },
+    }).catch(() => {
+      if (canceled || streamAbortController.signal.aborted) return;
+      runFallbackPolling();
+    });
 
     return () => {
       canceled = true;
-      window.clearInterval(interval);
+      streamAbortController.abort();
+      if (detailStreamAbortRef.current === streamAbortController) {
+        detailStreamAbortRef.current = null;
+      }
+      if (fallbackInterval != null) {
+        window.clearInterval(fallbackInterval);
+      }
     };
   }, [selectedMigrationId]);
 

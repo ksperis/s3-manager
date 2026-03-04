@@ -131,6 +131,32 @@ export type BucketMigrationActionResponse = {
   message: string;
 };
 
+export type ManagerMigrationStreamDone = {
+  migration_id: number;
+  status: BucketMigrationStatus;
+  reason: string;
+};
+
+type ManagerMigrationStreamOptions = {
+  eventsLimit?: number;
+  signal?: AbortSignal;
+  onSnapshot?: (detail: BucketMigrationDetail) => void;
+  onDone?: (event: ManagerMigrationStreamDone) => void;
+};
+
+function resolveApiBaseUrl(): string {
+  const base = typeof client.defaults.baseURL === "string" && client.defaults.baseURL.trim() ? client.defaults.baseURL : "/api";
+  return base.endsWith("/") ? base.slice(0, -1) : base;
+}
+
+function isCancelledError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  if (typeof err !== "object" || err === null) return false;
+  const name = "name" in err ? String((err as { name?: unknown }).name ?? "") : "";
+  const code = "code" in err ? String((err as { code?: unknown }).code ?? "") : "";
+  return name === "CanceledError" || code === "ERR_CANCELED";
+}
+
 export async function listManagerMigrations(limit = 100, contextId?: string | null): Promise<BucketMigrationView[]> {
   const params: { limit: number; context_id?: string } = { limit };
   if (contextId && contextId.trim()) {
@@ -145,6 +171,136 @@ export async function getManagerMigration(migrationId: number, eventsLimit = 200
     params: { events_limit: eventsLimit },
   });
   return data;
+}
+
+export async function streamManagerMigration(
+  migrationId: number,
+  options?: ManagerMigrationStreamOptions
+): Promise<BucketMigrationDetail> {
+  const baseUrl = resolveApiBaseUrl();
+  const query = new URLSearchParams();
+  query.set("events_limit", String(Math.max(1, Math.min(1000, Math.floor(options?.eventsLimit ?? 200)))));
+  const url = `${baseUrl}/manager/migrations/${migrationId}/stream?${query.toString()}`;
+
+  const buildHeaders = () => {
+    const headers = new Headers({ Accept: "text/event-stream" });
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    return headers;
+  };
+
+  let response = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(),
+    credentials: "include",
+    signal: options?.signal,
+  });
+
+  if (response.status === 401 || response.status === 419) {
+    try {
+      const refresh = await client.post<{ access_token: string; token_type: string }>(
+        "/auth/refresh",
+        undefined,
+        { signal: options?.signal }
+      );
+      if (typeof window !== "undefined") {
+        localStorage.setItem("token", refresh.data.access_token);
+      }
+      response = await fetch(url, {
+        method: "GET",
+        headers: buildHeaders(),
+        credentials: "include",
+        signal: options?.signal,
+      });
+    } catch (err) {
+      if (isCancelledError(err)) throw err;
+    }
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Migration stream failed with status ${response.status}`);
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("text/event-stream")) {
+    throw new Error(`Unexpected stream response content type: ${contentType}`);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is unavailable");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let currentEvent = "message";
+  let currentDataLines: string[] = [];
+  let latestSnapshot: BucketMigrationDetail | null = null;
+
+  const handleEvent = () => {
+    if (currentDataLines.length === 0) {
+      currentEvent = "message";
+      return;
+    }
+    const payloadText = currentDataLines.join("\n");
+    currentDataLines = [];
+    const payload = payloadText ? (JSON.parse(payloadText) as Record<string, unknown>) : {};
+    if (currentEvent === "snapshot") {
+      const detail = payload as unknown as BucketMigrationDetail;
+      latestSnapshot = detail;
+      options?.onSnapshot?.(detail);
+    } else if (currentEvent === "done") {
+      options?.onDone?.(payload as unknown as ManagerMigrationStreamDone);
+    } else if (currentEvent === "error") {
+      const detail = typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail ?? payload);
+      throw new Error(detail || "Migration stream failed");
+    }
+    currentEvent = "message";
+  };
+
+  const processLine = (line: string) => {
+    if (line === "") {
+      handleEvent();
+      return;
+    }
+    if (line.startsWith(":")) {
+      return;
+    }
+    if (line.startsWith("event:")) {
+      currentEvent = line.slice(6).trim() || "message";
+      return;
+    }
+    if (line.startsWith("data:")) {
+      currentDataLines.push(line.slice(5).trimStart());
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    buffer = buffer.replace(/\r\n/g, "\n");
+    let newlineIndex = buffer.indexOf("\n");
+    while (newlineIndex >= 0) {
+      const line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 1);
+      processLine(line);
+      newlineIndex = buffer.indexOf("\n");
+    }
+    if (done) {
+      if (buffer.length > 0) {
+        processLine(buffer);
+      }
+      processLine("");
+      break;
+    }
+  }
+
+  if (!latestSnapshot) {
+    throw new Error("Migration stream ended without a snapshot payload");
+  }
+  return latestSnapshot;
 }
 
 export async function deleteManagerMigration(migrationId: number): Promise<void> {
