@@ -92,7 +92,12 @@ def _seed_migration(db_session, *, source_context_id: str, target_context_id: st
     return int(migration.id)
 
 
-def _override_migration_scope(*, user_id: int = 1, allowed_context_ids: set[str]):
+def _override_migration_scope(
+    *,
+    user_id: int = 1,
+    allowed_context_ids: set[str],
+    admin_account_context_ids: set[str] | None = None,
+):
     user = User(
         id=user_id,
         email=f"user-{user_id}@example.com",
@@ -102,7 +107,11 @@ def _override_migration_scope(*, user_id: int = 1, allowed_context_ids: set[str]
     )
 
     def _dep() -> BucketMigrationAccessScope:
-        return BucketMigrationAccessScope(user=user, allowed_context_ids=allowed_context_ids)
+        return BucketMigrationAccessScope(
+            user=user,
+            allowed_context_ids=allowed_context_ids,
+            admin_account_context_ids=admin_account_context_ids or set(),
+        )
 
     app.dependency_overrides[dependencies.get_current_bucket_migration_scope] = _dep
 
@@ -167,5 +176,35 @@ def test_manager_migration_update_rejects_context_out_of_scope(client, db_sessio
             },
         )
         assert response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(dependencies.get_current_bucket_migration_scope, None)
+
+
+def test_manager_migration_create_rejects_cross_account_when_one_account_not_admin(client):
+    _override_migration_scope(allowed_context_ids={"10", "20"}, admin_account_context_ids={"10"})
+    try:
+        response = client.post(
+            "/api/manager/migrations",
+            json={
+                "source_context_id": "10",
+                "target_context_id": "20",
+                "buckets": [{"source_bucket": "bucket-a"}],
+            },
+        )
+        assert response.status_code == 403
+        assert "admin access on both source and target account contexts" in response.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.pop(dependencies.get_current_bucket_migration_scope, None)
+
+
+def test_manager_migration_precheck_and_start_reject_cross_account_non_admin_scope(client, db_session):
+    migration_id = _seed_migration(db_session, source_context_id="10", target_context_id="20", status="draft")
+    _override_migration_scope(allowed_context_ids={"10", "20"}, admin_account_context_ids={"10"})
+    try:
+        precheck_response = client.post(f"/api/manager/migrations/{migration_id}/precheck")
+        assert precheck_response.status_code == 403
+
+        start_response = client.post(f"/api/manager/migrations/{migration_id}/start")
+        assert start_response.status_code == 403
     finally:
         app.dependency_overrides.pop(dependencies.get_current_bucket_migration_scope, None)

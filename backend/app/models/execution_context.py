@@ -16,6 +16,7 @@ class ExecutionContext(BaseModel):
     id: str
     display_name: str
     hidden: bool = False
+    manager_account_is_admin: Optional[bool] = None
     rgw_account_id: Optional[str] = None
     quota_max_size_gb: Optional[float] = None
     quota_max_objects: Optional[int] = None

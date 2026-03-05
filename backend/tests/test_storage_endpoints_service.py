@@ -2,10 +2,20 @@
 # Licensed under the Apache License, Version 2.0
 import json
 
-from app.db import S3Connection, StorageEndpoint, StorageProvider
+from app.db import (
+    EndpointHealthCheck,
+    EndpointHealthLatest,
+    EndpointHealthRollup,
+    EndpointHealthStatusSegment,
+    HealthCheckStatus,
+    S3Connection,
+    StorageEndpoint,
+    StorageProvider,
+)
 from app.models.storage_endpoint import StorageEndpointFeatureDetectionRequest, StorageEndpointUpdate
 from app.services.rgw_admin import RGWAdminError
 from app.services.storage_endpoints_service import StorageEndpointsService
+from app.utils.time import utcnow
 
 
 def _create_ceph_endpoint(db_session, name: str = "ceph-main") -> StorageEndpoint:
@@ -284,6 +294,78 @@ def test_delete_endpoint_blocks_when_references_exist(db_session):
         assert False, "delete_endpoint should have raised when references exist"
     except ValueError as exc:
         assert "Unable to delete this endpoint" in str(exc)
+
+
+def test_delete_endpoint_cascades_healthcheck_records(db_session):
+    endpoint = _create_ceph_endpoint(db_session, name="ceph-delete-health-cascade")
+    now = utcnow()
+    db_session.add_all(
+        [
+            EndpointHealthCheck(
+                storage_endpoint_id=endpoint.id,
+                checked_at=now,
+                http_status=200,
+                latency_ms=12,
+                check_mode="http",
+                status=HealthCheckStatus.UP.value,
+            ),
+            EndpointHealthLatest(
+                storage_endpoint_id=endpoint.id,
+                checked_at=now,
+                check_mode="http",
+                check_type="availability",
+                scope="endpoint",
+                status=HealthCheckStatus.UP.value,
+            ),
+            EndpointHealthStatusSegment(
+                storage_endpoint_id=endpoint.id,
+                check_mode="http",
+                check_type="availability",
+                scope="endpoint",
+                status=HealthCheckStatus.UP.value,
+                started_at=now,
+            ),
+            EndpointHealthRollup(
+                storage_endpoint_id=endpoint.id,
+                check_mode="http",
+                check_type="availability",
+                scope="endpoint",
+                resolution_seconds=300,
+                bucket_start=now,
+                up_count=1,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    service = StorageEndpointsService(db_session)
+    service.delete_endpoint(endpoint.id)
+
+    assert db_session.query(StorageEndpoint).filter(StorageEndpoint.id == endpoint.id).count() == 0
+    assert (
+        db_session.query(EndpointHealthCheck)
+        .filter(EndpointHealthCheck.storage_endpoint_id == endpoint.id)
+        .count()
+        == 0
+    )
+    assert (
+        db_session.query(EndpointHealthLatest)
+        .filter(EndpointHealthLatest.storage_endpoint_id == endpoint.id)
+        .count()
+        == 0
+    )
+    assert (
+        db_session.query(EndpointHealthStatusSegment)
+        .filter(EndpointHealthStatusSegment.storage_endpoint_id == endpoint.id)
+        .count()
+        == 0
+    )
+    assert (
+        db_session.query(EndpointHealthRollup)
+        .filter(EndpointHealthRollup.storage_endpoint_id == endpoint.id)
+        .count()
+        == 0
+    )
 
 
 def test_detect_features_reuses_stored_secrets_in_edit_mode(db_session, monkeypatch):

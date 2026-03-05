@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 from app.utils.time import utcnow
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from typing import Optional, Union
 
@@ -69,6 +69,7 @@ class AccountAccess:
 class BucketMigrationAccessScope:
     user: User
     allowed_context_ids: set[str]
+    admin_account_context_ids: set[str] = field(default_factory=set)
 
 
 def _resolve_actor(db: Session, token: str) -> ManagerActor:
@@ -838,6 +839,15 @@ def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[
     return allowed_context_ids
 
 
+def _build_bucket_migration_admin_account_context_ids(db: Session, user: User) -> set[str]:
+    admin_account_context_ids: set[str] = set()
+    account_links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
+    for link in account_links:
+        if bool(link.account_admin or link.is_root):
+            admin_account_context_ids.add(str(link.account_id))
+    return admin_account_context_ids
+
+
 def get_current_bucket_migration_user(user: User = Depends(get_current_user)) -> User:
     _ensure_bucket_migration_allowed(user)
     return user
@@ -849,7 +859,12 @@ def get_current_bucket_migration_scope(
 ) -> BucketMigrationAccessScope:
     _ensure_bucket_migration_allowed(user)
     allowed_context_ids = _build_bucket_migration_allowed_context_ids(db, user)
-    return BucketMigrationAccessScope(user=user, allowed_context_ids=allowed_context_ids)
+    admin_account_context_ids = _build_bucket_migration_admin_account_context_ids(db, user)
+    return BucketMigrationAccessScope(
+        user=user,
+        allowed_context_ids=allowed_context_ids,
+        admin_account_context_ids=admin_account_context_ids,
+    )
 
 
 def require_bucket_compare_enabled() -> None:

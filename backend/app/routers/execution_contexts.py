@@ -31,7 +31,7 @@ def _connection_can_manage_iam(connection: S3Connection) -> bool:
     return s3_connection_can_manage_iam(getattr(connection, "capabilities_json", None))
 
 
-def _build_account_context(account: S3Account) -> ExecutionContext:
+def _build_account_context(account: S3Account, *, manager_account_is_admin: Optional[bool] = None) -> ExecutionContext:
     endpoint = account.storage_endpoint
     endpoint_caps = (
         features_to_capabilities(normalize_features_config(endpoint.provider, endpoint.features_config))
@@ -43,6 +43,7 @@ def _build_account_context(account: S3Account) -> ExecutionContext:
         kind="account",
         id=str(account.id),
         display_name=account.name,
+        manager_account_is_admin=manager_account_is_admin,
         rgw_account_id=account.rgw_account_id,
         endpoint_id=endpoint.id if endpoint else None,
         endpoint_name=endpoint.name if endpoint else None,
@@ -193,7 +194,12 @@ def list_execution_contexts(
                 continue
             account = account_by_id.get(link.account_id)
             if account is not None:
-                results.append(_build_account_context(account))
+                results.append(
+                    _build_account_context(
+                        account,
+                        manager_account_is_admin=bool(link.account_admin or link.is_root),
+                    )
+                )
     elif workspace is None:
         for account in accounts:
             results.append(_build_account_context(account))

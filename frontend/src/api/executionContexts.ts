@@ -17,6 +17,7 @@ export type ExecutionContext = {
   id: string;
   display_name: string;
   hidden?: boolean;
+  manager_account_is_admin?: boolean | null;
   rgw_account_id?: string | null;
   quota_max_size_gb?: number | null;
   quota_max_objects?: number | null;

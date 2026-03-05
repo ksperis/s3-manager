@@ -27,6 +27,7 @@ export type BucketMigrationItemStatus =
   | "paused"
   | "skipped"
   | "completed"
+  | "rolled_back"
   | "failed"
   | "canceled";
 

@@ -757,14 +757,6 @@ class StorageEndpointsService:
         linked_accounts = self.db.query(S3Account).filter(S3Account.storage_endpoint_id == endpoint.id).count()
         linked_users = self.db.query(S3User).filter(S3User.storage_endpoint_id == endpoint.id).count()
         linked_connections = self.db.query(S3Connection).filter(S3Connection.storage_endpoint_id == endpoint.id).count()
-        health_checks = self.db.query(EndpointHealthCheck).filter(EndpointHealthCheck.storage_endpoint_id == endpoint.id).count()
-        health_latest = self.db.query(EndpointHealthLatest).filter(EndpointHealthLatest.storage_endpoint_id == endpoint.id).count()
-        health_segments = (
-            self.db.query(EndpointHealthStatusSegment)
-            .filter(EndpointHealthStatusSegment.storage_endpoint_id == endpoint.id)
-            .count()
-        )
-        health_rollups = self.db.query(EndpointHealthRollup).filter(EndpointHealthRollup.storage_endpoint_id == endpoint.id).count()
         billing_usage = self.db.query(BillingUsageDaily).filter(BillingUsageDaily.storage_endpoint_id == endpoint.id).count()
         billing_storage = self.db.query(BillingStorageDaily).filter(BillingStorageDaily.storage_endpoint_id == endpoint.id).count()
         billing_rate_cards = self.db.query(BillingRateCard).filter(BillingRateCard.storage_endpoint_id == endpoint.id).count()
@@ -775,10 +767,6 @@ class StorageEndpointsService:
                 linked_accounts,
                 linked_users,
                 linked_connections,
-                health_checks,
-                health_latest,
-                health_segments,
-                health_rollups,
                 billing_usage,
                 billing_storage,
                 billing_rate_cards,
@@ -789,9 +777,21 @@ class StorageEndpointsService:
             raise ValueError(
                 "Unable to delete this endpoint: "
                 f"accounts={linked_accounts}, users={linked_users}, connections={linked_connections}, "
-                f"health_checks={health_checks + health_latest + health_segments + health_rollups}, "
                 f"billing={billing_usage + billing_storage + billing_rate_cards + billing_assignments}."
             )
+        # Endpoint health telemetry is endpoint-scoped and must be removed with the endpoint.
+        self.db.query(EndpointHealthCheck).filter(EndpointHealthCheck.storage_endpoint_id == endpoint.id).delete(
+            synchronize_session=False
+        )
+        self.db.query(EndpointHealthLatest).filter(EndpointHealthLatest.storage_endpoint_id == endpoint.id).delete(
+            synchronize_session=False
+        )
+        self.db.query(EndpointHealthStatusSegment).filter(
+            EndpointHealthStatusSegment.storage_endpoint_id == endpoint.id
+        ).delete(synchronize_session=False)
+        self.db.query(EndpointHealthRollup).filter(EndpointHealthRollup.storage_endpoint_id == endpoint.id).delete(
+            synchronize_session=False
+        )
         self.db.delete(endpoint)
         self.db.commit()
 

@@ -32,6 +32,7 @@ BucketMigrationItemStatus = Literal[
     "paused",
     "skipped",
     "completed",
+    "rolled_back",
     "failed",
     "canceled",
 ]

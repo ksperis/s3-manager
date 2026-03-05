@@ -199,14 +199,27 @@ def _validate_webhook_target_url(webhook_url: str) -> None:
 
 
 class BucketMigrationService:
-    def __init__(self, db: Session, *, authorized_context_ids: Optional[set[str]] = None) -> None:
+    def __init__(
+        self,
+        db: Session,
+        *,
+        authorized_context_ids: Optional[set[str]] = None,
+        admin_account_context_ids: Optional[set[str]] = None,
+    ) -> None:
         self.db = db
         self._buckets = BucketsService()
         self._authorized_context_ids: Optional[set[str]]
+        self._admin_account_context_ids: Optional[set[str]]
         if authorized_context_ids is None:
             self._authorized_context_ids = None
         else:
             self._authorized_context_ids = {str(value or "").strip() for value in authorized_context_ids if str(value or "").strip()}
+        if admin_account_context_ids is None:
+            self._admin_account_context_ids = None
+        else:
+            self._admin_account_context_ids = {
+                str(value or "").strip() for value in admin_account_context_ids if str(value or "").strip()
+            }
 
     def _commit(self) -> None:
         self.db.commit()
@@ -220,6 +233,25 @@ class BucketMigrationService:
         if self._is_context_authorized(context_id):
             return
         raise PermissionError("Not authorized for this context")
+
+    def _is_account_context_id(self, context_id: str) -> bool:
+        return str(context_id or "").strip().isdigit()
+
+    def _assert_cross_account_admin_contexts(self, source_context_id: str, target_context_id: str) -> None:
+        if self._admin_account_context_ids is None:
+            return
+
+        source_value = str(source_context_id or "").strip()
+        target_value = str(target_context_id or "").strip()
+        if source_value == target_value:
+            return
+        if not self._is_account_context_id(source_value) or not self._is_account_context_id(target_value):
+            return
+        if source_value in self._admin_account_context_ids and target_value in self._admin_account_context_ids:
+            return
+        raise PermissionError(
+            "Cross-account migrations require admin access on both source and target account contexts"
+        )
 
     def _validate_configured_webhook_url(self, webhook_url: str) -> None:
         try:
@@ -275,6 +307,7 @@ class BucketMigrationService:
         mappings = self._build_bucket_mappings(payload)
         self._assert_context_authorized_for_mutation(payload.source_context_id)
         self._assert_context_authorized_for_mutation(payload.target_context_id)
+        self._assert_cross_account_admin_contexts(payload.source_context_id, payload.target_context_id)
 
         webhook_url = (payload.webhook_url or "").strip() or None
         if webhook_url:
@@ -379,6 +412,7 @@ class BucketMigrationService:
         mappings = self._build_bucket_mappings(payload)
         self._assert_context_authorized_for_mutation(payload.source_context_id)
         self._assert_context_authorized_for_mutation(payload.target_context_id)
+        self._assert_cross_account_admin_contexts(payload.source_context_id, payload.target_context_id)
 
         webhook_url = (payload.webhook_url or "").strip() or None
         if webhook_url:
@@ -575,6 +609,7 @@ class BucketMigrationService:
 
     def run_precheck(self, migration_id: int) -> BucketMigration:
         migration = self.get_migration(migration_id)
+        self._assert_cross_account_admin_contexts(migration.source_context_id, migration.target_context_id)
         if migration.status in {"running", "queued", "pause_requested", "cancel_requested"}:
             raise ValueError("Precheck cannot run while migration is active")
 
@@ -805,6 +840,7 @@ class BucketMigrationService:
 
     def start_migration(self, migration_id: int) -> BucketMigration:
         migration = self.get_migration(migration_id)
+        self._assert_cross_account_admin_contexts(migration.source_context_id, migration.target_context_id)
         if migration.status not in {"draft", "paused"}:
             raise ValueError("Migration cannot be started from current status")
         if migration.precheck_status != "passed":
@@ -1049,7 +1085,7 @@ class BucketMigrationService:
                 item_errors.append(f"{item.source_bucket}: {'; '.join(rollback_issues)}")
                 continue
 
-            item.status = "completed"
+            item.status = "rolled_back"
             item.step = "rolled_back"
             item.error_message = None
             item.finished_at = utcnow()
@@ -1233,7 +1269,7 @@ class BucketMigrationService:
                 self._commit()
                 return
 
-            if item.status in {"completed", "skipped", "failed", "canceled"}:
+            if item.status in {"completed", "rolled_back", "skipped", "failed", "canceled"}:
                 continue
             if migration.mode == "pre_sync" and migration.status == "awaiting_cutover":
                 if worker_id and migration.worker_lease_owner == worker_id:
@@ -3421,7 +3457,7 @@ class BucketMigrationService:
             )
             return
 
-        item.status = "completed"
+        item.status = "rolled_back"
         item.step = "rolled_back"
         item.error_message = None
         item.finished_at = utcnow()
@@ -3877,7 +3913,7 @@ class BucketMigrationService:
         skipped = 0
         awaiting = 0
         for item in migration.items:
-            if item.status == "completed":
+            if item.status in {"completed", "rolled_back"}:
                 completed += 1
             elif item.status == "failed":
                 failed += 1

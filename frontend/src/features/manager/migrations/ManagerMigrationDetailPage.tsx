@@ -53,8 +53,9 @@ function priorityValue(item: BucketMigrationItemView): number {
     paused: 3,
     awaiting_cutover: 4,
     completed: 5,
-    skipped: 6,
-    canceled: 7,
+    rolled_back: 6,
+    skipped: 7,
+    canceled: 8,
   };
   return priority[item.status] ?? 99;
 }
@@ -76,30 +77,29 @@ export default function ManagerMigrationDetailPage() {
   const { migrationDetail, detailLoading, detailError, setDetailError, refresh } = useManagerMigrationDetail(migrationIdValue);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [showPrecheck, setShowPrecheck] = useState(false);
+  const [expandedPrecheckItems, setExpandedPrecheckItems] = useState<Record<number, boolean>>({});
   const [showEvents, setShowEvents] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
   const [bucketFocus, setBucketFocus] = useState<BucketFocus>("focus");
 
   const selectedMigrationSummary = useMemo(() => {
     if (!migrationDetail) return null;
-    const done = migrationDetail.completed_items + migrationDetail.failed_items + migrationDetail.skipped_items;
+    const completedItems = migrationDetail.items.filter((item) => item.status === "completed").length;
+    const rolledBackItems = migrationDetail.items.filter((item) => item.status === "rolled_back").length;
+    const failedItems = migrationDetail.items.filter((item) => item.status === "failed").length;
+    const skippedItems = migrationDetail.items.filter((item) => item.status === "skipped").length;
+    const done = completedItems + rolledBackItems + failedItems + skippedItems;
     const percent = computeProgress(done, migrationDetail.total_items);
     return {
       done,
       total: migrationDetail.total_items,
       percent,
-      activeItems:
-        migrationDetail.total_items - migrationDetail.completed_items - migrationDetail.failed_items - migrationDetail.skipped_items,
+      completedItems,
+      rolledBackItems,
+      failedItems,
+      skippedItems,
+      activeItems: Math.max(0, migrationDetail.total_items - done),
     };
-  }, [migrationDetail]);
-
-  const precheckSummary = useMemo(() => {
-    if (!migrationDetail?.precheck_report || typeof migrationDetail.precheck_report !== "object") return null;
-    const report = migrationDetail.precheck_report as Record<string, unknown>;
-    const errors = typeof report.errors === "number" ? report.errors : 0;
-    const warnings = typeof report.warnings === "number" ? report.warnings : 0;
-    return { errors, warnings };
   }, [migrationDetail]);
 
   const reviewItems = useMemo<ReviewItemSummary[]>(() => {
@@ -132,6 +132,7 @@ export default function ManagerMigrationDetailPage() {
       };
     });
   }, [migrationDetail]);
+  const reviewItemsById = useMemo(() => new Map(reviewItems.map((item) => [item.itemId, item])), [reviewItems]);
 
   const sortedItems = useMemo(() => {
     if (!migrationDetail) return [];
@@ -236,6 +237,13 @@ export default function ManagerMigrationDetailPage() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const togglePrecheckDetails = (itemId: number) => {
+    setExpandedPrecheckItems((current) => ({
+      ...current,
+      [itemId]: !current[itemId],
+    }));
   };
 
   const runDeleteMigration = async () => {
@@ -345,10 +353,11 @@ export default function ManagerMigrationDetailPage() {
                 <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                   <div className="h-full rounded-full bg-primary" style={{ width: `${selectedMigrationSummary.percent}%` }} />
                 </div>
-                <div className="mt-2 grid gap-2 sm:grid-cols-4">
-                  <p className="ui-caption text-slate-600 dark:text-slate-300">completed: {migrationDetail.completed_items}</p>
-                  <p className="ui-caption text-slate-600 dark:text-slate-300">failed: {migrationDetail.failed_items}</p>
-                  <p className="ui-caption text-slate-600 dark:text-slate-300">skipped: {migrationDetail.skipped_items}</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-5">
+                  <p className="ui-caption text-slate-600 dark:text-slate-300">completed: {selectedMigrationSummary.completedItems}</p>
+                  <p className="ui-caption text-slate-600 dark:text-slate-300">rolled_back: {selectedMigrationSummary.rolledBackItems}</p>
+                  <p className="ui-caption text-slate-600 dark:text-slate-300">failed: {selectedMigrationSummary.failedItems}</p>
+                  <p className="ui-caption text-slate-600 dark:text-slate-300">skipped: {selectedMigrationSummary.skippedItems}</p>
                   <p className="ui-caption text-slate-600 dark:text-slate-300">in progress: {selectedMigrationSummary.activeItems}</p>
                 </div>
               </div>
@@ -520,11 +529,19 @@ export default function ManagerMigrationDetailPage() {
               </div>
             </div>
 
-            <div className="max-h-[520px] space-y-2 overflow-auto">
+            <div className="space-y-2">
               {visibleItems.map((item) => {
                 const itemCopyProgress = computeItemCopyProgressPercent(item);
                 const showItemCopyProgress =
                   itemCopyProgress != null && ["pending", "running", "paused", "awaiting_cutover"].includes(item.status);
+                const reviewItem = reviewItemsById.get(item.id);
+                const precheckDetailsExpanded = Boolean(expandedPrecheckItems[item.id]);
+                const hasPrecheckDetails = Boolean(
+                  reviewItem &&
+                    (reviewItem.errors > 0 ||
+                      reviewItem.warnings > 0 ||
+                      reviewItem.targetExistsUnknown)
+                );
                 return (
                   <div key={item.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -547,6 +564,49 @@ export default function ManagerMigrationDetailPage() {
                         <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                           Copy progress: {item.objects_copied}/{item.source_count} ({itemCopyProgress}%)
                         </p>
+                      </div>
+                    )}
+                    {reviewItem && hasPrecheckDetails && (
+                      <div className="mt-2 rounded-md border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-700 dark:bg-slate-800/40">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span
+                            className={`ui-caption rounded-full border px-2 py-0.5 font-semibold ${
+                              reviewItem.errors > 0
+                                ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200"
+                                : reviewItem.warnings > 0
+                                  ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200"
+                                  : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200"
+                            }`}
+                          >
+                            Precheck: {reviewItem.errors} error(s), {reviewItem.warnings} warning(s)
+                          </span>
+                          {reviewItem.messages.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => togglePrecheckDetails(item.id)}
+                              className="ui-caption font-semibold text-slate-700 dark:text-slate-200"
+                            >
+                              {precheckDetailsExpanded ? "Hide precheck details" : "Show precheck details"}
+                            </button>
+                          )}
+                        </div>
+                        {reviewItem.targetExistsUnknown && (
+                          <p className="mt-2 ui-caption text-amber-700 dark:text-amber-300">
+                            Target bucket existence could not be fully verified during precheck.
+                          </p>
+                        )}
+                        {precheckDetailsExpanded && reviewItem.messages.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {reviewItem.messages.map((message, index) => (
+                              <span
+                                key={`${reviewItem.itemId}-${message.level}-${index}`}
+                                className={`rounded-md border px-2 py-1 text-[11px] ${precheckMessageClasses(message.level)}`}
+                              >
+                                {message.level.toUpperCase()}: {message.message}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     {item.error_message && <p className="mt-1 ui-caption text-rose-600 dark:text-rose-300">{item.error_message}</p>}
@@ -577,54 +637,6 @@ export default function ManagerMigrationDetailPage() {
                 <p className="ui-caption text-slate-500 dark:text-slate-400">No bucket items for current focus.</p>
               )}
             </div>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <button
-              type="button"
-              onClick={() => setShowPrecheck((current) => !current)}
-              className="ui-caption font-semibold text-slate-700 dark:text-slate-200"
-            >
-              {showPrecheck ? "Hide precheck details" : "Show precheck details"}
-            </button>
-            {showPrecheck && (
-              <div className="mt-3 space-y-3">
-                <p className="ui-caption text-slate-600 dark:text-slate-300">
-                  Precheck: {precheckSummary?.errors ?? 0} error(s), {precheckSummary?.warnings ?? 0} warning(s)
-                </p>
-                <div className="max-h-56 space-y-2 overflow-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  {reviewItems.map((reviewItem) => {
-                    return (
-                      <div key={reviewItem.itemId} className="rounded-md border border-slate-200 p-2 dark:border-slate-700">
-                        <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
-                          {reviewItem.sourceBucket} {"->"} {reviewItem.targetBucket}
-                        </p>
-                        <p className="ui-caption text-slate-600 dark:text-slate-300">
-                          Precheck result: {reviewItem.errors} error(s), {reviewItem.warnings} warning(s)
-                        </p>
-                        {reviewItem.targetExistsUnknown && (
-                          <p className="ui-caption text-amber-700 dark:text-amber-300">
-                            Target bucket existence could not be fully verified during precheck.
-                          </p>
-                        )}
-                        {reviewItem.messages.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {reviewItem.messages.map((message, index) => (
-                              <span
-                                key={`${reviewItem.itemId}-${message.level}-${index}`}
-                                className={`rounded-md border px-2 py-1 text-[11px] ${precheckMessageClasses(message.level)}`}
-                              >
-                                {message.level.toUpperCase()}: {message.message}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">

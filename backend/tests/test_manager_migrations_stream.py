@@ -32,7 +32,12 @@ def _seed_migration(session_factory: sessionmaker, *, status: str) -> int:
         db.add(migration)
         db.flush()
 
-        item_status = "completed" if status in {"completed", "completed_with_errors", "failed", "canceled", "rolled_back"} else "running"
+        if status == "rolled_back":
+            item_status = "rolled_back"
+        elif status in {"completed", "completed_with_errors", "failed", "canceled"}:
+            item_status = "completed"
+        else:
+            item_status = "running"
         item_step = "completed" if item_status == "completed" else "sync"
         item = BucketMigrationItem(
             migration_id=migration.id,

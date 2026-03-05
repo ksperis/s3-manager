@@ -31,7 +31,24 @@ function buildDetail() {
     pause_requested: false,
     cancel_requested: false,
     precheck_status: "passed",
-    precheck_report: null,
+    precheck_report: {
+      errors: 1,
+      warnings: 1,
+      items: [
+        {
+          item_id: 101,
+          errors: 0,
+          warnings: 1,
+          messages: [{ level: "warning", message: "Target bucket already exists; this item will be skipped." }],
+        },
+        {
+          item_id: 103,
+          errors: 1,
+          warnings: 0,
+          messages: [{ level: "error", message: "Source bucket read/list check failed: access denied." }],
+        },
+      ],
+    },
     precheck_checked_at: null,
     parallelism_max: 8,
     total_items: 3,
@@ -170,7 +187,7 @@ describe("ManagerMigrationDetailPage", () => {
 
   it("shows focused bucket progress with and without source_count", async () => {
     const user = userEvent.setup();
-    render(
+    const { container } = render(
       <MemoryRouter initialEntries={["/manager/migrations/11"]}>
         <Routes>
           <Route path="/manager/migrations/:migrationId" element={<ManagerMigrationDetailPage />} />
@@ -192,6 +209,14 @@ describe("ManagerMigrationDetailPage", () => {
     expect(screen.getByText(/bucket-failed/)).toBeInTheDocument();
     expect(screen.queryByText(/bucket-running/)).not.toBeInTheDocument();
 
-    expect(screen.getByRole("button", { name: "Show precheck details" })).toBeInTheDocument();
+    expect(screen.getByText("Precheck: 1 error(s), 0 warning(s)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show precheck details" }));
+    expect(screen.getByText(/Source bucket read\/list check failed: access denied\./)).toBeInTheDocument();
+    expect(screen.queryByText("Precheck result:")).not.toBeInTheDocument();
+
+    const hasLegacyBucketListScroll = Array.from(container.querySelectorAll("div")).some((node) =>
+      String(node.className).includes("max-h-[520px]")
+    );
+    expect(hasLegacyBucketListScroll).toBe(false);
   });
 });

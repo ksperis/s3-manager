@@ -46,8 +46,8 @@ describe("ManagerMigrationWizardPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listExecutionContextsMock.mockResolvedValue([
-      { id: "src-ctx", display_name: "Source", endpoint_id: 1 },
-      { id: "tgt-ctx", display_name: "Target", endpoint_id: 2 },
+      { id: "src-ctx", kind: "account", manager_account_is_admin: true, display_name: "Source", endpoint_id: 1 },
+      { id: "tgt-ctx", kind: "account", manager_account_is_admin: true, display_name: "Target", endpoint_id: 2 },
     ]);
     listBucketsMock.mockResolvedValue([{ name: "bucket-a" }]);
     createManagerMigrationMock.mockResolvedValue({ id: 77 });
@@ -107,8 +107,8 @@ describe("ManagerMigrationWizardPage", () => {
       buckets: [{ source_bucket: "bucket-a", target_bucket: undefined }],
       mapping_prefix: "mig-",
       mode: "one_shot",
-      copy_bucket_settings: true,
-      delete_source: false,
+      copy_bucket_settings: false,
+      delete_source: true,
       lock_target_writes: true,
       use_same_endpoint_copy: false,
       auto_grant_source_read_for_copy: false,
@@ -158,8 +158,8 @@ describe("ManagerMigrationWizardPage", () => {
   it("enables x-amz-copy-source on same endpoint and auto-enables auto-grant", async () => {
     const user = userEvent.setup();
     listExecutionContextsMock.mockResolvedValue([
-      { id: "src-ctx", display_name: "Source", endpoint_id: 1 },
-      { id: "tgt-ctx", display_name: "Target", endpoint_id: 1 },
+      { id: "src-ctx", kind: "account", manager_account_is_admin: true, display_name: "Source", endpoint_id: 1 },
+      { id: "tgt-ctx", kind: "account", manager_account_is_admin: true, display_name: "Target", endpoint_id: 1 },
     ]);
 
     render(
@@ -204,8 +204,8 @@ describe("ManagerMigrationWizardPage", () => {
       buckets: [{ source_bucket: "bucket-a", target_bucket: undefined }],
       mapping_prefix: "",
       mode: "one_shot",
-      copy_bucket_settings: true,
-      delete_source: false,
+      copy_bucket_settings: false,
+      delete_source: true,
       lock_target_writes: true,
       use_same_endpoint_copy: true,
       auto_grant_source_read_for_copy: true,
@@ -246,5 +246,56 @@ describe("ManagerMigrationWizardPage", () => {
       expect(runManagerMigrationPrecheckMock).toHaveBeenCalledWith(77);
     });
     expect(startManagerMigrationMock).not.toHaveBeenCalled();
+  });
+
+  it("filters non-admin account targets while keeping non-account contexts", async () => {
+    listExecutionContextsMock.mockResolvedValue([
+      { id: "src-ctx", kind: "account", manager_account_is_admin: true, display_name: "Source", endpoint_id: 1 },
+      { id: "acct-non-admin", kind: "account", manager_account_is_admin: false, display_name: "Account portal", endpoint_id: 2 },
+      { id: "acct-admin", kind: "account", manager_account_is_admin: true, display_name: "Account admin", endpoint_id: 3 },
+      { id: "conn-7", kind: "connection", display_name: "Shared connection", endpoint_id: null },
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/manager/migrations/new"]}>
+        <Routes>
+          <Route path="/manager/migrations/new" element={<ManagerMigrationWizardPage />} />
+          <Route path="/manager/migrations/:migrationId" element={<DestinationProbe />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("New migration");
+    const targetSelect = screen.getByLabelText("Target");
+    expect(screen.queryByRole("option", { name: /Account portal/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Account admin/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Shared connection/ })).toBeInTheDocument();
+    expect(targetSelect).toBeInTheDocument();
+  });
+
+  it("blocks cross-account account migration when one side is non-admin", async () => {
+    const user = userEvent.setup();
+    listExecutionContextsMock.mockResolvedValue([
+      { id: "src-ctx", kind: "account", manager_account_is_admin: false, display_name: "Source", endpoint_id: 1 },
+      { id: "tgt-ctx", kind: "account", manager_account_is_admin: true, display_name: "Target", endpoint_id: 2 },
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/manager/migrations/new"]}>
+        <Routes>
+          <Route path="/manager/migrations/new" element={<ManagerMigrationWizardPage />} />
+          <Route path="/manager/migrations/:migrationId" element={<DestinationProbe />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("New migration");
+    await user.selectOptions(screen.getByLabelText("Target"), "tgt-ctx");
+    await user.click(screen.getByRole("checkbox", { name: "bucket-a" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(
+      screen.getByText("Cross-account migrations require admin access on both source and target account contexts.")
+    ).toBeInTheDocument();
   });
 });

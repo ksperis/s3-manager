@@ -177,6 +177,49 @@ def test_create_migration_defaults_auto_grant_to_true_when_same_endpoint_copy_en
     assert migration.auto_grant_source_read_for_copy is True
 
 
+def test_create_migration_rejects_cross_account_when_admin_scope_missing_on_one_side(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(
+        db_session,
+        admin_account_context_ids={str(source.id)},
+    )
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-copy")],
+    )
+
+    try:
+        service.create_migration(payload, user)
+        assert False, "Expected create_migration to reject cross-account migration without admin scope on both accounts"
+    except PermissionError as exc:
+        assert "admin access on both source and target account contexts" in str(exc).lower()
+
+
+def test_create_migration_accepts_cross_account_when_admin_scope_present_on_both_sides(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(
+        db_session,
+        admin_account_context_ids={str(source.id), str(target.id)},
+    )
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-copy")],
+    )
+
+    migration = service.create_migration(payload, user)
+    assert migration.id is not None
+
+
 def test_create_migration_rejects_same_endpoint_copy_for_cross_endpoint_contexts(db_session):
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
@@ -330,6 +373,40 @@ def test_update_draft_migration_replaces_configuration_and_resets_precheck(db_se
     assert all(item.objects_deleted == 0 for item in by_source.values())
     assert all(item.error_message is None for item in by_source.values())
     assert any(event.message == "Migration configuration updated." for event in updated.events)
+
+
+def test_update_draft_migration_rejects_cross_account_when_admin_scope_missing_on_one_side(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    creator_service = BucketMigrationService(db_session)
+    migration = creator_service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+        ),
+        user,
+    )
+
+    service = BucketMigrationService(
+        db_session,
+        admin_account_context_ids={str(source.id)},
+    )
+    try:
+        service.update_draft_migration(
+            migration.id,
+            BucketMigrationCreateRequest(
+                source_context_id=str(source.id),
+                target_context_id=str(target.id),
+                buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-copy")],
+            ),
+        )
+        assert False, "Expected update_draft_migration to reject cross-account migration without admin scope on both accounts"
+    except PermissionError as exc:
+        assert "admin access on both source and target account contexts" in str(exc).lower()
 
 
 def test_update_draft_migration_rejects_non_draft_status(db_session):
@@ -1479,12 +1556,12 @@ def test_rollback_failed_migration_success_marks_migration_rolled_back(db_sessio
     assert restored == ["bucket-a"]
     assert removed == ["bucket-b"]
     assert purged == ["bucket-a-dst"]
-    assert migration.items[0].status == "completed"
+    assert migration.items[0].status == "rolled_back"
     assert migration.items[0].step == "rolled_back"
     assert migration.items[0].objects_deleted == 6
     assert migration.items[0].read_only_applied is False
     assert migration.items[0].source_policy_backup_json is None
-    assert migration.items[1].status == "completed"
+    assert migration.items[1].status == "rolled_back"
     assert migration.items[1].step == "rolled_back"
     assert migration.items[1].read_only_applied is False
 
@@ -1662,7 +1739,7 @@ def test_rollback_item_rolls_back_single_failed_bucket_item(db_session):
     assert updated.status == "completed"
     assert restored_source == ["bucket-a"]
     assert restored_target == ["bucket-a-dst"]
-    assert updated_item.status == "completed"
+    assert updated_item.status == "rolled_back"
     assert updated_item.step == "rolled_back"
     assert updated_item.objects_deleted == 7
     assert updated_item.read_only_applied is False
@@ -1711,10 +1788,11 @@ def test_rollback_failed_items_keeps_completed_with_errors_when_one_item_fails(d
 
     assert rolled_back_count == 2
     assert updated.status == "completed_with_errors"
-    assert updated.items[0].status == "completed"
-    assert updated.items[0].step == "rolled_back"
-    assert updated.items[1].status == "failed"
-    assert updated.items[1].step == "rollback_failed"
+    by_source = {item.source_bucket: item for item in updated.items}
+    assert by_source["bucket-a"].status == "rolled_back"
+    assert by_source["bucket-a"].step == "rolled_back"
+    assert by_source["bucket-b"].status == "failed"
+    assert by_source["bucket-b"].step == "rollback_failed"
 
 
 def test_rollback_failed_migration_blocks_when_delete_source_already_completed(db_session):

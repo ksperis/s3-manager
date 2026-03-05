@@ -182,6 +182,14 @@ def _worker_wake_up() -> None:
     worker.wake_up()
 
 
+def _build_service(db: Session, scope: BucketMigrationAccessScope) -> BucketMigrationService:
+    return BucketMigrationService(
+        db,
+        authorized_context_ids=scope.allowed_context_ids,
+        admin_account_context_ids=scope.admin_account_context_ids,
+    )
+
+
 @router.get("", response_model=BucketMigrationListResponse)
 def list_migrations(
     limit: int = Query(default=100, ge=1, le=500),
@@ -189,7 +197,7 @@ def list_migrations(
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
 ) -> BucketMigrationListResponse:
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     migrations = service.list_migrations(limit=limit, context_id=context_id)
     return BucketMigrationListResponse(items=[_migration_to_view(migration) for migration in migrations])
 
@@ -201,7 +209,7 @@ def get_migration(
     db: Session = Depends(get_db),
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
 ) -> BucketMigrationDetail:
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.get_migration(migration_id)
     except ValueError as exc:
@@ -219,7 +227,7 @@ async def stream_migration(
     scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
 ) -> StreamingResponse:
     with SessionLocal() as db:
-        service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+        service = _build_service(db, scope)
         try:
             service.get_migration(migration_id)
         except ValueError as exc:
@@ -236,7 +244,7 @@ async def stream_migration(
 
             try:
                 with SessionLocal() as db:
-                    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+                    service = _build_service(db, scope)
                     migration = service.get_migration(migration_id)
                     signature = _compute_migration_stream_signature(db, migration_id, migration=migration)
                     if signature != last_signature:
@@ -314,7 +322,7 @@ def delete_migration(
     audit: AuditService = Depends(get_audit_logger),
 ) -> Response:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         service.delete_migration(migration_id)
     except ValueError as exc:
@@ -340,7 +348,7 @@ def create_migration(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationDetail:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.create_migration(payload, current_user)
     except PermissionError as exc:
@@ -379,7 +387,7 @@ def update_migration(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationDetail:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.update_draft_migration(migration_id, payload)
     except PermissionError as exc:
@@ -419,9 +427,11 @@ def run_migration_precheck(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationDetail:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.run_precheck(migration_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         message = str(exc)
         error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
@@ -447,9 +457,11 @@ def start_migration(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.start_migration(migration_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         message = str(exc)
         error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
@@ -474,7 +486,7 @@ def pause_migration(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.request_pause(migration_id)
     except ValueError as exc:
@@ -501,7 +513,7 @@ def resume_migration(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.resume_migration(migration_id)
     except ValueError as exc:
@@ -528,7 +540,7 @@ def stop_migration(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.stop_migration(migration_id)
     except ValueError as exc:
@@ -555,7 +567,7 @@ def continue_after_presync(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.continue_after_presync(migration_id)
     except ValueError as exc:
@@ -582,7 +594,7 @@ def rollback_migration(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.rollback_failed_migration(migration_id)
     except ValueError as exc:
@@ -608,7 +620,7 @@ def retry_failed_items(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration, retried_count = service.retry_failed_items(migration_id)
     except ValueError as exc:
@@ -640,7 +652,7 @@ def rollback_failed_items(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration, rolled_back_count = service.rollback_failed_items(migration_id)
     except ValueError as exc:
@@ -672,7 +684,7 @@ def retry_item(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.retry_item(migration_id, item_id)
     except ValueError as exc:
@@ -704,7 +716,7 @@ def rollback_item(
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
     current_user = scope.user
-    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
+    service = _build_service(db, scope)
     try:
         migration = service.rollback_item(migration_id, item_id)
     except ValueError as exc:
