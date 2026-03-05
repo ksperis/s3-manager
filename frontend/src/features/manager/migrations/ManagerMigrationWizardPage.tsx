@@ -19,24 +19,24 @@ import { buildPlannedSteps, extractError } from "./shared";
 
 type WizardStep = 0 | 1 | 2 | 3;
 
-function hasPrecheckErrors(detail: { precheck_status?: string; precheck_report?: unknown }): boolean {
-  if (detail.precheck_status === "failed") return true;
-  if (!detail.precheck_report || typeof detail.precheck_report !== "object") return false;
+function isPrecheckPassed(detail: { precheck_status?: string; precheck_report?: unknown }): boolean {
+  if (detail.precheck_status !== "passed") return false;
+  if (!detail.precheck_report || typeof detail.precheck_report !== "object") return true;
   const report = detail.precheck_report as Record<string, unknown>;
-  if (typeof report.errors === "number" && report.errors > 0) return true;
+  if (typeof report.errors === "number" && report.errors > 0) return false;
   const reportItems = Array.isArray(report.items) ? report.items : [];
   for (const row of reportItems) {
     if (!row || typeof row !== "object") continue;
     const item = row as Record<string, unknown>;
-    if (typeof item.errors === "number" && item.errors > 0) return true;
+    if (typeof item.errors === "number" && item.errors > 0) return false;
     const messages = Array.isArray(item.messages) ? item.messages : [];
     for (const messageRow of messages) {
       if (!messageRow || typeof messageRow !== "object") continue;
       const message = messageRow as Record<string, unknown>;
-      if (typeof message.level === "string" && message.level.toLowerCase() === "error") return true;
+      if (typeof message.level === "string" && message.level.toLowerCase() === "error") return false;
     }
   }
-  return false;
+  return true;
 }
 
 export default function ManagerMigrationWizardPage() {
@@ -63,6 +63,7 @@ export default function ManagerMigrationWizardPage() {
   const [mode, setMode] = useState<"one_shot" | "pre_sync">("one_shot");
   const [copyBucketSettings, setCopyBucketSettings] = useState<boolean>(false);
   const [deleteSource, setDeleteSource] = useState<boolean>(true);
+  const [strongIntegrityCheck, setStrongIntegrityCheck] = useState<boolean>(false);
   const [lockTargetWrites, setLockTargetWrites] = useState<boolean>(true);
   const [useSameEndpointCopy, setUseSameEndpointCopy] = useState<boolean>(false);
   const [autoGrantSourceReadForCopy, setAutoGrantSourceReadForCopy] = useState<boolean>(false);
@@ -121,6 +122,7 @@ export default function ManagerMigrationWizardPage() {
         mode,
         copyBucketSettings,
         deleteSource,
+        strongIntegrityCheck,
         lockTargetWrites,
         useSameEndpointCopy,
         autoGrantSourceReadForCopy: useSameEndpointCopy && autoGrantSourceReadForCopy,
@@ -130,6 +132,7 @@ export default function ManagerMigrationWizardPage() {
     autoGrantSourceReadForCopy,
     copyBucketSettings,
     deleteSource,
+    strongIntegrityCheck,
     lockTargetWrites,
     mode,
     summaryBucketMappings,
@@ -194,6 +197,7 @@ export default function ManagerMigrationWizardPage() {
         setMode(detail.mode);
         setCopyBucketSettings(detail.copy_bucket_settings);
         setDeleteSource(detail.delete_source);
+        setStrongIntegrityCheck(Boolean(detail.strong_integrity_check));
         setLockTargetWrites(detail.lock_target_writes);
         setUseSameEndpointCopy(Boolean(detail.use_same_endpoint_copy));
         setAutoGrantSourceReadForCopy(
@@ -222,6 +226,11 @@ export default function ManagerMigrationWizardPage() {
     if (useSameEndpointCopy) return;
     setAutoGrantSourceReadForCopy(false);
   }, [useSameEndpointCopy]);
+
+  useEffect(() => {
+    if (deleteSource) return;
+    setStrongIntegrityCheck(false);
+  }, [deleteSource]);
 
   const toggleBucket = (bucketName: string) => {
     setSelectedBuckets((current) => {
@@ -310,6 +319,7 @@ export default function ManagerMigrationWizardPage() {
         mode,
         copy_bucket_settings: copyBucketSettings,
         delete_source: deleteSource,
+        strong_integrity_check: strongIntegrityCheck,
         lock_target_writes: lockTargetWrites,
         use_same_endpoint_copy: useSameEndpointCopy,
         auto_grant_source_read_for_copy: useSameEndpointCopy ? autoGrantSourceReadForCopy : false,
@@ -321,7 +331,7 @@ export default function ManagerMigrationWizardPage() {
           ? await createManagerMigration(payload)
           : await updateManagerMigration(editMigrationId, payload);
       const precheckDetail = await runManagerMigrationPrecheck(detail.id).catch(() => null);
-      if (precheckDetail && !hasPrecheckErrors(precheckDetail)) {
+      if (precheckDetail && isPrecheckPassed(precheckDetail)) {
         await startManagerMigration(detail.id).catch(() => {});
       }
       navigate(`/manager/migrations/${detail.id}`);
@@ -585,8 +595,30 @@ export default function ManagerMigrationWizardPage() {
                   onChange={(event) => setDeleteSource(event.target.checked)}
                   className="mt-0.5 h-4 w-4 shrink-0"
                 />
+                  <span className="space-y-0.5">
+                    <span className="block font-semibold">Delete source if diff is clean</span>
+                  </span>
+                </label>
+
+              <label
+                className={`flex w-fit max-w-full items-start gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 ui-caption text-slate-800 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100 ${
+                  !deleteSource ? "opacity-70" : ""
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={strongIntegrityCheck}
+                  onChange={(event) => setStrongIntegrityCheck(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  disabled={!deleteSource}
+                />
                 <span className="space-y-0.5">
-                  <span className="block font-semibold">Delete source if diff is clean</span>
+                  <span className="block font-semibold">Strong integrity check before source deletion</span>
+                  <span aria-hidden="true" className="block text-[11px] text-slate-500 dark:text-slate-400">
+                    {deleteSource
+                      ? "Optional deep verification (can be expensive on very large datasets). Disabled by default."
+                      : "Enable source deletion first to configure this option."}
+                  </span>
                 </span>
               </label>
             </div>
@@ -722,6 +754,7 @@ export default function ManagerMigrationWizardPage() {
                   { label: "Use x-amz-copy-source", value: useSameEndpointCopy ? "yes" : "no" },
                   { label: "Auto-grant source read", value: autoGrantSourceReadForCopy ? "yes" : "no" },
                   { label: "Delete source", value: deleteSource ? "yes" : "no" },
+                  { label: "Strong integrity check", value: strongIntegrityCheck ? "yes" : "no" },
                   { label: "Webhook", value: webhookUrl.trim() || "not configured" },
                 ].map((entry) => (
                   <div key={`wizard-summary-${entry.label}`} className="grid grid-cols-[140px_1fr] items-start gap-2">

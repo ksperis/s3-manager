@@ -44,6 +44,7 @@ export type BucketMigrationCreateRequest = {
   mode?: BucketMigrationMode;
   copy_bucket_settings?: boolean;
   delete_source?: boolean;
+  strong_integrity_check?: boolean;
   lock_target_writes?: boolean;
   use_same_endpoint_copy?: boolean;
   auto_grant_source_read_for_copy?: boolean;
@@ -94,6 +95,7 @@ export type BucketMigrationView = {
   mode: BucketMigrationMode;
   copy_bucket_settings: boolean;
   delete_source: boolean;
+  strong_integrity_check: boolean;
   lock_target_writes: boolean;
   use_same_endpoint_copy: boolean;
   auto_grant_source_read_for_copy: boolean;

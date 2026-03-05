@@ -22,6 +22,7 @@ function buildDetail() {
     mode: "one_shot",
     copy_bucket_settings: true,
     delete_source: false,
+    strong_integrity_check: false,
     lock_target_writes: true,
     use_same_endpoint_copy: true,
     auto_grant_source_read_for_copy: true,
@@ -218,5 +219,26 @@ describe("ManagerMigrationDetailPage", () => {
       String(node.className).includes("max-h-[520px]")
     );
     expect(hasLegacyBucketListScroll).toBe(false);
+  });
+
+  it("offers precheck action when draft precheck is pending", () => {
+    const pendingDetail = { ...buildDetail(), status: "draft", precheck_status: "pending" } as const;
+    mockUseManagerMigrationDetail.mockReturnValue({
+      migrationDetail: pendingDetail,
+      detailLoading: false,
+      detailError: null,
+      setDetailError: vi.fn(),
+      refresh: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/manager/migrations/11"]}>
+        <Routes>
+          <Route path="/manager/migrations/:migrationId" element={<ManagerMigrationDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: "Run precheck" })).toBeInTheDocument();
   });
 });

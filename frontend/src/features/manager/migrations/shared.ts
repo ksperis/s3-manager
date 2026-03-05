@@ -142,6 +142,7 @@ export function buildPlannedSteps(
     mode: "one_shot" | "pre_sync";
     copyBucketSettings: boolean;
     deleteSource: boolean;
+    strongIntegrityCheck: boolean;
     lockTargetWrites: boolean;
     useSameEndpointCopy: boolean;
     autoGrantSourceReadForCopy: boolean;
@@ -152,7 +153,7 @@ export function buildPlannedSteps(
   }
   const steps = ["Create destination bucket."];
   if (options.lockTargetWrites) {
-    steps.push("Apply temporary write-lock on destination bucket (migration worker is exempted).");
+    steps.push("Try to apply temporary write-lock on destination bucket (best effort guard rail).");
   }
   if (options.copyBucketSettings) {
     steps.push("Copy bucket settings.");
@@ -172,6 +173,9 @@ export function buildPlannedSteps(
   steps.push("Run sync/re-sync including deletion diff.");
   steps.push("Run final md5 + size verification.");
   if (options.deleteSource) {
+    if (options.strongIntegrityCheck) {
+      steps.push("Run optional strong integrity verification on size-only matches before deleting source.");
+    }
     steps.push("Delete source bucket only if final diff is clean.");
   }
   return steps;

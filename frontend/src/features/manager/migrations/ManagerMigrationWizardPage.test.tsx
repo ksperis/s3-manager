@@ -51,7 +51,7 @@ describe("ManagerMigrationWizardPage", () => {
     ]);
     listBucketsMock.mockResolvedValue([{ name: "bucket-a" }]);
     createManagerMigrationMock.mockResolvedValue({ id: 77 });
-    runManagerMigrationPrecheckMock.mockResolvedValue({ id: 77 });
+    runManagerMigrationPrecheckMock.mockResolvedValue({ id: 77, precheck_status: "passed", precheck_report: { errors: 0 } });
     startManagerMigrationMock.mockResolvedValue({ id: 77, status: "queued", message: "started" });
   });
 
@@ -109,6 +109,7 @@ describe("ManagerMigrationWizardPage", () => {
       mode: "one_shot",
       copy_bucket_settings: false,
       delete_source: true,
+      strong_integrity_check: false,
       lock_target_writes: true,
       use_same_endpoint_copy: false,
       auto_grant_source_read_for_copy: false,
@@ -206,6 +207,7 @@ describe("ManagerMigrationWizardPage", () => {
       mode: "one_shot",
       copy_bucket_settings: false,
       delete_source: true,
+      strong_integrity_check: false,
       lock_target_writes: true,
       use_same_endpoint_copy: true,
       auto_grant_source_read_for_copy: true,
@@ -240,6 +242,37 @@ describe("ManagerMigrationWizardPage", () => {
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
 
+    await user.click(screen.getByRole("button", { name: "Create migration" }));
+
+    await waitFor(() => {
+      expect(runManagerMigrationPrecheckMock).toHaveBeenCalledWith(77);
+    });
+    expect(startManagerMigrationMock).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-start migration when precheck is still pending", async () => {
+    const user = userEvent.setup();
+    runManagerMigrationPrecheckMock.mockResolvedValue({
+      id: 77,
+      precheck_status: "pending",
+      precheck_report: { errors: 0 },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/manager/migrations/new"]}>
+        <Routes>
+          <Route path="/manager/migrations/new" element={<ManagerMigrationWizardPage />} />
+          <Route path="/manager/migrations/:migrationId" element={<DestinationProbe />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("New migration");
+    await user.selectOptions(screen.getByLabelText("Target"), "tgt-ctx");
+    await user.click(screen.getByRole("checkbox", { name: "bucket-a" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Create migration" }));
 
     await waitFor(() => {

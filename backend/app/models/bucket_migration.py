@@ -62,6 +62,7 @@ class BucketMigrationCreateRequest(BaseModel):
     mode: BucketMigrationMode = "one_shot"
     copy_bucket_settings: bool = False
     delete_source: bool = False
+    strong_integrity_check: bool = False
     lock_target_writes: bool = True
     use_same_endpoint_copy: bool = False
     auto_grant_source_read_for_copy: Optional[bool] = None
@@ -141,6 +142,7 @@ class BucketMigrationView(BaseModel):
     mode: BucketMigrationMode
     copy_bucket_settings: bool
     delete_source: bool
+    strong_integrity_check: bool
     lock_target_writes: bool
     use_same_endpoint_copy: bool = False
     auto_grant_source_read_for_copy: bool = False

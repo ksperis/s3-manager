@@ -14,7 +14,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, wait
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
@@ -66,6 +66,12 @@ _SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS = 10.0
 _RUN_ACTIONS_WAIT_TIMEOUT_SECONDS = 5.0
 _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER = 32
 _ITEM_HEARTBEAT_PERSIST_INTERVAL_SECONDS = 10.0
+_DIFF_CONTROL_CHECK_INTERVAL_OBJECTS = 5_000
+_DB_ERROR_MESSAGE_MAX_CHARS = 16_384
+_DB_EVENT_MESSAGE_MAX_CHARS = 4_096
+_DB_EVENT_METADATA_MAX_CHARS = 65_536
+_DB_EVENT_METADATA_MAX_DEPTH = 8
+_DB_EVENT_METADATA_MAX_ITEMS = 100
 _RUNNABLE_MIGRATION_STATUSES = ("queued", "running", "pause_requested", "cancel_requested")
 _FINAL_MIGRATION_STATUSES = (
     "completed",
@@ -105,6 +111,24 @@ class _SyncDiff:
 
 
 @dataclass(frozen=True)
+class _BucketObjectEntry:
+    key: str
+    size: int
+    etag: Optional[str]
+
+
+@dataclass(frozen=True)
+class _BucketDiffEntry:
+    kind: str
+    key: str
+    source_size: int
+    target_size: int
+    source_etag: Optional[str]
+    target_etag: Optional[str]
+    compare_by: str
+
+
+@dataclass(frozen=True)
 class _MigrationRuntimeLimits:
     parallelism_default: int
     parallelism_max: int
@@ -134,6 +158,70 @@ def _json_loads(value: Optional[str]) -> Any:
         return json.loads(value)
     except Exception:
         return None
+
+
+def _truncate_db_text(value: Any, *, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ""
+    text = "" if value is None else str(value)
+    if len(text) <= max_chars:
+        return text
+    omitted = len(text) - max_chars
+    suffix = f"... [truncated {omitted} chars]"
+    if len(suffix) >= max_chars:
+        return suffix[:max_chars]
+    return text[: max_chars - len(suffix)] + suffix
+
+
+def _truncate_optional_db_text(value: Optional[str], *, max_chars: int) -> Optional[str]:
+    if value is None:
+        return None
+    return _truncate_db_text(value, max_chars=max_chars)
+
+
+def _sanitize_event_metadata(value: Any, *, depth: int = 0) -> Any:
+    if depth >= _DB_EVENT_METADATA_MAX_DEPTH:
+        return _truncate_db_text(value, max_chars=_DB_EVENT_MESSAGE_MAX_CHARS)
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return _truncate_db_text(value, max_chars=_DB_EVENT_MESSAGE_MAX_CHARS)
+    if isinstance(value, dict):
+        safe_dict: dict[str, Any] = {}
+        total_items = len(value)
+        for index, (key, nested_value) in enumerate(value.items()):
+            if index >= _DB_EVENT_METADATA_MAX_ITEMS:
+                safe_dict["__truncated_items__"] = total_items - _DB_EVENT_METADATA_MAX_ITEMS
+                break
+            safe_key = _truncate_db_text(key, max_chars=256)
+            safe_dict[safe_key] = _sanitize_event_metadata(nested_value, depth=depth + 1)
+        return safe_dict
+    if isinstance(value, (list, tuple, set)):
+        entries = list(value)
+        safe_entries = [
+            _sanitize_event_metadata(entry, depth=depth + 1)
+            for entry in entries[:_DB_EVENT_METADATA_MAX_ITEMS]
+        ]
+        if len(entries) > _DB_EVENT_METADATA_MAX_ITEMS:
+            safe_entries.append(
+                f"[truncated {len(entries) - _DB_EVENT_METADATA_MAX_ITEMS} additional item(s)]"
+            )
+        return safe_entries
+    return _truncate_db_text(value, max_chars=_DB_EVENT_MESSAGE_MAX_CHARS)
+
+
+def _serialize_event_metadata(metadata: Optional[dict[str, Any]]) -> Optional[str]:
+    if metadata is None:
+        return None
+    serialized = _json_dumps(metadata)
+    if len(serialized) <= _DB_EVENT_METADATA_MAX_CHARS:
+        return serialized
+    fallback_payload = {
+        "truncated": True,
+        "original_length": len(serialized),
+        "preview": _truncate_db_text(serialized, max_chars=1024),
+    }
+    return _json_dumps(fallback_payload)
 
 
 def _webhook_host_allowed(host: str) -> bool:
@@ -348,6 +436,7 @@ class BucketMigrationService:
             mode=payload.mode,
             copy_bucket_settings=bool(payload.copy_bucket_settings),
             delete_source=bool(payload.delete_source),
+            strong_integrity_check=bool(payload.strong_integrity_check),
             lock_target_writes=bool(payload.lock_target_writes),
             use_same_endpoint_copy=use_same_endpoint_copy,
             auto_grant_source_read_for_copy=auto_grant_source_read_for_copy,
@@ -392,6 +481,7 @@ class BucketMigrationService:
                 "mode": payload.mode,
                 "copy_bucket_settings": bool(payload.copy_bucket_settings),
                 "delete_source": bool(payload.delete_source),
+                "strong_integrity_check": bool(payload.strong_integrity_check),
                 "lock_target_writes": bool(payload.lock_target_writes),
                 "use_same_endpoint_copy": use_same_endpoint_copy,
                 "auto_grant_source_read_for_copy": auto_grant_source_read_for_copy,
@@ -451,6 +541,7 @@ class BucketMigrationService:
         migration.mode = payload.mode
         migration.copy_bucket_settings = bool(payload.copy_bucket_settings)
         migration.delete_source = bool(payload.delete_source)
+        migration.strong_integrity_check = bool(payload.strong_integrity_check)
         migration.lock_target_writes = bool(payload.lock_target_writes)
         migration.use_same_endpoint_copy = use_same_endpoint_copy
         migration.auto_grant_source_read_for_copy = auto_grant_source_read_for_copy
@@ -533,6 +624,7 @@ class BucketMigrationService:
                 "mode": payload.mode,
                 "copy_bucket_settings": bool(payload.copy_bucket_settings),
                 "delete_source": bool(payload.delete_source),
+                "strong_integrity_check": bool(payload.strong_integrity_check),
                 "lock_target_writes": bool(payload.lock_target_writes),
                 "use_same_endpoint_copy": use_same_endpoint_copy,
                 "auto_grant_source_read_for_copy": auto_grant_source_read_for_copy,
@@ -656,6 +748,7 @@ class BucketMigrationService:
             same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
             report["same_endpoint"] = bool(same_endpoint)
             report["use_same_endpoint_copy"] = bool(migration.use_same_endpoint_copy)
+            report["strong_integrity_check"] = bool(getattr(migration, "strong_integrity_check", False))
             same_endpoint_copy_enabled = bool(same_endpoint and migration.use_same_endpoint_copy)
             target_lock_probe_item_ids: set[int] = set()
             item_results_by_id: dict[int, dict[str, Any]] = {}
@@ -805,12 +898,15 @@ class BucketMigrationService:
                             continue
                         item_result["messages"].append(
                             {
-                                "level": "error",
-                                "message": f"Target write-lock precheck failed: {exc}",
+                                "level": "warning",
+                                "message": (
+                                    "Target write-lock precheck failed (best effort mode): "
+                                    f"{exc}. Migration can continue without destination lock."
+                                ),
                             }
                         )
-                        item_result["errors"] = int(item_result.get("errors") or 0) + 1
-                        errors += 1
+                        item_result["warnings"] = int(item_result.get("warnings") or 0) + 1
+                        warnings += 1
 
         report["errors"] = errors
         report["warnings"] = warnings
@@ -1047,7 +1143,12 @@ class BucketMigrationService:
                     item.read_only_applied = False
                     item.source_policy_backup_json = None
                 except Exception as exc:  # noqa: BLE001
-                    rollback_issues.append(f"source policy restore failed: {exc}")
+                    rollback_issues.append(
+                        _truncate_db_text(
+                            f"source policy restore failed: {exc}",
+                            max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+                        )
+                    )
 
             if item.target_lock_applied or item.target_policy_backup_json:
                 try:
@@ -1058,7 +1159,12 @@ class BucketMigrationService:
                     item.target_lock_applied = False
                     item.target_policy_backup_json = None
                 except Exception as exc:  # noqa: BLE001
-                    rollback_issues.append(f"target lock restore failed: {exc}")
+                    rollback_issues.append(
+                        _truncate_db_text(
+                            f"target lock restore failed: {exc}",
+                            max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+                        )
+                    )
 
             if item.status != "skipped":
                 try:
@@ -1067,12 +1173,20 @@ class BucketMigrationService:
                     total_purged_objects += purged_count
                     item.objects_deleted = int(item.objects_deleted or 0) + purged_count
                 except Exception as exc:  # noqa: BLE001
-                    rollback_issues.append(f"destination cleanup failed: {exc}")
+                    rollback_issues.append(
+                        _truncate_db_text(
+                            f"destination cleanup failed: {exc}",
+                            max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+                        )
+                    )
 
             if rollback_issues:
                 item.status = "failed"
                 item.step = "rollback_failed"
-                item.error_message = "Rollback failed: " + "; ".join(rollback_issues)
+                item.error_message = _truncate_optional_db_text(
+                    "Rollback failed: " + "; ".join(rollback_issues),
+                    max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+                )
                 item.finished_at = utcnow()
                 item.updated_at = utcnow()
                 self._add_event(
@@ -1082,7 +1196,12 @@ class BucketMigrationService:
                     message="Rollback failed for item.",
                     metadata={"issues": rollback_issues},
                 )
-                item_errors.append(f"{item.source_bucket}: {'; '.join(rollback_issues)}")
+                item_errors.append(
+                    _truncate_db_text(
+                        f"{item.source_bucket}: {'; '.join(rollback_issues)}",
+                        max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+                    )
+                )
                 continue
 
             item.status = "rolled_back"
@@ -1107,8 +1226,9 @@ class BucketMigrationService:
 
         if item_errors:
             migration.status = "completed_with_errors"
-            migration.error_message = (
-                f"Rollback completed with {len(item_errors)} error(s): " + " | ".join(item_errors[:3])
+            migration.error_message = _truncate_optional_db_text(
+                f"Rollback completed with {len(item_errors)} error(s): " + " | ".join(item_errors[:3]),
+                max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
             )
             self._add_event(
                 migration,
@@ -1296,7 +1416,10 @@ class BucketMigrationService:
                 if failed_item is None:
                     continue
                 failed_item.status = "failed"
-                failed_item.error_message = str(exc)
+                failed_item.error_message = _truncate_optional_db_text(
+                    str(exc),
+                    max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+                )
                 failed_item.finished_at = utcnow()
                 failed_item.updated_at = utcnow()
                 self._add_event(
@@ -1401,16 +1524,38 @@ class BucketMigrationService:
                 continue
 
             if item.step == "apply_target_lock":
-                self._apply_target_write_lock_policy(target_ctx, item.target_bucket, item)
-                item.target_lock_applied = True
+                lock_warning: Optional[str] = None
+                try:
+                    self._apply_target_write_lock_policy(target_ctx, item.target_bucket, item)
+                    item.target_lock_applied = True
+                except Exception as exc:  # noqa: BLE001
+                    lock_warning = str(exc)
+                    try:
+                        if item.target_policy_backup_json:
+                            self._restore_target_write_lock_policy(target_ctx.account, item.target_bucket, item)
+                        else:
+                            self._remove_managed_target_write_lock_statement(item.target_bucket, target_ctx.account)
+                    except Exception as restore_exc:  # noqa: BLE001
+                        lock_warning = f"{lock_warning}; restore attempt failed: {restore_exc}"
+                    item.target_lock_applied = False
+                    item.target_policy_backup_json = None
                 item.step = "pre_sync" if migration.mode == "pre_sync" and not item.pre_sync_done else "apply_read_only"
                 item.updated_at = utcnow()
-                self._add_event(
-                    migration,
-                    item=item,
-                    level="info",
-                    message="Target write-lock policy applied.",
-                )
+                if lock_warning:
+                    self._add_event(
+                        migration,
+                        item=item,
+                        level="warning",
+                        message="Target write-lock policy could not be applied; continuing in best-effort mode.",
+                        metadata={"error": lock_warning},
+                    )
+                else:
+                    self._add_event(
+                        migration,
+                        item=item,
+                        level="info",
+                        message="Target write-lock policy applied.",
+                    )
                 self._commit()
                 continue
 
@@ -1511,32 +1656,38 @@ class BucketMigrationService:
                 continue
 
             if item.step == "verify":
-                content_diff = self._buckets.compare_bucket_content(
-                    item.source_bucket,
-                    source_ctx.account,
-                    item.target_bucket,
-                    target_ctx.account,
-                    size_only=False,
-                    diff_sample_limit=200,
+                diff = self._compare_buckets_streamed(
+                    source_ctx,
+                    target_ctx,
+                    source_bucket=item.source_bucket,
+                    target_bucket=item.target_bucket,
+                    control_check=control_check,
                 )
-                item.source_count = content_diff.source_count
-                item.target_count = content_diff.target_count
-                item.matched_count = content_diff.matched_count
-                item.different_count = content_diff.different_count
-                item.only_source_count = content_diff.only_source_count
-                item.only_target_count = content_diff.only_target_count
-                item.diff_sample_json = _json_dumps(
-                    {
-                        "only_source_sample": content_diff.only_source_sample,
-                        "only_target_sample": content_diff.only_target_sample,
-                        "different_sample": [entry.model_dump() for entry in content_diff.different_sample],
-                    }
-                )
+                if diff is None:
+                    state = control_check()
+                    if state == "lost_lease":
+                        raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
+                    if state == "cancel":
+                        item.status = "canceled"
+                        item.finished_at = utcnow()
+                    else:
+                        item.status = "paused"
+                    item.updated_at = utcnow()
+                    self._commit()
+                    return
+
+                item.source_count = diff.source_count
+                item.target_count = diff.target_count
+                item.matched_count = diff.matched_count
+                item.different_count = diff.different_count
+                item.only_source_count = diff.only_source_count
+                item.only_target_count = diff.only_target_count
+                item.diff_sample_json = _json_dumps(diff.sample)
 
                 has_diff = bool(
-                    content_diff.different_count
-                    or content_diff.only_source_count
-                    or content_diff.only_target_count
+                    diff.different_count
+                    or diff.only_source_count
+                    or diff.only_target_count
                 )
                 if has_diff:
                     item.status = "failed"
@@ -1549,29 +1700,30 @@ class BucketMigrationService:
                         level="error",
                         message="Final diff detected differences.",
                         metadata={
-                            "different_count": content_diff.different_count,
-                            "only_source_count": content_diff.only_source_count,
-                            "only_target_count": content_diff.only_target_count,
+                            "different_count": diff.different_count,
+                            "only_source_count": diff.only_source_count,
+                            "only_target_count": diff.only_target_count,
                         },
                     )
                     self._commit()
                     return
 
                 if migration.delete_source:
-                    source_objects = self._list_current_objects(source_ctx, item.source_bucket)
-                    target_objects = self._list_current_objects(target_ctx, item.target_bucket)
-                    size_only_keys = self._size_only_common_key_list(source_objects, target_objects)
-                    if size_only_keys:
-                        verified_count, failed_keys, method_counts = self._strong_verify_size_only_objects(
+                    if bool(getattr(migration, "strong_integrity_check", False)):
+                        (
+                            size_only_count,
+                            verified_count,
+                            failed_keys,
+                            method_counts,
+                        ) = self._strong_verify_size_only_candidates_streamed(
                             source_ctx,
                             target_ctx,
                             source_bucket=item.source_bucket,
                             target_bucket=item.target_bucket,
-                            keys=size_only_keys,
                             parallelism_max=max(1, min(int(migration.parallelism_max), 4)),
                             control_check=control_check,
                         )
-                        if verified_count < 0:
+                        if size_only_count < 0:
                             state = control_check()
                             if state == "lost_lease":
                                 raise _WorkerLeaseLostError(f"Worker lease lost for migration {migration.id}")
@@ -1589,7 +1741,7 @@ class BucketMigrationService:
                             item.status = "failed"
                             item.error_message = (
                                 "Final strong verification failed for "
-                                f"{len(failed_keys)} object(s) out of {len(size_only_keys)} size-only candidate(s); "
+                                f"{len(failed_keys)} object(s) out of {size_only_count} size-only candidate(s); "
                                 "automatic source deletion is blocked to prevent data loss."
                             )
                             item.finished_at = utcnow()
@@ -1600,7 +1752,7 @@ class BucketMigrationService:
                                 level="error",
                                 message="Source deletion blocked due to strong verification failures.",
                                 metadata={
-                                    "size_only_count": len(size_only_keys),
+                                    "size_only_count": size_only_count,
                                     "verified_count": verified_count,
                                     "failed_count": len(failed_keys),
                                     "failed_sample": failed_sample,
@@ -1616,10 +1768,17 @@ class BucketMigrationService:
                             level="info",
                             message="Strong verification completed for size-only candidates.",
                             metadata={
-                                "size_only_count": len(size_only_keys),
+                                "size_only_count": size_only_count,
                                 "verified_count": verified_count,
                                 "method_counts": method_counts,
                             },
+                        )
+                    else:
+                        self._add_event(
+                            migration,
+                            item=item,
+                            level="warning",
+                            message="Strong integrity check is disabled; source deletion relies on md5/size diff only.",
                         )
 
                     item.step = "delete_source"
@@ -2317,6 +2476,8 @@ class BucketMigrationService:
         keys: list[str],
         parallelism_max: int,
         control_check: Callable[[], str],
+        source_client: Any | None = None,
+        target_client: Any | None = None,
     ) -> tuple[int, list[str], dict[str, int]]:
         if not keys:
             return 0, [], {"head_checksum": 0, "stream_sha256": 0}
@@ -2325,6 +2486,26 @@ class BucketMigrationService:
         failed_keys: list[str] = []
         method_counts: dict[str, int] = {"head_checksum": 0, "stream_sha256": 0}
         worker_count = max(1, min(int(parallelism_max), len(keys)))
+        thread_local = threading.local()
+
+        def _verify_worker(key: str) -> tuple[bool, str]:
+            resolved_source_client = getattr(thread_local, "source_client", None)
+            if resolved_source_client is None:
+                resolved_source_client = source_client or self._context_client(source_ctx)
+                thread_local.source_client = resolved_source_client
+            resolved_target_client = getattr(thread_local, "target_client", None)
+            if resolved_target_client is None:
+                resolved_target_client = target_client or self._context_client(target_ctx)
+                thread_local.target_client = resolved_target_client
+            return self._strong_verify_single_object(
+                source_ctx,
+                target_ctx,
+                source_bucket,
+                target_bucket,
+                key,
+                source_client=resolved_source_client,
+                target_client=resolved_target_client,
+            )
 
         for chunk in _chunked(keys, worker_count):
             state = control_check()
@@ -2335,14 +2516,7 @@ class BucketMigrationService:
 
             with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-strong-verify") as executor:
                 futures = {
-                    executor.submit(
-                        self._strong_verify_single_object,
-                        source_ctx,
-                        target_ctx,
-                        source_bucket,
-                        target_bucket,
-                        key,
-                    ): key
+                    executor.submit(_verify_worker, key): key
                     for key in chunk
                 }
                 interrupted_state: Optional[str] = None
@@ -2382,12 +2556,15 @@ class BucketMigrationService:
         source_bucket: str,
         target_bucket: str,
         key: str,
+        *,
+        source_client: Any | None = None,
+        target_client: Any | None = None,
     ) -> tuple[bool, str]:
-        source_client = self._context_client(source_ctx)
-        target_client = self._context_client(target_ctx)
+        resolved_source_client = source_client or self._context_client(source_ctx)
+        resolved_target_client = target_client or self._context_client(target_ctx)
 
-        source_checksums = self._head_object_checksums(source_client, source_bucket, key)
-        target_checksums = self._head_object_checksums(target_client, target_bucket, key)
+        source_checksums = self._head_object_checksums(resolved_source_client, source_bucket, key)
+        target_checksums = self._head_object_checksums(resolved_target_client, target_bucket, key)
         shared_checksum_fields = (
             "ChecksumSHA256",
             "ChecksumCRC32C",
@@ -2400,8 +2577,8 @@ class BucketMigrationService:
             if source_value and target_value:
                 return source_value == target_value, "head_checksum"
 
-        source_sha256 = self._stream_object_sha256(source_client, source_bucket, key)
-        target_sha256 = self._stream_object_sha256(target_client, target_bucket, key)
+        source_sha256 = self._stream_object_sha256(resolved_source_client, source_bucket, key)
+        target_sha256 = self._stream_object_sha256(resolved_target_client, target_bucket, key)
         return source_sha256 == target_sha256, "stream_sha256"
 
     def _head_object_checksums(self, client: Any, bucket_name: str, key: str) -> dict[str, str]:
@@ -2653,17 +2830,19 @@ class BucketMigrationService:
         item: BucketMigrationItem,
         control_check: Callable[[], str],
     ) -> tuple[int, int, _SyncDiff]:
-        source_objects = self._list_current_objects(source_ctx, source_bucket)
-        target_objects = self._list_current_objects(target_ctx, target_bucket)
-        diff = self._compute_sync_diff(source_objects, target_objects, allow_delete=allow_delete)
-        if not diff.copy_keys and not diff.delete_keys:
-            return 0, 0, diff
-
+        diff = self._new_empty_sync_diff()
         same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
         same_endpoint_copy = bool(same_endpoint and migration.use_same_endpoint_copy)
         pending_copied = 0
         pending_deleted = 0
         last_progress_flush = time.monotonic()
+        copied = 0
+        deleted = 0
+        copy_batch: list[str] = []
+        delete_batch: list[str] = []
+        scan_count_since_control = 0
+        worker_count = max(1, int(parallelism_max))
+        action_batch_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
 
         def flush_progress(*, force: bool = False) -> None:
             nonlocal pending_copied, pending_deleted, last_progress_flush
@@ -2700,54 +2879,148 @@ class BucketMigrationService:
                 pending_deleted += int(deleted_inc)
             flush_progress(force=force)
 
-        copied = 0
-        if diff.copy_keys:
-            if same_endpoint_copy and bool(migration.auto_grant_source_read_for_copy):
-                sample_key = diff.copy_keys[0]
-                with self._temporary_source_copy_grant(
-                    source_ctx,
-                    target_ctx,
-                    source_bucket=source_bucket,
-                    sample_key=sample_key,
-                ):
-                    copied = self._run_copy_actions(
-                        source_ctx,
-                        target_ctx,
-                        source_bucket,
-                        target_bucket,
-                        diff.copy_keys,
-                        parallelism_max=parallelism_max,
-                        same_endpoint=same_endpoint_copy,
-                        control_check=control_check,
-                        on_progress=on_object_progress,
-                    )
-            else:
-                copied = self._run_copy_actions(
-                    source_ctx,
-                    target_ctx,
-                    source_bucket,
-                    target_bucket,
-                    diff.copy_keys,
-                    parallelism_max=parallelism_max,
-                    same_endpoint=same_endpoint_copy,
-                    control_check=control_check,
-                    on_progress=on_object_progress,
-                )
-        if copied < 0:
-            return -1, -1, diff
+        def check_control_state(*, force_flush: bool) -> str:
+            state = control_check()
+            if state == "lost_lease":
+                if force_flush:
+                    on_object_progress(force=True)
+                raise _WorkerLeaseLostError("Worker lease lost while processing bucket diff")
+            if state in {"pause", "cancel"} and force_flush:
+                on_object_progress(force=True)
+            return state
 
-        deleted = 0
-        if diff.delete_keys:
-            deleted = self._run_delete_actions(
+        def flush_copy_batch() -> bool:
+            nonlocal copied, copy_batch
+            if not copy_batch:
+                return True
+            copied_now = self._run_copy_actions(
+                source_ctx,
+                target_ctx,
+                source_bucket,
+                target_bucket,
+                copy_batch,
+                parallelism_max=parallelism_max,
+                same_endpoint=same_endpoint_copy,
+                control_check=control_check,
+                on_progress=on_object_progress,
+            )
+            copy_batch = []
+            if copied_now < 0:
+                return False
+            copied += copied_now
+            return True
+
+        def flush_delete_batch() -> bool:
+            nonlocal deleted, delete_batch
+            if not delete_batch:
+                return True
+            deleted_now = self._run_delete_actions(
                 target_ctx,
                 target_bucket,
-                diff.delete_keys,
+                delete_batch,
                 parallelism_max=parallelism_max,
                 control_check=control_check,
                 on_progress=on_object_progress,
             )
-            if deleted < 0:
+            delete_batch = []
+            if deleted_now < 0:
+                return False
+            deleted += deleted_now
+            return True
+
+        source_client = self._context_client(source_ctx)
+        target_client = self._context_client(target_ctx)
+
+        with ExitStack() as copy_grant_stack:
+            copy_grant_enabled = False
+            for entry in self._iter_bucket_diff_entries(
+                source_ctx,
+                target_ctx,
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                source_client=source_client,
+                target_client=target_client,
+            ):
+                scan_count_since_control += 1
+                if scan_count_since_control >= _DIFF_CONTROL_CHECK_INTERVAL_OBJECTS:
+                    state = check_control_state(force_flush=True)
+                    if state in {"pause", "cancel"}:
+                        return -1, -1, diff
+                    scan_count_since_control = 0
+
+                copy_required = False
+                delete_required = False
+                if entry.kind == "only_source":
+                    diff.source_count += 1
+                    diff.only_source_count += 1
+                    if len(diff.sample["only_source_sample"]) < 200:
+                        diff.sample["only_source_sample"].append(entry.key)
+                    copy_required = True
+                elif entry.kind == "only_target":
+                    diff.target_count += 1
+                    diff.only_target_count += 1
+                    if len(diff.sample["only_target_sample"]) < 200:
+                        diff.sample["only_target_sample"].append(entry.key)
+                    delete_required = allow_delete
+                elif entry.kind == "matched":
+                    diff.source_count += 1
+                    diff.target_count += 1
+                    diff.matched_count += 1
+                elif entry.kind == "different":
+                    diff.source_count += 1
+                    diff.target_count += 1
+                    diff.different_count += 1
+                    if len(diff.sample["different_sample"]) < 200:
+                        diff.sample["different_sample"].append(
+                            {
+                                "key": entry.key,
+                                "source_size": entry.source_size,
+                                "target_size": entry.target_size,
+                                "source_etag": entry.source_etag,
+                                "target_etag": entry.target_etag,
+                                "compare_by": entry.compare_by,
+                            }
+                        )
+                    copy_required = True
+
+                if copy_required:
+                    if same_endpoint_copy and bool(migration.auto_grant_source_read_for_copy) and not copy_grant_enabled:
+                        copy_grant_stack.enter_context(
+                            self._temporary_source_copy_grant(
+                                source_ctx,
+                                target_ctx,
+                                source_bucket=source_bucket,
+                                sample_key=entry.key,
+                            )
+                        )
+                        copy_grant_enabled = True
+                    copy_batch.append(entry.key)
+                    if len(copy_batch) >= action_batch_size:
+                        state = check_control_state(force_flush=True)
+                        if state in {"pause", "cancel"}:
+                            return -1, -1, diff
+                        if not flush_copy_batch():
+                            return -1, -1, diff
+
+                if delete_required:
+                    delete_batch.append(entry.key)
+                    if len(delete_batch) >= action_batch_size:
+                        state = check_control_state(force_flush=True)
+                        if state in {"pause", "cancel"}:
+                            return -1, -1, diff
+                        if not flush_delete_batch():
+                            return -1, -1, diff
+
+            state = check_control_state(force_flush=True)
+            if state in {"pause", "cancel"}:
                 return -1, -1, diff
+            if not flush_copy_batch():
+                return -1, -1, diff
+            if not flush_delete_batch():
+                return -1, -1, diff
+
+        if copied == 0 and deleted == 0:
+            return 0, 0, diff
 
         on_object_progress(force=True)
         self._add_event(
@@ -2764,6 +3037,240 @@ class BucketMigrationService:
         )
         self._commit()
         return copied, deleted, diff
+
+    def _new_empty_sync_diff(self) -> _SyncDiff:
+        return _SyncDiff(
+            copy_keys=[],
+            delete_keys=[],
+            source_count=0,
+            target_count=0,
+            matched_count=0,
+            different_count=0,
+            only_source_count=0,
+            only_target_count=0,
+            sample={
+                "only_source_sample": [],
+                "only_target_sample": [],
+                "different_sample": [],
+            },
+        )
+
+    def _compare_buckets_streamed(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        control_check: Callable[[], str],
+    ) -> Optional[_SyncDiff]:
+        source_client = self._context_client(source_ctx)
+        target_client = self._context_client(target_ctx)
+        diff = self._new_empty_sync_diff()
+        scan_count_since_control = 0
+
+        for entry in self._iter_bucket_diff_entries(
+            source_ctx,
+            target_ctx,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            source_client=source_client,
+            target_client=target_client,
+        ):
+            scan_count_since_control += 1
+            if scan_count_since_control >= _DIFF_CONTROL_CHECK_INTERVAL_OBJECTS:
+                state = control_check()
+                if state == "lost_lease":
+                    raise _WorkerLeaseLostError("Worker lease lost while comparing bucket content")
+                if state in {"pause", "cancel"}:
+                    return None
+                scan_count_since_control = 0
+
+            if entry.kind == "only_source":
+                diff.source_count += 1
+                diff.only_source_count += 1
+                if len(diff.sample["only_source_sample"]) < 200:
+                    diff.sample["only_source_sample"].append(entry.key)
+                continue
+            if entry.kind == "only_target":
+                diff.target_count += 1
+                diff.only_target_count += 1
+                if len(diff.sample["only_target_sample"]) < 200:
+                    diff.sample["only_target_sample"].append(entry.key)
+                continue
+            if entry.kind == "matched":
+                diff.source_count += 1
+                diff.target_count += 1
+                diff.matched_count += 1
+                continue
+            if entry.kind == "different":
+                diff.source_count += 1
+                diff.target_count += 1
+                diff.different_count += 1
+                if len(diff.sample["different_sample"]) < 200:
+                    diff.sample["different_sample"].append(
+                        {
+                            "key": entry.key,
+                            "source_size": entry.source_size,
+                            "target_size": entry.target_size,
+                            "source_etag": entry.source_etag,
+                            "target_etag": entry.target_etag,
+                            "compare_by": entry.compare_by,
+                        }
+                    )
+
+        return diff
+
+    def _strong_verify_size_only_candidates_streamed(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        parallelism_max: int,
+        control_check: Callable[[], str],
+    ) -> tuple[int, int, list[str], dict[str, int]]:
+        worker_count = max(1, int(parallelism_max))
+        batch_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
+        size_only_count = 0
+        verified_count = 0
+        failed_keys: list[str] = []
+        method_counts: dict[str, int] = {"head_checksum": 0, "stream_sha256": 0}
+        size_only_batch: list[str] = []
+        scan_count_since_control = 0
+        source_client = self._context_client(source_ctx)
+        target_client = self._context_client(target_ctx)
+
+        def merge_method_counts(local_counts: dict[str, int]) -> None:
+            for method, count in local_counts.items():
+                method_counts[method] = method_counts.get(method, 0) + int(count or 0)
+
+        def flush_batch() -> bool:
+            nonlocal verified_count, size_only_batch
+            if not size_only_batch:
+                return True
+            verified_now, failed_now, method_counts_now = self._strong_verify_size_only_objects(
+                source_ctx,
+                target_ctx,
+                source_bucket=source_bucket,
+                target_bucket=target_bucket,
+                keys=size_only_batch,
+                parallelism_max=worker_count,
+                control_check=control_check,
+                source_client=source_client,
+                target_client=target_client,
+            )
+            size_only_batch = []
+            if verified_now < 0:
+                return False
+            verified_count += verified_now
+            failed_keys.extend(failed_now)
+            merge_method_counts(method_counts_now)
+            return True
+
+        for entry in self._iter_bucket_diff_entries(
+            source_ctx,
+            target_ctx,
+            source_bucket=source_bucket,
+            target_bucket=target_bucket,
+            source_client=source_client,
+            target_client=target_client,
+        ):
+            scan_count_since_control += 1
+            if scan_count_since_control >= _DIFF_CONTROL_CHECK_INTERVAL_OBJECTS:
+                state = control_check()
+                if state == "lost_lease":
+                    raise _WorkerLeaseLostError("Worker lease lost while collecting strong-verification candidates")
+                if state in {"pause", "cancel"}:
+                    return -1, 0, [], method_counts
+                scan_count_since_control = 0
+
+            if entry.kind != "matched" or entry.compare_by != "size":
+                continue
+            size_only_count += 1
+            size_only_batch.append(entry.key)
+            if len(size_only_batch) < batch_size:
+                continue
+            if not flush_batch():
+                return -1, 0, [], method_counts
+
+        if not flush_batch():
+            return -1, 0, [], method_counts
+        return size_only_count, verified_count, failed_keys, method_counts
+
+    def _iter_bucket_diff_entries(
+        self,
+        source_ctx: _ResolvedContext,
+        target_ctx: _ResolvedContext,
+        *,
+        source_bucket: str,
+        target_bucket: str,
+        source_client: Optional[Any] = None,
+        target_client: Optional[Any] = None,
+    ):
+        source_iter = iter(self._iter_bucket_objects(source_ctx, source_bucket, client=source_client))
+        target_iter = iter(self._iter_bucket_objects(target_ctx, target_bucket, client=target_client))
+        source_entry = next(source_iter, None)
+        target_entry = next(target_iter, None)
+
+        while source_entry is not None or target_entry is not None:
+            if source_entry is not None and (
+                target_entry is None or source_entry.key < target_entry.key
+            ):
+                yield _BucketDiffEntry(
+                    kind="only_source",
+                    key=source_entry.key,
+                    source_size=source_entry.size,
+                    target_size=0,
+                    source_etag=source_entry.etag,
+                    target_etag=None,
+                    compare_by="presence",
+                )
+                source_entry = next(source_iter, None)
+                continue
+
+            if target_entry is not None and (
+                source_entry is None or target_entry.key < source_entry.key
+            ):
+                yield _BucketDiffEntry(
+                    kind="only_target",
+                    key=target_entry.key,
+                    source_size=0,
+                    target_size=target_entry.size,
+                    source_etag=None,
+                    target_etag=target_entry.etag,
+                    compare_by="presence",
+                )
+                target_entry = next(target_iter, None)
+                continue
+
+            if source_entry is None or target_entry is None:
+                break
+            key = source_entry.key
+            source_size = source_entry.size
+            target_size = target_entry.size
+            source_etag = source_entry.etag
+            target_etag = target_entry.etag
+            source_md5 = self._etag_md5(source_etag)
+            target_md5 = self._etag_md5(target_etag)
+            if source_md5 and target_md5:
+                compare_by = "md5"
+                equal = source_md5 == target_md5
+            else:
+                compare_by = "size"
+                equal = source_size == target_size
+            yield _BucketDiffEntry(
+                kind="matched" if equal else "different",
+                key=key,
+                source_size=source_size,
+                target_size=target_size,
+                source_etag=source_etag,
+                target_etag=target_etag,
+                compare_by=compare_by,
+            )
+            source_entry = next(source_iter, None)
+            target_entry = next(target_iter, None)
 
     def _run_copy_actions(
         self,
@@ -2783,6 +3290,27 @@ class BucketMigrationService:
         copied = 0
         worker_count = max(1, min(int(parallelism_max), len(keys)))
         chunk_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
+        thread_local = threading.local()
+
+        def _copy_worker(key: str) -> None:
+            source_client = getattr(thread_local, "source_client", None)
+            if source_client is None:
+                source_client = self._context_client(source_ctx)
+                thread_local.source_client = source_client
+            target_client = getattr(thread_local, "target_client", None)
+            if target_client is None:
+                target_client = self._context_client(target_ctx)
+                thread_local.target_client = target_client
+            self._copy_single_object(
+                source_ctx,
+                target_ctx,
+                source_bucket,
+                target_bucket,
+                key,
+                same_endpoint,
+                source_client=source_client,
+                target_client=target_client,
+            )
 
         for chunk in _chunked(keys, chunk_size):
             state = control_check()
@@ -2795,18 +3323,7 @@ class BucketMigrationService:
                     on_progress(force=True)
                 return -1
             with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-copy") as executor:
-                futures = {
-                    executor.submit(
-                        self._copy_single_object,
-                        source_ctx,
-                        target_ctx,
-                        source_bucket,
-                        target_bucket,
-                        key,
-                        same_endpoint,
-                    )
-                    for key in chunk
-                }
+                futures = {executor.submit(_copy_worker, key) for key in chunk}
                 interrupted_state: Optional[str] = None
                 pending = set(futures)
                 while pending:
@@ -2848,6 +3365,14 @@ class BucketMigrationService:
         deleted = 0
         worker_count = max(1, min(int(parallelism_max), len(keys)))
         chunk_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
+        thread_local = threading.local()
+
+        def _delete_worker(key: str) -> None:
+            target_client = getattr(thread_local, "target_client", None)
+            if target_client is None:
+                target_client = self._context_client(target_ctx)
+                thread_local.target_client = target_client
+            self._delete_single_object(target_ctx, target_bucket, key, target_client=target_client)
 
         for chunk in _chunked(keys, chunk_size):
             state = control_check()
@@ -2860,10 +3385,7 @@ class BucketMigrationService:
                     on_progress(force=True)
                 return -1
             with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-delete") as executor:
-                futures = {
-                    executor.submit(self._delete_single_object, target_ctx, target_bucket, key)
-                    for key in chunk
-                }
+                futures = {executor.submit(_delete_worker, key) for key in chunk}
                 interrupted_state: Optional[str] = None
                 pending = set(futures)
                 while pending:
@@ -2898,12 +3420,16 @@ class BucketMigrationService:
         target_bucket: str,
         key: str,
         same_endpoint: bool,
+        *,
+        source_client: Any | None = None,
+        target_client: Any | None = None,
     ) -> None:
+        resolved_source_client = source_client or self._context_client(source_ctx)
+        resolved_target_client = target_client or self._context_client(target_ctx)
         if same_endpoint:
-            target_client = self._context_client(target_ctx)
             copy_source = {"Bucket": source_bucket, "Key": key}
             try:
-                target_client.copy_object(Bucket=target_bucket, Key=key, CopySource=copy_source)
+                resolved_target_client.copy_object(Bucket=target_bucket, Key=key, CopySource=copy_source)
                 return
             except (ClientError, BotoCoreError) as exc:
                 if not self._is_access_denied_error(exc):
@@ -2919,7 +3445,8 @@ class BucketMigrationService:
                     source_bucket=source_bucket,
                     target_bucket=target_bucket,
                     key=key,
-                    target_client=target_client,
+                    source_client=resolved_source_client,
+                    target_client=resolved_target_client,
                 )
                 return
 
@@ -2929,6 +3456,8 @@ class BucketMigrationService:
             source_bucket=source_bucket,
             target_bucket=target_bucket,
             key=key,
+            source_client=resolved_source_client,
+            target_client=resolved_target_client,
         )
 
     def _stream_copy_single_object(
@@ -2939,13 +3468,14 @@ class BucketMigrationService:
         source_bucket: str,
         target_bucket: str,
         key: str,
+        source_client: Any | None = None,
         target_client: Any | None = None,
     ) -> None:
-        source_client = self._context_client(source_ctx)
+        resolved_source_client = source_client or self._context_client(source_ctx)
         resolved_target_client = target_client or self._context_client(target_ctx)
         body = None
         try:
-            response = source_client.get_object(Bucket=source_bucket, Key=key)
+            response = resolved_source_client.get_object(Bucket=source_bucket, Key=key)
             body = response.get("Body")
             resolved_target_client.upload_fileobj(body, target_bucket, key)
         except (ClientError, BotoCoreError) as exc:
@@ -2957,8 +3487,15 @@ class BucketMigrationService:
                 except Exception:  # noqa: BLE001
                     pass
 
-    def _delete_single_object(self, target_ctx: _ResolvedContext, target_bucket: str, key: str) -> None:
-        client = self._context_client(target_ctx)
+    def _delete_single_object(
+        self,
+        target_ctx: _ResolvedContext,
+        target_bucket: str,
+        key: str,
+        *,
+        target_client: Any | None = None,
+    ) -> None:
+        client = target_client or self._context_client(target_ctx)
         try:
             client.delete_object(Bucket=target_bucket, Key=key)
         except (ClientError, BotoCoreError) as exc:
@@ -3188,16 +3725,21 @@ class BucketMigrationService:
             raise ValueError("S3 account not found")
         return account
 
-    def _list_current_objects(self, ctx: _ResolvedContext, bucket_name: str) -> dict[str, dict[str, Any]]:
-        client = self._context_client(ctx)
+    def _iter_bucket_objects(
+        self,
+        ctx: _ResolvedContext,
+        bucket_name: str,
+        *,
+        client: Optional[Any] = None,
+    ):
+        resolved_client = client or self._context_client(ctx)
         continuation_token: Optional[str] = None
-        objects_by_key: dict[str, dict[str, Any]] = {}
         while True:
             kwargs: dict[str, Any] = {"Bucket": bucket_name, "MaxKeys": 1000}
             if continuation_token:
                 kwargs["ContinuationToken"] = continuation_token
             try:
-                page = client.list_objects_v2(**kwargs)
+                page = resolved_client.list_objects_v2(**kwargs)
             except (ClientError, BotoCoreError) as exc:
                 raise RuntimeError(f"Unable to list objects in bucket '{bucket_name}': {exc}") from exc
             for entry in page.get("Contents", []) or []:
@@ -3206,13 +3748,19 @@ class BucketMigrationService:
                     continue
                 etag_raw = entry.get("ETag")
                 etag = etag_raw.strip().strip('"') if isinstance(etag_raw, str) else None
-                objects_by_key[key] = {
-                    "size": int(entry.get("Size") or 0),
-                    "etag": etag or None,
-                }
+                yield _BucketObjectEntry(
+                    key=key,
+                    size=int(entry.get("Size") or 0),
+                    etag=etag or None,
+                )
             continuation_token = page.get("NextContinuationToken")
             if not continuation_token:
                 break
+
+    def _list_current_objects(self, ctx: _ResolvedContext, bucket_name: str) -> dict[str, dict[str, Any]]:
+        objects_by_key: dict[str, dict[str, Any]] = {}
+        for entry in self._iter_bucket_objects(ctx, bucket_name):
+            objects_by_key[entry.key] = {"size": entry.size, "etag": entry.etag}
         return objects_by_key
 
     def _compute_sync_diff(
@@ -3422,7 +3970,12 @@ class BucketMigrationService:
                 item.read_only_applied = False
                 item.source_policy_backup_json = None
             except Exception as exc:  # noqa: BLE001
-                rollback_issues.append(f"source policy restore failed: {exc}")
+                rollback_issues.append(
+                    _truncate_db_text(
+                        f"source policy restore failed: {exc}",
+                        max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+                    )
+                )
 
         if item.target_lock_applied or item.target_policy_backup_json:
             try:
@@ -3433,19 +3986,32 @@ class BucketMigrationService:
                 item.target_lock_applied = False
                 item.target_policy_backup_json = None
             except Exception as exc:  # noqa: BLE001
-                rollback_issues.append(f"target lock restore failed: {exc}")
+                rollback_issues.append(
+                    _truncate_db_text(
+                        f"target lock restore failed: {exc}",
+                        max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+                    )
+                )
 
         try:
             purged_current, purged_versions = self._purge_target_bucket(target_ctx, item.target_bucket)
             purged_count = purged_current + purged_versions
             item.objects_deleted = int(item.objects_deleted or 0) + purged_count
         except Exception as exc:  # noqa: BLE001
-            rollback_issues.append(f"destination cleanup failed: {exc}")
+            rollback_issues.append(
+                _truncate_db_text(
+                    f"destination cleanup failed: {exc}",
+                    max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+                )
+            )
 
         if rollback_issues:
             item.status = "failed"
             item.step = "rollback_failed"
-            item.error_message = "Rollback failed: " + "; ".join(rollback_issues)
+            item.error_message = _truncate_optional_db_text(
+                "Rollback failed: " + "; ".join(rollback_issues),
+                max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+            )
             item.finished_at = utcnow()
             item.updated_at = utcnow()
             self._add_event(
@@ -3645,7 +4211,10 @@ class BucketMigrationService:
             migration.cancel_requested = False
             migration.worker_lease_owner = None
             migration.worker_lease_until = None
-            migration.error_message = f"Fatal migration worker error: {error_text}"
+            migration.error_message = _truncate_optional_db_text(
+                f"Fatal migration worker error: {error_text}",
+                max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
+            )
             migration.finished_at = now
             migration.updated_at = now
             for item in migration.items:
@@ -3851,9 +4420,10 @@ class BucketMigrationService:
         target_release_errors = self._release_target_write_locks(migration, target_ctx, verify_restored=True)
         release_errors = source_release_errors + target_release_errors
         if release_errors:
-            migration.error_message = (
+            migration.error_message = _truncate_optional_db_text(
                 f"Migration canceled, but {len(release_errors)} authorization restore error(s): "
-                + " | ".join(release_errors[:3])
+                + " | ".join(release_errors[:3]),
+                max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
             )
         else:
             migration.error_message = None
@@ -3901,9 +4471,10 @@ class BucketMigrationService:
         if release_errors:
             if migration.status == "completed":
                 migration.status = "completed_with_errors"
-            migration.error_message = (
+            migration.error_message = _truncate_optional_db_text(
                 f"Migration finished with {len(release_errors)} target lock cleanup error(s): "
-                + " | ".join(release_errors[:3])
+                + " | ".join(release_errors[:3]),
+                max_chars=_DB_ERROR_MESSAGE_MAX_CHARS,
             )
         self._add_event(migration, level="info", message=f"Migration finished with status '{migration.status}'.")
 
@@ -3936,13 +4507,21 @@ class BucketMigrationService:
         message: str,
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
+        safe_message = _truncate_db_text(message, max_chars=_DB_EVENT_MESSAGE_MAX_CHARS)
+        safe_metadata: Optional[dict[str, Any]] = None
+        if metadata is not None:
+            normalized_metadata = _sanitize_event_metadata(metadata)
+            if isinstance(normalized_metadata, dict):
+                safe_metadata = normalized_metadata
+            else:
+                safe_metadata = {"value": normalized_metadata}
         created_at = utcnow()
         entry = BucketMigrationEvent(
             migration_id=migration.id,
             item_id=item.id if item else None,
             level=level,
-            message=message,
-            metadata_json=_json_dumps(metadata) if metadata is not None else None,
+            message=safe_message,
+            metadata_json=_serialize_event_metadata(safe_metadata),
             created_at=created_at,
         )
         self.db.add(entry)
@@ -3950,8 +4529,8 @@ class BucketMigrationService:
             migration,
             item=item,
             level=level,
-            message=message,
-            metadata=metadata,
+            message=safe_message,
+            metadata=safe_metadata,
             created_at=created_at,
         )
 
@@ -4033,6 +4612,7 @@ class BucketMigrationService:
                 "target_context_id": migration.target_context_id,
                 "copy_bucket_settings": bool(migration.copy_bucket_settings),
                 "delete_source": bool(migration.delete_source),
+                "strong_integrity_check": bool(getattr(migration, "strong_integrity_check", False)),
                 "lock_target_writes": bool(migration.lock_target_writes),
                 "use_same_endpoint_copy": bool(migration.use_same_endpoint_copy),
                 "auto_grant_source_read_for_copy": bool(migration.auto_grant_source_read_for_copy),

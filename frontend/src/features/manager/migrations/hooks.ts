@@ -13,7 +13,7 @@ import {
   type BucketMigrationDetail,
   type BucketMigrationView,
 } from "../../../api/managerMigrations";
-import { extractError, normalizeEndpointUrl } from "./shared";
+import { extractError, isFinalMigrationStatus, normalizeEndpointUrl } from "./shared";
 
 export function useManagerContexts() {
   const [contexts, setContexts] = useState<ExecutionContext[]>([]);
@@ -164,9 +164,18 @@ export function useManagerMigrationDetail(migrationId: number | null) {
     let canceled = false;
     let fallbackInterval: number | null = null;
 
+    const stopFallbackPolling = () => {
+      if (fallbackInterval == null) return;
+      window.clearInterval(fallbackInterval);
+      fallbackInterval = null;
+    };
+
     const applyDetail = (detail: BucketMigrationDetail) => {
       if (canceled) return;
       setMigrationDetail(detail);
+      if (isFinalMigrationStatus(detail.status)) {
+        stopFallbackPolling();
+      }
     };
 
     const runFallbackPolling = () => {
@@ -221,9 +230,7 @@ export function useManagerMigrationDetail(migrationId: number | null) {
       if (detailStreamAbortRef.current === streamAbortController) {
         detailStreamAbortRef.current = null;
       }
-      if (fallbackInterval != null) {
-        window.clearInterval(fallbackInterval);
-      }
+      stopFallbackPolling();
     };
   }, [migrationId]);
 

@@ -18,6 +18,8 @@ from app.services.bucket_migration_service import (
     BucketMigrationService,
     BucketMigrationWorker,
     _BucketMigrationWebhookDispatcher,
+    _DB_ERROR_MESSAGE_MAX_CHARS,
+    _DB_EVENT_MESSAGE_MAX_CHARS,
 )
 
 
@@ -116,6 +118,7 @@ def test_create_migration_creates_items_and_defaults(db_session):
     assert migration.total_items == 2
     assert migration.mode == "pre_sync"
     assert migration.lock_target_writes is True
+    assert migration.strong_integrity_check is False
     assert migration.use_same_endpoint_copy is False
     assert migration.auto_grant_source_read_for_copy is False
     by_source = {item.source_bucket: item for item in migration.items}
@@ -348,6 +351,7 @@ def test_update_draft_migration_replaces_configuration_and_resets_precheck(db_se
     assert updated.mode == "one_shot"
     assert updated.copy_bucket_settings is False
     assert updated.delete_source is False
+    assert updated.strong_integrity_check is False
     assert updated.lock_target_writes is False
     assert updated.use_same_endpoint_copy is False
     assert updated.auto_grant_source_read_for_copy is False
@@ -972,6 +976,7 @@ def test_verify_blocks_delete_source_when_strong_verification_fails(db_session):
         target_context_id=str(target.id),
         mode="one_shot",
         delete_source=True,
+        strong_integrity_check=True,
         buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
     )
     migration = service.create_migration(payload, user)
@@ -980,23 +985,17 @@ def test_verify_blocks_delete_source_when_strong_verification_fails(db_session):
     item.step = "verify"
     db_session.commit()
 
-    service._buckets = SimpleNamespace(
-        compare_bucket_content=lambda *_args, **_kwargs: SimpleNamespace(
-            source_count=1,
-            target_count=1,
-            matched_count=1,
-            different_count=0,
-            only_source_count=0,
-            only_target_count=0,
-            only_source_sample=[],
-            only_target_sample=[],
-            different_sample=[],
-        )
+    service._compare_buckets_streamed = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
+        source_count=1,
+        target_count=1,
+        matched_count=1,
+        different_count=0,
+        only_source_count=0,
+        only_target_count=0,
+        sample={"only_source_sample": [], "only_target_sample": [], "different_sample": []},
     )
-    service._list_current_objects = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
-        "large-object.bin": {"size": 1024, "etag": "multipart-etag-1"}
-    }
-    service._strong_verify_size_only_objects = lambda *_args, **_kwargs: (  # type: ignore[method-assign]
+    service._strong_verify_size_only_candidates_streamed = lambda *_args, **_kwargs: (  # type: ignore[method-assign]
+        1,
         0,
         ["large-object.bin"],
         {"head_checksum": 0, "stream_sha256": 0},
@@ -1025,6 +1024,7 @@ def test_verify_allows_delete_source_when_strong_verification_succeeds(db_sessio
         target_context_id=str(target.id),
         mode="one_shot",
         delete_source=True,
+        strong_integrity_check=True,
         buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
     )
     migration = service.create_migration(payload, user)
@@ -1033,27 +1033,70 @@ def test_verify_allows_delete_source_when_strong_verification_succeeds(db_sessio
     item.step = "verify"
     db_session.commit()
 
-    service._buckets = SimpleNamespace(
-        compare_bucket_content=lambda *_args, **_kwargs: SimpleNamespace(
-            source_count=1,
-            target_count=1,
-            matched_count=1,
-            different_count=0,
-            only_source_count=0,
-            only_target_count=0,
-            only_source_sample=[],
-            only_target_sample=[],
-            different_sample=[],
-        )
+    service._compare_buckets_streamed = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
+        source_count=1,
+        target_count=1,
+        matched_count=1,
+        different_count=0,
+        only_source_count=0,
+        only_target_count=0,
+        sample={"only_source_sample": [], "only_target_sample": [], "different_sample": []},
     )
-    service._list_current_objects = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
-        "large-object.bin": {"size": 1024, "etag": "multipart-etag-1"}
-    }
-    service._strong_verify_size_only_objects = lambda *_args, **_kwargs: (  # type: ignore[method-assign]
+    service._strong_verify_size_only_candidates_streamed = lambda *_args, **_kwargs: (  # type: ignore[method-assign]
+        1,
         1,
         [],
         {"head_checksum": 0, "stream_sha256": 1},
     )
+    deleted: list[str] = []
+    service._set_managed_block_policy = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._delete_source_bucket_with_retry = lambda bucket, *_args, **_kwargs: deleted.append(bucket)  # type: ignore[method-assign]
+    source_ctx = SimpleNamespace(account=source)
+    target_ctx = SimpleNamespace(account=target)
+
+    service._run_item(migration, item, source_ctx, target_ctx, control_check=lambda: "run")
+
+    db_session.refresh(item)
+    assert item.status == "completed"
+    assert item.step == "completed"
+    assert deleted == ["bucket-a"]
+
+
+def test_verify_delete_source_skips_strong_verification_when_disabled(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        delete_source=True,
+        strong_integrity_check=False,
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+    )
+    migration = service.create_migration(payload, user)
+    item = migration.items[0]
+    item.status = "running"
+    item.step = "verify"
+    db_session.commit()
+
+    service._compare_buckets_streamed = lambda *_args, **_kwargs: SimpleNamespace(  # type: ignore[method-assign]
+        source_count=1,
+        target_count=1,
+        matched_count=1,
+        different_count=0,
+        only_source_count=0,
+        only_target_count=0,
+        sample={"only_source_sample": [], "only_target_sample": [], "different_sample": []},
+    )
+
+    def _unexpected_strong_verify(*_args, **_kwargs):
+        raise AssertionError("Strong verification must be skipped when strong_integrity_check is disabled")
+
+    service._strong_verify_size_only_candidates_streamed = _unexpected_strong_verify  # type: ignore[method-assign]
     deleted: list[str] = []
     service._set_managed_block_policy = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._delete_source_bucket_with_retry = lambda bucket, *_args, **_kwargs: deleted.append(bucket)  # type: ignore[method-assign]
@@ -1283,8 +1326,8 @@ def test_run_precheck_fails_when_same_endpoint_copy_source_access_is_missing(db_
 
 def test_sync_bucket_uses_stream_copy_when_same_endpoint_copy_option_is_disabled(db_session):
     service = BucketMigrationService(db_session)
-    source_ctx = SimpleNamespace(endpoint="https://same.example.test")
-    target_ctx = SimpleNamespace(endpoint="https://same.example.test")
+    source_ctx = SimpleNamespace(endpoint="https://same.example.test", context_id="src", account=SimpleNamespace())
+    target_ctx = SimpleNamespace(endpoint="https://same.example.test", context_id="dst", account=SimpleNamespace())
     migration = SimpleNamespace(
         use_same_endpoint_copy=False,
         auto_grant_source_read_for_copy=True,
@@ -1307,8 +1350,20 @@ def test_sync_bucket_uses_stream_copy_when_same_endpoint_copy_option_is_disabled
     captured_same_endpoint_flags: list[bool] = []
     captured_event_metadata: list[dict[str, object] | None] = []
 
-    service._list_current_objects = lambda *_args, **_kwargs: []  # type: ignore[method-assign]
-    service._compute_sync_diff = lambda *_args, **_kwargs: diff  # type: ignore[method-assign]
+    service._context_client = lambda *_args, **_kwargs: SimpleNamespace()  # type: ignore[method-assign]
+    service._iter_bucket_diff_entries = lambda *_args, **_kwargs: iter(  # type: ignore[method-assign]
+        [
+            SimpleNamespace(
+                kind="only_source",
+                key="object-a",
+                source_size=1,
+                target_size=0,
+                source_etag="etag-a",
+                target_etag=None,
+                compare_by="presence",
+            )
+        ]
+    )
     service._run_delete_actions = lambda *_args, **_kwargs: 0  # type: ignore[method-assign]
 
     def _run_copy_actions_stub(*_args, **kwargs):
@@ -1795,6 +1850,70 @@ def test_rollback_failed_items_keeps_completed_with_errors_when_one_item_fails(d
     assert by_source["bucket-b"].step == "rollback_failed"
 
 
+def test_rollback_failed_items_truncates_large_error_payloads(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    payload = BucketMigrationCreateRequest(
+        source_context_id=str(source.id),
+        target_context_id=str(target.id),
+        mode="one_shot",
+        buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+    )
+    migration = service.create_migration(payload, user)
+    migration.status = "completed_with_errors"
+    item = migration.items[0]
+    item.status = "failed"
+    item.step = "sync"
+    db_session.commit()
+
+    def _resolve_context(context_id: str):
+        return SimpleNamespace(account=source if context_id == str(source.id) else target)
+
+    huge_error = "x" * 100_000
+
+    def _purge_target_bucket(*_args, **_kwargs):
+        raise RuntimeError(huge_error)
+
+    service._resolve_context = _resolve_context  # type: ignore[method-assign]
+    service._precheck_can_list_bucket = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._purge_target_bucket = _purge_target_bucket  # type: ignore[method-assign]
+
+    updated, rolled_back_count = service.rollback_failed_items(migration.id)
+
+    assert rolled_back_count == 1
+    updated_item = updated.items[0]
+    assert updated_item.status == "failed"
+    assert updated_item.step == "rollback_failed"
+    assert updated_item.error_message is not None
+    assert len(updated_item.error_message) <= _DB_ERROR_MESSAGE_MAX_CHARS
+    assert "truncated" in updated_item.error_message
+
+    failure_event = (
+        db_session.query(BucketMigrationEvent)
+        .filter(
+            BucketMigrationEvent.migration_id == migration.id,
+            BucketMigrationEvent.item_id == updated_item.id,
+            BucketMigrationEvent.message == "Rollback failed for bucket item.",
+        )
+        .order_by(BucketMigrationEvent.id.desc())
+        .first()
+    )
+    assert failure_event is not None
+    assert failure_event.metadata_json is not None
+    metadata = json.loads(failure_event.metadata_json)
+    assert isinstance(metadata, dict)
+    issues = metadata.get("issues")
+    assert isinstance(issues, list)
+    assert issues
+    assert isinstance(issues[0], str)
+    assert len(issues[0]) <= _DB_EVENT_MESSAGE_MAX_CHARS
+    assert "truncated" in issues[0]
+
+
 def test_rollback_failed_migration_blocks_when_delete_source_already_completed(db_session):
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
@@ -2049,6 +2168,7 @@ def test_add_event_notifies_webhook_when_configured(db_session):
     assert payload["type"] == "bucket_migration.event"
     assert payload["migration"]["id"] == migration.id
     assert payload["migration"]["status"] == migration.status
+    assert payload["migration"]["strong_integrity_check"] is False
     assert payload["migration"]["use_same_endpoint_copy"] is False
     assert payload["item"]["id"] == item.id
     assert payload["item"]["source_bucket"] == item.source_bucket
@@ -2219,9 +2339,21 @@ def test_sync_bucket_updates_object_counters_incrementally(db_session):
         verify_tls=True,
     )
 
-    source_objects = {f"object-{index}": {"size": 1, "etag": "a" * 32} for index in range(30)}
-    target_objects: dict[str, dict[str, object]] = {}
-    service._list_current_objects = lambda ctx, _bucket_name: source_objects if ctx is source_ctx else target_objects  # type: ignore[method-assign]
+    service._context_client = lambda *_args, **_kwargs: SimpleNamespace()  # type: ignore[method-assign]
+    service._iter_bucket_diff_entries = lambda *_args, **_kwargs: iter(  # type: ignore[method-assign]
+        [
+            SimpleNamespace(
+                kind="only_source",
+                key=f"object-{index}",
+                source_size=1,
+                target_size=0,
+                source_etag="a" * 32,
+                target_etag=None,
+                compare_by="presence",
+            )
+            for index in range(30)
+        ]
+    )
     service._is_same_endpoint = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
     service._copy_single_object = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
@@ -2293,9 +2425,21 @@ def test_sync_bucket_force_flushes_progress_when_pause_is_requested(db_session):
         verify_tls=True,
     )
 
-    source_objects = {f"object-{index}": {"size": 1, "etag": "a" * 32} for index in range(5)}
-    target_objects: dict[str, dict[str, object]] = {}
-    service._list_current_objects = lambda ctx, _bucket_name: source_objects if ctx is source_ctx else target_objects  # type: ignore[method-assign]
+    service._context_client = lambda *_args, **_kwargs: SimpleNamespace()  # type: ignore[method-assign]
+    service._iter_bucket_diff_entries = lambda *_args, **_kwargs: iter(  # type: ignore[method-assign]
+        [
+            SimpleNamespace(
+                kind="only_source",
+                key=f"object-{index}",
+                source_size=1,
+                target_size=0,
+                source_etag="a" * 32,
+                target_etag=None,
+                compare_by="presence",
+            )
+            for index in range(5)
+        ]
+    )
     service._is_same_endpoint = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
     service._copy_single_object = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
     service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
@@ -2304,7 +2448,7 @@ def test_sync_bucket_force_flushes_progress_when_pause_is_requested(db_session):
 
     def _control_check() -> str:
         control_calls["count"] += 1
-        return "run" if control_calls["count"] == 1 else "pause"
+        return "pause" if control_calls["count"] >= 3 else "run"
 
     copied, deleted, _diff = service._sync_bucket(
         source_ctx,
@@ -2362,7 +2506,7 @@ def test_run_precheck_executes_target_lock_probe_once_when_required(db_session):
 
 
 
-def test_run_precheck_fails_when_target_lock_probe_fails(db_session):
+def test_run_precheck_warns_when_target_lock_probe_fails_in_best_effort_mode(db_session):
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
     target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
@@ -2389,14 +2533,16 @@ def test_run_precheck_fails_when_target_lock_probe_fails(db_session):
     )
 
     checked = service.run_precheck(migration.id)
-    assert checked.precheck_status == "failed"
+    assert checked.precheck_status == "passed"
     report = json.loads(checked.precheck_report_json or "{}")
+    assert int(report.get("errors") or 0) == 0
+    assert int(report.get("warnings") or 0) >= 1
     messages = report.get("items", [])[0].get("messages", [])
-    assert any("Target write-lock precheck failed" in str(message.get("message", "")) for message in messages)
+    assert any("best effort mode" in str(message.get("message", "")).lower() for message in messages)
 
 
 
-def test_run_precheck_fails_when_target_lock_probe_cleanup_fails(db_session):
+def test_run_precheck_warns_when_target_lock_probe_cleanup_fails_in_best_effort_mode(db_session):
     user = _create_user(db_session)
     source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
     target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
@@ -2423,11 +2569,82 @@ def test_run_precheck_fails_when_target_lock_probe_cleanup_fails(db_session):
     )
 
     checked = service.run_precheck(migration.id)
-    assert checked.precheck_status == "failed"
+    assert checked.precheck_status == "passed"
     report = json.loads(checked.precheck_report_json or "{}")
+    assert int(report.get("errors") or 0) == 0
+    assert int(report.get("warnings") or 0) >= 1
     messages = report.get("items", [])[0].get("messages", [])
     assert any("cleanup failed" in str(message.get("message", "")).lower() for message in messages)
 
+
+
+def test_apply_target_lock_continues_when_lock_fails_in_best_effort_mode(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            mode="pre_sync",
+            lock_target_writes=True,
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+        ),
+        user,
+    )
+    item = migration.items[0]
+    item.status = "running"
+    item.step = "apply_target_lock"
+    db_session.commit()
+
+    service._apply_target_write_lock_policy = (  # type: ignore[method-assign]
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("lock denied"))
+    )
+    service._remove_managed_target_write_lock_statement = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._sync_bucket = lambda *_args, **_kwargs: (  # type: ignore[method-assign]
+        -1,
+        -1,
+        SimpleNamespace(
+            source_count=0,
+            target_count=0,
+            matched_count=0,
+            different_count=0,
+            only_source_count=0,
+            only_target_count=0,
+            sample={"only_source_sample": [], "only_target_sample": [], "different_sample": []},
+        ),
+    )
+
+    source_ctx = SimpleNamespace(account=source)
+    target_ctx = SimpleNamespace(account=target)
+    control_calls = {"count": 0}
+
+    def _control_check() -> str:
+        control_calls["count"] += 1
+        return "run" if control_calls["count"] == 1 else "pause"
+
+    service._run_item(migration, item, source_ctx, target_ctx, control_check=_control_check)
+
+    db_session.refresh(item)
+    assert item.status == "paused"
+    assert item.step == "pre_sync"
+    assert item.target_lock_applied is False
+
+    warning_event = (
+        db_session.query(BucketMigrationEvent)
+        .filter(
+            BucketMigrationEvent.migration_id == migration.id,
+            BucketMigrationEvent.item_id == item.id,
+            BucketMigrationEvent.level == "warning",
+        )
+        .order_by(BucketMigrationEvent.id.desc())
+        .first()
+    )
+    assert warning_event is not None
+    assert "best-effort mode" in warning_event.message.lower()
 
 
 def test_fail_migration_fatal_marks_failed_and_releases_lease(db_session):

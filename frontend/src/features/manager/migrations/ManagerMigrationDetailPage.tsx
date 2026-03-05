@@ -161,6 +161,11 @@ export default function ManagerMigrationDetailPage() {
   const canStopMigration = Boolean(
     migrationDetail && !["completed", "completed_with_errors", "failed", "canceled", "rolled_back"].includes(migrationDetail.status)
   );
+  const canRunPrecheck = Boolean(
+    migrationDetail &&
+      migrationDetail.precheck_status !== "passed" &&
+      !["queued", "running", "pause_requested", "cancel_requested"].includes(migrationDetail.status)
+  );
 
   const runAction = async (action: MigrationOperatorAction | "stop") => {
     if (!migrationDetail) return;
@@ -375,14 +380,18 @@ export default function ManagerMigrationDetailPage() {
                 </button>
               )}
 
-              {migrationDetail.precheck_status === "failed" && (
+              {canRunPrecheck && (
                 <button
                   type="button"
                   onClick={runPrecheck}
                   disabled={actionLoading != null}
                   className="rounded-lg border border-amber-300 px-3 py-1.5 ui-caption font-semibold text-amber-800 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200"
                 >
-                  {actionLoading === "precheck" ? "Running precheck..." : "Re-run precheck"}
+                  {actionLoading === "precheck"
+                    ? "Running precheck..."
+                    : migrationDetail.precheck_status === "failed"
+                      ? "Re-run precheck"
+                      : "Run precheck"}
                 </button>
               )}
 
@@ -687,6 +696,9 @@ export default function ManagerMigrationDetailPage() {
                   Auto-grant source read: {formatYesNo(migrationDetail.auto_grant_source_read_for_copy)}
                 </p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">Delete source: {formatYesNo(migrationDetail.delete_source)}</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  Strong integrity check: {formatYesNo(migrationDetail.strong_integrity_check)}
+                </p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
                   Webhook: {migrationDetail.webhook_url ? migrationDetail.webhook_url : "not configured"}
                 </p>
