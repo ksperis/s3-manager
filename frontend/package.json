@@ -9,12 +9,13 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "lint": "eslint src/components src/features/auth/LoginPage.tsx src/features/auth/OidcCallbackPage.tsx src/features/manager/ManagerMigrationsPage.tsx src/router.tsx src/utils/routePrefetch.ts src/test --ext .ts,.tsx",
+    "lint:browser": "eslint src/features/browser/BrowserPage.tsx src/features/browser/ObjectAdvancedModal.tsx src/features/browser/BrowserDialogModals.tsx --ext .ts,.tsx",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:a11y": "vitest run --testNamePattern=a11y",
     "budget:check": "node ./scripts/check-bundle-budget.mjs",
     "chunks:check": "node ./scripts/check-chunk-cycles.mjs",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run chunks:check && npm run budget:check"
+    "check": "npm run lint && npm run lint:browser && npm run typecheck && npm run test && npm run build && npm run chunks:check && npm run budget:check"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.958.0",

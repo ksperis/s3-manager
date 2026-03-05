@@ -64,6 +64,7 @@ import { useBrowserContext } from "./BrowserContext";
 import BrowserBulkAttributesModal from "./BrowserBulkAttributesModal";
 import BrowserBulkRestoreModal from "./BrowserBulkRestoreModal";
 import BrowserCleanupModal from "./BrowserCleanupModal";
+import { BrowserConfirmModal, BrowserCopyValueModal } from "./BrowserDialogModals";
 import BrowserContextMenu from "./BrowserContextMenu";
 import BrowserOperationsModal from "./BrowserOperationsModal";
 import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
@@ -114,7 +115,6 @@ import {
   OBJECTS_PAGE_SIZE,
   PART_SIZE,
   VERSIONS_PAGE_SIZE,
-  aclOptions,
   bucketButtonClasses,
   bulkActionClasses,
   bulkDangerClasses,
@@ -149,11 +149,7 @@ import {
   getSelectionInfo,
   isAbortError,
   isLikelyCorsError,
-  isAudioFile,
   isImageFile,
-  isPdfFile,
-  isTextFile,
-  isVideoFile,
   makeId,
   normalizeEtag,
   normalizePrefix,
@@ -231,6 +227,19 @@ type PathDraftContext = {
   fragment: string;
 };
 type SearchScope = "prefix" | "bucket";
+type BrowserConfirmDialogState = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  tone?: "danger" | "primary";
+  onConfirm: () => Promise<void> | void;
+};
+type BrowserCopyDialogState = {
+  title: string;
+  label: string;
+  value: string;
+  successMessage?: string;
+};
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
@@ -557,6 +566,9 @@ export default function BrowserPage({
   const [newFolderName, setNewFolderName] = useState("");
   const [newFolderError, setNewFolderError] = useState<string | null>(null);
   const [newFolderLoading, setNewFolderLoading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<BrowserConfirmDialogState | null>(null);
+  const [confirmDialogLoading, setConfirmDialogLoading] = useState(false);
+  const [copyDialog, setCopyDialog] = useState<BrowserCopyDialogState | null>(null);
   const [showOperationsModal, setShowOperationsModal] = useState(false);
   const [previewItem, setPreviewItem] = useState<BrowserItem | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -843,7 +855,7 @@ export default function BrowserPage({
         if (credentials) {
           try {
             return await presignObjectWithSts(credentials, targetBucket, payload);
-          } catch (err) {
+          } catch {
             const refreshed = await ensureStsCredentials(true);
             if (refreshed) {
               try {
@@ -866,7 +878,7 @@ export default function BrowserPage({
         if (credentials) {
           try {
             return await presignPartWithSts(credentials, targetBucket, uploadId, payload);
-          } catch (err) {
+          } catch {
             const refreshed = await ensureStsCredentials(true);
             if (refreshed) {
               try {
@@ -1364,13 +1376,13 @@ export default function BrowserPage({
           setBucketMenuTotal(0);
         }
       } finally {
-        if (requestId !== bucketSearchRequestIdRef.current) {
-          return;
-        }
-        if (append) {
-          setBucketMenuLoadingMore(false);
-        } else {
-          setLoadingBuckets(false);
+        const isLatestRequest = requestId === bucketSearchRequestIdRef.current;
+        if (isLatestRequest) {
+          if (append) {
+            setBucketMenuLoadingMore(false);
+          } else {
+            setLoadingBuckets(false);
+          }
         }
       }
     },
@@ -1620,7 +1632,7 @@ export default function BrowserPage({
       });
       setObjectsNextToken(data.next_continuation_token ?? null);
       setObjectsIsTruncated(data.is_truncated);
-    } catch (err) {
+    } catch {
       if (isAbortError(err)) {
         return;
       }
@@ -1632,15 +1644,15 @@ export default function BrowserPage({
       if (objectsAbortControllerRef.current === controller) {
         objectsAbortControllerRef.current = null;
       }
-      if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
-        return;
-      }
-      if (!isAppend) {
-        if (!isSilent) {
-          setObjectsLoading(false);
+      const isLatestRequest = !isStaleRequest(requestSeq, objectsRequestSeqRef.current);
+      if (isLatestRequest) {
+        if (!isAppend) {
+          if (!isSilent) {
+            setObjectsLoading(false);
+          }
+        } else {
+          setObjectsLoadingMore(false);
         }
-      } else {
-        setObjectsLoadingMore(false);
       }
     }
   };
@@ -1666,7 +1678,7 @@ export default function BrowserPage({
       setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
       setPrefixVersions((prev) => (opts?.append ? [...prev, ...data.versions] : data.versions));
       setPrefixDeleteMarkers((prev) => (opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers));
-    } catch (err) {
+    } catch {
       setPrefixVersionsError("Unable to list versions for this prefix.");
       if (!opts?.append) {
         setPrefixVersions([]);
@@ -1705,7 +1717,7 @@ export default function BrowserPage({
       setObjectVersionIdMarker(data.next_version_id_marker ?? null);
       setObjectVersions((prev) => (opts?.append ? [...prev, ...data.versions] : data.versions));
       setObjectDeleteMarkers((prev) => (opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers));
-    } catch (err) {
+    } catch {
       setObjectVersionsError("Unable to list versions for this object.");
       if (!opts?.append) {
         setObjectVersions([]);
@@ -1748,7 +1760,7 @@ export default function BrowserPage({
       setObjectDeleteMarkersModal((prev) =>
         opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers
       );
-    } catch (err) {
+    } catch {
       setObjectVersionsModalError("Unable to list versions for this object.");
       if (!opts?.append) {
         setObjectVersionsModal([]);
@@ -2543,12 +2555,6 @@ export default function BrowserPage({
   }, [isEditingPath, prefix]);
 
   useEffect(() => {
-    if (!showNewFolderModal) return;
-    newFolderInputRef.current?.focus();
-    newFolderInputRef.current?.select();
-  }, [showNewFolderModal]);
-
-  useEffect(() => {
     if (!bucketName) {
       setPathHistory([]);
       return;
@@ -3201,7 +3207,7 @@ export default function BrowserPage({
         versions: stats.versionsCount,
         deleteMarkers: stats.deleteMarkersCount,
       });
-    } catch (err) {
+    } catch {
       if (contextCountIdRef.current !== requestId) return;
       setContextCountsError("Unable to count objects for this prefix.");
     } finally {
@@ -3250,7 +3256,7 @@ export default function BrowserPage({
 
       if (selectionStatsRequestIdRef.current !== requestId) return;
       setSelectionStats({ objectCount, totalBytes });
-    } catch (err) {
+    } catch {
       if (selectionStatsRequestIdRef.current !== requestId) return;
       setSelectionStatsError("Unable to calculate selection stats.");
     } finally {
@@ -3269,7 +3275,11 @@ export default function BrowserPage({
   };
 
   const handleRefresh = () => {
-    if (!bucketName) return;
+    if (!hasS3AccountContext) return;
+    if (!bucketName) {
+      void refreshBucketList();
+      return;
+    }
     loadObjects({ prefixOverride: prefix });
     if (showPrefixVersions) {
       loadPrefixVersions({ append: false, keyMarker: null, versionIdMarker: null });
@@ -3381,7 +3391,7 @@ export default function BrowserPage({
       } else {
         setCorsFixError(status.error ?? "CORS is still not enabled for this origin.");
       }
-    } catch (err) {
+    } catch {
       setCorsFixError("Unable to update bucket CORS configuration.");
     } finally {
       setCorsFixing(false);
@@ -3749,6 +3759,33 @@ export default function BrowserPage({
     );
   };
 
+  const openConfirmDialog = (dialog: BrowserConfirmDialogState) => {
+    setConfirmDialog(dialog);
+    setConfirmDialogLoading(false);
+  };
+
+  const closeConfirmDialog = () => {
+    if (confirmDialogLoading) return;
+    setConfirmDialog(null);
+  };
+
+  const submitConfirmDialog = async () => {
+    if (!confirmDialog) return;
+    setConfirmDialogLoading(true);
+    try {
+      await confirmDialog.onConfirm();
+      setConfirmDialog(null);
+    } finally {
+      setConfirmDialogLoading(false);
+    }
+  };
+
+  const closeNewFolderDialog = () => {
+    if (newFolderLoading) return;
+    setShowNewFolderModal(false);
+    setNewFolderError(null);
+  };
+
   const handleNewFolder = () => {
     if (!bucketName || !hasS3AccountContext) return;
     setNewFolderName("");
@@ -3775,7 +3812,7 @@ export default function BrowserPage({
       setNewFolderName("");
       await loadObjects({ prefixOverride: prefix });
       loadTreeChildren(prefix);
-    } catch (err) {
+    } catch {
       setNewFolderError("Unable to create folder.");
     } finally {
       setNewFolderLoading(false);
@@ -4968,7 +5005,7 @@ export default function BrowserPage({
           window.open(presign.url, "_blank");
         }
       }
-    } catch (err) {
+    } catch {
       setStatusMessage(useProxyTransfers ? "Unable to download object." : "Unable to generate download URL.");
     }
   };
@@ -4988,7 +5025,7 @@ export default function BrowserPage({
     void handleDownloadItems([item]);
   };
 
-  const handleDeleteItems = async (targets: BrowserItem[]) => {
+  const handleDeleteItems = async (targets: BrowserItem[], options?: { skipConfirm?: boolean }) => {
     if (!bucketName || !hasS3AccountContext || targets.length === 0) return;
     const fileTargets = targets.filter((item) => item.type === "file" && !item.isDeleted);
     const folderTargets = targets.filter((item) => item.type === "folder" && !item.isDeleted);
@@ -4999,12 +5036,20 @@ export default function BrowserPage({
       setWarningMessage(null);
     }
     if (fileTargets.length === 0 && folderTargets.length === 0) return;
-    const confirmed = window.confirm(
-      folderTargets.length > 0
-        ? `Delete ${fileTargets.length} object(s) and ${folderTargets.length} folder(s)? This removes all objects within the selected folders.`
-        : `Delete ${fileTargets.length} object(s)?`
-    );
-    if (!confirmed) return;
+    if (!options?.skipConfirm) {
+      const message =
+        folderTargets.length > 0
+          ? `Delete ${fileTargets.length} object(s) and ${folderTargets.length} folder(s)? This removes all objects within the selected folders.`
+          : `Delete ${fileTargets.length} object(s)?`;
+      openConfirmDialog({
+        title: "Delete objects",
+        message,
+        confirmLabel: "Delete",
+        tone: "danger",
+        onConfirm: () => handleDeleteItems(targets, { skipConfirm: true }),
+      });
+      return;
+    }
     if (fileTargets.length > 1 || folderTargets.length > 0) {
       setShowOperationsModal(true);
     }
@@ -5060,7 +5105,7 @@ export default function BrowserPage({
       );
       await loadObjects({ prefixOverride: prefix });
       loadTreeChildren(prefix);
-    } catch (err) {
+    } catch {
       setStatusMessage("Unable to delete objects.");
     }
   };
@@ -5189,7 +5234,7 @@ export default function BrowserPage({
           if (!key) return;
           try {
             await applyForKey(key);
-          } catch (err) {
+          } catch {
             failures += 1;
           } finally {
             completed += 1;
@@ -5205,7 +5250,7 @@ export default function BrowserPage({
       setBulkAttributesSummary(summary);
       setStatusMessage(summary);
       requestObjectsRefresh(prefix);
-    } catch (err) {
+    } catch {
       setBulkAttributesError("Unable to update attributes.");
     } finally {
       setBulkAttributesLoading(false);
@@ -5394,7 +5439,7 @@ export default function BrowserPage({
                 replace_metadata: false,
                 move: false,
               });
-            } catch (err) {
+            } catch {
               restoreFailures += 1;
             } finally {
               completed += 1;
@@ -5410,7 +5455,7 @@ export default function BrowserPage({
           await deleteObjectsInBatches(deleteList, (deleted) => {
             updateProgress(completed + deleted);
           });
-        } catch (err) {
+        } catch {
           deleteFailures = deleteList.length;
         }
       }
@@ -5422,7 +5467,7 @@ export default function BrowserPage({
       setBulkRestoreSummary(summary);
       setStatusMessage(summary);
       requestObjectsRefresh(prefix);
-    } catch (err) {
+    } catch {
       setBulkRestoreError("Unable to restore objects.");
     } finally {
       setBulkRestoreLoading(false);
@@ -5472,7 +5517,7 @@ export default function BrowserPage({
       setCleanupSummary(summary);
       setStatusMessage(summary);
       requestObjectsRefresh(prefix);
-    } catch (err) {
+    } catch {
       cleanupCompletionStatus = "failed";
       cleanupCompletionError = "Unable to clean old versions for this prefix.";
       setCleanupError("Unable to clean old versions for this prefix.");
@@ -5676,7 +5721,9 @@ export default function BrowserPage({
       showCleanupModal ||
       showPrefixVersions ||
       showObjectVersionsModal ||
-      Boolean(previewItem);
+      Boolean(previewItem) ||
+      Boolean(confirmDialog) ||
+      Boolean(copyDialog);
     const isEditableTarget = (target: EventTarget | null) => {
       const element = target as HTMLElement | null;
       if (!element) return false;
@@ -5752,6 +5799,8 @@ export default function BrowserPage({
     showBulkAttributesModal,
     showBulkRestoreModal,
     showCleanupModal,
+    confirmDialog,
+    copyDialog,
     showObjectVersionsModal,
     showOperationsModal,
     showPrefixVersions,
@@ -5769,7 +5818,7 @@ export default function BrowserPage({
       setInspectedMetadata(meta);
       setInspectedTags(tags.tags ?? []);
       setInspectedTagsVersionId(tags.version_id ?? null);
-    } catch (err) {
+    } catch {
       setMetadataError("Unable to load object details.");
       setInspectedMetadata(null);
       setInspectedTags([]);
@@ -5830,12 +5879,20 @@ export default function BrowserPage({
     }
   };
 
-  const handleDeleteVersion = async (item: BrowserObjectVersion) => {
+  const handleDeleteVersion = async (item: BrowserObjectVersion, options?: { skipConfirm?: boolean }) => {
     if (!bucketName || !hasS3AccountContext || !item.version_id || !isVersioningEnabled) return;
     setWarningMessage(null);
     const label = item.is_delete_marker ? "delete marker" : "version";
-    const confirmed = window.confirm(`Delete ${label} for ${item.key}?`);
-    if (!confirmed) return;
+    if (!options?.skipConfirm) {
+      openConfirmDialog({
+        title: `Delete ${label}`,
+        message: `Delete ${label} for ${item.key}?`,
+        confirmLabel: "Delete",
+        tone: "danger",
+        onConfirm: () => handleDeleteVersion(item, { skipConfirm: true }),
+      });
+      return;
+    }
     const operationLabel = item.is_delete_marker ? "Removing delete marker" : "Deleting version";
     const operationId = startOperation("deleting", operationLabel, `${bucketName}/${item.key}`);
     let completionStatus: OperationCompletionStatus = "done";
@@ -5875,9 +5932,14 @@ export default function BrowserPage({
         await navigator.clipboard.writeText(presign.url);
         setStatusMessage("URL copied to clipboard.");
       } else {
-        window.prompt("Copy URL:", presign.url);
+        setCopyDialog({
+          title: "Copy URL",
+          label: "Object URL",
+          value: presign.url,
+          successMessage: "URL copied to clipboard.",
+        });
       }
-    } catch (err) {
+    } catch {
       setStatusMessage("Unable to copy URL.");
     }
   };
@@ -5889,23 +5951,19 @@ export default function BrowserPage({
         await navigator.clipboard.writeText(path);
         setStatusMessage("Path copied to clipboard.");
       } else {
-        window.prompt("Copy path:", path);
+        setCopyDialog({
+          title: "Copy path",
+          label: "Object path",
+          value: path,
+          successMessage: "Path copied to clipboard.",
+        });
       }
-    } catch (err) {
+    } catch {
       setStatusMessage("Unable to copy path.");
     }
   };
 
   const activeOperations = useMemo(() => operations.filter((op) => !op.completedAt), [operations]);
-  const operationSummary = useMemo(() => {
-    return activeOperations.reduce(
-      (acc, op) => {
-        acc[op.status] += 1;
-        return acc;
-      },
-      { uploading: 0, deleting: 0, copying: 0, downloading: 0 } as Record<OperationItem["status"], number>
-    );
-  }, [activeOperations]);
   const uploadGroups = useMemo(() => {
     const groups = new Map<
       string,
@@ -6646,7 +6704,7 @@ export default function BrowserPage({
                   type="button"
                   className={bucketButtonClasses}
                   onClick={() => setShowBucketMenu((prev) => !prev)}
-                  disabled={!loadingBuckets && bucketTotalCount === 0}
+                  disabled={!hasS3AccountContext}
                   aria-haspopup="listbox"
                   aria-expanded={showBucketMenu}
                   aria-label="Select bucket"
@@ -6701,7 +6759,19 @@ export default function BrowserPage({
                           Loading buckets...
                         </div>
                       ) : bucketTotalCount === 0 ? (
-                        <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">No buckets</div>
+                        <div className="space-y-2 px-2 py-2">
+                          <div className="ui-caption text-slate-500 dark:text-slate-400">
+                            {bucketError ? "Unable to load buckets." : "No buckets available."}
+                          </div>
+                          <button
+                            type="button"
+                            className={filterChipClasses}
+                            onClick={() => void refreshBucketList()}
+                            disabled={loadingBuckets || !hasS3AccountContext}
+                          >
+                            {loadingBuckets ? "Retrying..." : "Retry"}
+                          </button>
+                        </div>
                       ) : bucketOptions.length === 0 ? (
                         <div className="px-2 py-2 ui-caption text-slate-500 dark:text-slate-400">
                           No buckets match this filter.
@@ -8506,59 +8576,80 @@ export default function BrowserPage({
         />
       )}
       {showNewFolderModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-            <div className="mb-3">
-              <h3 className="ui-body font-semibold text-slate-900 dark:text-slate-100">Create folder</h3>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Destination: <span className="font-semibold">{currentPath || `${bucketName}/`}</span>
-              </p>
+        <Modal
+          title="Create folder"
+          onClose={closeNewFolderDialog}
+          maxWidthClass="max-w-md"
+          initialFocusRef={newFolderInputRef}
+          closeOnBackdropClick={!newFolderLoading}
+        >
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleCreateFolderFromModal();
+            }}
+          >
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
+              Destination: <span className="font-semibold">{currentPath || `${bucketName}/`}</span>
+            </p>
+            <label className="block ui-caption font-semibold text-slate-600 dark:text-slate-300">
+              Folder name
+              <input
+                ref={newFolderInputRef}
+                type="text"
+                value={newFolderName}
+                onChange={(event) => setNewFolderName(event.target.value)}
+                placeholder="my-folder"
+                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                disabled={newFolderLoading}
+                spellCheck={false}
+              />
+            </label>
+            {newFolderError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">{newFolderError}</p>}
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                onClick={closeNewFolderDialog}
+                disabled={newFolderLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!bucketName || !hasS3AccountContext || newFolderLoading}
+              >
+                {newFolderLoading ? "Creating..." : "Create"}
+              </button>
             </div>
-            <form
-              className="space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleCreateFolderFromModal();
-              }}
-            >
-              <label className="block ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                Folder name
-                <input
-                  ref={newFolderInputRef}
-                  type="text"
-                  value={newFolderName}
-                  onChange={(event) => setNewFolderName(event.target.value)}
-                  placeholder="my-folder"
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 ui-body font-semibold text-slate-700 shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  disabled={newFolderLoading}
-                  spellCheck={false}
-                />
-              </label>
-              {newFolderError && <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">{newFolderError}</p>}
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
-                  onClick={() => {
-                    if (newFolderLoading) return;
-                    setShowNewFolderModal(false);
-                    setNewFolderError(null);
-                  }}
-                  disabled={newFolderLoading}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={!bucketName || !hasS3AccountContext || newFolderLoading}
-                >
-                  {newFolderLoading ? "Creating..." : "Create"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
+      )}
+      {confirmDialog && (
+        <BrowserConfirmModal
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
+          tone={confirmDialog.tone}
+          loading={confirmDialogLoading}
+          onCancel={closeConfirmDialog}
+          onConfirm={() => void submitConfirmDialog()}
+        />
+      )}
+      {copyDialog && (
+        <BrowserCopyValueModal
+          title={copyDialog.title}
+          label={copyDialog.label}
+          value={copyDialog.value}
+          onCopySuccess={() => {
+            if (copyDialog.successMessage) {
+              setStatusMessage(copyDialog.successMessage);
+            }
+          }}
+          onClose={() => setCopyDialog(null)}
+        />
       )}
       {showOperationsModal && (
         <BrowserOperationsModal

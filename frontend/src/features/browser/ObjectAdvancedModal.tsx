@@ -25,6 +25,7 @@ import {
   restoreObject,
 } from "../../api/browser";
 import { S3AccountSelector } from "../../api/accountParams";
+import { BrowserCopyValueModal } from "./BrowserDialogModals";
 
 type TargetObject = {
   key: string;
@@ -156,6 +157,7 @@ export default function ObjectAdvancedModal({
   const [savingRetention, setSavingRetention] = useState(false);
   const [savingRestore, setSavingRestore] = useState(false);
   const [savingPresign, setSavingPresign] = useState(false);
+  const [copyDialogValue, setCopyDialogValue] = useState<string | null>(null);
 
   const tagIdRef = useRef(0);
   const metadataIdRef = useRef(0);
@@ -292,7 +294,7 @@ export default function ObjectAdvancedModal({
       await updateObjectMetadata(accountId, bucketName, payload);
       pushStatus("Metadata updated.", "success");
       await onRefresh?.(item.key);
-    } catch (err) {
+    } catch {
       pushStatus("Unable to update metadata.", "error");
     } finally {
       setSavingMetadata(false);
@@ -313,7 +315,7 @@ export default function ObjectAdvancedModal({
       });
       pushStatus("Tags updated.", "success");
       await onRefresh?.(item.key);
-    } catch (err) {
+    } catch {
       pushStatus("Unable to update tags.", "error");
     } finally {
       setSavingTags(false);
@@ -333,7 +335,7 @@ export default function ObjectAdvancedModal({
       await updateObjectMetadata(accountId, bucketName, payload);
       pushStatus("Storage class updated.", "success");
       await onRefresh?.(item.key);
-    } catch (err) {
+    } catch {
       pushStatus("Unable to update storage class.", "error");
     } finally {
       setSavingStorage(false);
@@ -348,7 +350,7 @@ export default function ObjectAdvancedModal({
       const payload: ObjectAcl = { key: item.key, acl: aclValue, version_id: versionId ?? null };
       await updateObjectAcl(accountId, bucketName, payload);
       pushStatus("ACL updated.", "success");
-    } catch (err) {
+    } catch {
       pushStatus("Unable to update ACL.", "error");
     } finally {
       setSavingAcl(false);
@@ -364,7 +366,7 @@ export default function ObjectAdvancedModal({
       await updateObjectLegalHold(accountId, bucketName, payload);
       pushStatus("Legal hold updated.", "success");
       await onRefresh?.(item.key);
-    } catch (err) {
+    } catch {
       pushStatus("Unable to update legal hold.", "error");
     } finally {
       setSavingLegalHold(false);
@@ -391,7 +393,7 @@ export default function ObjectAdvancedModal({
       await updateObjectRetention(accountId, bucketName, payload);
       pushStatus("Retention updated.", "success");
       await onRefresh?.(item.key);
-    } catch (err) {
+    } catch {
       pushStatus("Unable to update retention.", "error");
     } finally {
       setSavingRetention(false);
@@ -416,7 +418,7 @@ export default function ObjectAdvancedModal({
       };
       await restoreObject(accountId, bucketName, payload);
       pushStatus("Restore request sent.", "success");
-    } catch (err) {
+    } catch {
       pushStatus("Unable to restore object.", "error");
     } finally {
       setSavingRestore(false);
@@ -451,7 +453,7 @@ export default function ObjectAdvancedModal({
       setPresignMethod(presigned.method);
       setPresignFields(presigned.fields ?? null);
       pushStatus("Signed URL generated.", "success");
-    } catch (err) {
+    } catch {
       setPresignError("Unable to generate signed URL.");
       pushStatus("Unable to generate signed URL.", "error");
     } finally {
@@ -465,7 +467,7 @@ export default function ObjectAdvancedModal({
       await navigator.clipboard.writeText(presignUrl);
       pushStatus("URL copied to clipboard.", "success");
     } else {
-      window.prompt("Copy URL:", presignUrl);
+      setCopyDialogValue(presignUrl);
     }
   };
 
@@ -899,16 +901,27 @@ export default function ObjectAdvancedModal({
   ];
 
   return (
-    <Modal title={`Advanced operations · ${item.name}`} onClose={onClose} maxWidthClass="max-w-4xl">
-      <div className="space-y-4">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-          <span className="font-semibold text-slate-700 dark:text-slate-100">{bucketName}</span> / {item.key}
+    <>
+      <Modal title={`Advanced operations · ${item.name}`} onClose={onClose} maxWidthClass="max-w-4xl">
+        <div className="space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+            <span className="font-semibold text-slate-700 dark:text-slate-100">{bucketName}</span> / {item.key}
+          </div>
+          {actionMessage && (
+            <div className={`rounded-lg border px-3 py-2 ui-caption font-semibold ${statusClassName}`}>{actionMessage}</div>
+          )}
+          <PageTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
         </div>
-        {actionMessage && (
-          <div className={`rounded-lg border px-3 py-2 ui-caption font-semibold ${statusClassName}`}>{actionMessage}</div>
-        )}
-        <PageTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-      </div>
-    </Modal>
+      </Modal>
+      {copyDialogValue && (
+        <BrowserCopyValueModal
+          title="Copy URL"
+          label="Signed URL"
+          value={copyDialogValue}
+          onCopySuccess={() => pushStatus("URL copied to clipboard.", "success")}
+          onClose={() => setCopyDialogValue(null)}
+        />
+      )}
+    </>
   );
 }
