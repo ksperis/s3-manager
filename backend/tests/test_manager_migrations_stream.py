@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import BucketMigration, BucketMigrationEvent, BucketMigrationItem
 from app.routers.manager import migrations as migrations_router
+from app.routers.dependencies import BucketMigrationAccessScope
 
 
 def _seed_migration(session_factory: sessionmaker, *, status: str) -> int:
@@ -21,7 +22,8 @@ def _seed_migration(session_factory: sessionmaker, *, status: str) -> int:
             copy_bucket_settings=False,
             delete_source=False,
             lock_target_writes=True,
-            auto_grant_source_read_for_copy=True,
+            use_same_endpoint_copy=False,
+            auto_grant_source_read_for_copy=False,
             status=status,
             precheck_status="passed",
             parallelism_max=4,
@@ -70,6 +72,13 @@ async def _read_stream_body(response) -> str:
     return "".join(chunks)
 
 
+def _scope(*context_ids: str) -> BucketMigrationAccessScope:
+    return BucketMigrationAccessScope(
+        user=SimpleNamespace(id=1),
+        allowed_context_ids=set(context_ids),
+    )
+
+
 def test_manager_migration_stream_emits_snapshot_and_done_for_final_state(
     db_session,
     monkeypatch: pytest.MonkeyPatch,
@@ -84,6 +93,7 @@ def test_manager_migration_stream_emits_snapshot_and_done_for_final_state(
             migration_id=migration_id,
             request=request,
             events_limit=200,
+            scope=_scope("source-ctx", "target-ctx"),
         )
         return await _read_stream_body(response)
 
@@ -108,6 +118,7 @@ def test_manager_migration_stream_returns_404_for_unknown_migration(
                 migration_id=99999,
                 request=request,
                 events_limit=200,
+                scope=_scope("source-ctx", "target-ctx"),
             )
         assert exc.value.status_code == 404
 
@@ -129,6 +140,7 @@ def test_manager_migration_stream_stops_when_client_disconnects(
             migration_id=migration_id,
             request=request,
             events_limit=200,
+            scope=_scope("source-ctx", "target-ctx"),
         )
         return await asyncio.wait_for(_read_stream_body(response), timeout=1.0)
 
@@ -163,6 +175,7 @@ def test_manager_migration_stream_emits_multiple_snapshots_when_item_timestamp_c
             migration_id=migration_id,
             request=request,
             events_limit=200,
+            scope=_scope("source-ctx", "target-ctx"),
         )
         updater = asyncio.create_task(_touch_item_timestamp())
         body = await asyncio.wait_for(_read_stream_body(response), timeout=1.0)
@@ -171,3 +184,32 @@ def test_manager_migration_stream_emits_multiple_snapshots_when_item_timestamp_c
 
     body = asyncio.run(_run())
     assert body.count("event: snapshot") >= 2
+
+
+def test_manager_migration_get_detail_respects_events_limit(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind())
+    monkeypatch.setattr(migrations_router, "SessionLocal", test_session_factory)
+    migration_id = _seed_migration(test_session_factory, status="running")
+    with test_session_factory() as db:
+        for index in range(5):
+            db.add(
+                BucketMigrationEvent(
+                    migration_id=migration_id,
+                    level="info",
+                    message=f"event-{index}",
+                )
+            )
+        db.commit()
+
+    with test_session_factory() as db:
+        detail = migrations_router.get_migration(
+            migration_id=migration_id,
+            events_limit=2,
+            db=db,
+            scope=_scope("source-ctx", "target-ctx"),
+        )
+
+    assert len(detail.recent_events) == 2

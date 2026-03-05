@@ -42,7 +42,8 @@ The **New migration** modal lets you configure:
    - `One-shot migration` or `Pre-sync + cutover`
    - `Copy bucket settings`
    - `Lock target writes during migration`
-   - `Auto-grant temporary source read for same-endpoint copy`
+   - `Use x-amz-copy-source (same endpoint only)` (OFF by default)
+   - `Auto-grant temporary source read for same-endpoint copy` (editable only when `Use x-amz-copy-source` is ON)
    - `Delete source if diff is clean`
    - `Webhook URL` (called on each migration event)
 
@@ -79,16 +80,18 @@ Review validates prerequisites before launch:
 - Source list/read permissions.
 - Target existence checks.
 - Policy read/write roundtrip checks for source and target lock steps.
-- Same-endpoint `x-amz-copy-source` permissions.
+  - Target lock validation is executed on a temporary probe bucket and is blocking if probe cleanup fails.
+- Same-endpoint `x-amz-copy-source` permissions (only when `Use x-amz-copy-source` is enabled).
 
 Use the review panel to resolve blocking errors before launching replication.
 
 ## Copy strategy and performance
 
-- Same endpoint: tries `CopyObject` with `x-amz-copy-source`.
-- If `CopyObject` is denied, falls back to stream copy (`GetObject` + upload).
+- `Use x-amz-copy-source` OFF (default): always stream copy (`GetObject` + upload), even on same endpoint.
+- `Use x-amz-copy-source` ON: only allowed on same endpoint, tries `CopyObject` with `x-amz-copy-source`.
+- If `CopyObject` is denied while enabled, falls back to stream copy (`GetObject` + upload).
 - Copy and delete operations run in parallel with bounded concurrency.
-- When enabled, temporary source-read grant is applied only during same-endpoint sync windows and then restored.
+- Temporary source-read grant is only used when `Use x-amz-copy-source` is enabled and auto-grant is enabled.
 
 Global concurrency defaults and limits are configured in **Admin > Manager settings > Bucket migration controls**:
 
@@ -130,6 +133,13 @@ If `Webhook URL` is set, each migration event triggers an HTTP POST with:
 - migration-level status and counters
 - optional bucket item status/step/counters
 - event level/message/metadata
+
+Webhook delivery behavior:
+
+- Webhooks are delivered asynchronously (best-effort) and never block migration execution.
+- Redirects are disabled.
+- Targets resolving to local/private network ranges are rejected by default.
+- Queue saturation drops webhook events with warning logs.
 
 Use this to feed external monitoring, notifications, or controlled cutover orchestration.
 

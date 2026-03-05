@@ -14,7 +14,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal, get_db
-from app.db import BucketMigration, BucketMigrationEvent, BucketMigrationItem, User
+from app.db import BucketMigration, BucketMigrationEvent, BucketMigrationItem
 from app.models.bucket_migration import (
     BucketMigrationActionResponse,
     BucketMigrationCreateRequest,
@@ -24,7 +24,11 @@ from app.models.bucket_migration import (
     BucketMigrationListResponse,
     BucketMigrationView,
 )
-from app.routers.dependencies import get_audit_logger, get_current_bucket_migration_user
+from app.routers.dependencies import (
+    BucketMigrationAccessScope,
+    get_audit_logger,
+    get_current_bucket_migration_scope,
+)
 from app.services.audit_service import AuditService
 from app.services.bucket_migration_service import BucketMigrationService, get_bucket_migration_worker
 
@@ -134,6 +138,7 @@ def _migration_to_view(migration: BucketMigration) -> BucketMigrationView:
         copy_bucket_settings=bool(migration.copy_bucket_settings),
         delete_source=bool(migration.delete_source),
         lock_target_writes=bool(migration.lock_target_writes),
+        use_same_endpoint_copy=bool(migration.use_same_endpoint_copy),
         auto_grant_source_read_for_copy=bool(migration.auto_grant_source_read_for_copy),
         webhook_url=migration.webhook_url,
         mapping_prefix=migration.mapping_prefix,
@@ -158,9 +163,12 @@ def _migration_to_view(migration: BucketMigration) -> BucketMigrationView:
     )
 
 
-def _migration_to_detail(migration: BucketMigration, events_limit: int) -> BucketMigrationDetail:
-    items = sorted(migration.items, key=lambda entry: (entry.id, entry.source_bucket))
-    recent_events = sorted(migration.events, key=lambda entry: entry.created_at, reverse=True)[:events_limit]
+def _migration_to_detail(
+    migration: BucketMigration,
+    *,
+    items: list[BucketMigrationItem],
+    recent_events: list[BucketMigrationEvent],
+) -> BucketMigrationDetail:
     base = _migration_to_view(migration)
     return BucketMigrationDetail(
         **base.model_dump(),
@@ -179,9 +187,9 @@ def list_migrations(
     limit: int = Query(default=100, ge=1, le=500),
     context_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
 ) -> BucketMigrationListResponse:
-    service = BucketMigrationService(db)
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     migrations = service.list_migrations(limit=limit, context_id=context_id)
     return BucketMigrationListResponse(items=[_migration_to_view(migration) for migration in migrations])
 
@@ -191,14 +199,16 @@ def get_migration(
     migration_id: int,
     events_limit: int = Query(default=200, ge=1, le=1000),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
 ) -> BucketMigrationDetail:
-    service = BucketMigrationService(db)
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.get_migration(migration_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return _migration_to_detail(migration, events_limit)
+    items = service.list_migration_items(migration.id)
+    recent_events = service.list_recent_migration_events(migration.id, limit=events_limit)
+    return _migration_to_detail(migration, items=items, recent_events=recent_events)
 
 
 @router.get("/{migration_id}/stream")
@@ -206,10 +216,10 @@ async def stream_migration(
     migration_id: int,
     request: Request,
     events_limit: int = Query(default=200, ge=1, le=1000),
-    _: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
 ) -> StreamingResponse:
     with SessionLocal() as db:
-        service = BucketMigrationService(db)
+        service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
         try:
             service.get_migration(migration_id)
         except ValueError as exc:
@@ -226,11 +236,17 @@ async def stream_migration(
 
             try:
                 with SessionLocal() as db:
-                    service = BucketMigrationService(db)
+                    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
                     migration = service.get_migration(migration_id)
                     signature = _compute_migration_stream_signature(db, migration_id, migration=migration)
                     if signature != last_signature:
-                        detail = _migration_to_detail(migration, events_limit)
+                        items = service.list_migration_items(migration.id)
+                        recent_events = service.list_recent_migration_events(migration.id, limit=events_limit)
+                        detail = _migration_to_detail(
+                            migration,
+                            items=items,
+                            recent_events=recent_events,
+                        )
                         stream_event_id += 1
                         yield _format_sse_event(
                             "snapshot",
@@ -294,10 +310,11 @@ async def stream_migration(
 def delete_migration(
     migration_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> Response:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         service.delete_migration(migration_id)
     except ValueError as exc:
@@ -319,12 +336,15 @@ def delete_migration(
 def create_migration(
     payload: BucketMigrationCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationDetail:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.create_migration(payload, current_user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -339,12 +359,15 @@ def create_migration(
             "target_context_id": payload.target_context_id,
             "mode": payload.mode,
             "lock_target_writes": bool(payload.lock_target_writes),
-            "auto_grant_source_read_for_copy": bool(payload.auto_grant_source_read_for_copy),
+            "use_same_endpoint_copy": bool(migration.use_same_endpoint_copy),
+            "auto_grant_source_read_for_copy": bool(migration.auto_grant_source_read_for_copy),
             "webhook_enabled": bool((payload.webhook_url or "").strip()),
             "items": len(payload.buckets),
         },
     )
-    return _migration_to_detail(migration, events_limit=200)
+    items = service.list_migration_items(migration.id)
+    recent_events = service.list_recent_migration_events(migration.id, limit=200)
+    return _migration_to_detail(migration, items=items, recent_events=recent_events)
 
 
 @router.patch("/{migration_id}", response_model=BucketMigrationDetail)
@@ -352,12 +375,15 @@ def update_migration(
     migration_id: int,
     payload: BucketMigrationCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationDetail:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.update_draft_migration(migration_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
         message = str(exc)
         error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
@@ -374,26 +400,32 @@ def update_migration(
             "target_context_id": payload.target_context_id,
             "mode": payload.mode,
             "lock_target_writes": bool(payload.lock_target_writes),
-            "auto_grant_source_read_for_copy": bool(payload.auto_grant_source_read_for_copy),
+            "use_same_endpoint_copy": bool(migration.use_same_endpoint_copy),
+            "auto_grant_source_read_for_copy": bool(migration.auto_grant_source_read_for_copy),
             "webhook_enabled": bool((payload.webhook_url or "").strip()),
             "items": len(payload.buckets),
         },
     )
-    return _migration_to_detail(migration, events_limit=200)
+    items = service.list_migration_items(migration.id)
+    recent_events = service.list_recent_migration_events(migration.id, limit=200)
+    return _migration_to_detail(migration, items=items, recent_events=recent_events)
 
 
 @router.post("/{migration_id}/precheck", response_model=BucketMigrationDetail)
 def run_migration_precheck(
     migration_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationDetail:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.run_precheck(migration_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     audit.record_action(
         user=current_user,
@@ -402,21 +434,26 @@ def run_migration_precheck(
         entity_type="bucket_migration",
         entity_id=str(migration.id),
     )
-    return _migration_to_detail(migration, events_limit=200)
+    items = service.list_migration_items(migration.id)
+    recent_events = service.list_recent_migration_events(migration.id, limit=200)
+    return _migration_to_detail(migration, items=items, recent_events=recent_events)
 
 
 @router.post("/{migration_id}/start", response_model=BucketMigrationActionResponse)
 def start_migration(
     migration_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.start_migration(migration_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     _worker_wake_up()
     audit.record_action(
@@ -433,14 +470,17 @@ def start_migration(
 def pause_migration(
     migration_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.request_pause(migration_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     _worker_wake_up()
     audit.record_action(
@@ -457,14 +497,17 @@ def pause_migration(
 def resume_migration(
     migration_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.resume_migration(migration_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     _worker_wake_up()
     audit.record_action(
@@ -481,14 +524,17 @@ def resume_migration(
 def stop_migration(
     migration_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.stop_migration(migration_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     _worker_wake_up()
     audit.record_action(
@@ -505,14 +551,17 @@ def stop_migration(
 def continue_after_presync(
     migration_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.continue_after_presync(migration_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     _worker_wake_up()
     audit.record_action(
@@ -529,14 +578,17 @@ def continue_after_presync(
 def rollback_migration(
     migration_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.rollback_failed_migration(migration_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     audit.record_action(
         user=current_user,
@@ -552,14 +604,17 @@ def rollback_migration(
 def retry_failed_items(
     migration_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration, retried_count = service.retry_failed_items(migration_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     _worker_wake_up()
     audit.record_action(
@@ -581,14 +636,17 @@ def retry_failed_items(
 def rollback_failed_items(
     migration_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration, rolled_back_count = service.rollback_failed_items(migration_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     audit.record_action(
         user=current_user,
@@ -610,14 +668,17 @@ def retry_item(
     migration_id: int,
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.retry_item(migration_id, item_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     _worker_wake_up()
     audit.record_action(
@@ -639,14 +700,17 @@ def rollback_item(
     migration_id: int,
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_bucket_migration_user),
+    scope: BucketMigrationAccessScope = Depends(get_current_bucket_migration_scope),
     audit: AuditService = Depends(get_audit_logger),
 ) -> BucketMigrationActionResponse:
-    service = BucketMigrationService(db)
+    current_user = scope.user
+    service = BucketMigrationService(db, authorized_context_ids=scope.allowed_context_ids)
     try:
         migration = service.rollback_item(migration_id, item_id)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        message = str(exc)
+        error_status = status.HTTP_404_NOT_FOUND if message == "Migration not found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=error_status, detail=message) from exc
 
     audit.record_action(
         user=current_user,

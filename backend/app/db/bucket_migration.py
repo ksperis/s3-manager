@@ -38,6 +38,7 @@ class BucketMigration(Base):
     copy_bucket_settings = Column(Boolean, nullable=False, default=False, server_default="0")
     delete_source = Column(Boolean, nullable=False, default=False, server_default="0")
     lock_target_writes = Column(Boolean, nullable=False, default=True, server_default="1")
+    use_same_endpoint_copy = Column(Boolean, nullable=False, default=False, server_default="0")
     auto_grant_source_read_for_copy = Column(Boolean, nullable=False, default=False, server_default="0")
     webhook_url = Column(String, nullable=True)
     mapping_prefix = Column(String, nullable=True)

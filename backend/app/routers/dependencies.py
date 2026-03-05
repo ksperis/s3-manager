@@ -65,6 +65,12 @@ class AccountAccess:
     capabilities: AccountCapabilities
 
 
+@dataclass
+class BucketMigrationAccessScope:
+    user: User
+    allowed_context_ids: set[str]
+
+
 def _resolve_actor(db: Session, token: str) -> ManagerActor:
     payload = decode_token(token)
     if not payload:
@@ -777,9 +783,73 @@ def _ensure_bucket_migration_allowed(user: User) -> None:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
 
+def _manager_link_allows_bucket_migration(
+    link: UserS3Account,
+    *,
+    allow_portal_manager_workspace: bool,
+) -> bool:
+    if bool(link.account_admin or link.is_root):
+        return True
+    return (
+        (link.account_role or "") == AccountRole.PORTAL_MANAGER.value
+        and allow_portal_manager_workspace
+    )
+
+
+def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[str]:
+    allow_portal_manager_workspace = bool(load_app_settings().general.allow_portal_manager_workspace)
+    allowed_context_ids: set[str] = set()
+
+    account_links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
+    for link in account_links:
+        if _manager_link_allows_bucket_migration(
+            link,
+            allow_portal_manager_workspace=allow_portal_manager_workspace,
+        ):
+            allowed_context_ids.add(str(link.account_id))
+
+    s3_links = db.query(UserS3User).filter(UserS3User.user_id == user.id).all()
+    for link in s3_links:
+        allowed_context_ids.add(f"s3u-{link.s3_user_id}")
+
+    user_connection_ids = (
+        db.query(UserS3Connection.s3_connection_id)
+        .filter(UserS3Connection.user_id == user.id)
+    )
+    now = utcnow()
+    connections = (
+        db.query(S3Connection)
+        .filter(
+            (S3Connection.is_public.is_(True))
+            | (S3Connection.owner_user_id == user.id)
+            | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(user_connection_ids)))
+        )
+        .filter(S3Connection.access_manager.is_(True))
+        .filter(
+            (S3Connection.is_temporary.is_(False))
+            | (S3Connection.expires_at.is_(None))
+            | (S3Connection.expires_at > now)
+        )
+        .all()
+    )
+    for connection in connections:
+        allowed_context_ids.add(f"conn-{connection.id}")
+
+    return allowed_context_ids
+
+
 def get_current_bucket_migration_user(user: User = Depends(get_current_user)) -> User:
     _ensure_bucket_migration_allowed(user)
     return user
+
+
+def get_current_bucket_migration_scope(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> BucketMigrationAccessScope:
+    _ensure_bucket_migration_allowed(user)
+    allowed_context_ids = _build_bucket_migration_allowed_context_ids(db, user)
+    return BucketMigrationAccessScope(user=user, allowed_context_ids=allowed_context_ids)
 
 
 def require_bucket_compare_enabled() -> None:

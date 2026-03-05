@@ -36,3 +36,5 @@ pnpm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
+backend/app.db-shm
+backend/app.db-wal

@@ -23,7 +23,6 @@ import {
 } from "../../../api/managerMigrations";
 import { useManagerContexts, useManagerMigrationDetail } from "./hooks";
 import {
-  buildPlannedSteps,
   canOfferFullRollback,
   computeItemCopyProgressPercent,
   computeProgress,
@@ -77,7 +76,7 @@ export default function ManagerMigrationDetailPage() {
   const { migrationDetail, detailLoading, detailError, setDetailError, refresh } = useManagerMigrationDetail(migrationIdValue);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [showReview, setShowReview] = useState(false);
+  const [showPrecheck, setShowPrecheck] = useState(false);
   const [showEvents, setShowEvents] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
   const [bucketFocus, setBucketFocus] = useState<BucketFocus>("focus");
@@ -181,7 +180,7 @@ export default function ManagerMigrationDetailPage() {
     }
   };
 
-  const runReview = async () => {
+  const runPrecheck = async () => {
     if (!migrationDetail) return;
     setActionLoading("precheck");
     setDetailError(null);
@@ -301,7 +300,7 @@ export default function ManagerMigrationDetailPage() {
               <span
                 className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${precheckChipClasses(migrationDetail.precheck_status)}`}
               >
-                review: {migrationDetail.precheck_status}
+                precheck: {migrationDetail.precheck_status}
               </span>
               <span className="ui-caption text-slate-500 dark:text-slate-400">
                 {contextLabelById.get(migrationDetail.source_context_id) ?? migrationDetail.source_context_id} {"->"}{" "}
@@ -370,11 +369,11 @@ export default function ManagerMigrationDetailPage() {
               {migrationDetail.precheck_status === "failed" && (
                 <button
                   type="button"
-                  onClick={runReview}
+                  onClick={runPrecheck}
                   disabled={actionLoading != null}
                   className="rounded-lg border border-amber-300 px-3 py-1.5 ui-caption font-semibold text-amber-800 disabled:opacity-50 dark:border-amber-700 dark:text-amber-200"
                 >
-                  {actionLoading === "precheck" ? "Reviewing..." : "Re-run review"}
+                  {actionLoading === "precheck" ? "Running precheck..." : "Re-run precheck"}
                 </button>
               )}
 
@@ -583,38 +582,29 @@ export default function ManagerMigrationDetailPage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <button
               type="button"
-              onClick={() => setShowReview((current) => !current)}
+              onClick={() => setShowPrecheck((current) => !current)}
               className="ui-caption font-semibold text-slate-700 dark:text-slate-200"
             >
-              {showReview ? "Hide review" : "Show review"}
+              {showPrecheck ? "Hide precheck details" : "Show precheck details"}
             </button>
-            {showReview && (
+            {showPrecheck && (
               <div className="mt-3 space-y-3">
                 <p className="ui-caption text-slate-600 dark:text-slate-300">
-                  Review: {precheckSummary?.errors ?? 0} error(s), {precheckSummary?.warnings ?? 0} warning(s)
+                  Precheck: {precheckSummary?.errors ?? 0} error(s), {precheckSummary?.warnings ?? 0} warning(s)
                 </p>
                 <div className="max-h-56 space-y-2 overflow-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   {reviewItems.map((reviewItem) => {
-                    const plannedSteps = buildPlannedSteps(reviewItem, {
-                      mode: migrationDetail.mode,
-                      copyBucketSettings: migrationDetail.copy_bucket_settings,
-                      deleteSource: migrationDetail.delete_source,
-                      lockTargetWrites: migrationDetail.lock_target_writes,
-                      autoGrantSourceReadForCopy: migrationDetail.auto_grant_source_read_for_copy,
-                    });
                     return (
                       <div key={reviewItem.itemId} className="rounded-md border border-slate-200 p-2 dark:border-slate-700">
                         <p className="ui-caption font-semibold text-slate-800 dark:text-slate-100">
                           {reviewItem.sourceBucket} {"->"} {reviewItem.targetBucket}
                         </p>
-                        {plannedSteps.map((step, index) => (
-                          <p key={`${reviewItem.itemId}-${index}`} className="ui-caption text-slate-600 dark:text-slate-300">
-                            - {step}
-                          </p>
-                        ))}
+                        <p className="ui-caption text-slate-600 dark:text-slate-300">
+                          Precheck result: {reviewItem.errors} error(s), {reviewItem.warnings} warning(s)
+                        </p>
                         {reviewItem.targetExistsUnknown && (
                           <p className="ui-caption text-amber-700 dark:text-amber-300">
-                            - Target bucket existence could not be fully verified during review.
+                            Target bucket existence could not be fully verified during precheck.
                           </p>
                         )}
                         {reviewItem.messages.length > 0 && (
@@ -672,10 +662,15 @@ export default function ManagerMigrationDetailPage() {
             </button>
             {showTechnical && (
               <div className="mt-3 space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/50">
-                <p className="ui-caption text-slate-500 dark:text-slate-400">Last review: {formatDateTime(migrationDetail.precheck_checked_at)}</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  Last precheck: {formatDateTime(migrationDetail.precheck_checked_at)}
+                </p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">Mode: {migrationDetail.mode}</p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">Settings: {formatYesNo(migrationDetail.copy_bucket_settings)}</p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">Lock target: {formatYesNo(migrationDetail.lock_target_writes)}</p>
+                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                  Use x-amz-copy-source: {formatYesNo(migrationDetail.use_same_endpoint_copy)}
+                </p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
                   Auto-grant source read: {formatYesNo(migrationDetail.auto_grant_source_read_for_copy)}
                 </p>

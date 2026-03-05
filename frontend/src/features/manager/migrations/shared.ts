@@ -143,6 +143,7 @@ export function buildPlannedSteps(
     copyBucketSettings: boolean;
     deleteSource: boolean;
     lockTargetWrites: boolean;
+    useSameEndpointCopy: boolean;
     autoGrantSourceReadForCopy: boolean;
   }
 ): string[] {
@@ -156,10 +157,15 @@ export function buildPlannedSteps(
   if (options.copyBucketSettings) {
     steps.push("Copy bucket settings.");
   }
+  if (options.useSameEndpointCopy) {
+    steps.push("Use same-endpoint x-amz-copy-source for object replication.");
+  } else {
+    steps.push("Use stream copy (GetObject + upload) for object replication.");
+  }
   if (options.mode === "pre_sync") {
     steps.push("Run pre-sync then wait for cutover.");
   }
-  if (options.autoGrantSourceReadForCopy) {
+  if (options.useSameEndpointCopy && options.autoGrantSourceReadForCopy) {
     steps.push("Temporarily grant source read access for same-endpoint x-amz-copy-source operations.");
   }
   steps.push("Apply source bucket protection policy.");
@@ -198,7 +204,9 @@ export function computeItemCopyProgressPercent(item: { source_count?: number | n
 }
 
 export function isActiveMigrationStatus(status: BucketMigrationStatus): boolean {
-  return ["draft", "queued", "running", "pause_requested", "paused", "awaiting_cutover"].includes(status);
+  return ["draft", "queued", "running", "pause_requested", "cancel_requested", "paused", "awaiting_cutover"].includes(
+    status
+  );
 }
 
 export function isNeedsAttentionMigrationStatus(status: BucketMigrationStatus): boolean {
@@ -222,7 +230,7 @@ export function getNextAction(detail: BucketMigrationDetail, canLaunchFromDraft:
     if (canLaunchFromDraft) {
       return {
         title: "Action required: launch replication",
-        description: "Review checks passed. You can start replication now.",
+        description: "Precheck passed. You can start replication now.",
         action: "start",
         actionLabel: "Launch replication",
         tone: "success",
@@ -230,16 +238,16 @@ export function getNextAction(detail: BucketMigrationDetail, canLaunchFromDraft:
     }
     if (detail.precheck_status === "failed") {
       return {
-        title: "Action required: resolve review issues",
-        description: "Fix the review errors shown below before launch.",
+        title: "Action required: resolve precheck issues",
+        description: "Fix the precheck errors shown below before launch.",
         action: null,
         actionLabel: "",
         tone: "danger",
       };
     }
     return {
-      title: "Review in progress",
-      description: "Migration draft is waiting for review completion.",
+      title: "Precheck in progress",
+      description: "Migration draft is waiting for precheck completion.",
       action: null,
       actionLabel: "",
       tone: "info",

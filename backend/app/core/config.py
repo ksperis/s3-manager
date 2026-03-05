@@ -295,6 +295,37 @@ class Settings(BaseSettings):
         120,
         description="Duration of worker lease on a migration before takeover is allowed (BUCKET_MIGRATION_WORKER_LEASE_SECONDS)",
     )
+    bucket_migration_webhook_timeout_seconds: float = Field(
+        2.0,
+        gt=0,
+        description="HTTP timeout for bucket migration webhooks (BUCKET_MIGRATION_WEBHOOK_TIMEOUT_SECONDS)",
+    )
+    bucket_migration_webhook_allow_private_targets: bool = Field(
+        False,
+        description=(
+            "Allow bucket migration webhooks to target private/local network addresses "
+            "(BUCKET_MIGRATION_WEBHOOK_ALLOW_PRIVATE_TARGETS)"
+        ),
+    )
+    bucket_migration_webhook_allowed_hosts: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional allow-list for bucket migration webhook hosts (JSON list or comma-separated, "
+            "BUCKET_MIGRATION_WEBHOOK_ALLOWED_HOSTS)"
+        ),
+    )
+    bucket_migration_webhook_queue_size: int = Field(
+        500,
+        ge=1,
+        le=10000,
+        description="Maximum in-memory queue size for bucket migration webhooks (BUCKET_MIGRATION_WEBHOOK_QUEUE_SIZE)",
+    )
+    bucket_migration_webhook_workers: int = Field(
+        1,
+        ge=1,
+        le=8,
+        description="Number of background webhook workers for bucket migration events (BUCKET_MIGRATION_WEBHOOK_WORKERS)",
+    )
 
     @field_validator("jwt_keys", "credential_keys", mode="before")
     @classmethod
@@ -311,6 +342,28 @@ class Settings(BaseSettings):
                 except json.JSONDecodeError as exc:
                     raise ValueError("Unable to parse keys JSON") from exc
             return [item.strip() for item in text.split(",") if item.strip()]
+        return value
+
+    @field_validator("bucket_migration_webhook_allowed_hosts", mode="before")
+    @classmethod
+    def parse_webhook_host_list(cls, value):
+        if value is None:
+            return []
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return []
+            if text.startswith("["):
+                try:
+                    parsed = json.loads(text)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("Unable to parse webhook hosts JSON") from exc
+                if not isinstance(parsed, list):
+                    raise ValueError("bucket_migration_webhook_allowed_hosts must be a list")
+                return [str(item).strip().lower() for item in parsed if str(item).strip()]
+            return [item.strip().lower() for item in text.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(item).strip().lower() for item in value if str(item).strip()]
         return value
 
     @field_validator("log_level", mode="before")

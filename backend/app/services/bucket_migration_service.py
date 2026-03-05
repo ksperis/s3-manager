@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import logging
 import os
+import queue
 import re
 import socket
 import threading
@@ -16,6 +18,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
+from urllib.parse import urlparse
 from typing import Any, Callable, Optional
 
 import requests
@@ -49,9 +52,20 @@ _READ_ONLY_POLICY_SID = "S3ManagerMigrationReadOnlyDeny"
 _TARGET_WRITE_LOCK_POLICY_SID = "S3ManagerMigrationTargetWriteLockDeny"
 _SOURCE_COPY_GRANT_POLICY_SID = "S3ManagerMigrationSourceCopyGrantAllow"
 _MIGRATION_USER_AGENT_MARKER = "s3-manager-migration-worker"
-_WEBHOOK_TIMEOUT_SECONDS = 3.0
-_SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD = 25
-_SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS = 1.0
+_WEBHOOK_TIMEOUT_SECONDS = max(0.1, float(settings.bucket_migration_webhook_timeout_seconds or 2.0))
+_WEBHOOK_ALLOW_PRIVATE_TARGETS = bool(settings.bucket_migration_webhook_allow_private_targets)
+_WEBHOOK_ALLOWED_HOSTS = {
+    str(host or "").strip().lower()
+    for host in (settings.bucket_migration_webhook_allowed_hosts or [])
+    if str(host or "").strip()
+}
+_WEBHOOK_QUEUE_SIZE = max(1, min(int(settings.bucket_migration_webhook_queue_size or 500), 10_000))
+_WEBHOOK_WORKERS = max(1, min(int(settings.bucket_migration_webhook_workers or 1), 8))
+_SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD = 500
+_SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS = 10.0
+_RUN_ACTIONS_WAIT_TIMEOUT_SECONDS = 5.0
+_RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER = 32
+_ITEM_HEARTBEAT_PERSIST_INTERVAL_SECONDS = 10.0
 _RUNNABLE_MIGRATION_STATUSES = ("queued", "running", "pause_requested", "cancel_requested")
 _FINAL_MIGRATION_STATUSES = (
     "completed",
@@ -60,6 +74,7 @@ _FINAL_MIGRATION_STATUSES = (
     "canceled",
     "rolled_back",
 )
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
 class _WorkerLeaseLostError(RuntimeError):
@@ -96,6 +111,14 @@ class _MigrationRuntimeLimits:
     max_active_per_endpoint: int
 
 
+@dataclass(frozen=True)
+class _WebhookDispatchTask:
+    webhook_url: str
+    payload: dict[str, Any]
+    migration_id: int
+    item_id: Optional[int]
+
+
 def _chunked(items: list[str], size: int) -> list[list[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
@@ -113,10 +136,96 @@ def _json_loads(value: Optional[str]) -> Any:
         return None
 
 
+def _webhook_host_allowed(host: str) -> bool:
+    normalized_host = str(host or "").strip().lower().rstrip(".")
+    if not normalized_host:
+        return False
+    if not _WEBHOOK_ALLOWED_HOSTS:
+        return True
+    for allowed in _WEBHOOK_ALLOWED_HOSTS:
+        if normalized_host == allowed or normalized_host.endswith(f".{allowed}"):
+            return True
+    return False
+
+
+def _resolve_webhook_host_ips(host: str) -> set[IPAddress]:
+    resolved: set[IPAddress] = set()
+    for family, _, _, _, sockaddr in socket.getaddrinfo(host, None):
+        try:
+            if family == socket.AF_INET6:
+                addr = ipaddress.ip_address(sockaddr[0])
+            else:
+                addr = ipaddress.ip_address(sockaddr[0])
+        except Exception:  # noqa: BLE001
+            continue
+        resolved.add(addr)
+    return resolved
+
+
+def _is_private_or_local_ip(address: IPAddress) -> bool:
+    return bool(
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_multicast
+        or address.is_unspecified
+        or address.is_reserved
+    )
+
+
+def _validate_webhook_target_url(webhook_url: str) -> None:
+    parsed = urlparse(webhook_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not parsed.hostname:
+        raise ValueError("webhook_url must be a valid http(s) URL")
+    if parsed.username or parsed.password:
+        raise ValueError("webhook_url must not include user credentials")
+
+    host = parsed.hostname.strip().lower().rstrip(".")
+    if not _webhook_host_allowed(host):
+        raise ValueError("webhook_url host is not allowed by webhook policy")
+
+    try:
+        resolved_ips = _resolve_webhook_host_ips(host)
+    except socket.gaierror as exc:
+        raise ValueError(f"webhook_url host cannot be resolved: {exc}") from exc
+    if not resolved_ips:
+        raise ValueError("webhook_url host cannot be resolved")
+
+    if not _WEBHOOK_ALLOW_PRIVATE_TARGETS and any(_is_private_or_local_ip(ip_addr) for ip_addr in resolved_ips):
+        raise ValueError(
+            "webhook_url resolves to a private or local network address; "
+            "set BUCKET_MIGRATION_WEBHOOK_ALLOW_PRIVATE_TARGETS=true to allow it"
+        )
+
+
 class BucketMigrationService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, *, authorized_context_ids: Optional[set[str]] = None) -> None:
         self.db = db
         self._buckets = BucketsService()
+        self._authorized_context_ids: Optional[set[str]]
+        if authorized_context_ids is None:
+            self._authorized_context_ids = None
+        else:
+            self._authorized_context_ids = {str(value or "").strip() for value in authorized_context_ids if str(value or "").strip()}
+
+    def _commit(self) -> None:
+        self.db.commit()
+
+    def _is_context_authorized(self, context_id: str) -> bool:
+        if self._authorized_context_ids is None:
+            return True
+        return str(context_id or "").strip() in self._authorized_context_ids
+
+    def _assert_context_authorized_for_mutation(self, context_id: str) -> None:
+        if self._is_context_authorized(context_id):
+            return
+        raise PermissionError("Not authorized for this context")
+
+    def _validate_configured_webhook_url(self, webhook_url: str) -> None:
+        try:
+            _validate_webhook_target_url(webhook_url)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 
     def _build_bucket_mappings(self, payload: BucketMigrationCreateRequest) -> list[tuple[str, str]]:
         mappings: list[tuple[str, str]] = []
@@ -134,8 +243,42 @@ class BucketMigrationService:
             mappings.append((source_bucket, target_bucket))
         return mappings
 
+    def _resolve_same_endpoint_copy_options(
+        self,
+        payload: BucketMigrationCreateRequest,
+        *,
+        same_endpoint: bool,
+    ) -> tuple[bool, bool]:
+        use_same_endpoint_copy = bool(payload.use_same_endpoint_copy)
+        explicit_auto_grant = payload.auto_grant_source_read_for_copy
+
+        if use_same_endpoint_copy and not same_endpoint:
+            raise ValueError(
+                "x-amz-copy-source can only be enabled when source and target contexts use the same endpoint"
+            )
+        if not use_same_endpoint_copy and explicit_auto_grant is True:
+            raise ValueError(
+                "auto_grant_source_read_for_copy cannot be enabled when use_same_endpoint_copy is disabled"
+            )
+
+        if explicit_auto_grant is None:
+            auto_grant_source_read_for_copy = use_same_endpoint_copy
+        else:
+            auto_grant_source_read_for_copy = bool(explicit_auto_grant)
+
+        if not use_same_endpoint_copy:
+            auto_grant_source_read_for_copy = False
+
+        return use_same_endpoint_copy, auto_grant_source_read_for_copy
+
     def create_migration(self, payload: BucketMigrationCreateRequest, user: User) -> BucketMigration:
         mappings = self._build_bucket_mappings(payload)
+        self._assert_context_authorized_for_mutation(payload.source_context_id)
+        self._assert_context_authorized_for_mutation(payload.target_context_id)
+
+        webhook_url = (payload.webhook_url or "").strip() or None
+        if webhook_url:
+            self._validate_configured_webhook_url(webhook_url)
 
         source_ctx = self._resolve_context(payload.source_context_id)
         target_ctx = self._resolve_context(payload.target_context_id)
@@ -152,6 +295,10 @@ class BucketMigrationService:
                         "target bucket must differ from source bucket. "
                         "Use a prefix or explicit mapping override."
                     )
+        use_same_endpoint_copy, auto_grant_source_read_for_copy = self._resolve_same_endpoint_copy_options(
+            payload,
+            same_endpoint=same_endpoint,
+        )
 
         limits = self._load_runtime_limits()
         requested_parallelism = (
@@ -169,8 +316,9 @@ class BucketMigrationService:
             copy_bucket_settings=bool(payload.copy_bucket_settings),
             delete_source=bool(payload.delete_source),
             lock_target_writes=bool(payload.lock_target_writes),
-            auto_grant_source_read_for_copy=bool(payload.auto_grant_source_read_for_copy),
-            webhook_url=(payload.webhook_url or None),
+            use_same_endpoint_copy=use_same_endpoint_copy,
+            auto_grant_source_read_for_copy=auto_grant_source_read_for_copy,
+            webhook_url=webhook_url,
             mapping_prefix=payload.mapping_prefix or None,
             status="draft",
             precheck_status="pending",
@@ -212,13 +360,14 @@ class BucketMigrationService:
                 "copy_bucket_settings": bool(payload.copy_bucket_settings),
                 "delete_source": bool(payload.delete_source),
                 "lock_target_writes": bool(payload.lock_target_writes),
-                "auto_grant_source_read_for_copy": bool(payload.auto_grant_source_read_for_copy),
+                "use_same_endpoint_copy": use_same_endpoint_copy,
+                "auto_grant_source_read_for_copy": auto_grant_source_read_for_copy,
                 "webhook_enabled": bool(payload.webhook_url),
                 "parallelism_max": parallelism,
                 "items": len(mappings),
             },
         )
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
@@ -228,6 +377,12 @@ class BucketMigrationService:
             raise ValueError("Only draft migrations can be updated")
 
         mappings = self._build_bucket_mappings(payload)
+        self._assert_context_authorized_for_mutation(payload.source_context_id)
+        self._assert_context_authorized_for_mutation(payload.target_context_id)
+
+        webhook_url = (payload.webhook_url or "").strip() or None
+        if webhook_url:
+            self._validate_configured_webhook_url(webhook_url)
 
         source_ctx = self._resolve_context(payload.source_context_id)
         target_ctx = self._resolve_context(payload.target_context_id)
@@ -244,6 +399,10 @@ class BucketMigrationService:
                         "target bucket must differ from source bucket. "
                         "Use a prefix or explicit mapping override."
                     )
+        use_same_endpoint_copy, auto_grant_source_read_for_copy = self._resolve_same_endpoint_copy_options(
+            payload,
+            same_endpoint=same_endpoint,
+        )
 
         limits = self._load_runtime_limits()
         requested_parallelism = (
@@ -259,8 +418,9 @@ class BucketMigrationService:
         migration.copy_bucket_settings = bool(payload.copy_bucket_settings)
         migration.delete_source = bool(payload.delete_source)
         migration.lock_target_writes = bool(payload.lock_target_writes)
-        migration.auto_grant_source_read_for_copy = bool(payload.auto_grant_source_read_for_copy)
-        migration.webhook_url = payload.webhook_url or None
+        migration.use_same_endpoint_copy = use_same_endpoint_copy
+        migration.auto_grant_source_read_for_copy = auto_grant_source_read_for_copy
+        migration.webhook_url = webhook_url
         migration.mapping_prefix = payload.mapping_prefix or None
         migration.parallelism_max = parallelism
         migration.status = "draft"
@@ -340,20 +500,30 @@ class BucketMigrationService:
                 "copy_bucket_settings": bool(payload.copy_bucket_settings),
                 "delete_source": bool(payload.delete_source),
                 "lock_target_writes": bool(payload.lock_target_writes),
-                "auto_grant_source_read_for_copy": bool(payload.auto_grant_source_read_for_copy),
+                "use_same_endpoint_copy": use_same_endpoint_copy,
+                "auto_grant_source_read_for_copy": auto_grant_source_read_for_copy,
                 "webhook_enabled": bool(payload.webhook_url),
                 "parallelism_max": parallelism,
                 "items": len(mappings),
             },
         )
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
     def list_migrations(self, limit: int = 100, *, context_id: Optional[str] = None) -> list[BucketMigration]:
+        if self._authorized_context_ids is not None and not self._authorized_context_ids:
+            return []
         query = self.db.query(BucketMigration)
+        if self._authorized_context_ids is not None:
+            query = query.filter(
+                BucketMigration.source_context_id.in_(self._authorized_context_ids),
+                BucketMigration.target_context_id.in_(self._authorized_context_ids),
+            )
         normalized_context_id = (context_id or "").strip()
         if normalized_context_id:
+            if self._authorized_context_ids is not None and normalized_context_id not in self._authorized_context_ids:
+                return []
             query = query.filter(
                 or_(
                     BucketMigration.source_context_id == normalized_context_id,
@@ -363,17 +533,45 @@ class BucketMigrationService:
         return query.order_by(BucketMigration.created_at.desc()).limit(max(1, min(int(limit), 500))).all()
 
     def get_migration(self, migration_id: int) -> BucketMigration:
-        migration = self.db.query(BucketMigration).filter(BucketMigration.id == migration_id).first()
+        query = self.db.query(BucketMigration).filter(BucketMigration.id == migration_id)
+        if self._authorized_context_ids is not None:
+            if not self._authorized_context_ids:
+                raise ValueError("Migration not found")
+            query = query.filter(
+                BucketMigration.source_context_id.in_(self._authorized_context_ids),
+                BucketMigration.target_context_id.in_(self._authorized_context_ids),
+            )
+        migration = query.first()
         if not migration:
             raise ValueError("Migration not found")
         return migration
+
+    def list_migration_items(self, migration_id: int) -> list[BucketMigrationItem]:
+        migration = self.get_migration(migration_id)
+        return (
+            self.db.query(BucketMigrationItem)
+            .filter(BucketMigrationItem.migration_id == migration.id)
+            .order_by(BucketMigrationItem.id.asc())
+            .all()
+        )
+
+    def list_recent_migration_events(self, migration_id: int, *, limit: int) -> list[BucketMigrationEvent]:
+        migration = self.get_migration(migration_id)
+        safe_limit = max(1, min(int(limit), 1000))
+        return (
+            self.db.query(BucketMigrationEvent)
+            .filter(BucketMigrationEvent.migration_id == migration.id)
+            .order_by(BucketMigrationEvent.created_at.desc(), BucketMigrationEvent.id.desc())
+            .limit(safe_limit)
+            .all()
+        )
 
     def delete_migration(self, migration_id: int) -> None:
         migration = self.get_migration(migration_id)
         if migration.status not in _FINAL_MIGRATION_STATUSES:
             raise ValueError("Migration can only be deleted from a final status")
         self.db.delete(migration)
-        self.db.commit()
+        self._commit()
 
     def run_precheck(self, migration_id: int) -> BucketMigration:
         migration = self.get_migration(migration_id)
@@ -422,6 +620,10 @@ class BucketMigrationService:
         if source_ctx and target_ctx:
             same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
             report["same_endpoint"] = bool(same_endpoint)
+            report["use_same_endpoint_copy"] = bool(migration.use_same_endpoint_copy)
+            same_endpoint_copy_enabled = bool(same_endpoint and migration.use_same_endpoint_copy)
+            target_lock_probe_item_ids: set[int] = set()
+            item_results_by_id: dict[int, dict[str, Any]] = {}
 
             for item in sorted(migration.items, key=lambda entry: entry.id):
                 item_result: dict[str, Any] = {
@@ -490,7 +692,7 @@ class BucketMigrationService:
                 else:
                     item.target_count = None
 
-                if same_endpoint and target_exists is not True and source_access_ok:
+                if same_endpoint_copy_enabled and target_exists is not True and source_access_ok:
                     try:
                         probe = self._precheck_same_endpoint_copy_source_access(
                             source_ctx,
@@ -518,18 +720,6 @@ class BucketMigrationService:
                     except Exception as exc:  # noqa: BLE001
                         add_msg("error", f"Same-endpoint x-amz-copy-source precheck failed: {exc}")
 
-                if migration.lock_target_writes and target_exists is not True:
-                    if target_exists is False:
-                        add_msg(
-                            "info",
-                            "Target bucket lock is enabled and will be applied right after destination bucket creation.",
-                        )
-                    else:
-                        add_msg(
-                            "warning",
-                            "Target write-lock check could not be fully validated because destination bucket visibility is limited.",
-                        )
-
                 requires_cutover = bool(target_exists is not True)
                 if requires_cutover:
                     try:
@@ -545,9 +735,47 @@ class BucketMigrationService:
                 item.source_count = source_object_count
                 item.target_count = target_object_count if target_exists is True else item.target_count
                 item.updated_at = checked_at
+                item_results_by_id[item.id] = item_result
+
+                if migration.lock_target_writes and target_exists is not True:
+                    target_lock_probe_item_ids.add(item.id)
+                    item_result["messages"].append(
+                        {
+                            "level": "info",
+                            "message": "Target write-lock validation is scheduled on a temporary destination bucket.",
+                        }
+                    )
+
                 errors += item_errors
                 warnings += item_warnings
                 report["items"].append(item_result)
+
+            if migration.lock_target_writes and target_lock_probe_item_ids:
+                try:
+                    self._precheck_target_lock_with_probe_bucket(target_ctx, migration_id=migration.id)
+                    for item_id in sorted(target_lock_probe_item_ids):
+                        item_result = item_results_by_id.get(item_id)
+                        if not item_result:
+                            continue
+                        item_result["messages"].append(
+                            {
+                                "level": "info",
+                                "message": "Target write-lock policy roundtrip is validated for migration worker access.",
+                            }
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    for item_id in sorted(target_lock_probe_item_ids):
+                        item_result = item_results_by_id.get(item_id)
+                        if not item_result:
+                            continue
+                        item_result["messages"].append(
+                            {
+                                "level": "error",
+                                "message": f"Target write-lock precheck failed: {exc}",
+                            }
+                        )
+                        item_result["errors"] = int(item_result.get("errors") or 0) + 1
+                        errors += 1
 
         report["errors"] = errors
         report["warnings"] = warnings
@@ -571,7 +799,7 @@ class BucketMigrationService:
                 message="Precheck passed.",
                 metadata={"errors": 0, "warnings": warnings},
             )
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
@@ -598,7 +826,7 @@ class BucketMigrationService:
                 item.step = "apply_read_only"
             item.updated_at = utcnow()
         self._add_event(migration, level="info", message="Migration queued.")
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
@@ -610,7 +838,7 @@ class BucketMigrationService:
         migration.status = "pause_requested"
         migration.updated_at = utcnow()
         self._add_event(migration, level="info", message="Pause requested.")
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
@@ -629,7 +857,7 @@ class BucketMigrationService:
                 item.status = "pending"
                 item.updated_at = utcnow()
         self._add_event(migration, level="info", message="Migration resumed.")
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
@@ -668,7 +896,7 @@ class BucketMigrationService:
             migration.status = "cancel_requested"
         migration.updated_at = utcnow()
         self._add_event(migration, level="info", message="Stop requested.")
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
@@ -688,7 +916,7 @@ class BucketMigrationService:
                 item.step = "apply_read_only"
                 item.updated_at = utcnow()
         self._add_event(migration, level="info", message="Cutover requested after pre-sync.")
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
@@ -701,7 +929,7 @@ class BucketMigrationService:
 
         self._prepare_item_retry(migration, item)
         self._queue_migration_for_retry(migration, message=f"Retry requested for bucket '{item.source_bucket}'.")
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
@@ -719,7 +947,7 @@ class BucketMigrationService:
             migration,
             message=f"Retry requested for {len(failed_items)} failed bucket item(s).",
         )
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration, len(failed_items)
 
@@ -735,7 +963,7 @@ class BucketMigrationService:
         self._ensure_rollback_safe(migration, [item], source_ctx=source_ctx)
         self._rollback_single_item(migration, item, source_ctx, target_ctx)
         self._refresh_status_after_manual_item_operations(migration)
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
@@ -753,7 +981,7 @@ class BucketMigrationService:
             self._rollback_single_item(migration, item, source_ctx, target_ctx)
 
         self._refresh_status_after_manual_item_operations(migration)
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration, len(failed_items)
 
@@ -867,7 +1095,7 @@ class BucketMigrationService:
             )
 
         self._recompute_counters(migration)
-        self.db.commit()
+        self._commit()
         self.db.refresh(migration)
         return migration
 
@@ -930,7 +1158,7 @@ class BucketMigrationService:
                 )
             )
             if updated == 1:
-                self.db.commit()
+                self._commit()
                 return migration_id
             self.db.rollback()
         return None
@@ -972,7 +1200,7 @@ class BucketMigrationService:
             if worker_id and migration.worker_lease_owner == worker_id:
                 migration.worker_lease_owner = None
                 migration.worker_lease_until = None
-                self.db.commit()
+                self._commit()
             return
 
         if migration.status in _RUNNABLE_MIGRATION_STATUSES:
@@ -981,7 +1209,7 @@ class BucketMigrationService:
                 migration.started_at = utcnow()
             migration.updated_at = utcnow()
             migration.last_heartbeat_at = utcnow()
-            self.db.commit()
+            self._commit()
 
         source_ctx = self._resolve_context(migration.source_context_id)
         target_ctx = self._resolve_context(migration.target_context_id)
@@ -998,11 +1226,11 @@ class BucketMigrationService:
                 return
             if state == "cancel":
                 self._mark_canceled(migration, source_ctx=source_ctx, target_ctx=target_ctx)
-                self.db.commit()
+                self._commit()
                 return
             if state == "pause":
                 self._mark_paused(migration)
-                self.db.commit()
+                self._commit()
                 return
 
             if item.status in {"completed", "skipped", "failed", "canceled"}:
@@ -1011,7 +1239,7 @@ class BucketMigrationService:
                 if worker_id and migration.worker_lease_owner == worker_id:
                     migration.worker_lease_owner = None
                     migration.worker_lease_until = None
-                    self.db.commit()
+                    self._commit()
                 return
 
             try:
@@ -1019,32 +1247,37 @@ class BucketMigrationService:
                 if item.started_at is None:
                     item.started_at = utcnow()
                 item.updated_at = utcnow()
-                self.db.commit()
+                self._commit()
                 self._run_item(migration, item, source_ctx, target_ctx, control_check=control_check)
             except _WorkerLeaseLostError:
                 self.db.rollback()
                 return
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Bucket migration item failed: migration=%s item=%s", migration.id, item.id)
-                item.status = "failed"
-                item.error_message = str(exc)
-                item.finished_at = utcnow()
-                item.updated_at = utcnow()
+                self.db.rollback()
+                migration = self.get_migration(migration.id)
+                failed_item = self.db.query(BucketMigrationItem).filter(BucketMigrationItem.id == item.id).first()
+                if failed_item is None:
+                    continue
+                failed_item.status = "failed"
+                failed_item.error_message = str(exc)
+                failed_item.finished_at = utcnow()
+                failed_item.updated_at = utcnow()
                 self._add_event(
                     migration,
-                    item=item,
+                    item=failed_item,
                     level="error",
                     message="Item failed.",
-                    metadata={"error": str(exc), "step": item.step},
+                    metadata={"error": str(exc), "step": failed_item.step},
                 )
-                self.db.commit()
+                self._commit()
 
         self.db.refresh(migration)
         self._finalize_or_wait_cutover(migration, source_ctx=source_ctx, target_ctx=target_ctx)
         if worker_id and migration.worker_lease_owner == worker_id and migration.status not in _RUNNABLE_MIGRATION_STATUSES:
             migration.worker_lease_owner = None
             migration.worker_lease_until = None
-        self.db.commit()
+        self._commit()
 
     def _run_item(
         self,
@@ -1055,13 +1288,16 @@ class BucketMigrationService:
         *,
         control_check: Callable[[], str],
     ) -> None:
+        last_heartbeat_persist = 0.0
         while True:
-            self.db.refresh(migration)
-            self.db.refresh(item)
-            migration.last_heartbeat_at = utcnow()
-            migration.updated_at = utcnow()
-            item.updated_at = utcnow()
-            self.db.commit()
+            now_mono = time.monotonic()
+            if (now_mono - last_heartbeat_persist) >= _ITEM_HEARTBEAT_PERSIST_INTERVAL_SECONDS:
+                heartbeat_at = utcnow()
+                migration.last_heartbeat_at = heartbeat_at
+                migration.updated_at = heartbeat_at
+                item.updated_at = heartbeat_at
+                self._commit()
+                last_heartbeat_persist = now_mono
 
             state = control_check()
             if state == "lost_lease":
@@ -1070,12 +1306,12 @@ class BucketMigrationService:
                 item.status = "canceled"
                 item.finished_at = utcnow()
                 item.updated_at = utcnow()
-                self.db.commit()
+                self._commit()
                 return
             if state == "pause":
                 item.status = "paused"
                 item.updated_at = utcnow()
-                self.db.commit()
+                self._commit()
                 return
 
             if item.step == "create_bucket":
@@ -1105,7 +1341,7 @@ class BucketMigrationService:
                             message="Target bucket already exists; item skipped.",
                             metadata={"target_bucket": item.target_bucket},
                         )
-                        self.db.commit()
+                        self._commit()
                         return
                     raise
                 self._add_event(
@@ -1119,13 +1355,13 @@ class BucketMigrationService:
                     item.step = "copy_bucket_settings"
                 else:
                     item.step = self._next_step_after_target_setup(migration, item)
-                self.db.commit()
+                self._commit()
                 continue
 
             if item.step == "copy_bucket_settings":
                 self._copy_bucket_settings(source_ctx.account, item.source_bucket, target_ctx.account, item.target_bucket, migration, item)
                 item.step = self._next_step_after_target_setup(migration, item)
-                self.db.commit()
+                self._commit()
                 continue
 
             if item.step == "apply_target_lock":
@@ -1139,7 +1375,7 @@ class BucketMigrationService:
                     level="info",
                     message="Target write-lock policy applied.",
                 )
-                self.db.commit()
+                self._commit()
                 continue
 
             if item.step == "pre_sync":
@@ -1164,7 +1400,7 @@ class BucketMigrationService:
                     else:
                         item.status = "paused"
                     item.updated_at = utcnow()
-                    self.db.commit()
+                    self._commit()
                     return
                 item.source_count = diff.source_count
                 item.target_count = diff.target_count
@@ -1184,13 +1420,13 @@ class BucketMigrationService:
                     message="Pre-sync completed; waiting for cutover.",
                     metadata={"copied": copied},
                 )
-                self.db.commit()
+                self._commit()
                 return
 
             if item.step == "awaiting_cutover":
                 item.status = "awaiting_cutover"
                 item.updated_at = utcnow()
-                self.db.commit()
+                self._commit()
                 return
 
             if item.step == "apply_read_only":
@@ -1199,7 +1435,7 @@ class BucketMigrationService:
                 item.step = "sync"
                 item.updated_at = utcnow()
                 self._add_event(migration, item=item, level="info", message="Read-only policy applied on source bucket.")
-                self.db.commit()
+                self._commit()
                 continue
 
             if item.step == "sync":
@@ -1224,7 +1460,7 @@ class BucketMigrationService:
                     else:
                         item.status = "paused"
                     item.updated_at = utcnow()
-                    self.db.commit()
+                    self._commit()
                     return
                 item.source_count = diff.source_count
                 item.target_count = diff.target_count
@@ -1235,7 +1471,7 @@ class BucketMigrationService:
                 item.diff_sample_json = _json_dumps(diff.sample)
                 item.step = "verify"
                 item.updated_at = utcnow()
-                self.db.commit()
+                self._commit()
                 continue
 
             if item.step == "verify":
@@ -1282,7 +1518,7 @@ class BucketMigrationService:
                             "only_target_count": content_diff.only_target_count,
                         },
                     )
-                    self.db.commit()
+                    self._commit()
                     return
 
                 if migration.delete_source:
@@ -1309,7 +1545,7 @@ class BucketMigrationService:
                             else:
                                 item.status = "paused"
                             item.updated_at = utcnow()
-                            self.db.commit()
+                            self._commit()
                             return
 
                         if failed_keys:
@@ -1335,7 +1571,7 @@ class BucketMigrationService:
                                     "method_counts": method_counts,
                                 },
                             )
-                            self.db.commit()
+                            self._commit()
                             return
 
                         self._add_event(
@@ -1352,7 +1588,7 @@ class BucketMigrationService:
 
                     item.step = "delete_source"
                     item.updated_at = utcnow()
-                    self.db.commit()
+                    self._commit()
                     continue
 
                 item.status = "completed"
@@ -1360,7 +1596,7 @@ class BucketMigrationService:
                 item.finished_at = utcnow()
                 item.updated_at = utcnow()
                 self._add_event(migration, item=item, level="info", message="Item completed with clean diff.")
-                self.db.commit()
+                self._commit()
                 return
 
             if item.step == "delete_source":
@@ -1371,7 +1607,7 @@ class BucketMigrationService:
                 item.finished_at = utcnow()
                 item.updated_at = utcnow()
                 self._add_event(migration, item=item, level="info", message="Source bucket deleted after clean diff.")
-                self.db.commit()
+                self._commit()
                 return
 
             if item.step in {"completed", "skipped"}:
@@ -1380,7 +1616,7 @@ class BucketMigrationService:
                 if item.finished_at is None:
                     item.finished_at = utcnow()
                 item.updated_at = utcnow()
-                self.db.commit()
+                self._commit()
                 return
 
             raise RuntimeError(f"Unsupported item step: {item.step}")
@@ -1840,6 +2076,47 @@ class BucketMigrationService:
             raise RuntimeError(
                 f"Unable to restore destination bucket policy after write-lock precheck on '{target_bucket}': {restore_error}"
             ) from restore_error
+
+    def _precheck_target_lock_with_probe_bucket(self, target_ctx: _ResolvedContext, *, migration_id: int) -> None:
+        probe_bucket = f"s3-manager-mig-precheck-{migration_id}-{uuid.uuid4().hex[:12]}"
+        try:
+            self._buckets.create_bucket(
+                probe_bucket,
+                target_ctx.account,
+                versioning=False,
+                location_constraint=target_ctx.region,
+                object_lock_enabled=False,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                "Unable to create temporary destination bucket for target write-lock precheck: "
+                f"{exc}"
+            ) from exc
+
+        roundtrip_error: Optional[Exception] = None
+        try:
+            self._precheck_target_lock_roundtrip(target_ctx, probe_bucket)
+        except Exception as exc:  # noqa: BLE001
+            roundtrip_error = exc
+
+        cleanup_error: Optional[Exception] = None
+        try:
+            self._buckets.delete_bucket(probe_bucket, target_ctx.account, force=True)
+        except Exception as exc:  # noqa: BLE001
+            cleanup_error = exc
+
+        if roundtrip_error is not None and cleanup_error is not None:
+            raise RuntimeError(
+                "Target write-lock precheck failed and temporary probe cleanup also failed: "
+                f"precheck={roundtrip_error}; cleanup={cleanup_error}"
+            ) from roundtrip_error
+        if cleanup_error is not None:
+            raise RuntimeError(
+                "Target write-lock precheck cleanup failed on temporary probe bucket: "
+                f"{cleanup_error}"
+            ) from cleanup_error
+        if roundtrip_error is not None:
+            raise RuntimeError(f"{roundtrip_error}") from roundtrip_error
 
     def _build_read_only_policy(
         self,
@@ -2347,6 +2624,7 @@ class BucketMigrationService:
             return 0, 0, diff
 
         same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
+        same_endpoint_copy = bool(same_endpoint and migration.use_same_endpoint_copy)
         pending_copied = 0
         pending_deleted = 0
         last_progress_flush = time.monotonic()
@@ -2373,7 +2651,7 @@ class BucketMigrationService:
             item.updated_at = heartbeat_at
             migration.updated_at = heartbeat_at
             migration.last_heartbeat_at = heartbeat_at
-            self.db.commit()
+            self._commit()
             pending_copied = 0
             pending_deleted = 0
             last_progress_flush = now
@@ -2388,7 +2666,7 @@ class BucketMigrationService:
 
         copied = 0
         if diff.copy_keys:
-            if same_endpoint and bool(migration.auto_grant_source_read_for_copy):
+            if same_endpoint_copy and bool(migration.auto_grant_source_read_for_copy):
                 sample_key = diff.copy_keys[0]
                 with self._temporary_source_copy_grant(
                     source_ctx,
@@ -2403,7 +2681,7 @@ class BucketMigrationService:
                         target_bucket,
                         diff.copy_keys,
                         parallelism_max=parallelism_max,
-                        same_endpoint=same_endpoint,
+                        same_endpoint=same_endpoint_copy,
                         control_check=control_check,
                         on_progress=on_object_progress,
                     )
@@ -2415,7 +2693,7 @@ class BucketMigrationService:
                     target_bucket,
                     diff.copy_keys,
                     parallelism_max=parallelism_max,
-                    same_endpoint=same_endpoint,
+                    same_endpoint=same_endpoint_copy,
                     control_check=control_check,
                     on_progress=on_object_progress,
                 )
@@ -2445,10 +2723,10 @@ class BucketMigrationService:
                 "copied": copied,
                 "deleted": deleted,
                 "allow_delete": allow_delete,
-                "same_endpoint_copy": same_endpoint,
+                "same_endpoint_copy": same_endpoint_copy,
             },
         )
-        self.db.commit()
+        self._commit()
         return copied, deleted, diff
 
     def _run_copy_actions(
@@ -2468,8 +2746,9 @@ class BucketMigrationService:
             return 0
         copied = 0
         worker_count = max(1, min(int(parallelism_max), len(keys)))
+        chunk_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
 
-        for chunk in _chunked(keys, worker_count):
+        for chunk in _chunked(keys, chunk_size):
             state = control_check()
             if state == "lost_lease":
                 if on_progress is not None:
@@ -2495,7 +2774,7 @@ class BucketMigrationService:
                 interrupted_state: Optional[str] = None
                 pending = set(futures)
                 while pending:
-                    done, pending = wait(pending, timeout=1.0)
+                    done, pending = wait(pending, timeout=_RUN_ACTIONS_WAIT_TIMEOUT_SECONDS)
                     state = control_check()
                     if state == "lost_lease":
                         interrupted_state = "lost_lease"
@@ -2532,8 +2811,9 @@ class BucketMigrationService:
             return 0
         deleted = 0
         worker_count = max(1, min(int(parallelism_max), len(keys)))
+        chunk_size = max(worker_count, worker_count * _RUN_ACTIONS_CHUNK_SIZE_MULTIPLIER)
 
-        for chunk in _chunked(keys, worker_count):
+        for chunk in _chunked(keys, chunk_size):
             state = control_check()
             if state == "lost_lease":
                 if on_progress is not None:
@@ -2551,7 +2831,7 @@ class BucketMigrationService:
                 interrupted_state: Optional[str] = None
                 pending = set(futures)
                 while pending:
-                    done, pending = wait(pending, timeout=1.0)
+                    done, pending = wait(pending, timeout=_RUN_ACTIONS_WAIT_TIMEOUT_SECONDS)
                     state = control_check()
                     if state == "lost_lease":
                         interrupted_state = "lost_lease"
@@ -3285,7 +3565,7 @@ class BucketMigrationService:
             )
         )
         if updated == 1:
-            self.db.commit()
+            self._commit()
             return True
         self.db.rollback()
         return False
@@ -3301,6 +3581,61 @@ class BucketMigrationService:
             },
             synchronize_session=False,
         )
+
+    def fail_migration_fatal(
+        self,
+        migration_id: int,
+        *,
+        error: Exception,
+        worker_id: Optional[str] = None,
+    ) -> None:
+        try:
+            migration = self.db.query(BucketMigration).filter(BucketMigration.id == migration_id).first()
+            if not migration:
+                return
+
+            now = utcnow()
+            if migration.status in _FINAL_MIGRATION_STATUSES:
+                if worker_id and migration.worker_lease_owner == worker_id:
+                    migration.worker_lease_owner = None
+                    migration.worker_lease_until = None
+                    migration.updated_at = now
+                    self._commit()
+                return
+
+            error_text = str(error or "unknown fatal error").strip() or "unknown fatal error"
+            migration.status = "failed"
+            migration.pause_requested = False
+            migration.cancel_requested = False
+            migration.worker_lease_owner = None
+            migration.worker_lease_until = None
+            migration.error_message = f"Fatal migration worker error: {error_text}"
+            migration.finished_at = now
+            migration.updated_at = now
+            for item in migration.items:
+                if item.status == "running":
+                    item.status = "failed"
+                    item.step = item.step or "unknown"
+                    if not item.error_message:
+                        item.error_message = "Migration stopped due to fatal worker error."
+                    item.finished_at = now
+                    item.updated_at = now
+
+            self._add_event(
+                migration,
+                level="error",
+                message="Migration failed due to fatal worker error.",
+                metadata={"error": error_text},
+            )
+            self._recompute_counters(migration)
+            self._commit()
+        except Exception:  # noqa: BLE001
+            self.db.rollback()
+            logger.exception(
+                "Unable to persist fatal migration failure state: migration=%s worker=%s",
+                migration_id,
+                worker_id,
+            )
 
     def _control_state(
         self,
@@ -3575,7 +3910,7 @@ class BucketMigrationService:
             created_at=created_at,
         )
         self.db.add(entry)
-        self._notify_migration_webhook(
+        self._enqueue_migration_webhook(
             migration,
             item=item,
             level=level,
@@ -3584,7 +3919,7 @@ class BucketMigrationService:
             created_at=created_at,
         )
 
-    def _notify_migration_webhook(
+    def _enqueue_migration_webhook(
         self,
         migration: BucketMigration,
         *,
@@ -3607,35 +3942,28 @@ class BucketMigrationService:
             created_at=created_at,
         )
         try:
-            response = requests.post(
-                webhook_url,
-                json=payload,
-                timeout=_WEBHOOK_TIMEOUT_SECONDS,
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": "s3-manager-migration-webhook/1.0",
-                },
-            )
-            if int(getattr(response, "status_code", 0) or 0) >= 400:
-                logger.warning(
-                    "Bucket migration webhook returned non-success status: migration=%s item=%s status=%s",
-                    migration.id,
-                    item.id if item else None,
-                    getattr(response, "status_code", "unknown"),
-                )
-        except requests.RequestException as exc:
+            self._validate_configured_webhook_url(webhook_url)
+        except ValueError as exc:
             logger.warning(
-                "Bucket migration webhook delivery failed: migration=%s item=%s error=%s",
+                "Bucket migration webhook target rejected by security policy: migration=%s item=%s error=%s",
                 migration.id,
                 item.id if item else None,
                 exc,
             )
-        except Exception as exc:  # noqa: BLE001
+            return
+
+        dispatcher = get_bucket_migration_webhook_dispatcher()
+        enqueued = dispatcher.enqueue(
+            webhook_url=webhook_url,
+            payload=payload,
+            migration_id=int(migration.id),
+            item_id=int(item.id) if item else None,
+        )
+        if not enqueued:
             logger.warning(
-                "Bucket migration webhook delivery raised unexpected error: migration=%s item=%s error=%s",
+                "Bucket migration webhook dropped because dispatch queue is full: migration=%s item=%s",
                 migration.id,
                 item.id if item else None,
-                exc,
             )
 
     def _build_migration_webhook_payload(
@@ -3670,6 +3998,7 @@ class BucketMigrationService:
                 "copy_bucket_settings": bool(migration.copy_bucket_settings),
                 "delete_source": bool(migration.delete_source),
                 "lock_target_writes": bool(migration.lock_target_writes),
+                "use_same_endpoint_copy": bool(migration.use_same_endpoint_copy),
                 "auto_grant_source_read_for_copy": bool(migration.auto_grant_source_read_for_copy),
                 "parallelism_max": int(migration.parallelism_max or 1),
                 "total_items": int(migration.total_items or 0),
@@ -3697,6 +4026,146 @@ class BucketMigrationService:
                 "error_message": item.error_message,
             }
         return payload
+
+
+class _BucketMigrationWebhookDispatcher:
+    def __init__(
+        self,
+        *,
+        queue_size: int,
+        workers: int,
+        timeout_seconds: float,
+    ) -> None:
+        self._queue: queue.Queue[_WebhookDispatchTask] = queue.Queue(maxsize=max(1, int(queue_size)))
+        self._workers = max(1, int(workers))
+        self._timeout_seconds = max(0.1, float(timeout_seconds))
+        self._stop_event = threading.Event()
+        self._threads: list[threading.Thread] = []
+        self._lock = threading.Lock()
+
+    def start(self) -> None:
+        with self._lock:
+            if any(thread.is_alive() for thread in self._threads):
+                return
+            self._stop_event.clear()
+            self._threads = []
+            for index in range(self._workers):
+                thread = threading.Thread(
+                    target=self._run_loop,
+                    name=f"bucket-migration-webhook-{index + 1}",
+                    daemon=True,
+                )
+                thread.start()
+                self._threads.append(thread)
+
+    def stop(self, timeout: float = 3.0) -> None:
+        with self._lock:
+            self._stop_event.set()
+            threads = list(self._threads)
+        for thread in threads:
+            thread.join(timeout=timeout)
+
+    def enqueue(
+        self,
+        *,
+        webhook_url: str,
+        payload: dict[str, Any],
+        migration_id: int,
+        item_id: Optional[int],
+    ) -> bool:
+        task = _WebhookDispatchTask(
+            webhook_url=webhook_url,
+            payload=payload,
+            migration_id=int(migration_id),
+            item_id=int(item_id) if item_id is not None else None,
+        )
+        try:
+            self._queue.put_nowait(task)
+            return True
+        except queue.Full:
+            return False
+
+    def _run_loop(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                task = self._queue.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            try:
+                self._deliver(task)
+            finally:
+                self._queue.task_done()
+
+    def _deliver(self, task: _WebhookDispatchTask) -> None:
+        try:
+            _validate_webhook_target_url(task.webhook_url)
+        except ValueError as exc:
+            logger.warning(
+                "Bucket migration webhook target rejected before delivery: migration=%s item=%s error=%s",
+                task.migration_id,
+                task.item_id,
+                exc,
+            )
+            return
+
+        try:
+            response = requests.post(
+                task.webhook_url,
+                json=task.payload,
+                timeout=self._timeout_seconds,
+                allow_redirects=False,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "s3-manager-migration-webhook/1.0",
+                },
+            )
+            if int(getattr(response, "status_code", 0) or 0) >= 400:
+                logger.warning(
+                    "Bucket migration webhook returned non-success status: migration=%s item=%s status=%s",
+                    task.migration_id,
+                    task.item_id,
+                    getattr(response, "status_code", "unknown"),
+                )
+        except requests.RequestException as exc:
+            logger.warning(
+                "Bucket migration webhook delivery failed: migration=%s item=%s error=%s",
+                task.migration_id,
+                task.item_id,
+                exc,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Bucket migration webhook delivery raised unexpected error: migration=%s item=%s error=%s",
+                task.migration_id,
+                task.item_id,
+                exc,
+            )
+
+
+_webhook_dispatcher_singleton: Optional[_BucketMigrationWebhookDispatcher] = None
+_webhook_dispatcher_lock = threading.Lock()
+
+
+def get_bucket_migration_webhook_dispatcher() -> _BucketMigrationWebhookDispatcher:
+    global _webhook_dispatcher_singleton
+    with _webhook_dispatcher_lock:
+        if _webhook_dispatcher_singleton is None:
+            _webhook_dispatcher_singleton = _BucketMigrationWebhookDispatcher(
+                queue_size=_WEBHOOK_QUEUE_SIZE,
+                workers=_WEBHOOK_WORKERS,
+                timeout_seconds=_WEBHOOK_TIMEOUT_SECONDS,
+            )
+            _webhook_dispatcher_singleton.start()
+        return _webhook_dispatcher_singleton
+
+
+def reset_bucket_migration_webhook_dispatcher_for_tests() -> None:
+    global _webhook_dispatcher_singleton
+    with _webhook_dispatcher_lock:
+        dispatcher = _webhook_dispatcher_singleton
+        _webhook_dispatcher_singleton = None
+    if dispatcher is not None:
+        dispatcher.stop(timeout=0.1)
 
 
 class BucketMigrationWorker:
@@ -3744,6 +4213,7 @@ class BucketMigrationWorker:
         while not self._stop_event.is_set():
             processed = False
             try:
+                migration_id: Optional[int] = None
                 with self._session_factory() as db:
                     service = BucketMigrationService(db)
                     migration_id = service.claim_next_runnable_migration_id(
@@ -3752,13 +4222,26 @@ class BucketMigrationWorker:
                     )
                 if migration_id is not None:
                     processed = True
-                    with self._session_factory() as db:
-                        service = BucketMigrationService(db)
-                        service.run_migration(
+                    try:
+                        with self._session_factory() as db:
+                            service = BucketMigrationService(db)
+                            service.run_migration(
+                                migration_id,
+                                worker_id=self._worker_id,
+                                lease_seconds=self._lease_seconds,
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.exception(
+                            "Bucket migration worker failed while processing migration %s",
                             migration_id,
-                            worker_id=self._worker_id,
-                            lease_seconds=self._lease_seconds,
                         )
+                        with self._session_factory() as db:
+                            service = BucketMigrationService(db)
+                            service.fail_migration_fatal(
+                                migration_id,
+                                error=exc,
+                                worker_id=self._worker_id,
+                            )
             except Exception:  # noqa: BLE001
                 logger.exception("Bucket migration worker iteration failed")
             finally:

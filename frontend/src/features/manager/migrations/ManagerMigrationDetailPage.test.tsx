@@ -23,6 +23,7 @@ function buildDetail() {
     copy_bucket_settings: true,
     delete_source: false,
     lock_target_writes: true,
+    use_same_endpoint_copy: true,
     auto_grant_source_read_for_copy: true,
     webhook_url: null,
     mapping_prefix: "",
@@ -190,5 +191,7 @@ describe("ManagerMigrationDetailPage", () => {
     await user.click(screen.getByRole("button", { name: "Failed" }));
     expect(screen.getByText(/bucket-failed/)).toBeInTheDocument();
     expect(screen.queryByText(/bucket-running/)).not.toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "Show precheck details" })).toBeInTheDocument();
   });
 });

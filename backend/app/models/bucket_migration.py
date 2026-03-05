@@ -62,7 +62,8 @@ class BucketMigrationCreateRequest(BaseModel):
     copy_bucket_settings: bool = False
     delete_source: bool = False
     lock_target_writes: bool = True
-    auto_grant_source_read_for_copy: bool = True
+    use_same_endpoint_copy: bool = False
+    auto_grant_source_read_for_copy: Optional[bool] = None
     webhook_url: Optional[str] = None
     parallelism_max: Optional[int] = Field(default=None, ge=1, le=128)
 
@@ -140,7 +141,8 @@ class BucketMigrationView(BaseModel):
     copy_bucket_settings: bool
     delete_source: bool
     lock_target_writes: bool
-    auto_grant_source_read_for_copy: bool = True
+    use_same_endpoint_copy: bool = False
+    auto_grant_source_read_for_copy: bool = False
     webhook_url: Optional[str] = None
     mapping_prefix: Optional[str] = None
 

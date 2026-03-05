@@ -44,6 +44,7 @@ export type BucketMigrationCreateRequest = {
   copy_bucket_settings?: boolean;
   delete_source?: boolean;
   lock_target_writes?: boolean;
+  use_same_endpoint_copy?: boolean;
   auto_grant_source_read_for_copy?: boolean;
   webhook_url?: string;
   parallelism_max?: number;
@@ -93,6 +94,7 @@ export type BucketMigrationView = {
   copy_bucket_settings: boolean;
   delete_source: boolean;
   lock_target_writes: boolean;
+  use_same_endpoint_copy: boolean;
   auto_grant_source_read_for_copy: boolean;
   webhook_url?: string | null;
   mapping_prefix?: string | null;
