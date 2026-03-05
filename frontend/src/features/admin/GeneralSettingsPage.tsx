@@ -51,9 +51,6 @@ const FEATURE_FIELDS = [
 type FeatureField = (typeof FEATURE_FIELDS)[number];
 type ToggleField =
   | FeatureField
-  | "bucket_migration_enabled"
-  | "bucket_compare_enabled"
-  | "allow_ui_user_bucket_migration"
   | "allow_login_access_keys"
   | "allow_login_endpoint_list"
   | "allow_login_custom_endpoint"
@@ -181,7 +178,17 @@ export default function GeneralSettingsPage() {
       const defaults = await fetchDefaultAppSettings();
       setSettings((prev) =>
         prev
-          ? { ...prev, general: defaults.general, branding: defaults.branding }
+          ? {
+              ...prev,
+              general: {
+                ...defaults.general,
+                allow_portal_manager_workspace: prev.general.allow_portal_manager_workspace,
+                bucket_migration_enabled: prev.general.bucket_migration_enabled,
+                bucket_compare_enabled: prev.general.bucket_compare_enabled,
+                allow_ui_user_bucket_migration: prev.general.allow_ui_user_bucket_migration,
+              },
+              branding: defaults.branding,
+            }
           : defaults
       );
       setLoginLogoUrlDraft(defaults.branding.login_logo_url ?? "");
@@ -367,33 +374,6 @@ export default function GeneralSettingsPage() {
                     </p>
                   )}
                 </PortalSettingsItem>
-                <PortalSettingsItem
-                  title="Bucket migration tool"
-                  description="Enables the Manager bucket migration tool."
-                  action={
-                    <PortalSettingsSwitch
-                      checked={Boolean(settings.general.bucket_migration_enabled)}
-                      onChange={(value) => {
-                        handleToggle("bucket_migration_enabled", value);
-                        if (!value) {
-                          handleToggle("allow_ui_user_bucket_migration", false);
-                        }
-                      }}
-                      ariaLabel="Bucket migration tool"
-                    />
-                  }
-                />
-                <PortalSettingsItem
-                  title="Bucket compare tool"
-                  description="Enables the Manager bucket compare tool."
-                  action={
-                    <PortalSettingsSwitch
-                      checked={Boolean(settings.general.bucket_compare_enabled)}
-                      onChange={(value) => handleToggle("bucket_compare_enabled", value)}
-                      ariaLabel="Bucket compare tool"
-                    />
-                  }
-                />
               </PortalSettingsSection>
             </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">

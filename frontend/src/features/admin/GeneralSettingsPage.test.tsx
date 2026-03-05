@@ -176,19 +176,11 @@ describe("GeneralSettingsPage branding", () => {
     expect(screen.getByText(/custom endpoints are intended for trusted\/local environments/i)).toBeInTheDocument();
   });
 
-  it("renders and updates bucket compare toggle", async () => {
-    const user = userEvent.setup();
+  it("does not render manager extra tools toggles", async () => {
     render(<GeneralSettingsPage />);
 
-    const toggle = await screen.findByLabelText("Bucket compare tool");
-    expect(toggle).toBeInTheDocument();
-    await user.click(toggle);
-    await user.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => {
-      expect(updateAppSettingsMock).toHaveBeenCalled();
-    });
-    const lastPayload = updateAppSettingsMock.mock.calls.at(-1)?.[0] as AppSettings;
-    expect(lastPayload.general.bucket_compare_enabled).toBe(false);
+    await screen.findByLabelText("Primary color picker");
+    expect(screen.queryByLabelText("Bucket migration tool")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Bucket compare tool")).not.toBeInTheDocument();
   });
 });

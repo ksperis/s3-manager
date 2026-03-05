@@ -58,6 +58,34 @@ export default function ManagerSettingsPage() {
     );
   };
 
+  const handleToggleBucketMigrationTool = (value: boolean) => {
+    setSettings((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        general: {
+          ...prev.general,
+          bucket_migration_enabled: value,
+          allow_ui_user_bucket_migration: value ? prev.general.allow_ui_user_bucket_migration : false,
+        },
+      };
+    });
+  };
+
+  const handleToggleBucketCompareTool = (value: boolean) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            general: {
+              ...prev.general,
+              bucket_compare_enabled: value,
+            },
+          }
+        : prev
+    );
+  };
+
   const handleManagerParallelismDefaultChange = (rawValue: string) => {
     setSettings((prev) => {
       if (!prev) return prev;
@@ -141,6 +169,8 @@ export default function ManagerSettingsPage() {
                   general: {
                     ...prev.general,
                     allow_portal_manager_workspace: defaults.general.allow_portal_manager_workspace,
+                    bucket_migration_enabled: defaults.general.bucket_migration_enabled,
+                    bucket_compare_enabled: defaults.general.bucket_compare_enabled,
                     allow_ui_user_bucket_migration: defaults.general.allow_ui_user_bucket_migration,
                   },
                 }
@@ -158,7 +188,7 @@ export default function ManagerSettingsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Manager settings"
-        description="Configure manager dashboard visibility and bucket migration controls."
+        description="Configure manager workspace access and extra operational tools."
         breadcrumbs={[
           { label: "Admin" },
           { label: "Manager" },
@@ -245,14 +275,62 @@ export default function ManagerSettingsPage() {
             <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
               <div>
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Bucket migration
+                  Extra Tools
                 </p>
                 <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Access policy and runtime controls for manager bucket migrations.
+                  Optional manager tools and access policy for non-admin users.
                 </p>
               </div>
 
-              <div className="mt-3 flex items-start justify-between gap-4">
+              <div className="mt-3 space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
+                      Bucket migration tool
+                    </p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Enables the Manager bucket migration tool.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={Boolean(settings.general.bucket_migration_enabled)}
+                      onChange={(e) => handleToggleBucketMigrationTool(e.target.checked)}
+                      aria-label="Bucket migration tool"
+                    />
+                    <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
+                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
+                  </label>
+                </div>
+
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
+                      Bucket compare tool
+                    </p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Enables the Manager bucket compare tool.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={Boolean(settings.general.bucket_compare_enabled)}
+                      onChange={(e) => handleToggleBucketCompareTool(e.target.checked)}
+                      aria-label="Bucket compare tool"
+                    />
+                    <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
+                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="my-4 border-t border-slate-200 dark:border-slate-700" />
+
+              <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
                     Allow UI User access to bucket migration
@@ -261,9 +339,7 @@ export default function ManagerSettingsPage() {
                     When enabled, standard UI users can access the bucket migration tool. Otherwise it stays restricted to UI Admin.
                   </p>
                   {!settings.general.bucket_migration_enabled && (
-                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
-                      Enable "Bucket migration tool" in General settings first.
-                    </p>
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">Enable "Bucket migration tool" first.</p>
                   )}
                 </div>
                 <label className="relative inline-flex cursor-pointer items-center">
