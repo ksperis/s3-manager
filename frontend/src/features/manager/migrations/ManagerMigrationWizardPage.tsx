@@ -55,6 +55,7 @@ export default function ManagerMigrationWizardPage() {
 
   const [targetContextId, setTargetContextId] = useState<string>("");
   const [selectedBuckets, setSelectedBuckets] = useState<string[]>([]);
+  const [bucketFilter, setBucketFilter] = useState<string>("");
   const [mappingPrefix, setMappingPrefix] = useState<string>("");
   const [mappingSuffix, setMappingSuffix] = useState<string>("");
   const [targetOverrides, setTargetOverrides] = useState<Record<string, string>>({});
@@ -79,6 +80,11 @@ export default function ManagerMigrationWizardPage() {
   const canUseSameEndpointCopy = Boolean(sourceContext && targetContext && !isCrossEndpointSelection);
 
   const selectedBucketSet = useMemo(() => new Set(selectedBuckets), [selectedBuckets]);
+  const filteredBuckets = useMemo(() => {
+    const needle = bucketFilter.trim().toLowerCase();
+    if (!needle) return sourceBuckets;
+    return sourceBuckets.filter((bucket) => bucket.name.toLowerCase().includes(needle));
+  }, [bucketFilter, sourceBuckets]);
   const summaryOperationItems = useMemo(
     () =>
       selectedBuckets.map((sourceBucket, index) => {
@@ -210,6 +216,14 @@ export default function ManagerMigrationWizardPage() {
     setSelectedBuckets((current) => {
       if (current.includes(bucketName)) return current.filter((entry) => entry !== bucketName);
       return [...current, bucketName];
+    });
+  };
+
+  const selectFilteredBuckets = () => {
+    setSelectedBuckets((current) => {
+      const next = new Set(current);
+      filteredBuckets.forEach((bucket) => next.add(bucket.name));
+      return [...next];
     });
   };
 
@@ -383,11 +397,28 @@ export default function ManagerMigrationWizardPage() {
                   {selectedBuckets.length} selected / {sourceBuckets.length}
                 </p>
               </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={bucketFilter}
+                  onChange={(event) => setBucketFilter(event.target.value)}
+                  placeholder="Filter source buckets"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 ui-body text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-80 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+                <button
+                  type="button"
+                  onClick={selectFilteredBuckets}
+                  disabled={filteredBuckets.length === 0}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:border-slate-500"
+                >
+                  Select filtered
+                </button>
+              </div>
 
               {bucketsLoading && <p className="ui-caption text-slate-500 dark:text-slate-400">Loading buckets...</p>}
 
               <div className="max-h-64 space-y-2 overflow-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                {sourceBuckets.map((bucket) => {
+                {filteredBuckets.map((bucket) => {
                   const checked = selectedBucketSet.has(bucket.name);
                   return (
                     <div key={`wizard-${bucket.name}`} className="rounded-md border border-slate-200 p-2 dark:border-slate-700">
@@ -398,8 +429,10 @@ export default function ManagerMigrationWizardPage() {
                     </div>
                   );
                 })}
-                {!bucketsLoading && sourceBuckets.length === 0 && (
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">No bucket found for selected source.</p>
+                {!bucketsLoading && filteredBuckets.length === 0 && (
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    {sourceBuckets.length === 0 ? "No bucket found for selected source." : "No buckets match current filter."}
+                  </p>
                 )}
               </div>
             </div>

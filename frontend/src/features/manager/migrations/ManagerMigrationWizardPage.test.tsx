@@ -124,6 +124,37 @@ describe("ManagerMigrationWizardPage", () => {
     await screen.findByText("detail-77");
   });
 
+  it("supports filtering source buckets and selecting filtered results", async () => {
+    const user = userEvent.setup();
+    listBucketsMock.mockResolvedValue([{ name: "bucket-a" }, { name: "logs-prod" }, { name: "archive-prod" }]);
+
+    render(
+      <MemoryRouter initialEntries={["/manager/migrations/new"]}>
+        <Routes>
+          <Route path="/manager/migrations/new" element={<ManagerMigrationWizardPage />} />
+          <Route path="/manager/migrations/:migrationId" element={<DestinationProbe />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("New migration");
+    await user.type(screen.getByPlaceholderText("Filter source buckets"), "prod");
+    expect(screen.getByRole("checkbox", { name: "logs-prod" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "archive-prod" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "bucket-a" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Select filtered" }));
+    expect(screen.getByText("2 selected / 3")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Target"), "tgt-ctx");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(screen.getByText("Target prefix/suffix mapping")).toBeInTheDocument();
+    expect(screen.getByText("logs-prod")).toBeInTheDocument();
+    expect(screen.getByText("archive-prod")).toBeInTheDocument();
+    expect(screen.queryByText("bucket-a")).not.toBeInTheDocument();
+  });
+
   it("enables x-amz-copy-source on same endpoint and auto-enables auto-grant", async () => {
     const user = userEvent.setup();
     listExecutionContextsMock.mockResolvedValue([
