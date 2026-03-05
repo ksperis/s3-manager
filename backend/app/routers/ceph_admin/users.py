@@ -85,8 +85,8 @@ def _split_tenant_uid(value: str) -> Tuple[Optional[str], str]:
 
 
 def _extract_access_key(payload: dict) -> tuple[Optional[str], Optional[str]]:
-    access_key = payload.get("access_key") or payload.get("access-key")
-    secret_key = payload.get("secret_key") or payload.get("secret-key")
+    access_key = payload.get("access_key")
+    secret_key = payload.get("secret_key")
     return access_key, secret_key
 
 
@@ -392,27 +392,12 @@ def _enrich_users(
                     )
                 user.account_name = account_name_by_id.get(account_id)
         if "profile" in requested:
-            user.full_name = _normalize_optional_str(
-                user_payload.get("display_name")
-                or user_payload.get("display-name")
-                or payload.get("display_name")
-                or payload.get("display-name")
-            )
+            user.full_name = _normalize_optional_str(user_payload.get("display_name") or payload.get("display_name"))
             user.email = _normalize_optional_str(user_payload.get("email") or payload.get("email"))
         if "status" in requested:
-            user.suspended = _parse_suspended(
-                user_payload.get("suspended")
-                or user_payload.get("suspension")
-                or payload.get("suspended")
-                or payload.get("suspension")
-            )
+            user.suspended = _parse_suspended(user_payload.get("suspended") or payload.get("suspended"))
         if "limits" in requested:
-            user.max_buckets = _parse_int(
-                user_payload.get("max_buckets")
-                or user_payload.get("max-buckets")
-                or payload.get("max_buckets")
-                or payload.get("max-buckets")
-            )
+            user.max_buckets = _parse_int(user_payload.get("max_buckets") or payload.get("max_buckets"))
         if "quota" in requested:
             quota_size, quota_objects = extract_quota_limits(payload, keys=("user_quota", "quota"))
             user.quota_max_size_bytes = quota_size
@@ -558,19 +543,12 @@ def _parse_key_status(status_value: Any) -> tuple[Optional[str], Optional[bool]]
 
 
 def _serialize_access_key(entry: dict[str, Any]) -> Optional[CephAdminRgwAccessKey]:
-    access_key_value = (
-        entry.get("access_key")
-        or entry.get("access-key")
-        or entry.get("access_key_id")
-        or entry.get("access-key-id")
-    )
+    access_key_value = entry.get("access_key") or entry.get("access_key_id")
     access_key = _normalize_optional_str(access_key_value)
     if not access_key:
         return None
-    secret_key = _normalize_optional_str(entry.get("secret_key") or entry.get("secret-key"))
-    status_text, is_active = _parse_key_status(
-        entry.get("status") or entry.get("key_status") or entry.get("key-status") or entry.get("state")
-    )
+    secret_key = _normalize_optional_str(entry.get("secret_key"))
+    status_text, is_active = _parse_key_status(entry.get("status") or entry.get("key_status") or entry.get("state"))
     return CephAdminRgwAccessKey(
         access_key=access_key,
         secret_key=secret_key,
@@ -638,54 +616,26 @@ def _build_user_detail(
     return CephAdminRgwUserDetail(
         uid=uid,
         tenant=tenant,
-        display_name=_normalize_optional_str(
-            user_payload.get("display_name")
-            or user_payload.get("display-name")
-            or payload.get("display_name")
-            or payload.get("display-name")
-        ),
+        display_name=_normalize_optional_str(user_payload.get("display_name") or payload.get("display_name")),
         email=_normalize_optional_str(user_payload.get("email") or payload.get("email")),
         account_id=account_id,
         account_name=account_name,
-        suspended=_parse_suspended(
-            user_payload.get("suspended")
-            or user_payload.get("suspension")
-            or payload.get("suspended")
-            or payload.get("suspension")
-        ),
+        suspended=_parse_suspended(user_payload.get("suspended") or payload.get("suspended")),
         admin=_coerce_bool(user_payload.get("admin") if "admin" in user_payload else payload.get("admin")),
         system=_coerce_bool(user_payload.get("system") if "system" in user_payload else payload.get("system")),
-        account_root=_coerce_bool(
-            user_payload.get("account_root")
-            or user_payload.get("account-root")
-            or payload.get("account_root")
-            or payload.get("account-root")
-        ),
-        max_buckets=_parse_int(
-            user_payload.get("max_buckets")
-            or user_payload.get("max-buckets")
-            or payload.get("max_buckets")
-            or payload.get("max-buckets")
-        ),
-        op_mask=_normalize_optional_str(
-            user_payload.get("op_mask")
-            or user_payload.get("op-mask")
-            or payload.get("op_mask")
-            or payload.get("op-mask")
-        ),
+        account_root=_coerce_bool(user_payload.get("account_root") or payload.get("account_root")),
+        max_buckets=_parse_int(user_payload.get("max_buckets") or payload.get("max_buckets")),
+        op_mask=_normalize_optional_str(user_payload.get("op_mask") or payload.get("op_mask")),
         default_placement=_extract_user_setting(
             payload,
             user_payload,
             "default_placement",
-            "default-placement",
             "default_placement_rule",
-            "default-placement-rule",
         ),
         default_storage_class=_extract_user_setting(
             payload,
             user_payload,
             "default_storage_class",
-            "default-storage-class",
         ),
         caps=_extract_caps(payload),
         quota=quota,

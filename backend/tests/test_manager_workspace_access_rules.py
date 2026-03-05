@@ -117,6 +117,30 @@ def test_manager_workspace_rejects_connection_without_manager_access(db_session)
     assert "cannot be used in manager workspace" in str(exc.value.detail)
 
 
+@pytest.mark.parametrize("account_ref", ["-1", "null", "-42", "0"])
+def test_workspace_rejects_legacy_account_selectors(db_session, account_ref: str):
+    user = User(
+        email="legacy-account-selector@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies.get_account_context(
+            request=_request("/api/manager/buckets"),
+            account_ref=account_ref,
+            actor=user,
+            db=db_session,
+        )
+
+    assert exc.value.status_code == 400
+    assert "Invalid account identifier" in str(exc.value.detail)
+
+
 def test_manager_context_exposes_browser_access_flag_for_connection(db_session):
     user = User(
         email="manager-context-connection-browser-flag@example.com",

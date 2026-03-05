@@ -140,6 +140,12 @@ helm install s3-manager helm/s3-manager \
 - S3-compatible object storage
 - Partial AWS S3 support (feature-dependent)
 
+## Legacy Compatibility Cleanup (2026-03)
+
+- API selectors now fail fast (`400`) for legacy account inputs: `-1`, `null`, and negative numeric ids.
+- Frontend context persistence only uses `selectedExecutionContextId` (and `ctx` query param). Legacy keys (`selectedS3AccountId`, `selectedBrowserContextId`) are ignored.
+- Feature locking no longer bridges legacy env flags (`BILLING_ENABLED`, `HEALTHCHECK_ENABLED`) into `general_feature_locks`.
+
 ---
 
 ## Contributing

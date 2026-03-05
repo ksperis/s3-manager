@@ -57,7 +57,7 @@ def get_manager_context(
         access_mode = "session"
     elif s3_connection_id is not None:
         access_mode = "connection"
-    elif s3_user_id is not None or (hasattr(account, "id") and getattr(account, "id") < 0):
+    elif s3_user_id is not None:
         access_mode = "s3_user"
     elif caps and getattr(caps, "using_root_key", False):
         access_mode = "admin"

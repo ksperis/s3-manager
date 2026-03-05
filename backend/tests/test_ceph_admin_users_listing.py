@@ -249,8 +249,8 @@ def test_ceph_admin_users_advanced_filter_rejects_invalid_json():
 
 def test_build_user_detail_reads_default_placement_and_storage_class():
     payload = _build_user_payload("alice")
-    payload["user"]["default-placement"] = "hot-placement"
-    payload["user"]["default-storage-class"] = "STANDARD"
+    payload["user"]["default_placement"] = "hot-placement"
+    payload["user"]["default_storage_class"] = "STANDARD"
 
     detail = users_router._build_user_detail(
         payload,
@@ -262,3 +262,20 @@ def test_build_user_detail_reads_default_placement_and_storage_class():
 
     assert detail.default_placement == "hot-placement"
     assert detail.default_storage_class == "STANDARD"
+
+
+def test_build_user_detail_ignores_legacy_kebab_case_default_fields():
+    payload = _build_user_payload("alice")
+    payload["user"]["default-placement"] = "legacy-placement"
+    payload["user"]["default-storage-class"] = "LEGACY"
+
+    detail = users_router._build_user_detail(
+        payload,
+        uid_fallback="alice",
+        tenant_fallback=None,
+        account_name=None,
+        keys=[],
+    )
+
+    assert detail.default_placement is None
+    assert detail.default_storage_class is None

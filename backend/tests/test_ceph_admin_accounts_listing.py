@@ -282,3 +282,21 @@ def test_ceph_admin_accounts_sort_by_name_uses_metadata_without_detail_fetch():
     assert [item.account_name for item in result.items] == ["Alpha", "Beta", "Gamma"]
     assert rgw_admin.list_accounts_calls == 1
     assert rgw_admin.get_account_calls == 0
+
+
+def test_build_account_detail_ignores_legacy_kebab_case_limit_fields():
+    payload = {
+        "id": "RGW01",
+        "name": "Alpha",
+        "max-buckets": 25,
+        "max-users": 10,
+        "limits": {
+            "max-buckets": 20,
+            "max-users": 8,
+        },
+    }
+
+    detail = accounts_router._build_account_detail(payload, account_id_fallback="RGW01")
+
+    assert detail.max_buckets is None
+    assert detail.max_users is None

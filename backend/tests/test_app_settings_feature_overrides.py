@@ -78,7 +78,7 @@ def test_save_app_settings_keeps_persisted_value_for_locked_features(monkeypatch
     assert saved_effective.general.billing_enabled is False
 
 
-def test_general_feature_locks_include_dedicated_and_legacy_sources(monkeypatch):
+def test_general_feature_locks_only_use_dedicated_feature_sources(monkeypatch):
     monkeypatch.setattr(
         app_settings_service,
         "get_settings",
@@ -96,13 +96,13 @@ def test_general_feature_locks_include_dedicated_and_legacy_sources(monkeypatch)
     assert locks.portal_enabled.value is False
     assert locks.portal_enabled.source == "FEATURE_PORTAL_ENABLED"
 
-    assert locks.billing_enabled.forced is True
-    assert locks.billing_enabled.value is False
-    assert locks.billing_enabled.source == "BILLING_ENABLED"
+    assert locks.billing_enabled.forced is False
+    assert locks.billing_enabled.value is None
+    assert locks.billing_enabled.source is None
 
-    assert locks.endpoint_status_enabled.forced is True
-    assert locks.endpoint_status_enabled.value is False
-    assert locks.endpoint_status_enabled.source == "HEALTHCHECK_ENABLED"
+    assert locks.endpoint_status_enabled.forced is False
+    assert locks.endpoint_status_enabled.value is None
+    assert locks.endpoint_status_enabled.source is None
 
 
 def test_branding_settings_defaults_and_normalizes_hex():

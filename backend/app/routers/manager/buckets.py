@@ -59,7 +59,7 @@ def _require_sse_feature(account: S3Account) -> None:
         )
 
 
-def _context_id_from_account(account: S3Account, *, fallback: str | None = None) -> str:
+def _context_id_from_account(account: S3Account) -> str:
     connection_id = getattr(account, "s3_connection_id", None)
     if isinstance(connection_id, int) and connection_id > 0:
         return f"conn-{connection_id}"
@@ -68,18 +68,15 @@ def _context_id_from_account(account: S3Account, *, fallback: str | None = None)
     if isinstance(s3_user_id, int) and s3_user_id > 0:
         return f"s3u-{s3_user_id}"
 
+    ceph_admin_endpoint_id = getattr(account, "ceph_admin_endpoint_id", None)
+    if isinstance(ceph_admin_endpoint_id, int) and ceph_admin_endpoint_id > 0:
+        return f"ceph-admin-{ceph_admin_endpoint_id}"
+
     account_id = getattr(account, "id", None)
-    if isinstance(account_id, int):
-        if account_id <= -2_000_000:
-            return f"ceph-admin-{abs(account_id) - 2_000_000}"
-        if account_id <= -1_000_000:
-            return f"conn-{abs(account_id) - 1_000_000}"
-        if account_id <= -100_000:
-            return f"s3u-{abs(account_id) - 100_000}"
+    if isinstance(account_id, int) and account_id > 0:
         return str(account_id)
 
-    normalized_fallback = (fallback or "").strip()
-    return normalized_fallback
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported account context")
 
 
 @router.get("", response_model=list[Bucket])
@@ -121,11 +118,8 @@ def compare_bucket_pair(
         db=db,
     )
 
-    source_context_id = _context_id_from_account(
-        source_account,
-        fallback=request.query_params.get("account_id"),
-    )
-    target_context_id = _context_id_from_account(target_account, fallback=payload.target_context_id)
+    source_context_id = _context_id_from_account(source_account)
+    target_context_id = _context_id_from_account(target_account)
     same_context = bool(source_context_id and target_context_id and source_context_id == target_context_id)
     if same_context and payload.source_bucket == payload.target_bucket:
         raise HTTPException(
@@ -196,11 +190,8 @@ def run_compare_bucket_action(
         db=db,
     )
 
-    source_context_id = _context_id_from_account(
-        source_account,
-        fallback=request.query_params.get("account_id"),
-    )
-    target_context_id = _context_id_from_account(target_account, fallback=payload.target_context_id)
+    source_context_id = _context_id_from_account(source_account)
+    target_context_id = _context_id_from_account(target_account)
     same_context = bool(source_context_id and target_context_id and source_context_id == target_context_id)
     if same_context and payload.source_bucket == payload.target_bucket:
         raise HTTPException(

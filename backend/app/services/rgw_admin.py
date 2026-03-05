@@ -348,25 +348,15 @@ class RGWAdminClient:
         if email is not None:
             params["email"] = email
         if max_users is not None:
-            value = int(max_users)
-            params["max_users"] = value
-            params["max-users"] = value
+            params["max_users"] = int(max_users)
         if max_buckets is not None:
-            value = int(max_buckets)
-            params["max_buckets"] = value
-            params["max-buckets"] = value
+            params["max_buckets"] = int(max_buckets)
         if max_roles is not None:
-            value = int(max_roles)
-            params["max_roles"] = value
-            params["max-roles"] = value
+            params["max_roles"] = int(max_roles)
         if max_groups is not None:
-            value = int(max_groups)
-            params["max_groups"] = value
-            params["max-groups"] = value
+            params["max_groups"] = int(max_groups)
         if max_access_keys is not None:
-            value = int(max_access_keys)
-            params["max_access_keys"] = value
-            params["max-access-keys"] = value
+            params["max_access_keys"] = int(max_access_keys)
         if isinstance(extra_params, dict):
             for key, value in extra_params.items():
                 normalized_key = str(key or "").strip()
@@ -404,7 +394,6 @@ class RGWAdminClient:
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
             "id": account_id,
-            "account-id": account_id,
             "format": "json",
         }
         if account_name is not None:
@@ -412,25 +401,15 @@ class RGWAdminClient:
         if email is not None:
             params["email"] = email
         if max_users is not None:
-            value = int(max_users)
-            params["max_users"] = value
-            params["max-users"] = value
+            params["max_users"] = int(max_users)
         if max_buckets is not None:
-            value = int(max_buckets)
-            params["max_buckets"] = value
-            params["max-buckets"] = value
+            params["max_buckets"] = int(max_buckets)
         if max_roles is not None:
-            value = int(max_roles)
-            params["max_roles"] = value
-            params["max-roles"] = value
+            params["max_roles"] = int(max_roles)
         if max_groups is not None:
-            value = int(max_groups)
-            params["max_groups"] = value
-            params["max-groups"] = value
+            params["max_groups"] = int(max_groups)
         if max_access_keys is not None:
-            value = int(max_access_keys)
-            params["max_access_keys"] = value
-            params["max-access-keys"] = value
+            params["max_access_keys"] = int(max_access_keys)
         if isinstance(extra_params, dict):
             for key, value in extra_params.items():
                 normalized_key = str(key or "").strip()
@@ -455,7 +434,6 @@ class RGWAdminClient:
     def delete_account(self, account_id: str) -> Dict[str, Any]:
         params: Dict[str, Any] = {
             "id": account_id,
-            "account-id": account_id,
             "format": "json",
         }
         return self._request(
@@ -477,9 +455,7 @@ class RGWAdminClient:
         enabled: bool = True,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
-            # Some RGW versions expect different identifiers; provide all
             "quota": "",
-            "account-id": account_id,
             "id": account_id,
             "quota-type": quota_type,
             "format": "json",
@@ -600,9 +576,7 @@ class RGWAdminClient:
         if suspended is not None:
             params["suspended"] = self._to_rgw_bool(bool(suspended))
         if max_buckets is not None:
-            value = int(max_buckets)
-            params["max-buckets"] = value
-            params["max_buckets"] = value
+            params["max_buckets"] = int(max_buckets)
         if op_mask is not None:
             params["op-mask"] = op_mask
         if admin is not None:
@@ -751,7 +725,7 @@ class RGWAdminClient:
             base_params["sync-stats"] = "true"
 
         params = dict(base_params)
-        params["account-id"] = account_id
+        params["id"] = account_id
         return self._request("GET", "/admin/account", params=params, allow_not_found=True)
 
     def set_bucket_quota(

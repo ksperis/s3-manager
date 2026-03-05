@@ -10,7 +10,6 @@ import { fetchManagerContext, type ManagerAccessMode } from "../../api/managerCo
 
 const EXECUTION_CONTEXT_STORAGE_KEY = "selectedExecutionContextId";
 const EXECUTION_CONTEXT_URL_PARAM = "ctx";
-const LEGACY_CONTEXT_KEYS = ["selectedS3AccountId", "selectedBrowserContextId"];
 
 type S3AccountContextType = {
   accounts: ExecutionContext[];
@@ -135,9 +134,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
     }
     if (accounts.length === 0) return;
     const urlContext = searchParams.get(EXECUTION_CONTEXT_URL_PARAM);
-    const stored =
-      localStorage.getItem(EXECUTION_CONTEXT_STORAGE_KEY) ??
-      LEGACY_CONTEXT_KEYS.map((key) => localStorage.getItem(key)).find((value) => value);
+    const stored = localStorage.getItem(EXECUTION_CONTEXT_STORAGE_KEY);
     if (urlContext && accounts.some((context) => context.id === urlContext)) {
       if (urlContext !== selectedS3AccountId) {
         setSelectedS3AccountId(urlContext);

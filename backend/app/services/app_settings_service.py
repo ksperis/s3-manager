@@ -98,15 +98,6 @@ def get_general_feature_locks() -> GeneralFeatureLocks:
                 GeneralFeatureLock(forced=True, value=bool(forced_value), source=env_name),
             )
 
-    # Backward compatibility: legacy technical flags still force-disable when dedicated
-    # feature overrides are not explicitly set.
-    if not locks.billing_enabled.forced and not bool(settings.billing_enabled):
-        locks.billing_enabled = GeneralFeatureLock(forced=True, value=False, source="BILLING_ENABLED")
-    if not locks.endpoint_status_enabled.forced and not bool(settings.healthcheck_enabled):
-        locks.endpoint_status_enabled = GeneralFeatureLock(
-            forced=True, value=False, source="HEALTHCHECK_ENABLED"
-        )
-
     return locks
 
 

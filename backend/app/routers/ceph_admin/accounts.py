@@ -280,12 +280,12 @@ def _extract_count(data: dict[str, Any], keys: tuple[str, ...]) -> Optional[int]
 
 
 def _extract_bucket_count(payload: dict[str, Any]) -> Optional[int]:
-    direct = _extract_count(payload, ("bucket_count", "bucket-count", "num_buckets", "buckets_count"))
+    direct = _extract_count(payload, ("bucket_count", "num_buckets", "buckets_count"))
     if direct is not None:
         return direct
     stats = payload.get("stats")
     if isinstance(stats, dict):
-        from_stats = _extract_count(stats, ("bucket_count", "bucket-count", "num_buckets", "buckets_count"))
+        from_stats = _extract_count(stats, ("bucket_count", "num_buckets", "buckets_count"))
         if from_stats is not None:
             return from_stats
     buckets = payload.get("bucket_list") or payload.get("buckets")
@@ -321,41 +321,14 @@ def _extract_quota_enabled(payload: dict[str, Any], keys: tuple[str, ...] = ("qu
 
 def _build_account_detail(payload: dict[str, Any], account_id_fallback: str) -> CephAdminRgwAccountDetail:
     account_id = _normalize_optional_str(payload.get("id") or payload.get("account_id")) or account_id_fallback
-    account_name = _normalize_optional_str(
-        payload.get("name") or payload.get("account_name") or payload.get("display_name") or payload.get("display-name")
-    )
+    account_name = _normalize_optional_str(payload.get("name") or payload.get("account_name") or payload.get("display_name"))
     email = _normalize_optional_str(payload.get("email") or payload.get("mail"))
     limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
-    max_users = _parse_int(
-        payload.get("max_users")
-        or payload.get("max-users")
-        or limits_payload.get("max_users")
-        or limits_payload.get("max-users")
-    )
-    max_buckets = _parse_int(
-        payload.get("max_buckets")
-        or payload.get("max-buckets")
-        or limits_payload.get("max_buckets")
-        or limits_payload.get("max-buckets")
-    )
-    max_roles = _parse_int(
-        payload.get("max_roles")
-        or payload.get("max-roles")
-        or limits_payload.get("max_roles")
-        or limits_payload.get("max-roles")
-    )
-    max_groups = _parse_int(
-        payload.get("max_groups")
-        or payload.get("max-groups")
-        or limits_payload.get("max_groups")
-        or limits_payload.get("max-groups")
-    )
-    max_access_keys = _parse_int(
-        payload.get("max_access_keys")
-        or payload.get("max-access-keys")
-        or limits_payload.get("max_access_keys")
-        or limits_payload.get("max-access-keys")
-    )
+    max_users = _parse_int(payload.get("max_users") or limits_payload.get("max_users"))
+    max_buckets = _parse_int(payload.get("max_buckets") or limits_payload.get("max_buckets"))
+    max_roles = _parse_int(payload.get("max_roles") or limits_payload.get("max_roles"))
+    max_groups = _parse_int(payload.get("max_groups") or limits_payload.get("max_groups"))
+    max_access_keys = _parse_int(payload.get("max_access_keys") or limits_payload.get("max_access_keys"))
     quota_size, quota_objects = extract_quota_limits(payload, keys=("quota", "account_quota"))
     quota_enabled = _extract_quota_enabled(payload, keys=("quota", "account_quota"))
     quota = None
@@ -432,18 +405,8 @@ def _enrich_accounts(
             account.email = _normalize_optional_str(payload.get("email") or payload.get("mail"))
         if "limits" in requested:
             limits_payload = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
-            account.max_users = _parse_int(
-                payload.get("max_users")
-                or payload.get("max-users")
-                or limits_payload.get("max_users")
-                or limits_payload.get("max-users")
-            )
-            account.max_buckets = _parse_int(
-                payload.get("max_buckets")
-                or payload.get("max-buckets")
-                or limits_payload.get("max_buckets")
-                or limits_payload.get("max-buckets")
-            )
+            account.max_users = _parse_int(payload.get("max_users") or limits_payload.get("max_users"))
+            account.max_buckets = _parse_int(payload.get("max_buckets") or limits_payload.get("max_buckets"))
         if "quota" in requested:
             quota_size, quota_objects = extract_quota_limits(payload, keys=("quota", "account_quota"))
             account.quota_max_size_bytes = quota_size
@@ -563,18 +526,8 @@ def list_rgw_accounts(
                 )
                 email = _normalize_optional_str(entry.get("email") or entry.get("mail"))
                 limits_payload = entry.get("limits") if isinstance(entry.get("limits"), dict) else {}
-                max_users = _parse_int(
-                    entry.get("max_users")
-                    or entry.get("max-users")
-                    or limits_payload.get("max_users")
-                    or limits_payload.get("max-users")
-                )
-                max_buckets = _parse_int(
-                    entry.get("max_buckets")
-                    or entry.get("max-buckets")
-                    or limits_payload.get("max_buckets")
-                    or limits_payload.get("max-buckets")
-                )
+                max_users = _parse_int(entry.get("max_users") or limits_payload.get("max_users"))
+                max_buckets = _parse_int(entry.get("max_buckets") or limits_payload.get("max_buckets"))
                 quota_max_size_bytes, quota_max_objects = extract_quota_limits(entry, keys=("quota", "account_quota"))
                 bucket_count = _extract_bucket_count(entry)
                 user_count = _extract_user_count(entry)
@@ -725,7 +678,6 @@ def create_rgw_account(
         account_id = (
             _normalize_optional_str(create_result.get("id"))
             or _normalize_optional_str(create_result.get("account_id"))
-            or _normalize_optional_str(create_result.get("account-id"))
             or account_id
         )
         account_payload = create_result.get("account")
@@ -733,7 +685,6 @@ def create_rgw_account(
             account_id = (
                 _normalize_optional_str(account_payload.get("id"))
                 or _normalize_optional_str(account_payload.get("account_id"))
-                or _normalize_optional_str(account_payload.get("account-id"))
             )
     if not account_id:
         raise HTTPException(

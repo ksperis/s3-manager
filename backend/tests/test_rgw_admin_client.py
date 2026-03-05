@@ -214,3 +214,135 @@ def test_get_all_buckets_uses_extended_timeout_only_with_stats(monkeypatch):
     assert captured[1]["path"] == "/admin/bucket"
     assert captured[1]["timeout"] == 45
     assert captured[1]["params"] == {"format": "json", "stats": "true"}
+
+
+def test_update_account_uses_canonical_id_and_snake_case_limits(monkeypatch):
+    client = RGWAdminClient(
+        access_key="AKIA-TEST",
+        secret_key="SECRET-TEST",
+        endpoint="https://rgw-admin.example.test",
+        region="us-east-1",
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_request(method: str, path: str, **kwargs):
+        captured["method"] = method
+        captured["path"] = path
+        captured["params"] = kwargs.get("params")
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    client.update_account(
+        "RGW-01",
+        max_users=10,
+        max_buckets=20,
+        max_roles=30,
+        max_groups=40,
+        max_access_keys=50,
+    )
+
+    params = captured["params"]
+    assert captured["method"] == "POST"
+    assert captured["path"] == "/admin/account"
+    assert isinstance(params, dict)
+    assert params["id"] == "RGW-01"
+    assert params["max_users"] == 10
+    assert params["max_buckets"] == 20
+    assert params["max_roles"] == 30
+    assert params["max_groups"] == 40
+    assert params["max_access_keys"] == 50
+    assert "account-id" not in params
+    assert "max-users" not in params
+    assert "max-buckets" not in params
+    assert "max-roles" not in params
+    assert "max-groups" not in params
+    assert "max-access-keys" not in params
+
+
+def test_set_account_quota_uses_id_only(monkeypatch):
+    client = RGWAdminClient(
+        access_key="AKIA-TEST",
+        secret_key="SECRET-TEST",
+        endpoint="https://rgw-admin.example.test",
+        region="us-east-1",
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_request(method: str, path: str, **kwargs):
+        captured["method"] = method
+        captured["path"] = path
+        captured["params"] = kwargs.get("params")
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    client.set_account_quota("RGW-02", max_objects=123, enabled=True)
+
+    params = captured["params"]
+    assert captured["method"] == "PUT"
+    assert captured["path"] == "/admin/account"
+    assert isinstance(params, dict)
+    assert params["id"] == "RGW-02"
+    assert params["max-objects"] == 123
+    assert "account-id" not in params
+
+
+def test_get_account_stats_uses_id_filter(monkeypatch):
+    client = RGWAdminClient(
+        access_key="AKIA-TEST",
+        secret_key="SECRET-TEST",
+        endpoint="https://rgw-admin.example.test",
+        region="us-east-1",
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_request(method: str, path: str, **kwargs):
+        captured["method"] = method
+        captured["path"] = path
+        captured["params"] = kwargs.get("params")
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    client.get_account_stats("RGW-03")
+
+    params = captured["params"]
+    assert captured["method"] == "GET"
+    assert captured["path"] == "/admin/account"
+    assert isinstance(params, dict)
+    assert params["id"] == "RGW-03"
+    assert params["sync-stats"] == "true"
+    assert "account-id" not in params
+
+
+def test_update_user_uses_snake_case_max_buckets_only(monkeypatch):
+    client = RGWAdminClient(
+        access_key="AKIA-TEST",
+        secret_key="SECRET-TEST",
+        endpoint="https://rgw-admin.example.test",
+        region="us-east-1",
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_request(method: str, path: str, **kwargs):
+        captured["method"] = method
+        captured["path"] = path
+        captured["params"] = kwargs.get("params")
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    client.update_user("alice", max_buckets=7)
+
+    params = captured["params"]
+    assert captured["method"] == "PUT"
+    assert captured["path"] == "/admin/user"
+    assert isinstance(params, dict)
+    assert params["uid"] == "alice"
+    assert params["max_buckets"] == 7
+    assert "max-buckets" not in params

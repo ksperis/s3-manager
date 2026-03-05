@@ -10,7 +10,6 @@ export type BrowserAccessMode = "admin" | "portal";
 
 const EXECUTION_CONTEXT_STORAGE_KEY = "selectedExecutionContextId";
 const EXECUTION_CONTEXT_URL_PARAM = "ctx";
-const LEGACY_CONTEXT_KEYS = ["selectedBrowserContextId", "selectedS3AccountId"];
 
 type BrowserContextState = {
   contexts: ExecutionContext[];
@@ -104,9 +103,7 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
     }
     if (contexts.length === 0) return;
     const urlContext = searchParams.get(EXECUTION_CONTEXT_URL_PARAM);
-    const stored =
-      localStorage.getItem(EXECUTION_CONTEXT_STORAGE_KEY) ??
-      LEGACY_CONTEXT_KEYS.map((key) => localStorage.getItem(key)).find((value) => value);
+    const stored = localStorage.getItem(EXECUTION_CONTEXT_STORAGE_KEY);
     if (urlContext && contexts.some((context) => context.id === urlContext)) {
       if (urlContext !== selectedContextId) {
         setSelectedContextIdState(urlContext);

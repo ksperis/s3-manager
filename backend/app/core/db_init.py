@@ -54,11 +54,6 @@ def init_db(engine, session_factory) -> None:
                     "Seeded super-admin user '%s' with a default/weak password. Rotate immediately.",
                     settings.seed_super_admin_email,
                 )
-        elif admin.role != UserRole.UI_SUPERADMIN.value:
-            # Backward compatibility: historical seed user role was ui_admin.
-            admin.role = UserRole.UI_SUPERADMIN.value
-            db.add(admin)
-            db.commit()
         # Ensure env-managed endpoints or default endpoint are registered
         storage_service = StorageEndpointsService(db)
         storage_service.sync_env_endpoints()

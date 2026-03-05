@@ -13,6 +13,11 @@ The repository includes Helm assets under `helm/`.
 
 This page is intentionally a scaffold.
 
+## Legacy Env Flags
+
+`BILLING_ENABLED` and `HEALTHCHECK_ENABLED` are no longer used as fallback feature-lock inputs.  
+Use explicit app settings / `FEATURE_*` overrides for feature locking.
+
 If you want production-grade Helm docs, expand with:
 
 - value schema overview

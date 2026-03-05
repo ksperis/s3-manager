@@ -150,7 +150,7 @@ def _parse_account_selector(account_ref: Optional[str]) -> tuple[Optional[int], 
     if account_ref is None or account_ref == "":
         return None, None, None, None
     if isinstance(account_ref, str) and account_ref.lower() in {"-1", "null"}:
-        return None, None, None, None
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid account identifier")
     if isinstance(account_ref, str) and account_ref.startswith("conn-"):
         suffix = account_ref.split("conn-", 1)[1]
         if not suffix.isdigit():
@@ -168,8 +168,8 @@ def _parse_account_selector(account_ref: Optional[str]) -> tuple[Optional[int], 
         return None, None, None, int(suffix)
     try:
         value = int(account_ref)
-        if value < 0:
-            return None, abs(value), None, None
+        if value <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid account identifier")
         return value, None, None, None
     except (TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid account identifier")
@@ -265,6 +265,7 @@ def _build_ceph_admin_browser_account(endpoint: StorageEndpoint) -> S3Account:
     account.rgw_secret_key = endpoint.ceph_admin_secret_key
     account.storage_endpoint_id = endpoint.id
     account.storage_endpoint = endpoint
+    account.ceph_admin_endpoint_id = endpoint.id  # type: ignore[attr-defined]
     account.set_session_credentials(endpoint.ceph_admin_access_key, endpoint.ceph_admin_secret_key)
     account._manager_capabilities = AccountCapabilities(  # type: ignore[attr-defined]
         can_manage_buckets=True,
