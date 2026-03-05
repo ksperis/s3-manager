@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
 import asyncio
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -134,3 +135,39 @@ def test_manager_migration_stream_stops_when_client_disconnects(
     body = asyncio.run(_run())
     assert "event: snapshot" in body
     assert "event: done" not in body
+
+
+def test_manager_migration_stream_emits_multiple_snapshots_when_item_timestamp_changes(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind())
+    monkeypatch.setattr(migrations_router, "SessionLocal", test_session_factory)
+    monkeypatch.setattr(migrations_router, "_MIGRATION_STREAM_POLL_INTERVAL_SECONDS", 0.01)
+    migration_id = _seed_migration(test_session_factory, status="running")
+
+    async def _touch_item_timestamp() -> None:
+        await asyncio.sleep(0.06)
+        with test_session_factory() as db:
+            migration = db.query(BucketMigration).filter(BucketMigration.id == migration_id).first()
+            item = db.query(BucketMigrationItem).filter(BucketMigrationItem.migration_id == migration_id).first()
+            assert migration is not None
+            assert item is not None
+            migration.updated_at = migration.updated_at + timedelta(seconds=2)
+            item.updated_at = item.updated_at + timedelta(seconds=2)
+            db.commit()
+
+    async def _run() -> str:
+        request = _request_with_disconnect_after(calls_before_disconnect=7)
+        response = await migrations_router.stream_migration(
+            migration_id=migration_id,
+            request=request,
+            events_limit=200,
+        )
+        updater = asyncio.create_task(_touch_item_timestamp())
+        body = await asyncio.wait_for(_read_stream_body(response), timeout=1.0)
+        await updater
+        return body
+
+    body = asyncio.run(_run())
+    assert body.count("event: snapshot") >= 2

@@ -50,6 +50,8 @@ _TARGET_WRITE_LOCK_POLICY_SID = "S3ManagerMigrationTargetWriteLockDeny"
 _SOURCE_COPY_GRANT_POLICY_SID = "S3ManagerMigrationSourceCopyGrantAllow"
 _MIGRATION_USER_AGENT_MARKER = "s3-manager-migration-worker"
 _WEBHOOK_TIMEOUT_SECONDS = 3.0
+_SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD = 25
+_SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS = 1.0
 _RUNNABLE_MIGRATION_STATUSES = ("queued", "running", "pause_requested", "cancel_requested")
 _FINAL_MIGRATION_STATUSES = (
     "completed",
@@ -1164,8 +1166,6 @@ class BucketMigrationService:
                     item.updated_at = utcnow()
                     self.db.commit()
                     return
-                item.objects_copied += copied
-                item.objects_deleted += deleted
                 item.source_count = diff.source_count
                 item.target_count = diff.target_count
                 item.matched_count = diff.matched_count
@@ -1226,8 +1226,6 @@ class BucketMigrationService:
                     item.updated_at = utcnow()
                     self.db.commit()
                     return
-                item.objects_copied += copied
-                item.objects_deleted += deleted
                 item.source_count = diff.source_count
                 item.target_count = diff.target_count
                 item.matched_count = diff.matched_count
@@ -2349,6 +2347,45 @@ class BucketMigrationService:
             return 0, 0, diff
 
         same_endpoint = self._is_same_endpoint(source_ctx, target_ctx)
+        pending_copied = 0
+        pending_deleted = 0
+        last_progress_flush = time.monotonic()
+
+        def flush_progress(*, force: bool = False) -> None:
+            nonlocal pending_copied, pending_deleted, last_progress_flush
+            now = time.monotonic()
+            total_pending = pending_copied + pending_deleted
+            if total_pending <= 0:
+                return
+
+            should_flush = force
+            if not should_flush:
+                if total_pending >= _SYNC_PROGRESS_FLUSH_OBJECTS_THRESHOLD:
+                    should_flush = True
+                elif (now - last_progress_flush) >= _SYNC_PROGRESS_FLUSH_INTERVAL_SECONDS:
+                    should_flush = True
+            if not should_flush:
+                return
+
+            item.objects_copied = int(item.objects_copied or 0) + int(pending_copied)
+            item.objects_deleted = int(item.objects_deleted or 0) + int(pending_deleted)
+            heartbeat_at = utcnow()
+            item.updated_at = heartbeat_at
+            migration.updated_at = heartbeat_at
+            migration.last_heartbeat_at = heartbeat_at
+            self.db.commit()
+            pending_copied = 0
+            pending_deleted = 0
+            last_progress_flush = now
+
+        def on_object_progress(*, copied_inc: int = 0, deleted_inc: int = 0, force: bool = False) -> None:
+            nonlocal pending_copied, pending_deleted
+            if copied_inc > 0:
+                pending_copied += int(copied_inc)
+            if deleted_inc > 0:
+                pending_deleted += int(deleted_inc)
+            flush_progress(force=force)
+
         copied = 0
         if diff.copy_keys:
             if same_endpoint and bool(migration.auto_grant_source_read_for_copy):
@@ -2368,6 +2405,7 @@ class BucketMigrationService:
                         parallelism_max=parallelism_max,
                         same_endpoint=same_endpoint,
                         control_check=control_check,
+                        on_progress=on_object_progress,
                     )
             else:
                 copied = self._run_copy_actions(
@@ -2379,6 +2417,7 @@ class BucketMigrationService:
                     parallelism_max=parallelism_max,
                     same_endpoint=same_endpoint,
                     control_check=control_check,
+                    on_progress=on_object_progress,
                 )
         if copied < 0:
             return -1, -1, diff
@@ -2391,10 +2430,12 @@ class BucketMigrationService:
                 diff.delete_keys,
                 parallelism_max=parallelism_max,
                 control_check=control_check,
+                on_progress=on_object_progress,
             )
             if deleted < 0:
                 return -1, -1, diff
 
+        on_object_progress(force=True)
         self._add_event(
             migration,
             item=item,
@@ -2421,6 +2462,7 @@ class BucketMigrationService:
         parallelism_max: int,
         same_endpoint: bool,
         control_check: Callable[[], str],
+        on_progress: Optional[Callable[..., None]] = None,
     ) -> int:
         if not keys:
             return 0
@@ -2430,8 +2472,12 @@ class BucketMigrationService:
         for chunk in _chunked(keys, worker_count):
             state = control_check()
             if state == "lost_lease":
+                if on_progress is not None:
+                    on_progress(force=True)
                 raise _WorkerLeaseLostError("Worker lease lost while copying objects")
             if state in {"pause", "cancel"}:
+                if on_progress is not None:
+                    on_progress(force=True)
                 return -1
             with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-copy") as executor:
                 futures = {
@@ -2458,10 +2504,18 @@ class BucketMigrationService:
                     for future in done:
                         future.result()
                         copied += 1
+                        if on_progress is not None:
+                            on_progress(copied_inc=1)
                 if interrupted_state == "lost_lease":
+                    if on_progress is not None:
+                        on_progress(force=True)
                     raise _WorkerLeaseLostError("Worker lease lost while copying objects")
                 if interrupted_state in {"pause", "cancel"}:
+                    if on_progress is not None:
+                        on_progress(force=True)
                     return -1
+        if on_progress is not None:
+            on_progress(force=True)
         return copied
 
     def _run_delete_actions(
@@ -2472,6 +2526,7 @@ class BucketMigrationService:
         *,
         parallelism_max: int,
         control_check: Callable[[], str],
+        on_progress: Optional[Callable[..., None]] = None,
     ) -> int:
         if not keys:
             return 0
@@ -2481,8 +2536,12 @@ class BucketMigrationService:
         for chunk in _chunked(keys, worker_count):
             state = control_check()
             if state == "lost_lease":
+                if on_progress is not None:
+                    on_progress(force=True)
                 raise _WorkerLeaseLostError("Worker lease lost while deleting objects")
             if state in {"pause", "cancel"}:
+                if on_progress is not None:
+                    on_progress(force=True)
                 return -1
             with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="bucket-migration-delete") as executor:
                 futures = {
@@ -2501,10 +2560,18 @@ class BucketMigrationService:
                     for future in done:
                         future.result()
                         deleted += 1
+                        if on_progress is not None:
+                            on_progress(deleted_inc=1)
                 if interrupted_state == "lost_lease":
+                    if on_progress is not None:
+                        on_progress(force=True)
                     raise _WorkerLeaseLostError("Worker lease lost while deleting objects")
                 if interrupted_state in {"pause", "cancel"}:
+                    if on_progress is not None:
+                        on_progress(force=True)
                     return -1
+        if on_progress is not None:
+            on_progress(force=True)
         return deleted
 
     def _copy_single_object(

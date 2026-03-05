@@ -1735,3 +1735,144 @@ def test_delete_migration_rejects_non_final_status(db_session):
         assert False, "Expected delete_migration to be blocked for non-final status"
     except ValueError as exc:
         assert "can only be deleted from a final status" in str(exc)
+
+
+def test_sync_bucket_updates_object_counters_incrementally(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            mode="one_shot",
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+        ),
+        user,
+    )
+    item = migration.items[0]
+
+    source_ctx = SimpleNamespace(
+        context_id=str(source.id),
+        account=source,
+        endpoint="https://source.example.test",
+        region="us-east-1",
+        force_path_style=False,
+        verify_tls=True,
+    )
+    target_ctx = SimpleNamespace(
+        context_id=str(target.id),
+        account=target,
+        endpoint="https://target.example.test",
+        region="us-east-1",
+        force_path_style=False,
+        verify_tls=True,
+    )
+
+    source_objects = {f"object-{index}": {"size": 1, "etag": "a" * 32} for index in range(30)}
+    target_objects: dict[str, dict[str, object]] = {}
+    service._list_current_objects = lambda ctx, _bucket_name: source_objects if ctx is source_ctx else target_objects  # type: ignore[method-assign]
+    service._is_same_endpoint = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._copy_single_object = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+
+    commit_calls = {"count": 0}
+    original_commit = db_session.commit
+
+    def _counting_commit():
+        commit_calls["count"] += 1
+        original_commit()
+
+    db_session.commit = _counting_commit  # type: ignore[assignment]
+    copied, deleted, _diff = service._sync_bucket(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-a-dst",
+        allow_delete=False,
+        parallelism_max=8,
+        migration=migration,
+        item=item,
+        control_check=lambda: "run",
+    )
+    db_session.commit = original_commit  # type: ignore[assignment]
+
+    db_session.refresh(migration)
+    db_session.refresh(item)
+
+    assert copied == 30
+    assert deleted == 0
+    assert item.objects_copied == 30
+    assert migration.last_heartbeat_at is not None
+    # One commit around threshold flush, one forced flush, one final sync commit.
+    assert commit_calls["count"] >= 3
+
+
+def test_sync_bucket_force_flushes_progress_when_pause_is_requested(db_session):
+    user = _create_user(db_session)
+    source = _create_account(db_session, name="source", endpoint_url="https://source.example.test", account_id="RGW001")
+    target = _create_account(db_session, name="target", endpoint_url="https://target.example.test", account_id="RGW002")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source.id),
+            target_context_id=str(target.id),
+            mode="one_shot",
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a", target_bucket="bucket-a-dst")],
+        ),
+        user,
+    )
+    item = migration.items[0]
+
+    source_ctx = SimpleNamespace(
+        context_id=str(source.id),
+        account=source,
+        endpoint="https://source.example.test",
+        region="us-east-1",
+        force_path_style=False,
+        verify_tls=True,
+    )
+    target_ctx = SimpleNamespace(
+        context_id=str(target.id),
+        account=target,
+        endpoint="https://target.example.test",
+        region="us-east-1",
+        force_path_style=False,
+        verify_tls=True,
+    )
+
+    source_objects = {f"object-{index}": {"size": 1, "etag": "a" * 32} for index in range(5)}
+    target_objects: dict[str, dict[str, object]] = {}
+    service._list_current_objects = lambda ctx, _bucket_name: source_objects if ctx is source_ctx else target_objects  # type: ignore[method-assign]
+    service._is_same_endpoint = lambda *_args, **_kwargs: False  # type: ignore[method-assign]
+    service._copy_single_object = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    service._add_event = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+
+    control_calls = {"count": 0}
+
+    def _control_check() -> str:
+        control_calls["count"] += 1
+        return "run" if control_calls["count"] == 1 else "pause"
+
+    copied, deleted, _diff = service._sync_bucket(
+        source_ctx,
+        target_ctx,
+        source_bucket="bucket-a",
+        target_bucket="bucket-a-dst",
+        allow_delete=False,
+        parallelism_max=4,
+        migration=migration,
+        item=item,
+        control_check=_control_check,
+    )
+
+    db_session.refresh(item)
+    assert copied == -1
+    assert deleted == -1
+    # Progress already completed before pause must still be visible.
+    assert item.objects_copied > 0

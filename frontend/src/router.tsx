@@ -56,6 +56,8 @@ const loadManagerGroupPoliciesPage = () => import("./features/manager/ManagerGro
 const loadManagerMetricsPage = () => import("./features/manager/ManagerMetricsPage");
 const loadTopicsPage = () => import("./features/manager/TopicsPage");
 const loadManagerMigrationsPage = () => import("./features/manager/ManagerMigrationsPage");
+const loadManagerMigrationDetailPage = () => import("./features/manager/ManagerMigrationDetailPage");
+const loadManagerMigrationWizardPage = () => import("./features/manager/ManagerMigrationWizardPage");
 const loadManagerBucketComparePage = () => import("./features/manager/ManagerBucketComparePage");
 const loadPortalLayout = () => import("./features/portal/PortalLayout");
 const loadPortalDashboard = () => import("./features/portal/PortalDashboard");
@@ -115,6 +117,8 @@ const ManagerGroupPoliciesPage = lazy(loadManagerGroupPoliciesPage);
 const ManagerMetricsPage = lazy(loadManagerMetricsPage);
 const TopicsPage = lazy(loadTopicsPage);
 const ManagerMigrationsPage = lazy(loadManagerMigrationsPage);
+const ManagerMigrationDetailPage = lazy(loadManagerMigrationDetailPage);
+const ManagerMigrationWizardPage = lazy(loadManagerMigrationWizardPage);
 const ManagerBucketComparePage = lazy(loadManagerBucketComparePage);
 const PortalLayout = lazy(loadPortalLayout);
 const PortalDashboard = lazy(loadPortalDashboard);
@@ -473,6 +477,8 @@ export default function AppRouter() {
                 </Route>
                 <Route element={<RequireManagerMigrationFeature />}>
                   <Route path="migrations" element={<ManagerMigrationsPage />} />
+                  <Route path="migrations/new" element={<ManagerMigrationWizardPage />} />
+                  <Route path="migrations/:migrationId" element={<ManagerMigrationDetailPage />} />
                 </Route>
               </Route>
             </Route>
