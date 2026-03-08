@@ -36,3 +36,7 @@ You can map each operational task to the right workspace and avoid cross-scope m
 - [Workspace: Admin](workspace-admin.md)
 - [Workspace: Manager](workspace-manager.md)
 - [Workspace: Ceph Admin](workspace-ceph-admin.md)
+
+## Visual example
+
+![Manager workspace navigation for storage administration](../assets/screenshots/user/use-cases-storage-admin.png)

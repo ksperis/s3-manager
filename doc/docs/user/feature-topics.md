@@ -29,3 +29,7 @@ SNS topics are managed within the selected manager context.
 ## Related pages
 
 - [Workspace: Manager](workspace-manager.md)
+
+## Visual example
+
+![SNS Topics feature page with topic actions](../assets/screenshots/user/feature-topics.png)

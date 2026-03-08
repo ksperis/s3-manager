@@ -35,3 +35,7 @@ Object-level operations are executed with current context credentials and reflec
 - [Workspace: Browser](workspace-browser.md)
 - [Workspace: Manager](workspace-manager.md)
 - [Troubleshooting](troubleshooting.md)
+
+## Visual example
+
+![Object browser page with upload and operations panel](../assets/screenshots/user/feature-objects-browser.png)

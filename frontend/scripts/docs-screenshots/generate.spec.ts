@@ -1,0 +1,120 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { test, type Page } from "@playwright/test";
+
+import { applyAnnotations, clearAnnotations } from "./annotate";
+import { registerApiMocks } from "./mockApi";
+import { scenarios } from "./scenarios";
+import type { ScenarioAction } from "./types";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SCREENSHOT_DIR = path.resolve(__dirname, "../../../doc/docs/assets/screenshots/user");
+
+async function writeDebugArtifacts(page: Page, scenarioId: string, runtimeErrors: string[]) {
+  const debugPath = path.join(SCREENSHOT_DIR, `${scenarioId}.debug.png`);
+  const htmlPath = path.join(SCREENSHOT_DIR, `${scenarioId}.debug.html`);
+  const errorsPath = path.join(SCREENSHOT_DIR, `${scenarioId}.debug.log`);
+  await page.screenshot({ path: debugPath, fullPage: true });
+  const html = await page.content();
+  await fs.writeFile(htmlPath, html, "utf8");
+  await fs.writeFile(errorsPath, runtimeErrors.join("\n"), "utf8");
+}
+
+async function seedLocalStorage(page: Page, storage: {
+  token: string;
+  user: Record<string, unknown>;
+  selectedWorkspace?: string;
+  selectedExecutionContextId?: string;
+  selectedPortalAccountId?: string;
+  selectedCephAdminEndpointId?: string;
+  theme?: "light" | "dark";
+}) {
+  await page.addInitScript((value) => {
+    localStorage.clear();
+    localStorage.setItem("token", value.token);
+    localStorage.setItem("user", JSON.stringify(value.user));
+    if (value.selectedWorkspace) {
+      localStorage.setItem("selectedWorkspace", value.selectedWorkspace);
+    }
+    if (value.selectedExecutionContextId) {
+      localStorage.setItem("selectedExecutionContextId", value.selectedExecutionContextId);
+    }
+    if (value.selectedPortalAccountId) {
+      localStorage.setItem("selectedPortalAccountId", value.selectedPortalAccountId);
+    }
+    if (value.selectedCephAdminEndpointId) {
+      localStorage.setItem("selectedCephAdminEndpointId", value.selectedCephAdminEndpointId);
+    }
+    localStorage.setItem("theme", value.theme ?? "dark");
+  }, storage);
+}
+
+async function runAction(page: Page, action: ScenarioAction) {
+  if (action.type === "wait") {
+    await page.locator(action.selector).first().waitFor({ state: "visible" });
+    return;
+  }
+  if (action.type === "click") {
+    const locator = page.locator(action.selector).first();
+    await locator.waitFor({ state: "visible" });
+    await locator.click();
+    return;
+  }
+  const locator = page.locator(action.selector).first();
+  await locator.waitFor({ state: "visible" });
+  await locator.press(action.key);
+}
+
+test.describe.configure({ mode: "serial" });
+
+for (const scenario of scenarios) {
+  test(`docs screenshot: ${scenario.id}`, async ({ page }) => {
+    await fs.mkdir(SCREENSHOT_DIR, { recursive: true });
+    const runtimeErrors: string[] = [];
+    page.on("pageerror", (error) => {
+      runtimeErrors.push(`[pageerror] ${error.message}`);
+    });
+    page.on("console", (message) => {
+      if (message.type() === "error") {
+        runtimeErrors.push(`[console.error] ${message.text()}`);
+      }
+    });
+    page.on("response", (response) => {
+      if (response.status() >= 400) {
+        runtimeErrors.push(`[http ${response.status()}] ${response.request().method()} ${response.url()}`);
+      }
+    });
+
+    const mockRegistry = await registerApiMocks(page, scenario.mockRules, scenario.id);
+    await seedLocalStorage(page, scenario.storage);
+
+    await page.goto(scenario.route, { waitUntil: "domcontentloaded" });
+    try {
+      await page.locator(scenario.waitFor).first().waitFor({ state: "visible", timeout: 30_000 });
+    } catch (error) {
+      await writeDebugArtifacts(page, scenario.id, runtimeErrors);
+      throw error;
+    }
+
+    try {
+      for (const action of scenario.actions ?? []) {
+        await runAction(page, action);
+      }
+
+      await page.waitForTimeout(250);
+      await applyAnnotations(page, scenario.annotations);
+      await page.waitForTimeout(100);
+
+      const outputPath = path.join(SCREENSHOT_DIR, scenario.outputFile);
+      await page.screenshot({ path: outputPath, fullPage: false });
+
+      await clearAnnotations(page);
+      mockRegistry.assertNoUnmatched();
+    } catch (error) {
+      await writeDebugArtifacts(page, scenario.id, runtimeErrors);
+      throw error;
+    }
+  });
+}

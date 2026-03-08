@@ -31,3 +31,7 @@ You can identify whether the issue is permission, feature flag, endpoint capabil
 - [Workspace: Admin](workspace-admin.md)
 - [Workspace: Manager](workspace-manager.md)
 - [Ops / Observability](../ops/operations-observability.md)
+
+## Visual example
+
+![Troubleshooting example when no account context is selected](../assets/screenshots/user/troubleshooting.png)

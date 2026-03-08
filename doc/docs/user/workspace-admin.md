@@ -32,3 +32,7 @@ Platform and tenant-entry resources are configured and auditable.
 - [Workspace: Manager](workspace-manager.md)
 - [Ops / Configuration](../ops/configuration.md)
 - [Ops / Security](../ops/operations-security.md)
+
+## Visual example
+
+![Admin workspace with platform-level navigation](../assets/screenshots/user/workspace-admin.png)

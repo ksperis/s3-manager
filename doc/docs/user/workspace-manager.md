@@ -35,3 +35,7 @@ Tenant resources are managed in the right scope with explicit context control.
 - [Feature: SNS topics](feature-topics.md)
 - [Feature: Bucket compare](feature-bucket-compare.md)
 - [Feature: Bucket migration](feature-bucket-migration.md)
+
+## Visual example
+
+![Manager workspace with buckets, topics and migration tools](../assets/screenshots/user/workspace-manager.png)

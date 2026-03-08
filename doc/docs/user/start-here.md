@@ -35,3 +35,7 @@ You know which workspace to use and can start from the correct context.
 - [Use cases for storage administrators](use-cases-storage-admin.md)
 - [Use cases for storage users](use-cases-storage-user.md)
 - [Troubleshooting](troubleshooting.md)
+
+## Visual example
+
+![Workspace switcher open to choose where to continue](../assets/screenshots/user/start-here.png)

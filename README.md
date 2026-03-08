@@ -16,23 +16,23 @@
 
 ### Admin
 
-![Admin dashboard](doc/docs/assets/screenshots/admin-dashboard.png)
+![Admin dashboard](doc/docs/assets/screenshots/user/user-overview.png)
 
 ### Manager
 
-![Manager buckets](doc/docs/assets/screenshots/manager-buckets.png)
+![Manager buckets](doc/docs/assets/screenshots/user/workspace-manager.png)
 
 ### Browser
 
-![S3 browser](doc/docs/assets/screenshots/s3-browser.png)
+![S3 browser](doc/docs/assets/screenshots/user/workspace-browser.png)
 
 ### Ceph-admin
 
-![Ceph Admin](doc/docs/assets/screenshots/ceph-admin-buckets.png)
+![Ceph Admin](doc/docs/assets/screenshots/user/workspace-ceph-admin.png)
 
 ### Portal
 
-![Portal](doc/docs/assets/screenshots/portal.png)
+![Portal](doc/docs/assets/screenshots/user/workspace-portal.png)
 
 ## Quick Start (Docker Compose)
 

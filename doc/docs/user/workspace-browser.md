@@ -30,3 +30,7 @@ You can perform day-to-day object operations directly from the UI.
 
 - [Feature: Object operations in Browser](feature-objects-browser.md)
 - [Troubleshooting](troubleshooting.md)
+
+## Visual example
+
+![Browser workspace with operations and search controls](../assets/screenshots/user/workspace-browser.png)

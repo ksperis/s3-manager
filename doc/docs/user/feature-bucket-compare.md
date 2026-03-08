@@ -31,3 +31,7 @@ You get an actionable diff view to support controlled bucket alignment.
 
 - [Workspace: Manager](workspace-manager.md)
 - [Feature: Bucket migration](feature-bucket-migration.md)
+
+## Visual example
+
+![Bucket compare workflow with source context and selection table](../assets/screenshots/user/feature-bucket-compare.png)

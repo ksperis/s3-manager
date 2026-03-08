@@ -35,3 +35,28 @@ When adding or changing routes/features:
 1. Update user-facing page in `doc/docs/user/`.
 2. Update ops/developer pages when runtime behavior or architecture changed.
 3. Keep this matrix in sync with `frontend/src/router.tsx` and workspace layouts.
+
+## User screenshot workflow
+
+User pages in `doc/docs/user/*.md` must include exactly one screenshot reference:
+
+`![...](../assets/screenshots/user/<page-screenshot>.png)`
+
+The screenshots are generated with synthetic/mock data using Playwright:
+
+```bash
+npm --prefix frontend run docs:screenshots
+```
+
+Validate references and dimensions (1728x972) before merging:
+
+```bash
+npm --prefix frontend run docs:screenshots:check
+```
+
+If you add a new user page:
+
+1. Add a scenario in `frontend/scripts/docs-screenshots/scenarios.ts` with route, storage seed, mocks, and output file.
+2. Generate screenshots.
+3. Add one screenshot reference to the new markdown page.
+4. Run the screenshot check script.

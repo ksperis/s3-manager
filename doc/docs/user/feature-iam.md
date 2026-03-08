@@ -30,3 +30,7 @@ IAM resources are managed with native IAM semantics.
 
 - [Workspace: Manager](workspace-manager.md)
 - [Feature: Buckets](feature-buckets.md)
+
+## Visual example
+
+![IAM users feature page with principal list](../assets/screenshots/user/feature-iam.png)

@@ -34,3 +34,7 @@ You can run Ceph cluster-wide tasks without switching to account-scoped Manager 
 
 - [Use cases for storage administrators](use-cases-storage-admin.md)
 - [Ops / Ceph RGW backend notes](../ops/backends-ceph-rgw.md)
+
+## Visual example
+
+![Ceph Admin workspace with endpoint and RGW inventory](../assets/screenshots/user/workspace-ceph-admin.png)

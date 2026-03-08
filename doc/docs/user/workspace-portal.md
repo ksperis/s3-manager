@@ -31,3 +31,7 @@ Users complete controlled workflows without requiring full admin surfaces.
 
 - [Use cases for storage users](use-cases-storage-user.md)
 - [Workspace: Browser](workspace-browser.md)
+
+## Visual example
+
+![Portal workspace self-service bucket interface](../assets/screenshots/user/workspace-portal.png)

@@ -33,3 +33,7 @@ You can complete daily storage tasks without navigating admin-only areas.
 - [Workspace: Browser](workspace-browser.md)
 - [Workspace: Portal](workspace-portal.md)
 - [Feature: Object operations in Browser](feature-objects-browser.md)
+
+## Visual example
+
+![Browser workspace showing bucket selector and object tools](../assets/screenshots/user/use-cases-storage-user.png)

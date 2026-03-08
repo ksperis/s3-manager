@@ -39,3 +39,7 @@ Migration runs with explicit progress, safety checks, and auditable operator dec
 
 - [Workspace: Manager](workspace-manager.md)
 - [Feature: Bucket compare](feature-bucket-compare.md)
+
+## Visual example
+
+![Bucket migration page with status filters and runs](../assets/screenshots/user/feature-bucket-migration.png)
