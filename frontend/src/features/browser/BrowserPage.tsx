@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { unstable_usePrompt, useLocation, useSearchParams } from "react-router-dom";
 import JSZip from "jszip";
 import { ZipWriter } from "@zip.js/zip.js";
@@ -673,7 +673,6 @@ export default function BrowserPage({
   const pendingUploadedKeysByBucketRef = useRef<Map<string, Set<string>>>(new Map());
   const previewObjectUrlRef = useRef<string | null>(null);
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
-  const skipNextObjectsLoadRef = useRef(false);
   const contextCountIdRef = useRef(0);
   const bucketInspectorRequestIdRef = useRef(0);
   const selectionStatsRequestIdRef = useRef(0);
@@ -728,6 +727,7 @@ export default function BrowserPage({
     return String(value);
   }, []);
   const currentAccountId = normalizeAccountId(accountIdForApi);
+  const accountSwitchInFlight = previousAccountIdRef.current !== accountIdForApi;
   const sseCustomerScopeKey = useMemo(() => {
     if (!currentAccountId || !bucketName) return null;
     return `${currentAccountId}::${bucketName}`;
@@ -1888,12 +1888,15 @@ export default function BrowserPage({
     }
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (previousAccountIdRef.current === accountIdForApi) {
       return;
     }
     previousAccountIdRef.current = accountIdForApi;
-    skipNextObjectsLoadRef.current = true;
+    // Clear selection synchronously on context switch so bucket-scoped effects
+    // don't issue stale requests with the next credentials.
+    bucketNameRef.current = "";
+    prefixRef.current = "";
     setBucketName("");
     setPrefix("");
     setActiveItem(null);
@@ -1902,8 +1905,9 @@ export default function BrowserPage({
   }, [accountIdForApi]);
 
   useEffect(() => {
-    if (skipNextObjectsLoadRef.current) {
-      skipNextObjectsLoadRef.current = false;
+    if (accountSwitchInFlight) {
+      objectsAbortControllerRef.current?.abort();
+      objectsAbortControllerRef.current = null;
       return;
     }
     if (objectsSearchDebounceRef.current !== null) {
@@ -1932,7 +1936,7 @@ export default function BrowserPage({
         objectsSearchDebounceRef.current = null;
       }
     };
-  }, [accountIdForApi, accessMode, bucketName, filter, hasS3AccountContext, isVersioningEnabled, prefix, searchCaseSensitive, searchExactMatch, searchRecursive, searchScope, showDeletedObjects, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [accountIdForApi, accessMode, accountSwitchInFlight, bucketName, filter, hasS3AccountContext, isVersioningEnabled, prefix, searchCaseSensitive, searchExactMatch, searchRecursive, searchScope, showDeletedObjects, storageFilter, typeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (filter.trim()) return;
@@ -1965,7 +1969,7 @@ export default function BrowserPage({
   }, [accountIdForApi, accessMode, bucketName, hasS3AccountContext, normalizedPrefix, showPrefixVersions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!bucketName || !hasS3AccountContext) {
+    if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
       setBucketVersioningEnabled(false);
       return;
     }
@@ -1982,7 +1986,7 @@ export default function BrowserPage({
     return () => {
       active = false;
     };
-  }, [accountIdForApi, bucketName, hasS3AccountContext]);
+  }, [accountIdForApi, accountSwitchInFlight, bucketName, hasS3AccountContext]);
 
   useEffect(() => {
     if (isVersioningEnabled) return;
@@ -2010,7 +2014,7 @@ export default function BrowserPage({
   }, [showDeletedObjects]);
 
   useEffect(() => {
-    if (!bucketName || !hasS3AccountContext) {
+    if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
       setTreeNodes([]);
       return;
     }
@@ -2048,7 +2052,7 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, accessMode, bucketName, hasS3AccountContext]);
+  }, [accountIdForApi, accessMode, accountSwitchInFlight, bucketName, hasS3AccountContext]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext || treeNodes.length === 0) return;
@@ -2095,7 +2099,7 @@ export default function BrowserPage({
   }, [accessMode, bucketName, hasS3AccountContext, prefix, treeNodes]);
 
   useEffect(() => {
-    if (!bucketName || !hasS3AccountContext) {
+    if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
       setCorsStatus(null);
       setUseProxyTransfers(false);
       return;
@@ -2114,7 +2118,7 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, accessMode, bucketName, hasS3AccountContext, uiOrigin]);
+  }, [accountIdForApi, accessMode, accountSwitchInFlight, bucketName, hasS3AccountContext, uiOrigin]);
 
   useEffect(() => {
     if (!hasS3AccountContext || !stsEnabled) {
@@ -2457,12 +2461,12 @@ export default function BrowserPage({
   }, [previewContentType, previewItem]);
 
   const layoutClass = isFoldersPanelVisible && isInspectorPanelVisible
-    ? "xl:grid-cols-[200px_minmax(0,1fr)_320px]"
+    ? "lg:grid-cols-[200px_minmax(0,1fr)_320px]"
     : isFoldersPanelVisible
-      ? "xl:grid-cols-[200px_minmax(0,1fr)]"
+      ? "lg:grid-cols-[200px_minmax(0,1fr)]"
       : isInspectorPanelVisible
-        ? "xl:grid-cols-[minmax(0,1fr)_320px]"
-        : "xl:grid-cols-[minmax(0,1fr)]";
+        ? "lg:grid-cols-[minmax(0,1fr)_320px]"
+        : "lg:grid-cols-[minmax(0,1fr)]";
   const rowPadding = compactMode ? "py-1" : "py-2.5";
   const rowHeightClasses = compactMode ? "h-10" : "h-16";
   const rowCellClasses = rowPadding;
@@ -3490,14 +3494,14 @@ export default function BrowserPage({
   };
 
   const renderTreeNodes = (nodes: TreeNode[], depth = 0) => (
-    <ul className="min-w-max space-y-1">
+    <ul className="w-full min-w-0 space-y-1">
       {nodes.map((node) => {
         const isActive = prefix === node.prefix;
         const canToggle = node.isLoaded ? node.children.length > 0 : true;
         const labelClasses = `${treeItemBaseClasses} ${isActive ? treeItemActiveClasses : treeItemInactiveClasses}`;
         return (
           <li key={node.id}>
-            <div className="flex items-center gap-1" style={{ paddingLeft: depth * 12 }}>
+            <div className="flex w-full min-w-0 items-center gap-1" style={{ paddingLeft: depth * 12 }}>
               <button
                 type="button"
                 className={treeToggleButtonClasses}
@@ -3514,7 +3518,7 @@ export default function BrowserPage({
                 title={node.name}
               >
                 {node.prefix === "" ? <BucketIcon className="h-3.5 w-3.5" /> : <FolderIcon className="h-3.5 w-3.5" />}
-                <span className="whitespace-nowrap">{node.name}</span>
+                <span className="truncate">{node.name}</span>
               </button>
             </div>
             {node.isExpanded && (node.isLoading || node.children.length > 0) && (
@@ -7261,9 +7265,9 @@ export default function BrowserPage({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
           <div className={`grid min-h-0 flex-1 grid-rows-1 gap-3 ${layoutClass}`}>
             {isFoldersPanelVisible && (
-              <div className="flex min-h-0 h-full flex-col rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+              <div className="flex min-h-0 h-full min-w-0 flex-col rounded-xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Folders</p>
-                <div className="mt-3 min-h-0 flex-1 overflow-x-auto overflow-y-auto pr-1">
+                <div className="mt-3 min-h-0 flex-1 overflow-hidden overflow-y-auto pr-1">
                   {!bucketName ? (
                     <p className="ui-caption text-slate-500 dark:text-slate-400">Select a bucket to view folders.</p>
                   ) : (
@@ -7272,7 +7276,7 @@ export default function BrowserPage({
                 </div>
               </div>
             )}
-            <div className="flex min-h-0 h-full flex-1 flex-col gap-3">
+            <div className="flex min-h-0 h-full min-w-0 flex-1 flex-col gap-3">
                   <div
                     className={`relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border transition ${
                       dragging

@@ -45,7 +45,7 @@ export const bucketButtonClasses =
 export const treeToggleButtonClasses =
   "inline-flex h-4 w-4 items-center justify-center rounded border border-slate-200 ui-caption font-semibold text-slate-500 transition hover:border-primary hover:text-primary disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:border-primary-500 dark:hover:text-primary-200";
 export const treeItemBaseClasses =
-  "flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-0.5 text-left ui-caption font-semibold transition";
+  "flex min-w-0 flex-1 max-w-full items-center gap-2 overflow-hidden rounded-md px-1.5 py-0.5 text-left ui-caption font-semibold transition";
 export const treeItemActiveClasses =
   "bg-primary-100 text-primary-800 dark:bg-primary-500/20 dark:text-primary-100";
 export const treeItemInactiveClasses =
