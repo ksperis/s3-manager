@@ -54,51 +54,47 @@ plugins:
 
 nav:
   - Home: index.md
-  - Getting started:
-      - Overview: getting-started/overview.md
-      - Run locally (Docker Compose): getting-started/docker-compose.md
-      - Run locally (dev mode): getting-started/dev-mode.md
-      - Configuration: getting-started/configuration.md
-  - Concepts:
-      - Core principles: concepts/principles.md
-      - Surfaces (Admin / Manager / Browser / Portal): concepts/surfaces.md
-      - S3 Accounts: concepts/s3-accounts.md
-      - S3 Connections: concepts/s3-connections.md
-      - Identity model (principals): concepts/identity-model.md
-      - Auditability: concepts/audit.md
-  - Functional behavior:
-      - IAM alignment: functional/iam-alignment.md
-      - Executors & context: functional/executors.md
-      - S3 Account lifecycle: functional/account-lifecycle.md
-      - S3 Connection lifecycle: functional/connection-lifecycle.md
-      - Bucket features: functional/bucket-features.md
-      - IAM features: functional/iam-features.md
-      - Audit flows: functional/audit-flows.md
-  - Architecture:
-      - High-level architecture: architecture/high-level.md
-      - Backend (FastAPI): architecture/backend.md
-      - Frontend (React): architecture/frontend.md
-      - Database & migrations: architecture/database.md
-  - Features by surface:
-      - Admin: features/admin.md
-      - Ceph Admin: features/ceph-admin.md
-      - Manager: features/manager.md
-      - Bucket Migration (Manager): features/bucket-migration.md
-      - Browser: features/browser.md
-      - Portal: features/portal.md
-  - Backends:
-      - Compatibility matrix: backends/compatibility.md
-      - Ceph RGW: backends/ceph-rgw.md
-      - MinIO and others: backends/others.md
-  - Operations:
-      - Helm chart: operations/helm.md
-      - Billing & collection: operations/billing.md
-      - Admin API tokens: operations/api-tokens.md
-      - Admin automation API: operations/admin-automation.md
-      - Observability & troubleshooting: operations/ops.md
-      - Security hardening: operations/security.md
-  - Development:
-      - Contributing: development/contributing.md
-      - Repo layout: development/repo-layout.md
-      - API reference (OpenAPI): development/api-reference.md
-      - GitHub Pages deployment: development/github-pages.md
+  - User Guide:
+      - Overview: user/index.md
+      - Start here: user/start-here.md
+      - Use cases (storage admin): user/use-cases-storage-admin.md
+      - Use cases (storage user): user/use-cases-storage-user.md
+      - "Workspace: Admin": user/workspace-admin.md
+      - "Workspace: Manager": user/workspace-manager.md
+      - "Workspace: Browser": user/workspace-browser.md
+      - "Workspace: Portal": user/workspace-portal.md
+      - "Workspace: Ceph Admin": user/workspace-ceph-admin.md
+      - "Feature: Buckets": user/feature-buckets.md
+      - "Feature: IAM": user/feature-iam.md
+      - "Feature: Object operations in Browser": user/feature-objects-browser.md
+      - "Feature: SNS topics": user/feature-topics.md
+      - "Feature: Bucket compare": user/feature-bucket-compare.md
+      - "Feature: Bucket migration": user/feature-bucket-migration.md
+      - Troubleshooting: user/troubleshooting.md
+  - Ops / Sysadmin Guide:
+      - Overview: ops/index.md
+      - Deploy with Docker Compose: ops/deploy-docker-compose.md
+      - Deploy with Helm: ops/deploy-helm.md
+      - Configuration: ops/configuration.md
+      - "Operations: healthchecks": ops/operations-healthchecks.md
+      - "Operations: billing": ops/operations-billing.md
+      - "Operations: API tokens": ops/operations-api-tokens.md
+      - "Operations: admin automation API": ops/operations-admin-automation.md
+      - "Operations: security": ops/operations-security.md
+      - "Operations: observability": ops/operations-observability.md
+      - "Operations: upgrade and compatibility": ops/operations-upgrade-compatibility.md
+      - "Backends: compatibility matrix": ops/backends-compatibility.md
+      - "Backends: Ceph RGW": ops/backends-ceph-rgw.md
+      - "Backends: other S3 implementations": ops/backends-others.md
+  - Developer Guide:
+      - Overview: developer/index.md
+      - Architecture overview: developer/architecture-overview.md
+      - "Architecture: backend": developer/architecture-backend.md
+      - "Architecture: frontend": developer/architecture-frontend.md
+      - "Architecture: database": developer/architecture-database.md
+      - Principles: developer/principles.md
+      - Identity and execution model: developer/identity-and-execution-model.md
+      - Repository layout: developer/repo-layout.md
+      - Contributing: developer/contributing.md
+      - API reference: developer/api-reference.md
+      - Docs maintenance: developer/docs-maintenance.md
