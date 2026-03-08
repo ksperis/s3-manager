@@ -146,6 +146,12 @@ class PresignedUrl(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
 
 
+class SseCustomerContext(BaseModel):
+    algorithm: Literal["AES256"] = "AES256"
+    key: str
+    key_md5: str
+
+
 class MultipartUploadInitRequest(BaseModel):
     key: str
     content_type: Optional[str] = None

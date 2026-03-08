@@ -48,6 +48,7 @@ from app.models.browser import (
     PresignPartResponse,
     PresignRequest,
     PresignedUrl,
+    SseCustomerContext,
     StsStatus,
 )
 from app.services.s3_client import (
@@ -238,6 +239,24 @@ class BrowserService:
             session_token=session_token,
             **self._s3_client_kwargs(account),
         )
+
+    def _sse_customer_params(self, sse_customer: Optional[SseCustomerContext]) -> dict[str, str]:
+        if not sse_customer:
+            return {}
+        return {
+            "SSECustomerAlgorithm": sse_customer.algorithm,
+            "SSECustomerKey": sse_customer.key,
+            "SSECustomerKeyMD5": sse_customer.key_md5,
+        }
+
+    def _sse_customer_headers(self, sse_customer: Optional[SseCustomerContext]) -> dict[str, str]:
+        if not sse_customer:
+            return {}
+        return {
+            "x-amz-server-side-encryption-customer-algorithm": sse_customer.algorithm,
+            "x-amz-server-side-encryption-customer-key": sse_customer.key,
+            "x-amz-server-side-encryption-customer-key-MD5": sse_customer.key_md5,
+        }
 
     def _get_sts_credentials(
         self,
@@ -611,11 +630,20 @@ class BrowserService:
             region=region or settings.seed_s3_region,
         )
 
-    def proxy_upload(self, bucket_name: str, account: S3Account, key: str, file_obj, content_type: Optional[str]) -> None:
+    def proxy_upload(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        key: str,
+        file_obj,
+        content_type: Optional[str],
+        sse_customer: Optional[SseCustomerContext] = None,
+    ) -> None:
         client = self._client(account)
         extra_args = {}
         if content_type:
             extra_args["ContentType"] = content_type
+        extra_args.update(self._sse_customer_params(sse_customer))
         try:
             file_obj.seek(0)
             if extra_args:
@@ -634,14 +662,23 @@ class BrowserService:
         *,
         key: str,
         content_type: Optional[str],
+        sse_customer: Optional[SseCustomerContext] = None,
     ) -> None:
         file_obj = getattr(file, "file", file)
-        self.proxy_upload(bucket_name, account, key, file_obj, content_type)
+        self.proxy_upload(bucket_name, account, key, file_obj, content_type, sse_customer=sse_customer)
 
-    def proxy_download(self, bucket_name: str, account: S3Account, key: str):
+    def proxy_download(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        key: str,
+        sse_customer: Optional[SseCustomerContext] = None,
+    ):
         client = self._client(account)
+        kwargs = {"Bucket": bucket_name, "Key": key}
+        kwargs.update(self._sse_customer_params(sse_customer))
         try:
-            return client.get_object(Bucket=bucket_name, Key=key)
+            return client.get_object(**kwargs)
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to download '{key}': {exc}") from exc
 
@@ -673,11 +710,13 @@ class BrowserService:
         key: str,
         *,
         version_id: Optional[str] = None,
+        sse_customer: Optional[SseCustomerContext] = None,
     ):
         client = self._client(account)
         kwargs = {"Bucket": bucket_name, "Key": key}
         if version_id:
             kwargs["VersionId"] = version_id
+        kwargs.update(self._sse_customer_params(sse_customer))
         try:
             resp = client.get_object(**kwargs)
         except (ClientError, BotoCoreError) as exc:
@@ -1217,11 +1256,13 @@ class BrowserService:
         account: S3Account,
         key: str,
         version_id: Optional[str] = None,
+        sse_customer: Optional[SseCustomerContext] = None,
     ) -> ObjectMetadata:
         client = self._client(account)
         kwargs = {"Bucket": bucket_name, "Key": key}
         if version_id:
             kwargs["VersionId"] = version_id
+        kwargs.update(self._sse_customer_params(sse_customer))
         try:
             resp = client.head_object(**kwargs)
         except (ClientError, BotoCoreError) as exc:
@@ -1520,11 +1561,13 @@ class BrowserService:
         bucket_name: str,
         account: S3Account,
         payload: PresignRequest,
+        sse_customer: Optional[SseCustomerContext] = None,
     ) -> PresignedUrl:
         client = self._client(account)
         expires = payload.expires_in or 900
         params = {"Bucket": bucket_name, "Key": payload.key}
-        headers: dict[str, str] = {}
+        params.update(self._sse_customer_params(sse_customer))
+        headers: dict[str, str] = self._sse_customer_headers(sse_customer)
         if payload.version_id:
             params["VersionId"] = payload.version_id
         try:
@@ -1553,6 +1596,8 @@ class BrowserService:
                 )
                 return PresignedUrl(url=url, method="PUT", expires_in=expires, headers=headers)
             if payload.operation == "post_object":
+                if sse_customer:
+                    raise RuntimeError("SSE-C is not supported with post_object presign; use put_object instead.")
                 fields = {}
                 conditions: list[dict | list] = []
                 if payload.content_type:
@@ -1684,9 +1729,11 @@ class BrowserService:
         bucket_name: str,
         account: S3Account,
         payload: MultipartUploadInitRequest,
+        sse_customer: Optional[SseCustomerContext] = None,
     ) -> MultipartUploadInitResponse:
         client = self._client(account)
         kwargs = {"Bucket": bucket_name, "Key": payload.key}
+        kwargs.update(self._sse_customer_params(sse_customer))
         if payload.content_type:
             kwargs["ContentType"] = payload.content_type
         if payload.metadata:
@@ -1788,6 +1835,7 @@ class BrowserService:
         bucket_name: str,
         account: S3Account,
         payload: PresignPartRequest,
+        sse_customer: Optional[SseCustomerContext] = None,
     ) -> PresignPartResponse:
         if not payload.upload_id:
             raise RuntimeError("Upload id is required to presign a part")
@@ -1799,6 +1847,8 @@ class BrowserService:
             "UploadId": payload.upload_id,
             "PartNumber": payload.part_number,
         }
+        params.update(self._sse_customer_params(sse_customer))
+        headers = self._sse_customer_headers(sse_customer)
         try:
             url = client.generate_presigned_url(
                 "upload_part",
@@ -1807,7 +1857,7 @@ class BrowserService:
             )
         except (ClientError, BotoCoreError) as exc:
             raise RuntimeError(f"Unable to presign part {payload.part_number} for '{payload.key}': {exc}") from exc
-        return PresignPartResponse(url=url, expires_in=expires)
+        return PresignPartResponse(url=url, expires_in=expires, headers=headers)
 
     def complete_multipart_upload(
         self,

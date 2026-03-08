@@ -31,6 +31,7 @@ import {
   PresignRequest,
   StsCredentials,
   StsStatus,
+  buildSseCustomerBackendHeaders,
   copyObject,
   cleanupObjectVersions,
   createFolder,
@@ -75,6 +76,13 @@ import ObjectAdvancedModal from "./ObjectAdvancedModal";
 import BucketDetailPage from "../manager/BucketDetailPage";
 import { S3AccountProvider } from "../manager/S3AccountContext";
 import { presignObjectWithSts, presignPartWithSts } from "./stsPresigner";
+import { resolveSimpleUploadOperation, shouldUseStsPresigner } from "./sseBrowserLogic";
+import {
+  activateSseCustomerKeyForScope,
+  copySseCustomerKeyWithFallback,
+  generateAndActivateSseCustomerKeyForScope,
+  resolveSseCustomerKeyInputType,
+} from "./sseCustomerKeyActions";
 import { resolveBrowserPanelVisibility } from "./browserResponsivePanels";
 import {
   BucketIcon,
@@ -504,6 +512,12 @@ export default function BrowserPage({
   const [stsStatus, setStsStatus] = useState<StsStatus | null>(null);
   const [stsCredentials, setStsCredentials] = useState<StsCredentials | null>(null);
   const [stsCredentialsError, setStsCredentialsError] = useState<string | null>(null);
+  const [sseCustomerKeysByScope, setSseCustomerKeysByScope] = useState<Record<string, string>>({});
+  const [showSseCustomerModal, setShowSseCustomerModal] = useState(false);
+  const [sseCustomerKeyInput, setSseCustomerKeyInput] = useState("");
+  const [sseCustomerKeyError, setSseCustomerKeyError] = useState<string | null>(null);
+  const [sseCustomerKeyNotice, setSseCustomerKeyNotice] = useState<string | null>(null);
+  const [sseCustomerKeyVisible, setSseCustomerKeyVisible] = useState(false);
   const [useProxyTransfers, setUseProxyTransfers] = useState(false);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [corsFixing, setCorsFixing] = useState(false);
@@ -708,11 +722,23 @@ export default function BrowserPage({
   const isLegacyConnectionContext = Boolean(contextId && contextId.startsWith("conn-"));
   const isLegacyContext = isLegacyS3UserContext || isLegacyConnectionContext;
   const stsEnabled = Boolean(effectiveCaps?.sts) && !isLegacyContext;
+  const sseFeatureEnabled = Boolean(effectiveCaps?.sse);
   const normalizeAccountId = useCallback((value: S3AccountSelector | null | undefined) => {
     if (value == null) return null;
     return String(value);
   }, []);
   const currentAccountId = normalizeAccountId(accountIdForApi);
+  const sseCustomerScopeKey = useMemo(() => {
+    if (!currentAccountId || !bucketName) return null;
+    return `${currentAccountId}::${bucketName}`;
+  }, [bucketName, currentAccountId]);
+  const sseCustomerKeyBase64Raw = useMemo(() => {
+    if (!sseCustomerScopeKey) return null;
+    return sseCustomerKeysByScope[sseCustomerScopeKey] ?? null;
+  }, [sseCustomerKeysByScope, sseCustomerScopeKey]);
+  const sseCustomerKeyBase64 = sseFeatureEnabled ? sseCustomerKeyBase64Raw : null;
+  const sseActive = Boolean(sseCustomerKeyBase64);
+  const showSseControls = Boolean(sseFeatureEnabled && hasS3AccountContext && bucketName);
   const clipboardAccountId = normalizeAccountId(clipboard?.sourceAccountId ?? null);
   const clipboardMatchesContext = Boolean(clipboard && clipboardAccountId === currentAccountId);
   const canPaste = Boolean(clipboard && bucketName && hasS3AccountContext && clipboardMatchesContext);
@@ -765,6 +791,87 @@ export default function BrowserPage({
     if (!canUseInspectorPanel) return;
     setShowInspector((prev) => !prev);
   }, [canUseInspectorPanel]);
+  const openSseCustomerModal = useCallback(() => {
+    if (!sseFeatureEnabled || !sseCustomerScopeKey) return;
+    setSseCustomerKeyInput(sseCustomerKeyBase64 ?? "");
+    setSseCustomerKeyError(null);
+    setSseCustomerKeyNotice(null);
+    setSseCustomerKeyVisible(false);
+    setShowSseCustomerModal(true);
+  }, [sseCustomerKeyBase64, sseCustomerScopeKey, sseFeatureEnabled]);
+  const handleActivateSseCustomerKey = useCallback(() => {
+    if (!sseCustomerScopeKey) return;
+    try {
+      const result = activateSseCustomerKeyForScope(sseCustomerKeysByScope, sseCustomerScopeKey, sseCustomerKeyInput);
+      setSseCustomerKeysByScope(result.next);
+      setSseCustomerKeyError(null);
+      setSseCustomerKeyNotice(null);
+      setShowSseCustomerModal(false);
+      setStatusMessage("SSE-C key enabled for this bucket.");
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : "Unable to activate SSE-C key.";
+      setSseCustomerKeyError(message);
+    }
+  }, [sseCustomerKeyInput, sseCustomerKeysByScope, sseCustomerScopeKey]);
+  const handleGenerateSseCustomerKey = useCallback(async () => {
+    if (!sseCustomerScopeKey) return;
+    let generatedKey = "";
+    try {
+      const result = generateAndActivateSseCustomerKeyForScope(sseCustomerKeysByScope, sseCustomerScopeKey);
+      generatedKey = result.normalizedKey;
+      setSseCustomerKeysByScope(result.next);
+      setSseCustomerKeyInput(generatedKey);
+      setSseCustomerKeyError(null);
+      setSseCustomerKeyVisible(false);
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : "Unable to generate SSE-C key.";
+      setSseCustomerKeyError(message);
+      setSseCustomerKeyNotice(null);
+      return;
+    }
+    const copyOutcome = await copySseCustomerKeyWithFallback(
+      generatedKey,
+      navigator.clipboard?.writeText?.bind(navigator.clipboard),
+      () => {
+        setCopyDialog({
+          title: "Copy SSE-C key",
+          label: "SSE-C key",
+          value: generatedKey,
+          successMessage: "SSE-C key copied to clipboard.",
+        });
+      }
+    );
+    if (copyOutcome === "copied") {
+      setSseCustomerKeyNotice(
+        "SSE-C key generated and enabled. Copy and save this key now; it will be lost on browser refresh."
+      );
+      setStatusMessage("SSE-C key generated, enabled, and copied to clipboard.");
+      return;
+    }
+    setSseCustomerKeyNotice(
+      "SSE-C key generated and enabled. Clipboard access failed: copy and save the key now using the manual dialog."
+    );
+    setStatusMessage("SSE-C key generated and enabled. Copy it manually from the dialog.");
+  }, [sseCustomerKeysByScope, sseCustomerScopeKey]);
+  const handleClearSseCustomerKey = useCallback(() => {
+    if (!sseCustomerScopeKey) return;
+    setSseCustomerKeysByScope((prev) => {
+      const next = { ...prev };
+      delete next[sseCustomerScopeKey];
+      return next;
+    });
+    setSseCustomerKeyInput("");
+    setSseCustomerKeyError(null);
+    setSseCustomerKeyNotice(null);
+    setSseCustomerKeyVisible(false);
+    setShowSseCustomerModal(false);
+    setStatusMessage("SSE-C key cleared for this bucket.");
+  }, [sseCustomerScopeKey]);
+  useEffect(() => {
+    if (!sseFeatureEnabled && showSseCustomerModal) {
+      setShowSseCustomerModal(false);
+    }
+  }, [showSseCustomerModal, sseFeatureEnabled]);
 
   const normalizedPrefix = useMemo(() => normalizePrefix(prefix), [prefix]);
   const isVersioningEnabled = bucketVersioningEnabled;
@@ -848,9 +955,10 @@ export default function BrowserPage({
     [accountIdForApi, hasS3AccountContext, stsEnabled, stsStatus?.available]
   );
   const stsAvailable = Boolean(stsEnabled && stsStatus?.available);
+  const useStsPresigner = shouldUseStsPresigner({ stsAvailable, sseActive });
   const presignObjectRequest = useCallback(
     async (targetBucket: string, payload: PresignRequest) => {
-      if (stsAvailable) {
+      if (useStsPresigner) {
         const credentials = await ensureStsCredentials();
         if (credentials) {
           try {
@@ -867,13 +975,13 @@ export default function BrowserPage({
           }
         }
       }
-      return presignObject(accountIdForApi, targetBucket, payload);
+      return presignObject(accountIdForApi, targetBucket, payload, sseCustomerKeyBase64);
     },
-    [accountIdForApi, ensureStsCredentials, stsAvailable]
+    [accountIdForApi, ensureStsCredentials, sseCustomerKeyBase64, useStsPresigner]
   );
   const presignPartRequest = useCallback(
     async (targetBucket: string, uploadId: string, payload: PresignPartRequest) => {
-      if (stsAvailable) {
+      if (useStsPresigner) {
         const credentials = await ensureStsCredentials();
         if (credentials) {
           try {
@@ -890,9 +998,9 @@ export default function BrowserPage({
           }
         }
       }
-      return presignPart(accountIdForApi, targetBucket, uploadId, payload);
+      return presignPart(accountIdForApi, targetBucket, uploadId, payload, sseCustomerKeyBase64);
     },
-    [accountIdForApi, ensureStsCredentials, stsAvailable]
+    [accountIdForApi, ensureStsCredentials, sseCustomerKeyBase64, useStsPresigner]
   );
   const warnings = useMemo(() => {
     const items: string[] = [];
@@ -954,6 +1062,14 @@ export default function BrowserPage({
           "border-amber-200/70 bg-amber-200/60 text-amber-600/70 dark:border-amber-400/40 dark:bg-amber-400/25 dark:text-amber-200/90",
       };
     }
+    if (sseActive) {
+      return {
+        label: "SSE-C",
+        title: "Download/Upload mode: SSE-C customer key is active for this bucket.",
+        className:
+          "border-sky-200/70 bg-sky-200/60 text-sky-700/80 dark:border-sky-400/40 dark:bg-sky-400/25 dark:text-sky-100/90",
+      };
+    }
     if (stsCredentials) {
       return {
         label: "STS",
@@ -977,6 +1093,7 @@ export default function BrowserPage({
     hasS3AccountContext,
     legacyStsTooltip,
     proxyAllowed,
+    sseActive,
     stsCredentials,
     stsExpirationLabel,
     useProxyTransfers,
@@ -2174,6 +2291,12 @@ export default function BrowserPage({
     if (bucketTotalCount === 0) return "No buckets";
     return "Select bucket";
   }, [bucketName, bucketTotalCount, loadingBuckets]);
+  const bucketSelectorNeedsAttention = hasS3AccountContext && !bucketName && bucketTotalCount > 0;
+  const bucketButtonClassName = `${bucketButtonClasses} ${
+    bucketSelectorNeedsAttention
+      ? "rounded-md border border-amber-300 bg-amber-50/80 text-amber-800 shadow-sm ring-2 ring-amber-200/70 dark:border-amber-400/60 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/30"
+      : ""
+  }`;
   const canLoadMoreBucketResults = bucketMenuHasNext && !loadingBuckets && !bucketMenuLoadingMore;
   const sortKey = sortId.split("-")[0] as "name" | "size" | "modified";
   const sortDirection = sortId.endsWith("asc") ? "asc" : "desc";
@@ -2319,7 +2442,7 @@ export default function BrowserPage({
   const canSelectionDownloadFiles = selectionInfo.canDownloadFiles;
   const canSelectionDownloadFolder = selectionInfo.canDownloadFolder;
   const canSelectionOpen = selectionInfo.canOpen;
-  const canSelectionCopyUrl = selectionInfo.canCopyUrl;
+  const canSelectionCopyUrl = selectionInfo.canCopyUrl && !sseActive;
   const canSelectionAdvanced = selectionInfo.canAdvanced;
   const canSelectionCopyItems = selectionInfo.canCopyItems;
   const canSelectionCutItems = selectionInfo.canCutItems;
@@ -2674,7 +2797,7 @@ export default function BrowserPage({
     setMetadataLoading(true);
     setMetadataError(null);
     Promise.all([
-      fetchObjectMetadata(accountIdForApi, bucketName, inspectedItem.key),
+      fetchObjectMetadata(accountIdForApi, bucketName, inspectedItem.key, null, sseCustomerKeyBase64),
       getObjectTags(accountIdForApi, bucketName, inspectedItem.key),
     ])
       .then(([meta, tags]) => {
@@ -2698,7 +2821,15 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, bucketName, hasS3AccountContext, inspectedItem?.isDeleted, inspectedItem?.key, inspectedItem?.type]);
+  }, [
+    accountIdForApi,
+    bucketName,
+    hasS3AccountContext,
+    inspectedItem?.isDeleted,
+    inspectedItem?.key,
+    inspectedItem?.type,
+    sseCustomerKeyBase64,
+  ]);
 
   useEffect(() => {
     if (!previewItem || !bucketName || !hasS3AccountContext || !accountIdForApi) {
@@ -2719,12 +2850,33 @@ export default function BrowserPage({
     clearPreviewObjectUrl();
 
     const loadPreview = async () => {
-      const contentTypePromise = fetchObjectMetadata(accountIdForApi, bucketName, previewItem.key)
+      const contentTypePromise = fetchObjectMetadata(
+        accountIdForApi,
+        bucketName,
+        previewItem.key,
+        null,
+        sseCustomerKeyBase64
+      )
         .then((meta) => meta.content_type ?? null)
         .catch(() => null);
 
-      if (useProxyTransfers) {
-        const blob = await proxyDownload(accountIdForApi, bucketName, previewItem.key);
+      if (useProxyTransfers || sseActive) {
+        const blob = useProxyTransfers
+          ? await proxyDownload(accountIdForApi, bucketName, previewItem.key, undefined, sseCustomerKeyBase64)
+          : await (async () => {
+              const presign = await presignObjectRequest(bucketName, {
+                key: previewItem.key,
+                operation: "get_object",
+                expires_in: 900,
+              });
+              const response = await fetch(presign.url, {
+                headers: presign.headers || undefined,
+              });
+              if (!response.ok) {
+                throw new Error("Preview download failed.");
+              }
+              return response.blob();
+            })();
         if (!isMounted) return;
         const url = URL.createObjectURL(blob);
         previewObjectUrlRef.current = url;
@@ -2768,6 +2920,8 @@ export default function BrowserPage({
     hasS3AccountContext,
     presignObjectRequest,
     previewItem,
+    sseActive,
+    sseCustomerKeyBase64,
     useProxyTransfers,
   ]);
 
@@ -3941,10 +4095,10 @@ export default function BrowserPage({
     controller?: AbortController
   ) => {
     if (useProxyTransfers) {
-      await proxyUpload(accountId, bucket, key, file, onProgress, controller?.signal);
+      await proxyUpload(accountId, bucket, key, file, onProgress, controller?.signal, sseCustomerKeyBase64);
       return;
     }
-    const operation: PresignRequest["operation"] = stsAvailable ? "put_object" : "post_object";
+    const operation = resolveSimpleUploadOperation({ stsAvailable, sseActive });
     const presign = await presignObjectRequest(bucket, {
       key,
       operation,
@@ -4039,7 +4193,7 @@ export default function BrowserPage({
       const init = await initiateMultipartUpload(accountId, bucket, {
         key,
         content_type: file.type || undefined,
-      });
+      }, sseCustomerKeyBase64);
       uploadId = init.upload_id;
       let hasError = false;
       const workerCount = Math.min(MULTIPART_CONCURRENCY, partsQueue.length);
@@ -4120,7 +4274,7 @@ export default function BrowserPage({
         setStatusMessage(completionError);
         if (!useProxyTransfers && isLikelyCorsError(err)) {
           setWarningMessage(
-            `Possible CORS or endpoint issue. Ensure bucket CORS allows origin ${window.location.origin} with PUT/GET/HEAD and headers like Content-Type or x-amz-*.`
+            `Direct transfer failed before S3 returned an HTTP response. Possible causes: network reachability, TLS/certificate issue, CORS policy, or endpoint/proxy configuration.`
           );
         }
       }
@@ -4188,12 +4342,12 @@ export default function BrowserPage({
     handleUploadFiles(files);
   };
 
-  const downloadObjectBlob = async (key: string, signal?: AbortSignal) => {
+  async function downloadObjectBlob(key: string, signal?: AbortSignal) {
     if (!bucketName || !hasS3AccountContext) {
       throw new Error("Missing bucket context.");
     }
     if (useProxyTransfers) {
-      return proxyDownload(accountIdForApi, bucketName, key, signal);
+      return proxyDownload(accountIdForApi, bucketName, key, signal, sseCustomerKeyBase64);
     }
     const presign = await presignObjectRequest(bucketName, {
       key,
@@ -4222,9 +4376,9 @@ export default function BrowserPage({
       throw new Error(`Download failed for ${key}${suffix}`);
     }
     return response.blob();
-  };
+  }
 
-  const buildAuthHeaders = () => {
+  const buildAuthHeaders = (sseKeyBase64?: string | null) => {
     const headers: Record<string, string> = {};
     if (typeof window === "undefined") return headers;
     const token = localStorage.getItem("token");
@@ -4252,6 +4406,7 @@ export default function BrowserPage({
         console.warn("Unable to parse stored user payload", err);
       }
     }
+    Object.assign(headers, buildSseCustomerBackendHeaders(sseKeyBase64));
     return headers;
   };
 
@@ -4279,7 +4434,7 @@ export default function BrowserPage({
         params ?? undefined
       );
       const response = await fetch(url, {
-        headers: buildAuthHeaders(),
+        headers: buildAuthHeaders(sseCustomerKeyBase64),
         credentials: "include",
         signal,
       });
@@ -4987,7 +5142,7 @@ export default function BrowserPage({
     try {
       for (const item of files) {
         if (useProxyTransfers) {
-          const blob = await proxyDownload(accountIdForApi, bucketName, item.key);
+          const blob = await proxyDownload(accountIdForApi, bucketName, item.key, undefined, sseCustomerKeyBase64);
           const url = window.URL.createObjectURL(blob);
           const link = document.createElement("a");
           link.href = url;
@@ -4997,16 +5152,28 @@ export default function BrowserPage({
           link.remove();
           window.URL.revokeObjectURL(url);
         } else {
-          const presign = await presignObjectRequest(bucketName, {
-            key: item.key,
-            operation: "get_object",
-            expires_in: 900,
-          });
-          window.open(presign.url, "_blank");
+          if (sseActive) {
+            const blob = await downloadObjectBlob(item.key);
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = item.name || "download";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+          } else {
+            const presign = await presignObjectRequest(bucketName, {
+              key: item.key,
+              operation: "get_object",
+              expires_in: 900,
+            });
+            window.open(presign.url, "_blank");
+          }
         }
       }
     } catch {
-      setStatusMessage(useProxyTransfers ? "Unable to download object." : "Unable to generate download URL.");
+      setStatusMessage(useProxyTransfers || sseActive ? "Unable to download object." : "Unable to generate download URL.");
     }
   };
 
@@ -5718,6 +5885,7 @@ export default function BrowserPage({
       showOperationsModal ||
       showBulkAttributesModal ||
       showBulkRestoreModal ||
+      showSseCustomerModal ||
       showCleanupModal ||
       showPrefixVersions ||
       showObjectVersionsModal ||
@@ -5798,6 +5966,7 @@ export default function BrowserPage({
     showNewFolderModal,
     showBulkAttributesModal,
     showBulkRestoreModal,
+    showSseCustomerModal,
     showCleanupModal,
     confirmDialog,
     copyDialog,
@@ -5812,7 +5981,7 @@ export default function BrowserPage({
     setMetadataError(null);
     try {
       const [meta, tags] = await Promise.all([
-        fetchObjectMetadata(accountIdForApi, bucketName, targetKey),
+        fetchObjectMetadata(accountIdForApi, bucketName, targetKey, null, sseCustomerKeyBase64),
         getObjectTags(accountIdForApi, bucketName, targetKey),
       ]);
       setInspectedMetadata(meta);
@@ -5920,6 +6089,10 @@ export default function BrowserPage({
       if (item?.isDeleted) {
         setWarningMessage("Deleted objects do not have a direct download URL.");
       }
+      return;
+    }
+    if (sseActive) {
+      setWarningMessage("Copy URL is disabled in SSE-C mode: required encryption headers are missing.");
       return;
     }
     try {
@@ -6702,7 +6875,7 @@ export default function BrowserPage({
               <div ref={bucketMenuRef} className="relative flex shrink-0 items-center gap-1">
                 <button
                   type="button"
-                  className={bucketButtonClasses}
+                  className={bucketButtonClassName}
                   onClick={() => setShowBucketMenu((prev) => !prev)}
                   disabled={!hasS3AccountContext}
                   aria-haspopup="listbox"
@@ -7018,6 +7191,21 @@ export default function BrowserPage({
             >
               <RefreshIcon className="h-3.5 w-3.5" />
             </button>
+            {showSseControls && (
+              <button
+                type="button"
+                onClick={openSseCustomerModal}
+                className={`${filterChipClasses} ${
+                  sseActive
+                    ? "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/20 dark:text-emerald-100"
+                    : ""
+                }`}
+                disabled={!bucketName || !hasS3AccountContext || !sseFeatureEnabled}
+                title={sseActive ? "SSE-C enabled for this bucket." : "Configure SSE-C key for this bucket."}
+              >
+                {sseActive ? "SSE-C On" : "SSE-C"}
+              </button>
+            )}
             <button
               type="button"
               onClick={openOperationsModal}
@@ -8328,6 +8516,8 @@ export default function BrowserPage({
           showDeletedObjects={showDeletedObjects}
           allowInspectorPanel={canUseInspectorPanel}
           canPaste={canPaste}
+          copyUrlDisabled={sseActive}
+          copyUrlDisabledReason="Copy URL is disabled in SSE-C mode."
           clipboard={clipboard}
           currentPath={currentPath}
           fileInputRef={fileInputRef}
@@ -8339,21 +8529,21 @@ export default function BrowserPage({
           onOpenCleanupVersions={openCleanupModal}
           onDownloadTarget={handleDownloadTarget}
           onPreviewItem={handlePreviewItem}
-        onCopyUrl={handleCopyUrl}
-        onCopyItems={handleCopyItems}
-        onCutItems={handleCutItems}
-        onOpenBulkAttributes={openBulkAttributesModal}
-        onOpenBulkRestore={openBulkRestoreModal}
-        onOpenObjectVersions={openObjectVersionsModal}
-        onOpenAdvanced={openAdvancedForItem}
-        onDeleteItems={handleDeleteItems}
-        onDownloadFolder={handleDownloadFolder}
-        onDownloadItems={handleDownloadItems}
-        onOpenItem={handleOpenItem}
-        onOpenDetails={openItemDetails}
-        onToggleShowFolders={() => setShowFolderItems((prev) => !prev)}
-        onToggleShowDeleted={() => setShowDeletedObjects((prev) => !prev)}
-      />
+          onCopyUrl={handleCopyUrl}
+          onCopyItems={handleCopyItems}
+          onCutItems={handleCutItems}
+          onOpenBulkAttributes={openBulkAttributesModal}
+          onOpenBulkRestore={openBulkRestoreModal}
+          onOpenObjectVersions={openObjectVersionsModal}
+          onOpenAdvanced={openAdvancedForItem}
+          onDeleteItems={handleDeleteItems}
+          onDownloadFolder={handleDownloadFolder}
+          onDownloadItems={handleDownloadItems}
+          onOpenItem={handleOpenItem}
+          onOpenDetails={openItemDetails}
+          onToggleShowFolders={() => setShowFolderItems((prev) => !prev)}
+          onToggleShowDeleted={() => setShowDeletedObjects((prev) => !prev)}
+        />
       <BrowserPreviewModal
         previewItem={previewItem}
         previewUrl={previewUrl}
@@ -8445,6 +8635,93 @@ export default function BrowserPage({
           </form>
         </Modal>
       )}
+      {showSseCustomerModal && (
+        <Modal title="SSE-C key" onClose={() => setShowSseCustomerModal(false)} maxWidthClass="max-w-lg">
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleActivateSseCustomerKey();
+            }}
+          >
+            <p className="ui-caption text-slate-500 dark:text-slate-400">
+              Enter a base64 key that decodes to exactly 32 bytes. The key is stored in memory only for this browser
+              session and this bucket.
+            </p>
+            <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+              <span>Customer key (base64, 32 bytes)</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type={resolveSseCustomerKeyInputType(sseCustomerKeyVisible)}
+                  value={sseCustomerKeyInput}
+                  onChange={(event) => {
+                    setSseCustomerKeyInput(event.target.value);
+                    if (sseCustomerKeyError) {
+                      setSseCustomerKeyError(null);
+                    }
+                    if (sseCustomerKeyNotice) {
+                      setSseCustomerKeyNotice(null);
+                    }
+                  }}
+                  placeholder="Base64 key"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 ui-body font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  spellCheck={false}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-200 px-3 py-2 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                  onClick={() => setSseCustomerKeyVisible((prev) => !prev)}
+                >
+                  {sseCustomerKeyVisible ? "Masquer" : "Afficher"}
+                </button>
+              </div>
+            </label>
+            {sseCustomerKeyError && (
+              <p className="ui-caption font-semibold text-rose-600 dark:text-rose-300">{sseCustomerKeyError}</p>
+            )}
+            {sseCustomerKeyNotice && (
+              <p className="ui-caption font-semibold text-amber-700 dark:text-amber-200">{sseCustomerKeyNotice}</p>
+            )}
+            {sseActive && (
+              <p className="ui-caption font-semibold text-emerald-700 dark:text-emerald-200">
+                SSE-C is currently enabled for this bucket.
+              </p>
+            )}
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:text-slate-100"
+                onClick={() => setShowSseCustomerModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-emerald-200 px-3 py-1.5 ui-caption font-semibold text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-500/40 dark:text-emerald-200 dark:hover:border-emerald-400 dark:hover:text-emerald-100"
+                onClick={() => void handleGenerateSseCustomerKey()}
+                disabled={!sseCustomerScopeKey}
+              >
+                Générer
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-rose-200 px-3 py-1.5 ui-caption font-semibold text-rose-700 transition hover:border-rose-300 hover:text-rose-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-500/40 dark:text-rose-200 dark:hover:border-rose-400 dark:hover:text-rose-100"
+                onClick={handleClearSseCustomerKey}
+                disabled={!sseActive}
+              >
+                Effacer
+              </button>
+              <button
+                type="submit"
+                className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary/90"
+              >
+                Activer
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
       {showAdvancedModal && inspectedItem && inspectedItem.type === "file" && (
         <ObjectAdvancedModal
           accountId={accountIdForApi}
@@ -8453,6 +8730,7 @@ export default function BrowserPage({
           metadata={inspectedMetadata}
           tags={inspectedTags}
           tagsVersionId={inspectedTagsVersionId}
+          sseCustomerKeyBase64={sseCustomerKeyBase64}
           onClose={() => setShowAdvancedModal(false)}
           onRefresh={handleAdvancedRefresh}
         />

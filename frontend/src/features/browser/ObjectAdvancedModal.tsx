@@ -41,6 +41,7 @@ type ObjectAdvancedModalProps = {
   metadata: ObjectMetadata | null;
   tags: ObjectTag[];
   tagsVersionId?: string | null;
+  sseCustomerKeyBase64?: string | null;
   onClose: () => void;
   onRefresh?: (key: string) => Promise<void> | void;
 };
@@ -116,6 +117,7 @@ export default function ObjectAdvancedModal({
   metadata,
   tags,
   tagsVersionId,
+  sseCustomerKeyBase64,
   onClose,
   onRefresh,
 }: ObjectAdvancedModalProps) {
@@ -146,6 +148,7 @@ export default function ObjectAdvancedModal({
   const [presignUrl, setPresignUrl] = useState("");
   const [presignMethod, setPresignMethod] = useState("");
   const [presignFields, setPresignFields] = useState<PresignedUrl["fields"] | null>(null);
+  const [presignHeaders, setPresignHeaders] = useState<PresignedUrl["headers"] | null>(null);
   const [presignError, setPresignError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionTone, setActionTone] = useState<"success" | "error" | null>(null);
@@ -181,6 +184,7 @@ export default function ObjectAdvancedModal({
     setPresignUrl("");
     setPresignMethod("");
     setPresignFields(null);
+    setPresignHeaders(null);
     setPresignError(null);
     setPresignExpires(formatLocalDateTime(new Date(Date.now() + 60 * 60 * 1000)));
   }, [item.key]);
@@ -444,14 +448,20 @@ export default function ObjectAdvancedModal({
     }
     setSavingPresign(true);
     try {
-      const presigned = await presignObject(accountId, bucketName, {
-        key: item.key,
-        operation: "get_object",
-        expires_in: seconds,
-      });
+      const presigned = await presignObject(
+        accountId,
+        bucketName,
+        {
+          key: item.key,
+          operation: "get_object",
+          expires_in: seconds,
+        },
+        sseCustomerKeyBase64
+      );
       setPresignUrl(presigned.url);
       setPresignMethod(presigned.method);
       setPresignFields(presigned.fields ?? null);
+      setPresignHeaders(presigned.headers ?? null);
       pushStatus("Signed URL generated.", "success");
     } catch {
       setPresignError("Unable to generate signed URL.");
@@ -849,6 +859,11 @@ export default function ObjectAdvancedModal({
           <p className="ui-caption text-slate-500 dark:text-slate-400">
             Generate a temporary signed URL for this object (valid for up to 12 hours).
           </p>
+          {sseCustomerKeyBase64 && (
+            <p className="ui-caption font-semibold text-amber-600 dark:text-amber-200">
+              SSE-C is active: URL alone is insufficient without the required SSE-C headers.
+            </p>
+          )}
           <label className="space-y-1 ui-caption font-semibold text-slate-600 dark:text-slate-300">
             <span>Expires at</span>
             <input
@@ -890,6 +905,14 @@ export default function ObjectAdvancedModal({
                   <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Fields</p>
                   <pre className="overflow-auto rounded-md bg-slate-900/90 p-2 ui-caption text-slate-100">
                     {JSON.stringify(presignFields, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {presignHeaders && Object.keys(presignHeaders).length > 0 && (
+                <div className="space-y-1">
+                  <p className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Headers</p>
+                  <pre className="overflow-auto rounded-md bg-slate-900/90 p-2 ui-caption text-slate-100">
+                    {JSON.stringify(presignHeaders, null, 2)}
                   </pre>
                 </div>
               )}

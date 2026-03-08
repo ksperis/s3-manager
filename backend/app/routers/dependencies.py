@@ -1,5 +1,8 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import base64
+import binascii
+import hashlib
 from app.utils.time import utcnow
 from dataclasses import dataclass, field
 import logging
@@ -34,6 +37,7 @@ from app.services.portal_service import get_portal_service
 from app.services.audit_service import AuditService, get_audit_service as build_audit_service
 from app.services.api_token_service import ApiTokenService
 from app.services.session_service import SessionService
+from app.models.browser import SseCustomerContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.rgw import has_supervision_credentials
@@ -151,6 +155,41 @@ def require_internal_cron_token(x_internal_token: Optional[str] = Header(None, a
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Internal token is not configured")
     if not x_internal_token or x_internal_token != expected:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal token")
+
+
+def get_optional_sse_customer_context(
+    sse_customer_key: Optional[str] = Header(default=None, alias="X-S3-SSE-C-Key"),
+    sse_customer_algorithm: Optional[str] = Header(default=None, alias="X-S3-SSE-C-Algorithm"),
+) -> Optional[SseCustomerContext]:
+    key_raw = sse_customer_key.strip() if isinstance(sse_customer_key, str) else ""
+    algo_raw = sse_customer_algorithm.strip() if isinstance(sse_customer_algorithm, str) else ""
+    if not key_raw:
+        if algo_raw:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="X-S3-SSE-C-Algorithm requires X-S3-SSE-C-Key",
+            )
+        return None
+    if algo_raw and algo_raw != "AES256":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-S3-SSE-C-Algorithm must be AES256",
+        )
+    try:
+        key_bytes = base64.b64decode(key_raw, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-S3-SSE-C-Key must be valid base64",
+        ) from exc
+    if len(key_bytes) != 32:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-S3-SSE-C-Key must decode to exactly 32 bytes",
+        )
+    normalized_key = base64.b64encode(key_bytes).decode("ascii")
+    key_md5 = base64.b64encode(hashlib.md5(key_bytes).digest()).decode("ascii")
+    return SseCustomerContext(algorithm="AES256", key=normalized_key, key_md5=key_md5)
 
 
 def _parse_account_selector(account_ref: Optional[str]) -> tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:

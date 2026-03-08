@@ -36,13 +36,20 @@ from app.models.browser import (
     PresignRequest,
     PresignedUrl,
     PaginatedBrowserBucketsResponse,
+    SseCustomerContext,
     StsStatus,
 )
 from app.services.audit_service import AuditService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.app_settings_service import load_app_settings
 from app.models.app_settings import BrowserSettings
-from app.routers.dependencies import get_account_context, get_audit_logger, get_current_account_admin
+from app.routers.dependencies import (
+    get_account_context,
+    get_audit_logger,
+    get_current_account_admin,
+    get_optional_sse_customer_context,
+)
+from app.utils.storage_endpoint_features import resolve_feature_flags
 
 router = APIRouter(prefix="/manager/browser", tags=["manager-browser"])
 
@@ -58,6 +65,17 @@ class ProxyUploadResponse(BaseModel):
 
 class EnsureCorsPayload(BaseModel):
     origin: str
+
+
+def _require_sse_feature(account: S3Account) -> None:
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint is None:
+        return
+    if not resolve_feature_flags(endpoint).sse_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Server-side encryption is disabled for this endpoint",
+        )
 
 
 @router.get("/settings", response_model=BrowserSettings)
@@ -227,12 +245,15 @@ def head_object(
     version_id: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
+    sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: User = Depends(get_current_account_admin),
 ) -> ObjectMetadata:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    if sse_customer:
+        _require_sse_feature(account)
     try:
-        return service.head_object(bucket_name, account, key, version_id=version_id)
+        return service.head_object(bucket_name, account, key, version_id=version_id, sse_customer=sse_customer)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -456,12 +477,15 @@ def presign_object(
     payload: PresignRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
+    sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: User = Depends(get_current_account_admin),
 ) -> PresignedUrl:
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    if sse_customer:
+        _require_sse_feature(account)
     try:
-        return service.presign(bucket_name, account, payload)
+        return service.presign(bucket_name, account, payload, sse_customer=sse_customer)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -473,15 +497,18 @@ def proxy_upload(
     file: UploadFile = File(...),
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
+    sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> ProxyUploadResponse:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    if sse_customer:
+        _require_sse_feature(account)
     if not load_app_settings().browser.allow_proxy_transfers:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Proxy transfers are disabled")
     try:
-        service.proxy_upload(bucket_name, account, key, file.file, file.content_type)
+        service.proxy_upload(bucket_name, account, key, file.file, file.content_type, sse_customer=sse_customer)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -502,15 +529,18 @@ def proxy_download(
     key: str,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
+    sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ):
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    if sse_customer:
+        _require_sse_feature(account)
     if not load_app_settings().browser.allow_proxy_transfers:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Proxy transfers are disabled")
     try:
-        resp = service.proxy_download(bucket_name, account, key)
+        resp = service.proxy_download(bucket_name, account, key, sse_customer=sse_customer)
         body = resp.get("Body")
         if not body:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Empty response body")
@@ -662,13 +692,16 @@ def initiate_multipart_upload(
     payload: MultipartUploadInitRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
+    sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> MultipartUploadInitResponse:
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
+    if sse_customer:
+        _require_sse_feature(account)
     try:
-        result = service.initiate_multipart_upload(bucket_name, account, payload)
+        result = service.initiate_multipart_upload(bucket_name, account, payload, sse_customer=sse_customer)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -740,13 +773,16 @@ def presign_part(
     payload: PresignPartRequest,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
+    sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
     _: User = Depends(get_current_account_admin),
 ) -> PresignPartResponse:
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     payload.upload_id = upload_id
+    if sse_customer:
+        _require_sse_feature(account)
     try:
-        return service.presign_part(bucket_name, account, payload)
+        return service.presign_part(bucket_name, account, payload, sse_customer=sse_customer)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

@@ -40,6 +40,8 @@ type BrowserContextMenuProps = {
   showDeletedObjects: boolean;
   allowInspectorPanel?: boolean;
   canPaste: boolean;
+  copyUrlDisabled?: boolean;
+  copyUrlDisabledReason?: string;
   clipboard: ClipboardState | null;
   currentPath: string;
   fileInputRef: RefObject<HTMLInputElement>;
@@ -77,6 +79,8 @@ export default function BrowserContextMenu({
   showDeletedObjects,
   allowInspectorPanel = true,
   canPaste,
+  copyUrlDisabled = false,
+  copyUrlDisabledReason,
   clipboard,
   currentPath,
   fileInputRef,
@@ -306,12 +310,17 @@ export default function BrowserContextMenu({
           {contextItem.type === "file" && (
             <button
               type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext || contextItemDeleted ? contextMenuItemDisabledClasses : ""}`}
+              className={`${contextMenuItemClasses} ${
+                !bucketName || !hasS3AccountContext || contextItemDeleted || copyUrlDisabled
+                  ? contextMenuItemDisabledClasses
+                  : ""
+              }`}
               onClick={() => {
                 onClose();
                 onCopyUrl(contextItem);
               }}
-              disabled={!bucketName || !hasS3AccountContext || contextItemDeleted}
+              disabled={!bucketName || !hasS3AccountContext || contextItemDeleted || copyUrlDisabled}
+              title={copyUrlDisabled ? copyUrlDisabledReason : undefined}
             >
               <LinkIcon className="h-3.5 w-3.5" />
               Copy URL
@@ -443,12 +452,15 @@ export default function BrowserContextMenu({
           {contextSelectionInfo.canCopyUrl && contextSelectionInfo.primary && (
             <button
               type="button"
-              className={`${contextMenuItemClasses} ${!bucketName || !hasS3AccountContext ? contextMenuItemDisabledClasses : ""}`}
+              className={`${contextMenuItemClasses} ${
+                !bucketName || !hasS3AccountContext || copyUrlDisabled ? contextMenuItemDisabledClasses : ""
+              }`}
               onClick={() => {
                 onClose();
                 onCopyUrl(contextSelectionInfo.primary);
               }}
-              disabled={!bucketName || !hasS3AccountContext}
+              disabled={!bucketName || !hasS3AccountContext || copyUrlDisabled}
+              title={copyUrlDisabled ? copyUrlDisabledReason : undefined}
             >
               <LinkIcon className="h-3.5 w-3.5" />
               Copy URL

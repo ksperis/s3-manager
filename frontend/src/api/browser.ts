@@ -165,6 +165,85 @@ export type PresignedUrl = {
   headers?: Record<string, string>;
 };
 
+export const SSE_CUSTOMER_ALGORITHM = "AES256";
+
+export type SseCustomerKeyValidationResult =
+  | { valid: true; normalizedKey: string }
+  | { valid: false; error: string };
+
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+const decodeBase64 = (value: string): Uint8Array | null => {
+  try {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let idx = 0; idx < binary.length; idx += 1) {
+      bytes[idx] = binary.charCodeAt(idx);
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+};
+
+const encodeBase64 = (value: Uint8Array): string => {
+  let binary = "";
+  value.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+};
+
+export function generateSseCustomerKeyBase64(): string {
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error("Secure random generator is unavailable in this browser.");
+  }
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  const keyBase64 = encodeBase64(bytes);
+  const validation = validateSseCustomerKeyBase64(keyBase64);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+  return validation.normalizedKey;
+}
+
+export function validateSseCustomerKeyBase64(value: string): SseCustomerKeyValidationResult {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { valid: false, error: "SSE-C key is required." };
+  }
+  if (!BASE64_PATTERN.test(trimmed)) {
+    return { valid: false, error: "SSE-C key must be valid base64." };
+  }
+  const bytes = decodeBase64(trimmed);
+  if (!bytes) {
+    return { valid: false, error: "SSE-C key must be valid base64." };
+  }
+  const normalized = encodeBase64(bytes);
+  if (normalized !== trimmed) {
+    return { valid: false, error: "SSE-C key must be strict base64." };
+  }
+  if (bytes.length !== 32) {
+    return { valid: false, error: "SSE-C key must decode to exactly 32 bytes." };
+  }
+  return { valid: true, normalizedKey: normalized };
+}
+
+export function buildSseCustomerBackendHeaders(sseCustomerKeyBase64?: string | null): Record<string, string> {
+  if (!sseCustomerKeyBase64) {
+    return {};
+  }
+  const validation = validateSseCustomerKeyBase64(sseCustomerKeyBase64);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+  return {
+    "X-S3-SSE-C-Key": validation.normalizedKey,
+    "X-S3-SSE-C-Algorithm": SSE_CUSTOMER_ALGORITHM,
+  };
+}
+
 export type MultipartUploadInitRequest = {
   key: string;
   content_type?: string | null;
@@ -448,12 +527,16 @@ export async function fetchObjectMetadata(
   accountId: S3AccountSelector,
   bucketName: string,
   key: string,
-  versionId?: string | null
+  versionId?: string | null,
+  sseCustomerKeyBase64?: string | null
 ): Promise<ObjectMetadata> {
   const params = withS3AccountParam({ key, version_id: versionId ?? undefined }, accountId);
   const { data } = await client.get<ObjectMetadata>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/object-meta`,
-    { params }
+    {
+      params,
+      headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+    }
   );
   return data;
 }
@@ -582,12 +665,16 @@ export async function restoreObject(
 export async function presignObject(
   accountId: S3AccountSelector,
   bucketName: string,
-  payload: PresignRequest
+  payload: PresignRequest,
+  sseCustomerKeyBase64?: string | null
 ): Promise<PresignedUrl> {
   const { data } = await client.post<PresignedUrl>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/presign`,
     payload,
-    { params: withS3AccountParam(undefined, accountId) }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+    }
   );
   return data;
 }
@@ -642,13 +729,15 @@ export async function proxyUpload(
   key: string,
   file: File,
   onUploadProgress?: (event: ProgressEvent) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  sseCustomerKeyBase64?: string | null
 ): Promise<void> {
   const form = new FormData();
   form.append("key", key);
   form.append("file", file);
   await client.post(`/browser/buckets/${encodeURIComponent(bucketName)}/proxy-upload`, form, {
     params: withS3AccountParam(undefined, accountId),
+    headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
     onUploadProgress,
     signal,
   });
@@ -658,10 +747,12 @@ export async function proxyDownload(
   accountId: S3AccountSelector,
   bucketName: string,
   key: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  sseCustomerKeyBase64?: string | null
 ): Promise<Blob> {
   const { data } = await client.get(`/browser/buckets/${encodeURIComponent(bucketName)}/proxy-download`, {
     params: withS3AccountParam({ key }, accountId),
+    headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
     responseType: "blob",
     signal,
   });
@@ -671,12 +762,16 @@ export async function proxyDownload(
 export async function initiateMultipartUpload(
   accountId: S3AccountSelector,
   bucketName: string,
-  payload: MultipartUploadInitRequest
+  payload: MultipartUploadInitRequest,
+  sseCustomerKeyBase64?: string | null
 ): Promise<MultipartUploadInitResponse> {
   const { data } = await client.post<MultipartUploadInitResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/initiate`,
     payload,
-    { params: withS3AccountParam(undefined, accountId) }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+    }
   );
   return data;
 }
@@ -728,12 +823,16 @@ export async function presignPart(
   accountId: S3AccountSelector,
   bucketName: string,
   uploadId: string,
-  payload: PresignPartRequest
+  payload: PresignPartRequest,
+  sseCustomerKeyBase64?: string | null
 ): Promise<PresignPartResponse> {
   const { data } = await client.post<PresignPartResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/presign`,
     payload,
-    { params: withS3AccountParam(undefined, accountId) }
+    {
+      params: withS3AccountParam(undefined, accountId),
+      headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
+    }
   );
   return data;
 }
