@@ -3,6 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 export type UiTone = "neutral" | "info" | "success" | "warning" | "danger" | "primary";
+export type UiFeatureStateTone = "neutral" | "configured" | "unsaved";
+export type UiFeatureCardState = UiFeatureStateTone | "disabled";
 
 export function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -54,4 +56,27 @@ export const uiToneBannerClasses: Record<UiTone, string> = {
   danger: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100",
   primary:
     "border-primary-200 bg-primary-50 text-primary-700 dark:border-primary-900/40 dark:bg-primary-950/60 dark:text-primary-100",
+};
+
+export const uiFeatureStateHighlightFieldClasses: Record<UiFeatureStateTone, string> = {
+  neutral: "",
+  configured:
+    "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/15 dark:ring-emerald-500/25",
+  unsaved:
+    "border-amber-400 bg-amber-50 ring-2 ring-amber-300/70 dark:border-amber-400/70 dark:bg-amber-500/20 dark:ring-amber-500/25",
+};
+
+export const uiFeatureStateHighlightLabelClasses: Record<UiFeatureStateTone, string> = {
+  neutral: "",
+  configured: "text-emerald-700 dark:text-emerald-200",
+  unsaved: "text-amber-700 dark:text-amber-300",
+};
+
+export const uiFeatureCardStateClasses: Record<UiFeatureCardState, string> = {
+  neutral: "",
+  configured:
+    "border-emerald-400 bg-emerald-50/20 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/10 dark:ring-emerald-500/25",
+  unsaved:
+    "border-amber-400 bg-amber-50/20 ring-2 ring-amber-300/70 dark:border-amber-400/70 dark:bg-amber-500/15 dark:ring-amber-500/25",
+  disabled: "opacity-60",
 };

@@ -23,7 +23,7 @@ export default function ListSectionCard({
   className,
 }: ListSectionCardProps) {
   return (
-    <div className={cx("rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900", className)}>
+    <div className={cx("ui-surface-card", className)}>
       <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>

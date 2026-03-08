@@ -165,7 +165,7 @@ export default function MetricsTrafficOverview({
   const subtitle = description ?? `Reading RGW logs (${helperText}) for the selected window.`;
 
   return (
-    <section className="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className="space-y-5 ui-surface-card p-5">
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="ui-caption font-semibold uppercase tracking-wide text-primary">RGW traffic</p>

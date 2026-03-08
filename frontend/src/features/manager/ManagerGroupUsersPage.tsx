@@ -187,7 +187,7 @@ export default function ManagerGroupUsersPage() {
 
       <form
         onSubmit={handleAdd}
-        className="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+        className="space-y-3 ui-surface-card p-4"
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <select
@@ -215,7 +215,7 @@ export default function ManagerGroupUsersPage() {
         </p>
       </form>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="ui-surface-card">
         <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
           <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Users</p>
           <p className="ui-caption text-slate-500 dark:text-slate-400">Members of this group.</p>

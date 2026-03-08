@@ -243,7 +243,7 @@ export default function EndpointStatusPage() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="ui-surface-card">
         <div className="border-b border-slate-100 px-6 py-4 dark:border-slate-800">
           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Endpoint Latency</p>
           <p className="ui-caption text-slate-500 dark:text-slate-400">
@@ -316,7 +316,7 @@ export default function EndpointStatusPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="ui-surface-card">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Endpoint Timelines</p>

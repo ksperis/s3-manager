@@ -277,7 +277,7 @@ export default function PortalSettingsPage() {
       <form className="space-y-4" onSubmit={handleSave}>
         {error && <PageBanner tone="error">{error}</PageBanner>}
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="ui-surface-card p-5">
           <PortalSettingsSection title="UI" description="Portal UI switches and per-account override permissions." layout="grid">
             <PortalSettingsItem
               title="Portal key"
@@ -357,7 +357,7 @@ export default function PortalSettingsPage() {
             />
           </PortalSettingsSection>
         </div>
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="ui-surface-card p-5">
           <PortalSettingsSection
             title="IAM POLICIES"
             description="Action lists applied to portal IAM groups and bucket access."
@@ -481,7 +481,7 @@ export default function PortalSettingsPage() {
             </PortalSettingsItem>
           </PortalSettingsSection>
         </div>
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="ui-surface-card p-5">
           <PortalSettingsSection
             title="BUCKET DEFAULTS"
             description="Defaults applied when a bucket is created from the portal."

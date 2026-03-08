@@ -294,7 +294,7 @@ export default function CephAdminAccountEditModal({
   const overviewQuota = detail?.quota ?? null;
 
   const overviewTab = (
-    <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className="space-y-4 ui-surface-card p-5">
       <header className="space-y-1">
         <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Overview</p>
         <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Account {accountId}</h3>
@@ -358,7 +358,7 @@ export default function CephAdminAccountEditModal({
   );
 
   const configTab = (
-    <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className="space-y-4 ui-surface-card p-5">
       <header className="space-y-1">
         <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Configuration</p>
         <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Ceph Admin API settings</h3>
@@ -561,7 +561,7 @@ export default function CephAdminAccountEditModal({
   );
 
   const metricsTab = (
-    <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className="space-y-4 ui-surface-card p-5">
       <header className="space-y-1">
         <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Metrics</p>
         <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">RGW usage</h3>

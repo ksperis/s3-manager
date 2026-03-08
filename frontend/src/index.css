@@ -88,7 +88,7 @@
 
 body {
   font-family: "Inter", system-ui, -apple-system, sans-serif;
-  @apply bg-slate-50 text-sm text-slate-900 antialiased dark:bg-slate-900 dark:text-slate-100;
+  @apply bg-slate-50 text-sm text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
 }
 
 @layer base {
@@ -135,11 +135,11 @@ body {
   }
 
   .ui-surface-card {
-    @apply rounded-xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70;
+    @apply rounded-xl border border-slate-300/90 bg-white shadow-sm dark:border-slate-600/70 dark:bg-slate-800/80;
   }
 
   .ui-surface-muted {
-    @apply rounded-xl border border-slate-200/70 bg-slate-50/80 shadow-sm dark:border-slate-800 dark:bg-slate-900/40;
+    @apply rounded-xl border border-slate-300/80 bg-slate-100/80 shadow-sm dark:border-slate-600/60 dark:bg-slate-800/55;
   }
 
   .ui-control {

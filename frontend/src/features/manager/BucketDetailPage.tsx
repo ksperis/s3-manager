@@ -109,16 +109,35 @@ import { isAdminLikeRole } from "../../utils/workspaces";
 import { useS3AccountContext } from "./S3AccountContext";
 import TrafficAnalytics from "./TrafficAnalytics";
 import PropertySummaryChip, { PropertySummaryTone } from "../../components/PropertySummaryChip";
+import { PortalSettingsSwitch } from "../../components/PortalSettingsLayout";
 import { useCephAdminEndpoint } from "../cephAdmin/CephAdminEndpointContext";
 import {
   buildReplicationConfigurationFromGraphical,
   containsUnsupportedReplicationZone,
   createEmptyGraphicalReplicationRule,
   GraphicalReplicationRule,
+  isReplicationConfigurationConfigured,
+  normalizeReplicationConfiguration,
   parseReplicationConfigurationForGraphical,
   validateGraphicalReplication,
   validateJsonReplicationConfiguration,
 } from "./bucketReplication";
+import {
+  BucketFeatureCard,
+  BucketFeatureJsonExample,
+  BucketFeatureModeToggle,
+  jsonTextSignature,
+  isLifecycleSimpleDraftEmpty,
+  normalizeAclDraft,
+  normalizeAccessLoggingDraft,
+  normalizeBucketTagsDraft,
+  normalizeNotificationConfiguration,
+  normalizePublicAccessDraft,
+  normalizeQuotaDraft,
+  normalizeReplicationGraphicalDraft,
+  resolveFeatureVisualState,
+  stableBucketJsonSignature,
+} from "./bucketDetail";
 
 function getUserRole(): string | null {
   if (typeof window === "undefined") return null;
@@ -184,16 +203,7 @@ type SimpleLifecycleRule = {
   status: "Enabled" | "Disabled";
 };
 
-type FeatureState = "enabled" | "disabled" | "unknown";
-
-const bucketCardClass =
-  "rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900";
-
-const featureStateChipClasses: Record<FeatureState, string> = {
-  enabled: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100",
-  disabled: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-100",
-  unknown: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
-};
+const bucketCardClass = "ui-surface-card px-4 py-3";
 
 const defaultPublicAccessBlock: BucketPublicAccessBlock = {
   block_public_acls: false,
@@ -231,6 +241,51 @@ const isPublicAccessFullyEnabled = (config?: BucketPublicAccessBlock | null) =>
   Boolean(config) && publicAccessKeys.every((key) => (config as Record<string, boolean | null | undefined>)[key] === true);
 
 const defaultNotificationTemplate = '{\n  "TopicConfigurations": []\n}';
+const defaultCorsExample = `[
+  {
+    "AllowedMethods": ["GET", "PUT"],
+    "AllowedOrigins": ["https://app.example.com"],
+    "AllowedHeaders": ["*"]
+  }
+]`;
+const defaultEncryptionExample = `[
+  {
+    "ApplyServerSideEncryptionByDefault": {
+      "SSEAlgorithm": "AES256"
+    }
+  }
+]`;
+const defaultLifecycleJsonExample = `[
+  {
+    "ID": "expire-logs",
+    "Status": "Enabled",
+    "Filter": { "Prefix": "logs/" },
+    "Expiration": { "Days": 30 }
+  }
+]`;
+const defaultReplicationJsonExample = `{
+  "Role": "arn:aws:iam::123456789012:role/replication-role",
+  "Rules": [
+    {
+      "ID": "rule-1",
+      "Status": "Enabled",
+      "Priority": 1,
+      "Filter": { "Prefix": "logs/" },
+      "Destination": { "Bucket": "arn:aws:s3:::target-bucket" },
+      "DeleteMarkerReplication": { "Status": "Disabled" }
+    }
+  ]
+}`;
+const defaultWebsiteRoutingRulesExample = `[
+  {
+    "Condition": { "KeyPrefixEquals": "docs/" },
+    "Redirect": { "ReplaceKeyPrefixWith": "documents/" }
+  },
+  {
+    "Condition": { "HttpErrorCodeReturnedEquals": "404" },
+    "Redirect": { "ReplaceKeyWith": "error.html" }
+  }
+]`;
 
 const bucketAclOptions = [
   { value: "private", label: "Private (bucket owner full control)" },
@@ -281,6 +336,7 @@ export default function BucketDetailPage({
   const [propsError, setPropsError] = useState<string | null>(null);
   const [propsLoading, setPropsLoading] = useState(false);
   const [updatingVersioning, setUpdatingVersioning] = useState(false);
+  const [versioningDraftEnabled, setVersioningDraftEnabled] = useState(false);
   const [policy, setPolicy] = useState<BucketPolicy | null>(null);
   const [policyText, setPolicyText] = useState("");
   const [policyError, setPolicyError] = useState<string | null>(null);
@@ -334,6 +390,9 @@ export default function BucketDetailPage({
   const [savingWebsite, setSavingWebsite] = useState(false);
   const [clearingWebsite, setClearingWebsite] = useState(false);
   const [showWebsiteRulesExample, setShowWebsiteRulesExample] = useState(false);
+  const [showEncryptionExample, setShowEncryptionExample] = useState(false);
+  const [showLifecycleJsonExample, setShowLifecycleJsonExample] = useState(false);
+  const [showReplicationExample, setShowReplicationExample] = useState(false);
   const [bucketAcl, setBucketAcl] = useState<BucketAcl | null>(null);
   const [bucketAclError, setBucketAclError] = useState<string | null>(null);
   const [bucketAclLoading, setBucketAclLoading] = useState(false);
@@ -390,6 +449,9 @@ export default function BucketDetailPage({
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
   const [showPolicyExample, setShowPolicyExample] = useState(false);
   const [showCorsExample, setShowCorsExample] = useState(false);
+  const [publicAccessSnapshot, setPublicAccessSnapshot] = useState<BucketPublicAccessBlock>(defaultPublicAccessBlock);
+  const [notificationConfigSnapshot, setNotificationConfigSnapshot] = useState<Record<string, unknown>>({});
+  const [bucketTagsSnapshot, setBucketTagsSnapshot] = useState<BucketTag[]>([]);
   const [quotaSizeGb, setQuotaSizeGb] = useState<string>("");
   const [quotaSizeUnit, setQuotaSizeUnit] = useState<"MiB" | "GiB" | "TiB">("GiB");
   const [quotaObjects, setQuotaObjects] = useState<string>("");
@@ -482,16 +544,16 @@ export default function BucketDetailPage({
     (objectLockConfig?.enabled ?? null) === true || (properties?.object_lock_enabled ?? null) === true;
   const objectLockActive = (objectLockEnabled ?? null) === true || objectLockPersistentlyEnabled;
   const versioningStatusRaw = (properties?.versioning_status ?? "").trim();
-  const versioningIsEnabled = versioningStatusRaw.toLowerCase() === "enabled";
-  const versioningHasExplicitStatus = versioningStatusRaw.length > 0 && versioningStatusRaw.toLowerCase() !== "unknown";
-  const versioningStatusLabel = versioningIsEnabled
-    ? "Enabled"
-    : versioningHasExplicitStatus
-      ? versioningStatusRaw
-      : "Disabled";
-  const versioningChipState: FeatureState = versioningIsEnabled ? "enabled" : "disabled";
-  const objectLockStatusLabel = objectLockPersistentlyEnabled ? "Enabled" : "Disabled";
-  const objectLockChipState: FeatureState = objectLockPersistentlyEnabled ? "enabled" : "disabled";
+  const versioningStatusNormalized = versioningStatusRaw.toLowerCase();
+  const versioningIsEnabled = versioningStatusNormalized === "enabled";
+  const versioningIsSuspended = versioningStatusNormalized === "suspended";
+  const versioningDisableBlocked = objectLockActive && versioningIsEnabled;
+  const objectLockFormId = "bucket-object-lock-form";
+  const quotaFormId = "bucket-quota-form";
+
+  useEffect(() => {
+    setVersioningDraftEnabled(versioningIsEnabled);
+  }, [versioningIsEnabled]);
 
   useEffect(() => {
     if (!bucket || !quotaFeatureEnabled) {
@@ -782,6 +844,7 @@ export default function BucketDetailPage({
   const loadPublicAccessBlock = useCallback(async () => {
     if (!bucketName || !hasContext) {
       setPublicAccessBlock({ ...defaultPublicAccessBlock });
+      setPublicAccessSnapshot({ ...defaultPublicAccessBlock });
       setPublicAccessError(null);
       setPublicAccessStatus(null);
       return;
@@ -802,12 +865,20 @@ export default function BucketDetailPage({
         block_public_policy: Boolean(data.block_public_policy),
         restrict_public_buckets: Boolean(data.restrict_public_buckets),
       });
+      setPublicAccessSnapshot({
+        ...defaultPublicAccessBlock,
+        block_public_acls: Boolean(data.block_public_acls),
+        ignore_public_acls: Boolean(data.ignore_public_acls),
+        block_public_policy: Boolean(data.block_public_policy),
+        restrict_public_buckets: Boolean(data.restrict_public_buckets),
+      });
     } catch (err) {
       const message =
         (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
         "Unable to load public access block settings.";
       setPublicAccessError(message);
       setPublicAccessBlock({ ...defaultPublicAccessBlock });
+      setPublicAccessSnapshot({ ...defaultPublicAccessBlock });
     } finally {
       setPublicAccessLoading(false);
     }
@@ -816,6 +887,7 @@ export default function BucketDetailPage({
   const loadNotifications = useCallback(async () => {
     if (!bucketName || !hasContext) {
       setNotificationText(defaultNotificationTemplate);
+      setNotificationConfigSnapshot({});
       return;
     }
     setNotificationsLoading(true);
@@ -827,11 +899,14 @@ export default function BucketDetailPage({
           ? await getCephAdminBucketNotifications(endpointId, bucketName)
           : { configuration: {} }
         : await getBucketNotifications(accountId, bucketName);
-      const config = data.configuration ?? {};
-      const hasConfig = Object.keys(config).length > 0;
-      setNotificationText(hasConfig ? JSON.stringify(config, null, 2) : defaultNotificationTemplate);
+      const rawConfig = data.configuration ?? {};
+      const normalizedConfig = normalizeNotificationConfiguration(rawConfig);
+      const hasConfig = Object.keys(normalizedConfig).length > 0;
+      setNotificationText(hasConfig ? JSON.stringify(normalizedConfig, null, 2) : defaultNotificationTemplate);
+      setNotificationConfigSnapshot(normalizedConfig);
     } catch (err) {
       setNotificationText(defaultNotificationTemplate);
+      setNotificationConfigSnapshot({});
       setNotificationsError("Unable to load bucket notifications.");
     } finally {
       setNotificationsLoading(false);
@@ -911,7 +986,7 @@ export default function BucketDetailPage({
       const rawConfiguration = data.configuration;
       const configuration =
         rawConfiguration && typeof rawConfiguration === "object" && !Array.isArray(rawConfiguration)
-          ? (rawConfiguration as Record<string, unknown>)
+          ? normalizeReplicationConfiguration(rawConfiguration as Record<string, unknown>)
           : {};
       setReplicationConfig({ configuration });
       setReplicationText(Object.keys(configuration).length > 0 ? JSON.stringify(configuration, null, 2) : "{}");
@@ -967,6 +1042,7 @@ export default function BucketDetailPage({
   const loadBucketTags = useCallback(async () => {
     if (!bucketName || !hasContext) {
       setBucketTags([]);
+      setBucketTagsSnapshot([]);
       setBucketTagsError(null);
       setBucketTagsStatus(null);
       return;
@@ -987,12 +1063,14 @@ export default function BucketDetailPage({
         }))
         .filter((tag) => tag.key.length > 0);
       setBucketTags(normalized);
+      setBucketTagsSnapshot(normalized);
     } catch (err) {
       const message =
         (axios.isAxiosError(err) && ((err.response?.data as { detail?: string })?.detail || err.message)) ||
         "Unable to load bucket tags.";
       setBucketTagsError(message);
       setBucketTags([]);
+      setBucketTagsSnapshot([]);
     } finally {
       setBucketTagsLoading(false);
     }
@@ -1378,7 +1456,7 @@ export default function BucketDetailPage({
       websiteRoutingRulesList.length > 0
   );
   const replicationConfiguration = replicationConfig.configuration ?? {};
-  const replicationConfigured = Object.keys(replicationConfiguration).length > 0;
+  const replicationConfigured = isReplicationConfigurationConfigured(replicationConfiguration);
   const replicationBusy = replicationLoading || savingReplication || clearingReplication;
   const publicAccessBlockConfig = properties?.public_access_block;
   const publicAccessBlockEnabled = isPublicAccessFullyEnabled(publicAccessBlockConfig);
@@ -1386,6 +1464,182 @@ export default function BucketDetailPage({
     Boolean(publicAccessBlockConfig) &&
     !publicAccessBlockEnabled &&
     publicAccessKeys.some((key) => (publicAccessBlockConfig as Record<string, boolean | null | undefined>)[key] === true);
+  const policySnapshotSignature = stableBucketJsonSignature(policy?.policy ?? {});
+  const policyDraftSignature = jsonTextSignature(policyText, policy?.policy ?? {});
+  const policyDirty = policyDraftSignature.signature !== policySnapshotSignature;
+  const corsSnapshotSignature = stableBucketJsonSignature(cors?.rules ?? []);
+  const corsDraftSignature = jsonTextSignature(corsText, cors?.rules ?? []);
+  const corsDirty = corsDraftSignature.signature !== corsSnapshotSignature;
+  const encryptionSnapshotSignature = stableBucketJsonSignature(encryption?.rules ?? []);
+  const encryptionDraftSignature = jsonTextSignature(encryptionText, encryption?.rules ?? []);
+  const encryptionDirty = encryptionDraftSignature.signature !== encryptionSnapshotSignature;
+  const normalizedNotificationsSnapshot = normalizeNotificationConfiguration(notificationConfigSnapshot);
+  const notificationsSnapshotSignature = stableBucketJsonSignature(normalizedNotificationsSnapshot);
+  const notificationsDraftSignature = jsonTextSignature(
+    notificationText,
+    normalizedNotificationsSnapshot,
+    normalizeNotificationConfiguration
+  );
+  const notificationsDirty = notificationsDraftSignature.signature !== notificationsSnapshotSignature;
+  const notificationsConfigured = Object.keys(normalizedNotificationsSnapshot).length > 0;
+  const websiteRoutingDraftSignature = jsonTextSignature(
+    websiteRoutingRules,
+    Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : []
+  );
+  const websiteDraftSignature = stableBucketJsonSignature({
+    mode: websiteMode,
+    index_document: websiteIndexDocument.trim(),
+    error_document: websiteErrorDocument.trim(),
+    redirect_host: websiteRedirectHost.trim(),
+    redirect_protocol: websiteRedirectProtocol.trim(),
+    routing_rules:
+      websiteMode === "hosting" ? websiteRoutingDraftSignature.signature : stableBucketJsonSignature([] as Record<string, unknown>[]),
+  });
+  const websiteSnapshotSignature = stableBucketJsonSignature({
+    mode: (websiteConfig?.redirect_all_requests_to?.host_name ?? "").trim() ? "redirect" : "hosting",
+    index_document: (websiteConfig?.index_document ?? "").trim(),
+    error_document: (websiteConfig?.error_document ?? "").trim(),
+    redirect_host: (websiteConfig?.redirect_all_requests_to?.host_name ?? "").trim(),
+    redirect_protocol: (websiteConfig?.redirect_all_requests_to?.protocol ?? "").trim(),
+    routing_rules: stableBucketJsonSignature(Array.isArray(websiteConfig?.routing_rules) ? websiteConfig?.routing_rules : []),
+  });
+  const websiteDirty = websiteDraftSignature !== websiteSnapshotSignature;
+  const accessLoggingDraftSignature = stableBucketJsonSignature(
+    normalizeAccessLoggingDraft({
+      enabled: accessLoggingEnabled,
+      target_bucket: accessLoggingTargetBucket,
+      target_prefix: accessLoggingTargetPrefix,
+    })
+  );
+  const accessLoggingSnapshotSignature = stableBucketJsonSignature(normalizeAccessLoggingDraft(accessLoggingConfig));
+  const accessLoggingDirty = accessLoggingDraftSignature !== accessLoggingSnapshotSignature;
+  const replicationGraphicalSnapshot = parseReplicationConfigurationForGraphical(replicationConfiguration);
+  const replicationJsonDraftSignature = jsonTextSignature(replicationText, replicationConfiguration);
+  const replicationGraphicalDraftSignature = stableBucketJsonSignature(
+    normalizeReplicationGraphicalDraft(replicationRole, replicationRules)
+  );
+  const replicationGraphicalSnapshotSignature = stableBucketJsonSignature(
+    normalizeReplicationGraphicalDraft(
+      replicationGraphicalSnapshot.role,
+      replicationGraphicalSnapshot.rules
+    )
+  );
+  const replicationDirty =
+    replicationMode === "json"
+      ? replicationJsonDraftSignature.signature !== stableBucketJsonSignature(replicationConfiguration)
+      : replicationGraphicalDraftSignature !== replicationGraphicalSnapshotSignature;
+  const lifecycleJsonDraftSignature = jsonTextSignature(lifecycleText, lifecycle.rules ?? []);
+  const lifecycleJsonDirty = lifecycleJsonDraftSignature.signature !== stableBucketJsonSignature(lifecycle.rules ?? []);
+  const lifecycleSimpleDraft = simpleLifecycleRules[0] ?? {
+    id: "",
+    prefix: "",
+    expirationDays: "",
+    noncurrentDays: "",
+    multipartDays: "",
+    tagKey: "",
+    tagValue: "",
+    deleteExpiredMarkers: false,
+    status: "Enabled" as const,
+  };
+  const lifecycleSimpleDirty = !isLifecycleSimpleDraftEmpty(lifecycleSimpleDraft);
+  const lifecycleDirty = lifecycleMode === "json" ? lifecycleJsonDirty : lifecycleSimpleDirty;
+  const publicAccessDraftSignature = stableBucketJsonSignature(normalizePublicAccessDraft(publicAccessBlock));
+  const publicAccessSnapshotSignature = stableBucketJsonSignature(normalizePublicAccessDraft(publicAccessSnapshot));
+  const publicAccessDirty = publicAccessDraftSignature !== publicAccessSnapshotSignature;
+  const aclDraftSignature = stableBucketJsonSignature(normalizeAclDraft(bucketAclPreset, bucketAclCustom));
+  const aclSnapshotSignature = stableBucketJsonSignature(normalizeAclDraft(inferBucketAclPreset(bucketAcl), ""));
+  const aclDirty = aclDraftSignature !== aclSnapshotSignature;
+  const tagsDraftSignature = stableBucketJsonSignature(normalizeBucketTagsDraft(bucketTags));
+  const tagsSnapshotSignature = stableBucketJsonSignature(normalizeBucketTagsDraft(bucketTagsSnapshot));
+  const tagsDirty = tagsDraftSignature !== tagsSnapshotSignature;
+  const objectLockDraftSignature = stableBucketJsonSignature({
+    enabled: objectLockEnabled ?? null,
+    mode: objectLockMode.trim(),
+    days: objectLockDays.trim(),
+    years: objectLockYears.trim(),
+  });
+  const objectLockSnapshotSignature = stableBucketJsonSignature({
+    enabled: objectLockConfig?.enabled ?? null,
+    mode: (objectLockConfig?.mode ?? "").trim(),
+    days: objectLockConfig?.days != null ? String(objectLockConfig.days) : "",
+    years: objectLockConfig?.years != null ? String(objectLockConfig.years) : "",
+  });
+  const objectLockDirty = objectLockDraftSignature !== objectLockSnapshotSignature;
+  const quotaSnapshotSignature = stableBucketJsonSignature(
+    normalizeQuotaDraft(
+      (() => {
+        const bytes = bucket?.quota_max_size_bytes ?? null;
+        if (bytes == null || bytes <= 0) return "";
+        const divider = quotaSizeUnit === "MiB" ? 1024 ** 2 : quotaSizeUnit === "GiB" ? 1024 ** 3 : 1024 ** 4;
+        const value = bytes / divider;
+        return value % 1 === 0 ? String(value) : value.toFixed(1);
+      })(),
+      quotaSizeUnit,
+      (bucket?.quota_max_objects ?? 0) > 0 ? String(bucket?.quota_max_objects) : ""
+    )
+  );
+  const quotaDraftSignature = stableBucketJsonSignature(normalizeQuotaDraft(quotaSizeGb, quotaSizeUnit, quotaObjects));
+  const quotaDirty = quotaDraftSignature !== quotaSnapshotSignature;
+  const versioningDirty = versioningDraftEnabled !== versioningIsEnabled;
+  const versioningCardState = resolveFeatureVisualState({
+    configured: versioningIsEnabled,
+    unsaved: versioningDirty,
+  });
+  const encryptionCardState = resolveFeatureVisualState({
+    disabled: !sseFeatureEnabled,
+    configured: encryptionConfigured,
+    unsaved: encryptionDirty,
+  });
+  const objectLockCardState = resolveFeatureVisualState({
+    configured: objectLockPersistentlyEnabled,
+    unsaved: objectLockDirty,
+  });
+  const lifecycleCardState = resolveFeatureVisualState({
+    configured: hasLifecycleRules,
+    unsaved: lifecycleDirty,
+  });
+  const tagsCardState = resolveFeatureVisualState({
+    configured: bucketTags.length > 0,
+    unsaved: tagsDirty,
+  });
+  const publicAccessCardState = resolveFeatureVisualState({
+    configured: publicAccessBlockEnabled || publicAccessBlockPartial,
+    unsaved: publicAccessDirty,
+  });
+  const aclCardState = resolveFeatureVisualState({
+    configured: inferBucketAclPreset(bucketAcl) !== "private",
+    unsaved: aclDirty,
+  });
+  const policyCardState = resolveFeatureVisualState({
+    configured: policyConfigured,
+    unsaved: policyDirty,
+  });
+  const websiteCardState = resolveFeatureVisualState({
+    disabled: staticWebsiteBlocked,
+    configured: websiteConfigured,
+    unsaved: websiteDirty,
+  });
+  const replicationCardState = resolveFeatureVisualState({
+    configured: replicationConfigured,
+    unsaved: replicationDirty,
+  });
+  const corsCardState = resolveFeatureVisualState({
+    configured: corsConfigured,
+    unsaved: corsDirty,
+  });
+  const accessLoggingCardState = resolveFeatureVisualState({
+    configured: accessLoggingConfigured,
+    unsaved: accessLoggingDirty,
+  });
+  const notificationsCardState = resolveFeatureVisualState({
+    configured: notificationsConfigured,
+    unsaved: notificationsDirty,
+  });
+  const quotaCardState = resolveFeatureVisualState({
+    disabled: !quotaFeatureEnabled || quotaSectionRestricted,
+    configured: quotaConfigured,
+    unsaved: quotaDirty,
+  });
 
   const propertySummary = useMemo<PropertySummary[]>(() => {
     const versioningState = propsLoading
@@ -1599,18 +1853,18 @@ export default function BucketDetailPage({
     }));
   };
 
-  const toggleVersioning = async () => {
+  const saveVersioning = async () => {
     if (!bucketName || !hasContext || !properties) return;
-    if (versioningIsEnabled && objectLockActive) return;
+    if (versioningDisableBlocked && !versioningDraftEnabled) return;
+    if (versioningDraftEnabled === versioningIsEnabled) return;
     setUpdatingVersioning(true);
     setPropsError(null);
     try {
-      const enabled = (properties.versioning_status ?? "").toLowerCase() !== "enabled";
       if (isCephAdmin) {
         if (!endpointId) return;
-        await setCephAdminBucketVersioning(endpointId, bucketName, enabled);
+        await setCephAdminBucketVersioning(endpointId, bucketName, versioningDraftEnabled);
       } else {
-        await setBucketVersioning(accountId, bucketName, enabled);
+        await setBucketVersioning(accountId, bucketName, versioningDraftEnabled);
       }
       await loadProperties();
     } catch (err) {
@@ -1638,6 +1892,13 @@ export default function BucketDetailPage({
           : payload
         : await updateBucketPublicAccessBlock(accountId, bucketName, payload);
       setPublicAccessBlock({
+        ...defaultPublicAccessBlock,
+        block_public_acls: Boolean(saved.block_public_acls),
+        ignore_public_acls: Boolean(saved.ignore_public_acls),
+        block_public_policy: Boolean(saved.block_public_policy),
+        restrict_public_buckets: Boolean(saved.restrict_public_buckets),
+      });
+      setPublicAccessSnapshot({
         ...defaultPublicAccessBlock,
         block_public_acls: Boolean(saved.block_public_acls),
         ignore_public_acls: Boolean(saved.ignore_public_acls),
@@ -1818,6 +2079,7 @@ export default function BucketDetailPage({
           await deleteBucketTags(accountId, bucketName);
         }
         setBucketTags([]);
+        setBucketTagsSnapshot([]);
         setBucketTagsStatus("Bucket tags cleared.");
       } else {
         if (isCephAdmin) {
@@ -1827,6 +2089,7 @@ export default function BucketDetailPage({
           await putBucketTags(accountId, bucketName, filtered);
         }
         setBucketTags(filtered);
+        setBucketTagsSnapshot(filtered);
         setBucketTagsStatus("Bucket tags updated.");
       }
     } catch (err) {
@@ -1856,6 +2119,7 @@ export default function BucketDetailPage({
         await deleteBucketTags(accountId, bucketName);
       }
       setBucketTags([]);
+      setBucketTagsSnapshot([]);
       setBucketTagsStatus("Bucket tags cleared.");
     } catch (err) {
       const message = axios.isAxiosError(err)
@@ -2029,7 +2293,7 @@ export default function BucketDetailPage({
       const rawConfiguration = saved.configuration;
       const normalizedConfiguration =
         rawConfiguration && typeof rawConfiguration === "object" && !Array.isArray(rawConfiguration)
-          ? (rawConfiguration as Record<string, unknown>)
+          ? normalizeReplicationConfiguration(rawConfiguration as Record<string, unknown>)
           : {};
       setReplicationConfig({ configuration: normalizedConfiguration });
       setReplicationText(
@@ -2388,6 +2652,28 @@ export default function BucketDetailPage({
       return;
     }
     try {
+      const enablingObjectLock = objectLockEnabled === true;
+      if (enablingObjectLock && !versioningIsEnabled) {
+        if (isCephAdmin) {
+          if (!endpointId) {
+            setObjectLockError("Select a Ceph endpoint before saving Object Lock.");
+            return;
+          }
+          await setCephAdminBucketVersioning(endpointId, bucketName, true);
+        } else {
+          await setBucketVersioning(accountId, bucketName, true);
+        }
+        setVersioningDraftEnabled(true);
+        setProperties((prev) =>
+          prev
+            ? {
+                ...prev,
+                versioning_status: "Enabled",
+              }
+            : prev
+        );
+      }
+
       const payload = {
         enabled: objectLockEnabled,
         mode: objectLockMode || null,
@@ -2399,6 +2685,10 @@ export default function BucketDetailPage({
           ? await updateCephAdminBucketObjectLock(endpointId, bucketName, payload)
           : null
         : await updateBucketObjectLock(accountId, bucketName, payload);
+      if (!updated) {
+        setObjectLockError("Unable to update the Object Lock configuration.");
+        return;
+      }
       applyObjectLockState(updated);
       setProperties((prev) =>
         prev
@@ -2464,7 +2754,7 @@ export default function BucketDetailPage({
             id: "overview",
             label: "Overview",
             content: (
-              <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <section className="space-y-4 ui-surface-card p-5">
                 <header className="space-y-1">
                   <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Overview</p>
                   <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">
@@ -2683,75 +2973,82 @@ export default function BucketDetailPage({
                 {properties && (
                   <>
                     <div className="grid gap-3 md:grid-cols-2">
-                      <div className={`${bucketCardClass} md:col-start-1`}>
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Versioning</p>
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">Status returned by the storage service.</p>
-                          </div>
-                          <span
-                            className={`rounded-full px-3 py-1 ui-caption font-semibold ${featureStateChipClasses[versioningChipState]}`}
-                          >
-                            {versioningStatusLabel}
-                          </span>
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">
-                            Keeps object history for restores and is required for Object Lock.
-                          </p>
+                      <BucketFeatureCard
+                        title="Versioning"
+                        description="Enable or disable S3 object versioning."
+                        mode="graphical"
+                        visualState={versioningCardState}
+                        testId="bucket-feature-versioning"
+                        className="md:col-start-1"
+                        actions={
                           <button
                             type="button"
-                            onClick={toggleVersioning}
-                            disabled={updatingVersioning || (versioningIsEnabled && objectLockActive)}
-                            title={
-                              versioningIsEnabled && objectLockActive ? "Disable Object Lock to change versioning." : undefined
-                            }
-                            className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary disabled:opacity-60 dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
+                            onClick={saveVersioning}
+                            disabled={updatingVersioning || versioningDisableBlocked || !versioningDirty}
+                            title={versioningDisableBlocked ? "Disable Object Lock to change versioning." : undefined}
+                            className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
                           >
-                            {updatingVersioning
-                              ? "Updating..."
-                              : (properties.versioning_status ?? "").toLowerCase() === "enabled"
-                                ? "Disable"
-                                : "Enable"}
+                            {updatingVersioning ? "Saving..." : "Save"}
                           </button>
+                        }
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+                            <div>
+                              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Enable versioning</p>
+                              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                Keeps object history for restores and is required for Object Lock.
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {versioningIsSuspended && (
+                                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 ui-caption font-semibold text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
+                                  Suspended
+                                </span>
+                              )}
+                              <PortalSettingsSwitch
+                                checked={versioningDraftEnabled}
+                                disabled={updatingVersioning || versioningDisableBlocked}
+                                ariaLabel="Enable versioning"
+                                onChange={(checked) => setVersioningDraftEnabled(checked)}
+                              />
+                            </div>
+                          </div>
                         </div>
-                        {versioningIsEnabled && objectLockActive && (
+                        {versioningDisableBlocked && (
                           <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
                             Versioning cannot be disabled while Object Lock is enabled.
                           </p>
                         )}
-                      </div>
-                      <div
-                        className={`${bucketCardClass} md:col-start-1 md:row-start-2 space-y-3 ${
-                          sseFeatureEnabled ? "" : "opacity-60"
-                        }`}
-                      >
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Server-side encryption</p>
-                              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                Bucket default encryption rules (S3 API <code>Rules</code> array).
-                              </p>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={clearEncryption}
-                                disabled={!sseFeatureEnabled || deletingEncryption}
-                                className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                              >
-                                {deletingEncryption ? "Disabling..." : "Disable"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={saveEncryption}
-                                disabled={!sseFeatureEnabled || savingEncryption || encryptionLoading}
-                                className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                              >
-                                {savingEncryption ? "Saving..." : "Save"}
-                              </button>
-                            </div>
+                      </BucketFeatureCard>
+                      <BucketFeatureCard
+                        title="Server-side encryption"
+                        description="Bucket default encryption rules (S3 API Rules array)."
+                        mode="json"
+                        visualState={encryptionCardState}
+                        testId="bucket-feature-encryption"
+                        className="md:col-start-2 md:row-start-1 md:row-span-2 space-y-3"
+                        actions={
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={clearEncryption}
+                              disabled={!sseFeatureEnabled || deletingEncryption}
+                              className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                            >
+                              {deletingEncryption ? "Disabling..." : "Disable"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={saveEncryption}
+                              disabled={!sseFeatureEnabled || savingEncryption || encryptionLoading}
+                              className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                            >
+                              {savingEncryption ? "Saving..." : "Save"}
+                            </button>
                           </div>
+                        }
+                      >
                           {!sseFeatureEnabled && <EndpointFeatureDisabledNotice featureLabel="Server-side encryption" />}
                           {encryptionError && (
                             <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
@@ -2776,43 +3073,47 @@ export default function BucketDetailPage({
                             spellCheck={false}
                             disabled={!sseFeatureEnabled || encryptionLoading || savingEncryption || deletingEncryption}
                           />
-                          <div className="flex flex-wrap items-center justify-between gap-2">
+                          <BucketFeatureJsonExample
+                            show={showEncryptionExample}
+                            onToggle={() => setShowEncryptionExample((prev) => !prev)}
+                            example={defaultEncryptionExample}
+                            onUseExample={() => setEncryptionText(defaultEncryptionExample)}
+                            helperText={
+                              <span className="ui-caption text-slate-500 dark:text-slate-400">
+                                Leave <code>Rules</code> empty to disable default encryption.
+                              </span>
+                            }
+                          />
+                      </BucketFeatureCard>
+                      <BucketFeatureCard
+                        title="Object Lock"
+                        description="WORM / default retention."
+                        mode="graphical"
+                        visualState={objectLockCardState}
+                        testId="bucket-feature-object-lock"
+                        className="md:col-start-1 md:row-start-2"
+                        actions={
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
-                              onClick={() =>
-                                setEncryptionText(
-                                  JSON.stringify(
-                                    [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } }],
-                                    null,
-                                    2
-                                  )
-                                )
-                              }
+                              onClick={() => applyObjectLockState(objectLockConfig)}
                               className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                              disabled={!sseFeatureEnabled}
+                              disabled={propsLoading || savingObjectLock}
                             >
-                              Use AES256 default
+                              Reset
                             </button>
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">
-                              Leave <code>Rules</code> empty to disable default encryption.
-                            </p>
+                            <button
+                              type="submit"
+                              form={objectLockFormId}
+                              disabled={savingObjectLock || propsLoading}
+                              className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                            >
+                              {savingObjectLock ? "Saving..." : "Save"}
+                            </button>
                           </div>
-                      </div>
-                      <div className={`${bucketCardClass} md:col-start-2 md:row-start-1 md:row-span-2`}>
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Object Lock</p>
-                            <p className="ui-caption text-slate-500 dark:text-slate-400">
-                              WORM / default retention (bucket created with the Object Lock option).
-                            </p>
-                          </div>
-                          <span
-                            className={`rounded-full px-3 py-1 ui-caption font-semibold ${featureStateChipClasses[objectLockChipState]}`}
-                          >
-                            {objectLockStatusLabel}
-                          </span>
-                        </div>
-                        <div className="mt-3 space-y-2">
+                        }
+                      >
+                        <div className="space-y-2">
                           {objectLockError && (
                             <div className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                               {objectLockError}
@@ -2823,20 +3124,30 @@ export default function BucketDetailPage({
                               {objectLockStatus}
                             </div>
                           )}
-                          <form className="space-y-2" onSubmit={handleSaveObjectLock}>
-                            <label className="flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200">
-                              <input
-                                type="checkbox"
+                          <form id={objectLockFormId} className="space-y-2" onSubmit={handleSaveObjectLock}>
+                            <div className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+                              <div>
+                                <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Enable Object Lock</p>
+                                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                  Write-once retention controls for bucket objects.
+                                </p>
+                              </div>
+                              <PortalSettingsSwitch
                                 checked={objectLockEnabled ?? false}
-                                onChange={(e) => {
-                                  if (objectLockPersistentlyEnabled) return;
-                                  setObjectLockEnabled(e.target.checked);
-                                }}
                                 disabled={objectLockPersistentlyEnabled}
-                                className={uiCheckboxClass}
+                                ariaLabel="Enable object lock"
+                                onChange={(checked) => {
+                                  if (objectLockPersistentlyEnabled) return;
+                                  setObjectLockEnabled(checked);
+                                  if (checked) {
+                                    setVersioningDraftEnabled(true);
+                                  }
+                                }}
                               />
-                              Enable Object Lock
-                            </label>
+                            </div>
+                            <p className="ui-caption text-slate-500 dark:text-slate-400">
+                              Enabling Object Lock automatically enables bucket versioning.
+                            </p>
                             {objectLockPersistentlyEnabled && (
                               <p className="ui-caption text-slate-500 dark:text-slate-400">
                                 Object Lock cannot be disabled once it has been enabled on the bucket. Update only the default retention below.
@@ -2892,37 +3203,20 @@ export default function BucketDetailPage({
                                 {objectLockConfig.years != null ? ` · ${objectLockConfig.years} year(s)` : ""}
                               </p>
                             )}
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => applyObjectLockState(objectLockConfig)}
-                                className="rounded-md border border-slate-200 px-3 py-1 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100 dark:hover:border-primary-500 dark:hover:text-primary-100"
-                                disabled={propsLoading || savingObjectLock}
-                              >
-                                Reset
-                              </button>
-                              <button
-                                type="submit"
-                                disabled={savingObjectLock || propsLoading}
-                                className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                              >
-                                {savingObjectLock ? "Saving..." : "Save"}
-                              </button>
-                            </div>
                           </form>
                         </div>
                         <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                           Choose a mode plus days or years. Leave it empty to remove the default retention (Object Lock must already be enabled on the bucket).
                         </p>
-                      </div>
-                    <div className={`${bucketCardClass} order-4 md:order-none md:col-span-2 md:col-start-1 md:row-start-3`}>
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Lifecycle rules</p>
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">
-                            S3-side expiration/clean-up (JSON first, simple editor to add a rule).
-                          </p>
-                        </div>
+                      </BucketFeatureCard>
+                    <BucketFeatureCard
+                      title="Lifecycle rules"
+                      description="S3-side expiration/clean-up."
+                      mode="hybrid"
+                      visualState={lifecycleCardState}
+                      testId="bucket-feature-lifecycle"
+                      className="order-4 md:order-none md:col-span-2 md:col-start-1 md:row-start-3"
+                      actions={
                         <div className="flex items-center gap-2">
                           <span className="ui-caption text-slate-500 dark:text-slate-400">{(lifecycle.rules ?? []).length} rule(s)</span>
                           <button
@@ -2941,7 +3235,8 @@ export default function BucketDetailPage({
                             {savingLifecycle ? "Saving..." : "Save"}
                           </button>
                         </div>
-                      </div>
+                      }
+                    >
                       {lifecycleLoading && (
                         <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-body text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
                           Loading lifecycle rules...
@@ -3043,23 +3338,15 @@ export default function BucketDetailPage({
 
                       {showLifecycleEditor && (
                         <>
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <div className="flex overflow-hidden rounded-lg border border-slate-200 ui-caption font-semibold dark:border-slate-700">
-                              <button
-                                type="button"
-                                onClick={() => setLifecycleMode("json")}
-                                className={`px-3 py-1 ${lifecycleMode === "json" ? "bg-primary text-white" : "bg-transparent text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"}`}
-                              >
-                                JSON
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setLifecycleMode("simple")}
-                                className={`px-3 py-1 ${lifecycleMode === "simple" ? "bg-primary text-white" : "bg-transparent text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/60"}`}
-                              >
-                                Quick add
-                              </button>
-                            </div>
+                          <div className="mt-3">
+                            <BucketFeatureModeToggle
+                              value={lifecycleMode}
+                              options={[
+                                { value: "json", label: "JSON mode" },
+                                { value: "simple", label: "Quick add" },
+                              ]}
+                              onChange={(value) => setLifecycleMode(value)}
+                            />
                           </div>
                           {lifecycleMode === "simple" ? (
                             <div className="mt-3 space-y-3">
@@ -3237,21 +3524,25 @@ export default function BucketDetailPage({
                                 rows={10}
                                 className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                               />
+                              <BucketFeatureJsonExample
+                                show={showLifecycleJsonExample}
+                                onToggle={() => setShowLifecycleJsonExample((prev) => !prev)}
+                                example={defaultLifecycleJsonExample}
+                                onUseExample={() => setLifecycleText(defaultLifecycleJsonExample)}
+                              />
                             </div>
                           )}
                         </>
                       )}
-                    </div>
-                    <div
-                      className={`${bucketCardClass} space-y-3 order-3 md:order-none md:col-start-1 md:row-start-4`}
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Bucket tags</p>
-                          <p className="ui-caption text-slate-500 dark:text-slate-400">
-                            S3 key/value tags associated with this bucket.
-                          </p>
-                        </div>
+                    </BucketFeatureCard>
+                    <BucketFeatureCard
+                      title="Bucket tags"
+                      description="S3 key/value tags associated with this bucket."
+                      mode="graphical"
+                      visualState={tagsCardState}
+                      testId="bucket-feature-tags"
+                      className="space-y-3 order-3 md:order-none md:col-start-1 md:row-start-4"
+                      actions={
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -3270,7 +3561,8 @@ export default function BucketDetailPage({
                             {savingBucketTags ? "Saving..." : "Save"}
                           </button>
                         </div>
-                      </div>
+                      }
+                    >
                       {bucketTagsError && (
                         <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                           {bucketTagsError}
@@ -3336,7 +3628,7 @@ export default function BucketDetailPage({
                           </div>
                         </div>
                       )}
-                    </div>
+                    </BucketFeatureCard>
                     </div>
                   </>
                 )}
@@ -3348,30 +3640,29 @@ export default function BucketDetailPage({
             label: "Permissions",
             content: (
               <div className="space-y-4">
-                <div className={`space-y-3 ${bucketCardClass}`}>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Block public access</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">
-                        Manage the four S3 public access block flags. Configure each option below.
-                      </p>
+                <BucketFeatureCard
+                  title="Block public access"
+                  description="Manage the four S3 public access block flags. Configure each option below."
+                  mode="graphical"
+                  visualState={publicAccessCardState}
+                  testId="bucket-feature-block-public-access"
+                  className="space-y-3"
+                  actions={
+                    <button
+                      type="button"
+                      onClick={savePublicAccessBlock}
+                      disabled={publicAccessLoading || savingPublicAccess}
+                      className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                    >
+                      {savingPublicAccess ? "Saving..." : "Save"}
+                    </button>
+                  }
+                >
+                  {publicAccessStatus && (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 ui-body text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/60 dark:text-emerald-100">
+                      {publicAccessStatus}
                     </div>
-                    <div className="flex items-center gap-2">
-                      {publicAccessStatus && (
-                        <span className="ui-caption font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-200">
-                          {publicAccessStatus}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={savePublicAccessBlock}
-                        disabled={publicAccessLoading || savingPublicAccess}
-                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                      >
-                        {savingPublicAccess ? "Saving..." : "Save"}
-                      </button>
-                    </div>
-                  </div>
+                  )}
                   {publicAccessError && (
                     <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {publicAccessError}
@@ -3397,27 +3688,26 @@ export default function BucketDetailPage({
                       </label>
                     ))}
                   </div>
-                </div>
+                </BucketFeatureCard>
 
-                <div className={`space-y-3 ${bucketCardClass}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Access control list</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">
-                        Configure a canned ACL and review resulting grants.
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={saveBucketAcl}
-                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                        disabled={savingBucketAcl || bucketAclLoading}
-                      >
-                        {savingBucketAcl ? "Saving..." : "Save"}
-                      </button>
-                    </div>
-                  </div>
+                <BucketFeatureCard
+                  title="Access control list"
+                  description="Configure a canned ACL and review resulting grants."
+                  mode="graphical"
+                  visualState={aclCardState}
+                  testId="bucket-feature-acl"
+                  className="space-y-3"
+                  actions={
+                    <button
+                      type="button"
+                      onClick={saveBucketAcl}
+                      className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                      disabled={savingBucketAcl || bucketAclLoading}
+                    >
+                      {savingBucketAcl ? "Saving..." : "Save"}
+                    </button>
+                  }
+                >
                   {bucketAclError && (
                     <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {bucketAclError}
@@ -3511,14 +3801,16 @@ export default function BucketDetailPage({
                       )}
                     </div>
                   )}
-                </div>
+                </BucketFeatureCard>
 
-                <div className={`space-y-4 ${bucketCardClass}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Bucket policy</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">IAM-like JSON applied directly on the bucket.</p>
-                    </div>
+                <BucketFeatureCard
+                  title="Bucket policy"
+                  description="IAM-like JSON applied directly on the bucket."
+                  mode="json"
+                  visualState={policyCardState}
+                  testId="bucket-feature-policy"
+                  className="space-y-4"
+                  actions={
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -3537,7 +3829,8 @@ export default function BucketDetailPage({
                         {savingPolicy ? "Saving..." : "Save"}
                       </button>
                     </div>
-                  </div>
+                  }
+                >
                   {policyError && (
                     <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {policyError}
@@ -3550,17 +3843,10 @@ export default function BucketDetailPage({
                     placeholder='{"Version":"2012-10-17","Statement":[...]}'
                     spellCheck={false}
                   />
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
-                    <button
-                      type="button"
-                      onClick={() => setShowPolicyExample((prev) => !prev)}
-                      className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
-                    >
-                      {showPolicyExample ? "Hide example" : "Show example"}
-                    </button>
-                    {showPolicyExample && (
-                      <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
-{`{
+                  <BucketFeatureJsonExample
+                    show={showPolicyExample}
+                    onToggle={() => setShowPolicyExample((prev) => !prev)}
+                    example={`{
   "Version": "2012-10-17",
   "Statement": [
     {
@@ -3571,10 +3857,21 @@ export default function BucketDetailPage({
     }
   ]
 }`}
-                      </pre>
-                    )}
-                  </div>
-                </div>
+                    onUseExample={() =>
+                      setPolicyText(`{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::${bucketName || "bucket"}/*"
+    }
+  ]
+}`)
+                    }
+                  />
+                </BucketFeatureCard>
 
               </div>
             ),
@@ -3584,14 +3881,14 @@ export default function BucketDetailPage({
             label: "Advanced",
             content: (
               <div className="space-y-3">
-                <div className={`${bucketCardClass} space-y-3 ${staticWebsiteBlocked ? "opacity-60" : ""}`}>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Static website</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">
-                        Host a static website from this bucket or redirect all requests.
-                      </p>
-                    </div>
+                <BucketFeatureCard
+                  title="Static website"
+                  description="Host a static website from this bucket or redirect all requests."
+                  mode="hybrid"
+                  visualState={websiteCardState}
+                  testId="bucket-feature-website"
+                  className="space-y-3"
+                  actions={
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -3610,7 +3907,8 @@ export default function BucketDetailPage({
                         {savingWebsite ? "Saving..." : "Save"}
                       </button>
                     </div>
-                  </div>
+                  }
+                >
                   {staticWebsiteBlocked && <EndpointFeatureDisabledNotice featureLabel="Static website" />}
                   {websiteError && (
                     <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
@@ -3711,27 +4009,16 @@ export default function BucketDetailPage({
                           disabled={websiteLoading || savingWebsite || clearingWebsite || staticWebsiteBlocked}
                         />
                         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
-                          <button
-                            type="button"
-                            onClick={() => setShowWebsiteRulesExample((prev) => !prev)}
-                            className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
-                          >
-                            {showWebsiteRulesExample ? "Hide example" : "Show example"}
-                          </button>
-                          {showWebsiteRulesExample && (
-                            <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
-{`[
-  {
-    "Condition": { "KeyPrefixEquals": "docs/" },
-    "Redirect": { "ReplaceKeyPrefixWith": "documents/" }
-  },
-  {
-    "Condition": { "HttpErrorCodeReturnedEquals": "404" },
-    "Redirect": { "ReplaceKeyWith": "error.html" }
-  }
-]`}
-                            </pre>
-                          )}
+                          <BucketFeatureJsonExample
+                            show={showWebsiteRulesExample}
+                            onToggle={() => setShowWebsiteRulesExample((prev) => !prev)}
+                            example={defaultWebsiteRoutingRulesExample}
+                            onUseExample={() => {
+                              setWebsiteRoutingRules(defaultWebsiteRoutingRulesExample);
+                              setWebsiteStatus(null);
+                              setWebsiteError(null);
+                            }}
+                          />
                         </div>
                       </div>
                     </div>
@@ -3770,16 +4057,16 @@ export default function BucketDetailPage({
                       </p>
                     </div>
                   )}
-                </div>
+                </BucketFeatureCard>
                 {isCephEndpoint && (
-                  <div className={`${bucketCardClass} space-y-3`}>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Replication / multisite</p>
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">
-                          Configure cross-zonegroup replication rules supported by Ceph RGW.
-                        </p>
-                      </div>
+                  <BucketFeatureCard
+                    title="Replication / multisite"
+                    description="Configure cross-zonegroup replication rules supported by Ceph RGW."
+                    mode="hybrid"
+                    visualState={replicationCardState}
+                    testId="bucket-feature-replication"
+                    className="space-y-3"
+                    actions={
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -3798,41 +4085,21 @@ export default function BucketDetailPage({
                           {savingReplication ? "Saving..." : "Save"}
                         </button>
                       </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setReplicationMode("graphical");
-                          setReplicationStatus(null);
-                          setReplicationError(null);
-                        }}
-                        className={`rounded-md px-3 py-1 ui-caption font-semibold transition ${
-                          replicationMode === "graphical"
-                            ? "bg-primary text-white"
-                            : "border border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
-                        }`}
-                        disabled={replicationBusy}
-                      >
-                        Graphical mode
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setReplicationMode("json");
-                          setReplicationStatus(null);
-                          setReplicationError(null);
-                        }}
-                        className={`rounded-md px-3 py-1 ui-caption font-semibold transition ${
-                          replicationMode === "json"
-                            ? "bg-primary text-white"
-                            : "border border-slate-200 text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:text-slate-200"
-                        }`}
-                        disabled={replicationBusy}
-                      >
-                        JSON mode
-                      </button>
-                    </div>
+                    }
+                  >
+                    <BucketFeatureModeToggle
+                      value={replicationMode}
+                      options={[
+                        { value: "graphical", label: "Graphical mode" },
+                        { value: "json", label: "JSON mode" },
+                      ]}
+                      onChange={(value) => {
+                        setReplicationMode(value);
+                        setReplicationStatus(null);
+                        setReplicationError(null);
+                      }}
+                      disabled={replicationBusy}
+                    />
                     {replicationError && (
                       <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                         {replicationError}
@@ -3993,16 +4260,28 @@ export default function BucketDetailPage({
                             Destination.Zone is not supported in V1 and must be removed before saving.
                           </p>
                         )}
+                        <BucketFeatureJsonExample
+                          show={showReplicationExample}
+                          onToggle={() => setShowReplicationExample((prev) => !prev)}
+                          example={defaultReplicationJsonExample}
+                          onUseExample={() => {
+                            setReplicationText(defaultReplicationJsonExample);
+                            setReplicationStatus(null);
+                            setReplicationError(null);
+                          }}
+                        />
                       </div>
                     )}
-                  </div>
+                  </BucketFeatureCard>
                 )}
-                <div className={`space-y-3 ${bucketCardClass}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">CORS</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">CORS rules in AWS format (CORSRules).</p>
-                    </div>
+                <BucketFeatureCard
+                  title="CORS"
+                  description="CORS rules in AWS format (CORSRules)."
+                  mode="json"
+                  visualState={corsCardState}
+                  testId="bucket-feature-cors"
+                  className="space-y-3"
+                  actions={
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -4021,7 +4300,8 @@ export default function BucketDetailPage({
                         {savingCors ? "Saving..." : "Save"}
                       </button>
                     </div>
-                  </div>
+                  }
+                >
                   {corsError && (
                     <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {corsError}
@@ -4034,35 +4314,21 @@ export default function BucketDetailPage({
                     placeholder='[{"AllowedMethods":["GET"],"AllowedOrigins":["*"]}]'
                     spellCheck={false}
                   />
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
-                    <button
-                      type="button"
-                      onClick={() => setShowCorsExample((prev) => !prev)}
-                      className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
-                    >
-                      {showCorsExample ? "Hide example" : "Show example"}
-                    </button>
-                    {showCorsExample && (
-                      <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
-{`[
-  {
-    "AllowedMethods": ["GET", "PUT"],
-    "AllowedOrigins": ["https://app.example.com"],
-    "AllowedHeaders": ["*"]
-  }
-]`}
-                      </pre>
-                    )}
-                  </div>
-                </div>
-                <div className={`${bucketCardClass} space-y-3`}>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Server access logging</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">
-                        Deliver S3 server access logs to another bucket.
-                      </p>
-                    </div>
+                  <BucketFeatureJsonExample
+                    show={showCorsExample}
+                    onToggle={() => setShowCorsExample((prev) => !prev)}
+                    example={defaultCorsExample}
+                    onUseExample={() => setCorsText(defaultCorsExample)}
+                  />
+                </BucketFeatureCard>
+                <BucketFeatureCard
+                  title="Server access logging"
+                  description="Deliver S3 server access logs to another bucket."
+                  mode="graphical"
+                  visualState={accessLoggingCardState}
+                  testId="bucket-feature-access-logging"
+                  className="space-y-3"
+                  actions={
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -4081,7 +4347,8 @@ export default function BucketDetailPage({
                         {savingAccessLogging ? "Saving..." : "Save"}
                       </button>
                     </div>
-                  </div>
+                  }
+                >
                   {accessLoggingError && (
                     <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {accessLoggingError}
@@ -4142,15 +4409,17 @@ export default function BucketDetailPage({
                     The target bucket must allow log delivery (e.g., ACL <code className="font-mono ui-caption">log-delivery-write</code>
                     or an equivalent policy).
                   </p>
-                </div>
-                <div className={`${bucketCardClass} space-y-3`}>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Notifications / SNS topics</p>
-                      <p className="ui-caption text-slate-500 dark:text-slate-400">
-                        JSON payload forwarded to <code className="font-mono ui-caption">put_bucket_notification_configuration</code>.
-                      </p>
-                    </div>
+                </BucketFeatureCard>
+                <BucketFeatureCard
+                  title="Notifications / SNS topics"
+                  description={
+                    "JSON payload forwarded to put_bucket_notification_configuration."
+                  }
+                  mode="json"
+                  visualState={notificationsCardState}
+                  testId="bucket-feature-notifications"
+                  className="space-y-3"
+                  actions={
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -4169,7 +4438,8 @@ export default function BucketDetailPage({
                         {savingNotifications ? "Saving..." : "Save"}
                       </button>
                     </div>
-                  </div>
+                  }
+                >
                   {notificationsError && (
                     <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
                       {notificationsError}
@@ -4192,41 +4462,26 @@ export default function BucketDetailPage({
                     placeholder={defaultNotificationTemplate}
                     spellCheck={false}
                   />
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 ui-caption text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowNotificationExample((prev) => !prev)}
-                        className="ui-caption font-semibold text-primary hover:text-primary-700 dark:text-primary-200 dark:hover:text-primary-100"
-                      >
-                        {showNotificationExample ? "Hide example" : "Show example"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNotificationText(notificationExample);
-                          setNotificationsStatus(null);
-                        }}
-                        className="rounded-full border border-slate-200 px-2 py-0.5 ui-caption font-semibold text-slate-700 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-100"
-                      >
-                        Use example
-                      </button>
+                  <BucketFeatureJsonExample
+                    show={showNotificationExample}
+                    onToggle={() => setShowNotificationExample((prev) => !prev)}
+                    example={notificationExample}
+                    onUseExample={() => {
+                      setNotificationText(notificationExample);
+                      setNotificationsStatus(null);
+                    }}
+                    helperText={
                       <span className="ui-caption text-slate-500 dark:text-slate-400">
                         Need a topic? Create it in the Topics section.
                       </span>
-                    </div>
-                    {showNotificationExample && (
-                      <pre className="mt-2 whitespace-pre-wrap rounded bg-slate-900 px-3 py-2 ui-caption text-slate-100">
-                        {notificationExample}
-                      </pre>
-                    )}
-                  </div>
+                    }
+                  />
                   <p className="ui-caption text-slate-500 dark:text-slate-400">
                     Only topic-based notifications are supported. Each entry should include{" "}
                     <code className="font-mono ui-caption">TopicArn</code>, <code className="font-mono ui-caption">Events</code>, and
                     an optional filter.
                   </p>
-                </div>
+                </BucketFeatureCard>
               </div>
             ),
           },
@@ -4235,7 +4490,7 @@ export default function BucketDetailPage({
             label: "Metrics",
             content: (
               <div className="space-y-4">
-                <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <section className="space-y-4 ui-surface-card p-5">
                   <header className="space-y-1">
                     <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Usage Stats</p>
                     <h3 className="ui-subtitle font-semibold text-slate-900 dark:text-slate-100">Current Usage and Quota</h3>
@@ -4290,18 +4545,36 @@ export default function BucketDetailPage({
                   label: "Ceph Admin",
                   content: (
                     <div className="space-y-3">
-                      <div className={`${bucketCardClass} ${!quotaFeatureEnabled || quotaSectionRestricted ? "opacity-50" : ""}`}>
-                  <div className="flex items-center justify-between">
-                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Quota</p>
-                    {quotaSectionRestricted && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        Restricted
-                      </span>
-                    )}
-                  </div>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">Allowed bucket size and object count.</p>
+                      <BucketFeatureCard
+                        title="Quota"
+                        description="Allowed bucket size and object count."
+                        mode="graphical"
+                        visualState={quotaCardState}
+                        testId="bucket-feature-quota"
+                        actions={
+                          quotaSectionRestricted ? (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                              Restricted
+                            </span>
+                          ) : canEditQuota ? (
+                            <button
+                              type="submit"
+                              form={quotaFormId}
+                              disabled={updatingQuota || !canEditQuota}
+                              className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                              title={!quotaFeatureEnabled ? "Unavailable on this endpoint" : !canEditQuota ? "Admins only" : undefined}
+                            >
+                              {updatingQuota ? "Saving..." : "Save"}
+                            </button>
+                          ) : null
+                        }
+                      >
                   {!quotaFeatureEnabled && <EndpointFeatureDisabledNotice featureLabel="Quota" />}
-                  <form className={`mt-2 space-y-2 ${quotaSectionRestricted ? "pointer-events-none" : ""}`} onSubmit={handleUpdateQuota}>
+                  <form
+                    id={quotaFormId}
+                    className={`mt-2 space-y-2 ${quotaSectionRestricted ? "pointer-events-none" : ""}`}
+                    onSubmit={handleUpdateQuota}
+                  >
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <label className="flex flex-col gap-1 ui-caption font-medium text-slate-700 dark:text-slate-200">
                         Size
@@ -4352,23 +4625,13 @@ export default function BucketDetailPage({
                         {quotaError}
                       </div>
                     )}
-                    <div className="flex justify-end">
-                      <button
-                        type="submit"
-                        disabled={updatingQuota || !canEditQuota}
-                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                        title={!quotaFeatureEnabled ? "Unavailable on this endpoint" : !canEditQuota ? "Admins only" : undefined}
-                      >
-                        {updatingQuota ? "Saving..." : "Save"}
-                      </button>
-                    </div>
                   </form>
                   <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                     {quotaFeatureEnabled
                       ? `Leave empty to remove the quota. ${canEditQuota ? "" : "(Read-only for this role.)"}`
                       : "Quota management is unavailable on this endpoint."}
                   </p>
-                      </div>
+                      </BucketFeatureCard>
                       <InfoCard
                         title="Replication / multisite"
                         description={

@@ -17,7 +17,12 @@ import PropertySummaryChip from "../../components/PropertySummaryChip";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
 import UiCheckboxField from "../../components/ui/UiCheckboxField";
 import AnchoredPortalMenu from "../../components/ui/AnchoredPortalMenu";
-import { uiCheckboxClass } from "../../components/ui/styles";
+import {
+  uiCheckboxClass,
+  uiFeatureStateHighlightFieldClasses,
+  uiFeatureStateHighlightLabelClasses,
+  type UiFeatureStateTone,
+} from "../../components/ui/styles";
 import {
   BucketProperties,
   CephAdminBucket,
@@ -4600,12 +4605,6 @@ export default function CephAdminBucketsPage() {
     return availableUiTags.filter((tag) => !selected.has(tag.toLowerCase()));
   }, [availableUiTags, tagFilters]);
   const showTagFilterBar = availableUiTags.length > 0 || tagFilters.length > 0;
-  const activeFieldClass =
-    "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200/70 dark:border-emerald-400/70 dark:bg-emerald-500/15 dark:ring-emerald-500/25";
-  const activeLabelClass = "text-emerald-700 dark:text-emerald-200";
-  const pendingFieldClass =
-    "border-amber-400 bg-amber-50 ring-2 ring-amber-300/70 dark:border-amber-400/70 dark:bg-amber-500/20 dark:ring-amber-500/25";
-  const pendingLabelClass = "text-amber-700 dark:text-amber-300";
   const modeToggleBaseClass =
     "absolute right-1 top-1 rounded border px-1 py-0 ui-caption font-semibold transition focus:outline-none focus:ring-2 focus:ring-offset-0";
   const modeToggleClass = (mode: TextMatchMode, isPending: boolean, locked: boolean = false) => {
@@ -4632,10 +4631,17 @@ export default function CephAdminBucketsPage() {
     }
     return "rounded-md border border-slate-200 bg-white px-2 py-1 ui-caption font-semibold text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:text-primary-100";
   };
+  const fieldTone = (isApplied: boolean, isPending: boolean): UiFeatureStateTone => {
+    if (isPending) return "unsaved";
+    if (isApplied) return "configured";
+    return "neutral";
+  };
   const fieldHighlight = (isApplied: boolean, isPending: boolean) => {
-    if (isPending) return { labelClass: pendingLabelClass, fieldClass: pendingFieldClass };
-    if (isApplied) return { labelClass: activeLabelClass, fieldClass: activeFieldClass };
-    return { labelClass: "", fieldClass: "" };
+    const tone = fieldTone(isApplied, isPending);
+    return {
+      labelClass: uiFeatureStateHighlightLabelClasses[tone],
+      fieldClass: uiFeatureStateHighlightFieldClasses[tone],
+    };
   };
   const tenantAppliedValue = (advancedApplied?.tenant ?? "").trim();
   const ownerAppliedValue = (advancedApplied?.owner ?? "").trim();
@@ -6245,7 +6251,7 @@ export default function CephAdminBucketsPage() {
         </PageBanner>
       )}
 
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="ui-surface-card">
           <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>

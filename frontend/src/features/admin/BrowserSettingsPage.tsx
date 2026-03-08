@@ -186,7 +186,7 @@ export default function BrowserSettingsPage() {
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
           <div className="grid gap-4">
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="BROWSER WORKSPACES"
                 description="Enable the browser in specific workspaces."
@@ -246,7 +246,7 @@ export default function BrowserSettingsPage() {
                 </PortalSettingsItem>
               </PortalSettingsSection>
             </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="ZIP DOWNLOADS"
                 description="Stream ZIP generation in the browser for large folder downloads."
@@ -269,7 +269,7 @@ export default function BrowserSettingsPage() {
                 </PortalSettingsItem>
               </PortalSettingsSection>
             </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="PROXY TRANSFERS"
                 description="Allow the backend to proxy uploads/downloads when direct browser-to-S3 transfers are unavailable."
@@ -288,7 +288,7 @@ export default function BrowserSettingsPage() {
                 />
               </PortalSettingsSection>
             </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="UPLOAD PARALLELISM"
                 description="Direct mode uses browser-to-S3 transfers. Proxy mode is used when the backend proxies uploads."
@@ -327,7 +327,7 @@ export default function BrowserSettingsPage() {
                 </PortalSettingsItem>
               </PortalSettingsSection>
             </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="DOWNLOAD PARALLELISM"
                 description="Applies to folder downloads, with separate limits for direct and proxy modes."
@@ -366,7 +366,7 @@ export default function BrowserSettingsPage() {
                 </PortalSettingsItem>
               </PortalSettingsSection>
             </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="OTHER OPERATIONS"
                 description="Parallelism for operations like recursive deletes or server-side copies."

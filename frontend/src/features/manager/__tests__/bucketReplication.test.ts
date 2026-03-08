@@ -4,6 +4,8 @@ import {
   buildReplicationConfigurationFromGraphical,
   containsUnsupportedReplicationZone,
   createEmptyGraphicalReplicationRule,
+  isReplicationConfigurationConfigured,
+  normalizeReplicationConfiguration,
   parseReplicationConfigurationForGraphical,
   validateGraphicalReplication,
   validateJsonReplicationConfiguration,
@@ -110,5 +112,16 @@ describe("bucketReplication helpers", () => {
     const validationError = validateGraphicalReplication("arn:aws:iam::123456789012:role/replication", [emptyRule]);
 
     expect(validationError).toBe("Rule 1: Destination bucket ARN is required.");
+  });
+
+  it("normalizes empty replication payloads and marks empty role as not configured", () => {
+    expect(normalizeReplicationConfiguration({})).toEqual({});
+    expect(normalizeReplicationConfiguration({ Role: "" })).toEqual({});
+    expect(normalizeReplicationConfiguration({ Role: "", Rules: [] })).toEqual({});
+
+    expect(isReplicationConfigurationConfigured({})).toBe(false);
+    expect(isReplicationConfigurationConfigured({ Role: "" })).toBe(false);
+    expect(isReplicationConfigurationConfigured({ Role: "", Rules: [] })).toBe(false);
+    expect(isReplicationConfigurationConfigured({ Rules: [{ ID: "rule-1" }] })).toBe(true);
   });
 });

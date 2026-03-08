@@ -449,7 +449,7 @@ export default function TopicsPage() {
       {error && <PageBanner tone="error">{error}</PageBanner>}
 
       {!needsS3AccountSelection && (
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="ui-surface-card">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
             <div>
               <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Topics</p>

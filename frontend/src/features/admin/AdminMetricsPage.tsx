@@ -195,7 +195,7 @@ export default function AdminMetricsPage() {
         breadcrumbs={[{ label: "Admin" }, { label: "Overview", to: "/admin" }, { label: "Metrics" }]}
       />
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="ui-surface-card p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Ceph endpoint</p>
@@ -284,7 +284,7 @@ export default function AdminMetricsPage() {
         showEmpty={missingTraffic}
       />
 
-      <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <section className="space-y-4 ui-surface-card p-5">
         <header className="space-y-1">
           <p className="ui-caption font-semibold uppercase tracking-wide text-primary">Storage breakdown</p>
           <h3 className="ui-section font-semibold text-slate-900 dark:text-slate-100">Accounts & users</h3>

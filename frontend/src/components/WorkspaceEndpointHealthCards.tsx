@@ -89,7 +89,7 @@ export default function WorkspaceEndpointHealthCards({
 
   return (
     <div className={className}>
-      <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <section className="ui-surface-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{title}</p>
@@ -168,7 +168,7 @@ export default function WorkspaceEndpointHealthCards({
       </section>
 
       {showIncidents && (
-        <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <section className="ui-surface-card p-4">
           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Ongoing / Recent Incidents</p>
           <p className="ui-caption text-slate-500 dark:text-slate-400">
             Ongoing incidents and incidents ended in the last {formatIncidentWindow(data?.incident_highlight_minutes)}.

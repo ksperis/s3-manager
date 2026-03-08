@@ -33,6 +33,10 @@ function normalizeStatus(value: unknown, fallback: ReplicationRuleStatus): Repli
   return normalized === "disabled" ? "Disabled" : "Enabled";
 }
 
+function normalizeRole(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function createEmptyGraphicalReplicationRule(): GraphicalReplicationRule {
   return {
     id: "",
@@ -42,6 +46,43 @@ export function createEmptyGraphicalReplicationRule(): GraphicalReplicationRule 
     destinationBucket: "",
     deleteMarkerStatus: "Disabled",
   };
+}
+
+export function normalizeReplicationConfiguration(configuration: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+
+  Object.entries(configuration).forEach(([key, value]) => {
+    if (key === "Role") {
+      const role = normalizeRole(value);
+      if (role) {
+        normalized[key] = role;
+      }
+      return;
+    }
+    if (key === "Rules") {
+      if (Array.isArray(value)) {
+        normalized[key] = value;
+      }
+      return;
+    }
+    normalized[key] = value;
+  });
+
+  const rules = normalized["Rules"];
+  const hasRules = Array.isArray(rules) && rules.length > 0;
+  if (!hasRules) {
+    const otherKeys = Object.keys(normalized).filter((key) => key !== "Role" && key !== "Rules");
+    if (otherKeys.length === 0) {
+      return {};
+    }
+  }
+  return normalized;
+}
+
+export function isReplicationConfigurationConfigured(configuration: Record<string, unknown>): boolean {
+  const normalized = normalizeReplicationConfiguration(configuration);
+  const rules = normalized["Rules"];
+  return Array.isArray(rules) && rules.length > 0;
 }
 
 export function containsUnsupportedReplicationZone(configuration: Record<string, unknown>): boolean {
@@ -62,7 +103,7 @@ export function parseReplicationConfigurationForGraphical(
 ): GraphicalReplicationState {
   const topLevelAllowed = new Set(["Role", "Rules"]);
   const hasUnsupportedTopLevel = Object.keys(configuration).some((key) => !topLevelAllowed.has(key));
-  const role = typeof configuration["Role"] === "string" ? configuration["Role"] : "";
+  const role = normalizeRole(configuration["Role"]);
   const rulesRaw = Array.isArray(configuration["Rules"]) ? configuration["Rules"] : [];
   let hasAdvancedFields = hasUnsupportedTopLevel;
   const parsedRules: GraphicalReplicationRule[] = [];

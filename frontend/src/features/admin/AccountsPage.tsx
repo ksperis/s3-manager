@@ -1620,7 +1620,7 @@ export default function S3AccountsPage() {
                 </>
               )}
               {showPortalTab && (
-                <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="ui-surface-card p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Portal overrides</p>

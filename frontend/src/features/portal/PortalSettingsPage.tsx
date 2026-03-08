@@ -343,7 +343,7 @@ export default function PortalSettingsPage() {
       )}
 
       {hasAccountContext && canManagePortalUsers && (
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="ui-surface-card">
           <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>

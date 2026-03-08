@@ -144,7 +144,7 @@ export default function PortalBucketModal({
             label: t({ en: "Overview", fr: "General", de: "Ubersicht" }),
             content: (
               <div className="space-y-4">
-                <section className="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <section className="space-y-3 ui-surface-card p-5">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="space-y-1">
                       <p className="ui-caption font-semibold uppercase tracking-wide text-primary">

@@ -244,7 +244,7 @@ export default function GeneralSettingsPage() {
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
           <div className="grid gap-4">
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="CORE FEATURES"
                 description="Main application feature set available to your users."
@@ -331,7 +331,7 @@ export default function GeneralSettingsPage() {
                 </PortalSettingsItem>
               </PortalSettingsSection>
             </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="EXTRA FEATURES"
                 description="Optional capabilities that extend operations visibility."
@@ -376,7 +376,7 @@ export default function GeneralSettingsPage() {
                 </PortalSettingsItem>
               </PortalSettingsSection>
             </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="LOGIN OPTIONS"
                 description="Control how access-key users authenticate and select endpoints."
@@ -435,7 +435,7 @@ export default function GeneralSettingsPage() {
                 />
               </PortalSettingsSection>
             </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="ui-surface-card p-5">
               <PortalSettingsSection
                 title="BRANDING"
                 description="Customize the primary accent color used across the application."

@@ -1102,7 +1102,7 @@ export default function PortalDashboard() {
       </div>
 
       {generalSettings.endpoint_status_enabled && hasAccountContext && (workspaceHealthLoading || orderedIncidents.length > 0) && (
-        <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <section className="ui-surface-card p-4">
           <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
             {t({ en: "Ongoing / Recent Incidents", fr: "Incidents en cours / recents", de: "Laufende / aktuelle Vorfalle" })}
           </p>
@@ -1447,7 +1447,7 @@ export default function PortalDashboard() {
             />
           )}
 
-          <div className="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+          <div className="ui-surface-card p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">

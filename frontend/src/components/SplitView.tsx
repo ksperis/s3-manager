@@ -16,10 +16,10 @@ export default function SplitView({ left, right, leftWidth = "320px" }: SplitVie
       className="grid gap-4 lg:grid-cols-[minmax(var(--split-left,320px),1fr)_2fr]"
       style={{ "--split-left": leftWidth } as CSSProperties}
     >
-      <div className="rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+      <div className="ui-surface-card">
         {left}
       </div>
-      <div className="rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+      <div className="ui-surface-card">
         {right}
       </div>
     </div>

@@ -220,7 +220,7 @@ export default function ManagerSettingsPage() {
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
         {!settings && !error && <PageBanner tone="info">Loading settings...</PageBanner>}
         {settings && (
-          <div className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="space-y-4 ui-surface-card p-5">
             <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
               <div>
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
