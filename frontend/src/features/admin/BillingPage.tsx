@@ -18,6 +18,8 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import StatCards from "../../components/StatCards";
 import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import {
@@ -332,18 +334,23 @@ export default function BillingPage() {
       traffic_bytes: (point.bytes_in ?? 0) + (point.bytes_out ?? 0),
     }));
   }, [detail]);
+  const subjectsTableStatus = resolveListTableStatus({
+    loading: subjectsLoading,
+    error: subjectsError,
+    rowCount: subjects.length,
+  });
 
   return (
     <div className="space-y-4">
       <PageHeader title="Billing" description="Monthly usage and cost overview." />
-      {pageError && <PageBanner tone="warning">{pageError}</PageBanner>}
+      {pageError && <PageBanner tone="error">{pageError}</PageBanner>}
       {billingDisabled && (
         <PageBanner tone="warning">
           Billing is disabled. Enable it in General settings to use this page.
         </PageBanner>
       )}
       {collectMessage && <PageBanner tone="success">{collectMessage}</PageBanner>}
-      {collectError && <PageBanner tone="warning">{collectError}</PageBanner>}
+      {collectError && <PageBanner tone="error">{collectError}</PageBanner>}
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <label className="flex flex-col text-sm text-slate-600 dark:text-slate-300">
           Month
@@ -433,14 +440,13 @@ export default function BillingPage() {
         </button>
       </div>
 
-      {summaryError && <PageBanner tone="warning">{summaryError}</PageBanner>}
+      {summaryError && <PageBanner tone="error">{summaryError}</PageBanner>}
       {summaryLoading ? <PageBanner tone="info">Loading summary...</PageBanner> : <StatCards stats={stats} columns={3} />}
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:text-slate-200">
-          <div>Subjects</div>
-          {selectedEndpoint && <div className="text-xs font-normal text-slate-500">{selectedEndpoint.name}</div>}
-        </div>
+      <ListSectionCard
+        title="Subjects"
+        subtitle={selectedEndpoint ? selectedEndpoint.name : undefined}
+      >
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-950">
@@ -454,35 +460,34 @@ export default function BillingPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {subjectsLoading && <TableEmptyState colSpan={6} message="Loading subjects..." />}
-              {!subjectsLoading && subjects.length === 0 && <TableEmptyState colSpan={6} message="No subjects found." />}
-              {!subjectsLoading &&
-                subjects.map((subject) => (
-                  <tr
-                    key={`${subject.subject_type}-${subject.subject_id}`}
-                    className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                    onClick={() => void handleRowClick(subject)}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900 dark:text-slate-100">{subject.name}</div>
-                      <div className="text-xs text-slate-500">{subject.rgw_identifier ?? ""}</div>
-                    </td>
-                    <td className="px-4 py-3">{formatBytes(subject.storage.avg_bytes)}</td>
-                    <td className="px-4 py-3">{formatBytes(subject.usage.bytes_out)}</td>
-                    <td className="px-4 py-3">{formatBytes(subject.usage.bytes_in)}</td>
-                    <td className="px-4 py-3">{formatCompactNumber(subject.usage.ops_total)}</td>
-                    <td className="px-4 py-3">
-                      {subject.cost?.total_cost != null
-                        ? formatCurrency(subject.cost.total_cost, subject.cost.currency)
-                        : "-"}
-                    </td>
-                  </tr>
-                ))}
+              {subjectsTableStatus === "loading" && <TableEmptyState colSpan={6} message="Loading subjects..." />}
+              {subjectsTableStatus === "error" && <TableEmptyState colSpan={6} message="Unable to load subjects." tone="error" />}
+              {subjectsTableStatus === "empty" && <TableEmptyState colSpan={6} message="No subjects found." />}
+              {subjects.map((subject) => (
+                <tr
+                  key={`${subject.subject_type}-${subject.subject_id}`}
+                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                  onClick={() => void handleRowClick(subject)}
+                >
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-slate-900 dark:text-slate-100">{subject.name}</div>
+                    <div className="text-xs text-slate-500">{subject.rgw_identifier ?? ""}</div>
+                  </td>
+                  <td className="px-4 py-3">{formatBytes(subject.storage.avg_bytes)}</td>
+                  <td className="px-4 py-3">{formatBytes(subject.usage.bytes_out)}</td>
+                  <td className="px-4 py-3">{formatBytes(subject.usage.bytes_in)}</td>
+                  <td className="px-4 py-3">{formatCompactNumber(subject.usage.ops_total)}</td>
+                  <td className="px-4 py-3">
+                    {subject.cost?.total_cost != null
+                      ? formatCurrency(subject.cost.total_cost, subject.cost.currency)
+                      : "-"}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        {subjectsError && <PageBanner tone="warning" className="m-3">{subjectsError}</PageBanner>}
-      </div>
+      </ListSectionCard>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between">
@@ -493,7 +498,7 @@ export default function BillingPage() {
           {detail?.name && <div className="text-xs text-slate-500">{detail.name}</div>}
         </div>
         {detailLoading && <PageBanner tone="info" className="mt-3">Loading detail...</PageBanner>}
-        {detailError && <PageBanner tone="warning" className="mt-3">{detailError}</PageBanner>}
+        {detailError && <PageBanner tone="error" className="mt-3">{detailError}</PageBanner>}
         {!detailLoading && !detail && <PageBanner tone="info" className="mt-3">Select a subject to view charts.</PageBanner>}
         {!detailLoading && detail && (
           <div className="mt-4 grid gap-4 lg:grid-cols-3">

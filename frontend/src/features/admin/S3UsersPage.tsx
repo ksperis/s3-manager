@@ -21,6 +21,8 @@ import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import StorageUsageCard from "../../components/StorageUsageCard";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
@@ -544,6 +546,11 @@ export default function S3UsersPage() {
   const importEndpointCanWrite = selectedImportEndpointId ? endpointUsersWrite[selectedImportEndpointId] === true : false;
   const createPermissionError = selectedCreateEndpointId ? endpointPermissionErrors[selectedCreateEndpointId] ?? null : null;
   const importPermissionError = selectedImportEndpointId ? endpointPermissionErrors[selectedImportEndpointId] ?? null : null;
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: users.length,
+  });
 
   const confirmDeleteUser = async () => {
     if (!userToDelete) return;
@@ -595,17 +602,13 @@ export default function S3UsersPage() {
         }
       />
 
-      {error && <PageBanner tone="warning">{error}</PageBanner>}
+      {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Users</p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              {totalUsers} entr{totalUsers === 1 ? "y" : "ies"} · search matches all records
-            </p>
-          </div>
+      <ListSectionCard
+        title="Users"
+        subtitle={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"} · search matches all records`}
+        rightContent={(
           <div className="flex items-center gap-2">
             <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Filter
@@ -629,8 +632,8 @@ export default function S3UsersPage() {
               </button>
             </div>
           </div>
-        </div>
-        {quickFilterActive && (
+        )}
+        afterHeader={quickFilterActive ? (
           <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-2 dark:border-slate-800 dark:bg-slate-900/40">
             <div className="inline-flex items-center gap-2">
               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active filters summary</p>
@@ -648,7 +651,8 @@ export default function S3UsersPage() {
               </span>
             </div>
           </div>
-        )}
+        ) : null}
+      >
         <div className="overflow-x-auto">
           <table className="compact-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -674,63 +678,53 @@ export default function S3UsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {loading && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
-                    Loading users...
-                  </td>
-                </tr>
+              {tableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading users..." />}
+              {tableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load users." tone="error" />}
+              {tableStatus === "empty" && (
+                <TableEmptyState colSpan={5} title="No users" description="Import or create standalone RGW users to expose them to managers." />
               )}
-              {!loading && users.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-4">
-                    <TableEmptyState title="No users" description="Import or create standalone RGW users to expose them to managers." />
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                users.map((user) => {
-                  const deleteBusy = deleteBusyId === user.id;
-                  return (
-                    <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                      <td className="sticky left-0 z-10 min-w-[14rem] bg-white px-6 py-4 ui-body font-semibold text-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:text-slate-100 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]">
-                        {user.name}
-                      </td>
-                      <td className="w-56 min-w-[11rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{user.rgw_user_uid}</td>
-                      <td className="w-48 min-w-[10rem] px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-                        <span title={user.storage_endpoint_url || undefined}>
-                          {user.storage_endpoint_name || "—"}
-                        </span>
-                      </td>
-                      <td className="min-w-[14rem] max-w-[24rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                        {user.user_ids && user.user_ids.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                            {user.user_ids.map((id) => (
-                              <span key={id} className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                                {portalUsers.find((u) => u.id === id)?.email ?? `User #${id}`}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="ui-caption text-slate-400">None</span>
-                        )}
-                      </td>
-                      <td className="w-44 min-w-[9rem] px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button onClick={() => openEditModal(user)} className={tableActionButtonClasses}>
-                            Edit
-                          </button>
-                          <Link to={`/admin/s3-users/${user.id}/keys`} className={tableActionButtonClasses}>
-                            Keys
-                          </Link>
-                          <button onClick={() => startDeleteUser(user)} className={tableDeleteActionClasses} disabled={deleteBusy}>
-                            {deleteBusy ? "Deleting..." : "Delete"}
-                          </button>
+              {users.map((user) => {
+                const deleteBusy = deleteBusyId === user.id;
+                return (
+                  <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <td className="sticky left-0 z-10 min-w-[14rem] bg-white px-6 py-4 ui-body font-semibold text-slate-900 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:text-slate-100 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]">
+                      {user.name}
+                    </td>
+                    <td className="w-56 min-w-[11rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{user.rgw_user_uid}</td>
+                    <td className="w-48 min-w-[10rem] px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
+                      <span title={user.storage_endpoint_url || undefined}>
+                        {user.storage_endpoint_name || "—"}
+                      </span>
+                    </td>
+                    <td className="min-w-[14rem] max-w-[24rem] px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      {user.user_ids && user.user_ids.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {user.user_ids.map((id) => (
+                            <span key={id} className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                              {portalUsers.find((u) => u.id === id)?.email ?? `User #${id}`}
+                            </span>
+                          ))}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                      ) : (
+                        <span className="ui-caption text-slate-400">None</span>
+                      )}
+                    </td>
+                    <td className="w-44 min-w-[9rem] px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => openEditModal(user)} className={tableActionButtonClasses}>
+                          Edit
+                        </button>
+                        <Link to={`/admin/s3-users/${user.id}/keys`} className={tableActionButtonClasses}>
+                          Keys
+                        </Link>
+                        <button onClick={() => startDeleteUser(user)} className={tableDeleteActionClasses} disabled={deleteBusy}>
+                          {deleteBusy ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -742,7 +736,7 @@ export default function S3UsersPage() {
           onPageSizeChange={handlePageSizeChange}
           disabled={loading}
         />
-      </div>
+      </ListSectionCard>
 
       {showCreateModal && (
         <Modal title="Create user" onClose={() => setShowCreateModal(false)}>

@@ -9,6 +9,9 @@ import { KeyRotationResponse, KeyRotationType, rotateS3Keys } from "../../api/ke
 import { StorageEndpoint, listStorageEndpoints } from "../../api/storageEndpoints";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
+import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 
 type RotationTypeOption = {
   value: KeyRotationType;
@@ -112,6 +115,11 @@ export default function KeyRotationPage() {
     () => endpoints.filter((endpoint) => isEndpointEligible(endpoint)),
     [endpoints]
   );
+  const resultTableStatus = resolveListTableStatus({
+    loading: false,
+    error: null,
+    rowCount: result?.results.length ?? 0,
+  });
 
   const runDisabled = running || selectedEndpointIds.length === 0 || selectedTypes.length === 0;
 
@@ -326,13 +334,11 @@ export default function KeyRotationPage() {
       </div>
 
       {result && (
-        <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div>
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Execution summary</p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Mode: {result.mode === "deactivate_old_keys" ? "Deactivate old keys" : "Delete old keys"}
-            </p>
-          </div>
+        <ListSectionCard
+          title="Execution summary"
+          subtitle={`Mode: ${result.mode === "deactivate_old_keys" ? "Deactivate old keys" : "Delete old keys"}`}
+        >
+          <div className="space-y-3 px-5 pb-5 pt-3">
           <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-lg bg-slate-50 px-3 py-2 ui-caption dark:bg-slate-800/60">Total: {result.summary.total}</div>
             <div className="rounded-lg bg-emerald-50 px-3 py-2 ui-caption text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-100">
@@ -400,17 +406,14 @@ export default function KeyRotationPage() {
                     </td>
                   </tr>
                 ))}
-                {result.results.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-3 py-3 ui-caption text-slate-500 dark:text-slate-400">
-                      No details returned by the backend.
-                    </td>
-                  </tr>
+                {resultTableStatus === "empty" && (
+                  <TableEmptyState colSpan={5} message="No details returned by the backend." />
                 )}
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        </ListSectionCard>
       )}
     </div>
   );

@@ -8,6 +8,8 @@ import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
@@ -247,6 +249,11 @@ export default function S3ConnectionsPage() {
     portalUsers.forEach((user) => map.set(user.id, user.email));
     return map;
   }, [portalUsers]);
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: items.length,
+  });
 
   useEffect(() => {
     if (!showCreateModal) return;
@@ -444,16 +451,12 @@ export default function S3ConnectionsPage() {
       />
 
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
-      {error && <PageBanner tone="warning">{error}</PageBanner>}
+      {error && <PageBanner tone="error">{error}</PageBanner>}
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Connections</p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              {total} entr{total === 1 ? "y" : "ies"} · search matches all records
-            </p>
-          </div>
+      <ListSectionCard
+        title="Connections"
+        subtitle={`${total} entr${total === 1 ? "y" : "ies"} · search matches all records`}
+        rightContent={(
           <div className="flex items-center gap-2">
             <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
               Filter
@@ -466,7 +469,8 @@ export default function S3ConnectionsPage() {
               className={`${toolbarCompactInputClasses} w-full sm:w-64`}
             />
           </div>
-        </div>
+        )}
+      >
         <div className="overflow-x-auto">
           <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -479,86 +483,76 @@ export default function S3ConnectionsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {loading && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
-                    Loading connections...
-                  </td>
-                </tr>
+              {tableStatus === "loading" && <TableEmptyState colSpan={6} message="Loading connections..." />}
+              {tableStatus === "error" && <TableEmptyState colSpan={6} message="Unable to load connections." tone="error" />}
+              {tableStatus === "empty" && (
+                <TableEmptyState colSpan={6} title="No connections" description="Create a private, shared, or public connection." />
               )}
-              {!loading && items.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-4">
-                    <TableEmptyState title="No connections" description="Create a private, shared, or public connection." />
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                items.map((c) => {
-                  const visibility = c.visibility || (c.is_public ? "public" : c.is_shared ? "shared" : "private");
-                  const canManage =
-                    visibility === "public" || visibility === "shared" || (currentUserId != null && c.owner_user_id === currentUserId);
-                  return (
-                    <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                      <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{c.name}</td>
-                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                        {c.storage_endpoint_id != null ? (
-                          <span>{endpointNameById.get(c.storage_endpoint_id) || `Endpoint #${c.storage_endpoint_id}`}</span>
-                        ) : (
-                          <span className="ui-mono">{c.endpoint_url || "-"}</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                        {visibility === "public" ? "Public" : visibility === "shared" ? "Shared" : "Private"}
-                      </td>
-                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                        {visibility === "public" ? (
-                          "—"
-                        ) : (
-                          <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                            {c.owner_email || c.owner_user_id}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                        {c.user_ids && c.user_ids.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                            {c.user_ids.map((id) => (
-                              <span
-                                key={id}
-                                className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                              >
-                                {portalUserLabelById.get(id) ?? `User #${id}`}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="ui-caption text-slate-400">None</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            className={tableActionButtonClasses}
-                            onClick={() => openEdit(c)}
-                            disabled={!canManage}
-                            title={canManage ? undefined : "Only the owner can manage private connections."}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className={tableDeleteActionClasses}
-                            onClick={() => setDeleteTarget(c)}
-                            disabled={!canManage}
-                            title={canManage ? undefined : "Only the owner can manage private connections."}
-                          >
-                            Delete
-                          </button>
+              {items.map((c) => {
+                const visibility = c.visibility || (c.is_public ? "public" : c.is_shared ? "shared" : "private");
+                const canManage =
+                  visibility === "public" || visibility === "shared" || (currentUserId != null && c.owner_user_id === currentUserId);
+                return (
+                  <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{c.name}</td>
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      {c.storage_endpoint_id != null ? (
+                        <span>{endpointNameById.get(c.storage_endpoint_id) || `Endpoint #${c.storage_endpoint_id}`}</span>
+                      ) : (
+                        <span className="ui-mono">{c.endpoint_url || "-"}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      {visibility === "public" ? "Public" : visibility === "shared" ? "Shared" : "Private"}
+                    </td>
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      {visibility === "public" ? (
+                        "—"
+                      ) : (
+                        <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          {c.owner_email || c.owner_user_id}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      {c.user_ids && c.user_ids.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {c.user_ids.map((id) => (
+                            <span
+                              key={id}
+                              className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            >
+                              {portalUserLabelById.get(id) ?? `User #${id}`}
+                            </span>
+                          ))}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                      ) : (
+                        <span className="ui-caption text-slate-400">None</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          className={tableActionButtonClasses}
+                          onClick={() => openEdit(c)}
+                          disabled={!canManage}
+                          title={canManage ? undefined : "Only the owner can manage private connections."}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className={tableDeleteActionClasses}
+                          onClick={() => setDeleteTarget(c)}
+                          disabled={!canManage}
+                          title={canManage ? undefined : "Only the owner can manage private connections."}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -570,7 +564,7 @@ export default function S3ConnectionsPage() {
           onPageSizeChange={handlePageSizeChange}
           disabled={loading}
         />
-      </div>
+      </ListSectionCard>
 
       {/* Create modal */}
       {showCreateModal && (

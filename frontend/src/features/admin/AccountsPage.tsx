@@ -29,6 +29,9 @@ import PageBanner from "../../components/PageBanner";
 import PaginationControls from "../../components/PaginationControls";
 import { PortalSettingsItem, PortalSettingsSection } from "../../components/PortalSettingsLayout";
 import StorageUsageCard from "../../components/StorageUsageCard";
+import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
@@ -602,6 +605,11 @@ export default function S3AccountsPage() {
     { label: "UI Users", field: null },
     { label: "Actions", field: null, align: "right" },
   ];
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: accounts.length,
+  });
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -915,6 +923,8 @@ export default function S3AccountsPage() {
           ) : null
         }
       />
+
+      {error && <PageBanner tone="error">{error}</PageBanner>}
 
       {isSuperAdmin && showCreateModal && (
         <Modal title="Create an account" onClose={() => setShowCreateModal(false)}>
@@ -1917,14 +1927,10 @@ export default function S3AccountsPage() {
         </Modal>
       )}
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Accounts</p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              {totalAccounts} entr{totalAccounts === 1 ? "y" : "ies"} · search matches all records
-            </p>
-          </div>
+      <ListSectionCard
+        title="Accounts"
+        subtitle={`${totalAccounts} entr${totalAccounts === 1 ? "y" : "ies"} · search matches all records`}
+        rightContent={(
           <div className="flex items-center gap-2">
             <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
             <div className="relative w-full sm:w-64 md:w-72">
@@ -1946,8 +1952,8 @@ export default function S3AccountsPage() {
               </button>
             </div>
           </div>
-        </div>
-        {quickFilterActive && (
+        )}
+        afterHeader={quickFilterActive ? (
           <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-2 dark:border-slate-800 dark:bg-slate-900/40">
             <div className="inline-flex items-center gap-2">
               <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active filters summary</p>
@@ -1965,64 +1971,45 @@ export default function S3AccountsPage() {
               </span>
             </div>
           </div>
-        )}
+        ) : null}
+      >
         <div className="overflow-x-auto">
-        <table className="compact-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead className="bg-slate-50 dark:bg-slate-900/50">
-            <tr>
-              {columns.map((col, idx) => (
-                <th
-                  key={col.label}
-                  onClick={col.field ? () => toggleSort(col.field) : undefined}
-                  className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
-                    idx === 0
-                      ? "sticky left-0 z-20 min-w-[16rem] bg-slate-50 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
-                      : idx === 1
-                        ? "w-56 min-w-[11rem]"
-                        : idx === 2
-                          ? "w-48 min-w-[10rem]"
-                          : idx === 3
-                            ? "min-w-[14rem] max-w-[26rem]"
-                            : "w-44 min-w-[9rem]"
-                  } ${
-                    col.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : col.align === "right" ? "text-right" : ""
-                  }`}
-                >
-                  <div className={`flex items-center ${col.align === "right" ? "justify-end" : "gap-1"}`}>
-                    <span>{col.label}</span>
-                    {col.field && sort.field === col.field && (
-                      <span className="ui-caption">{sort.direction === "asc" ? "▲" : "▼"}</span>
-                    )}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {loading && (
-                <tr>
-                  <td colSpan={columns.length} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
-                    Loading accounts...
-                  </td>
-                </tr>
-              )}
-              {error && !loading && (
-                <tr>
-                  <td colSpan={columns.length} className="px-6 py-4 ui-body text-rose-600 dark:text-rose-200">
-                    {error}
-                  </td>
-                </tr>
-              )}
-              {!loading && !error && accounts.length === 0 && (
-                <tr>
-                  <td colSpan={columns.length} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
-                    No accounts yet.
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                !error &&
-                accounts.map((account) => {
+          <table className="compact-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+            <thead className="bg-slate-50 dark:bg-slate-900/50">
+              <tr>
+                {columns.map((col, idx) => (
+                  <th
+                    key={col.label}
+                    onClick={col.field ? () => toggleSort(col.field) : undefined}
+                    className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
+                      idx === 0
+                        ? "sticky left-0 z-20 min-w-[16rem] bg-slate-50 shadow-[inset_-1px_0_0_rgba(100,116,139,0.45),12px_0_16px_-12px_rgba(15,23,42,0.45)] dark:bg-slate-900 dark:shadow-[inset_-1px_0_0_rgba(51,65,85,0.9),12px_0_16px_-12px_rgba(2,6,23,0.85)]"
+                        : idx === 1
+                          ? "w-56 min-w-[11rem]"
+                          : idx === 2
+                            ? "w-48 min-w-[10rem]"
+                            : idx === 3
+                              ? "min-w-[14rem] max-w-[26rem]"
+                              : "w-44 min-w-[9rem]"
+                    } ${
+                      col.field ? "cursor-pointer hover:text-primary-700 dark:hover:text-primary-100" : col.align === "right" ? "text-right" : ""
+                    }`}
+                  >
+                    <div className={`flex items-center ${col.align === "right" ? "justify-end" : "gap-1"}`}>
+                      <span>{col.label}</span>
+                      {col.field && sort.field === col.field && (
+                        <span className="ui-caption">{sort.direction === "asc" ? "▲" : "▼"}</span>
+                      )}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+              {tableStatus === "loading" && <TableEmptyState colSpan={columns.length} message="Loading accounts..." />}
+              {tableStatus === "error" && <TableEmptyState colSpan={columns.length} message="Unable to load accounts." tone="error" />}
+              {tableStatus === "empty" && <TableEmptyState colSpan={columns.length} message="No accounts yet." />}
+              {accounts.map((account) => {
                   const summaryDbId = accountDbId(account);
                   const deleteBusy = summaryDbId != null && deletingS3AccountId === summaryDbId;
                   const accountUserLinks = resolveAccountUserLinks(account);
@@ -2107,8 +2094,8 @@ export default function S3AccountsPage() {
                     )}
                   </td>
                 </tr>
-                  );
-                })}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -2120,7 +2107,7 @@ export default function S3AccountsPage() {
           onPageSizeChange={handlePageSizeChange}
           disabled={loading}
         />
-      </div>
+      </ListSectionCard>
     </div>
   );
 }

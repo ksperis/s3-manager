@@ -24,6 +24,8 @@ import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { useI18n } from "../../i18n";
 import { confirmAction } from "../../utils/confirm";
@@ -227,6 +229,40 @@ export default function PortalManagePage() {
         de: `${filteredUsers.length} Benutzer`,
       })
     : "-";
+  const usersTableStatus = resolveListTableStatus({
+    loading: usersLoading,
+    error: usersError,
+    rowCount: filteredUsers.length,
+  });
+  const usersContextState =
+    accountLoading
+      ? {
+          message: t({ en: "Loading context...", fr: "Chargement du contexte...", de: "Kontext wird geladen..." }),
+          tone: "neutral" as const,
+        }
+      : accountError
+        ? { message: accountError, tone: "error" as const }
+        : stateError
+          ? {
+              message: t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." }),
+              tone: "error" as const,
+            }
+          : !hasAccountContext
+            ? {
+                message: t({ en: "Select an account to continue.", fr: "Selectionnez un compte pour continuer.", de: "Wahlen Sie ein Konto, um fortzufahren." }),
+                tone: "neutral" as const,
+              }
+            : stateLoading
+              ? {
+                  message: t({ en: "Loading permissions...", fr: "Chargement des permissions...", de: "Berechtigungen werden geladen..." }),
+                  tone: "neutral" as const,
+                }
+              : !canManagePortalUsers
+                ? {
+                    message: t({ en: "Access reserved for portal managers.", fr: "Acces reserve aux managers du portail.", de: "Zugriff nur fur Portal-Manager." }),
+                    tone: "neutral" as const,
+                  }
+                : null;
   const bucketAccessRows = useMemo(() => {
     const available = portalState?.buckets || [];
     const query = editBucketFilter.trim().toLowerCase();
@@ -493,21 +529,8 @@ export default function PortalManagePage() {
         actions={headerActions}
       />
 
-      {accountLoading && (
-        <PageBanner tone="info">
-          {t({ en: "Loading portal context...", fr: "Chargement du contexte portail...", de: "Portal-Kontext wird geladen..." })}
-        </PageBanner>
-      )}
       {accountError && <PageBanner tone="error">{accountError}</PageBanner>}
-      {!accountLoading && !hasAccountContext && (
-        <PageBanner tone="warning">
-          {t({ en: "Select an account from the top bar to continue.", fr: "Selectionnez un compte dans la barre superieure pour continuer.", de: "Wahlen Sie ein Konto in der oberen Leiste, um fortzufahren." })}
-        </PageBanner>
-      )}
       {stateError && <PageBanner tone="error">{stateError}</PageBanner>}
-      {!stateLoading && !stateError && hasAccountContext && !canManagePortalUsers && (
-        <PageBanner tone="warning">{t({ en: "Access reserved for portal managers.", fr: "Acces reserve aux managers du portail.", de: "Zugriff nur fur Portal-Manager." })}</PageBanner>
-      )}
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
@@ -594,35 +617,28 @@ export default function PortalManagePage() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">
-                {t({ en: "Portal users", fr: "Utilisateurs du portail", de: "Portal-Benutzer" })}
-              </p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                {t({ en: "Role and bucket permissions for selected account.", fr: "Role et droits buckets pour le compte selectionne.", de: "Rolle und Bucket-Rechte fur das ausgewahlte Konto." })}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <span className="ui-caption text-slate-500 dark:text-slate-400">{userCountLabel}</span>
-              <div className="flex items-center gap-2 sm:justify-end">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  {t({ en: "Filter", fr: "Filtre", de: "Filter" })}
-                </span>
-                <input
-                  type="text"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                  placeholder={t({ en: "Search by email or IAM", fr: "Rechercher par email ou IAM", de: "Nach E-Mail oder IAM suchen" })}
-                  disabled={!canRenderUsers}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
-                />
-              </div>
+      <ListSectionCard
+        title={t({ en: "Users", fr: "Utilisateurs", de: "Benutzer" })}
+        subtitle={t({ en: "Role and bucket permissions for selected account.", fr: "Role et droits buckets pour le compte selectionne.", de: "Rolle und Bucket-Rechte fur das ausgewahlte Konto." })}
+        rightContent={(
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <span className="ui-caption text-slate-500 dark:text-slate-400">{userCountLabel}</span>
+            <div className="flex items-center gap-2 sm:justify-end">
+              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {t({ en: "Filter", fr: "Filtre", de: "Filter" })}
+              </span>
+              <input
+                type="text"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder={t({ en: "Search by email or IAM", fr: "Rechercher par email ou IAM", de: "Nach E-Mail oder IAM suchen" })}
+                disabled={!canRenderUsers}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
+              />
             </div>
           </div>
-        </div>
+        )}
+      >
         <div className="overflow-x-auto">
           <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -641,66 +657,38 @@ export default function PortalManagePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {accountLoading && (
+              {usersContextState && (
                 <TableEmptyState
                   colSpan={userTableColumns.length}
-                  message={t({ en: "Loading context...", fr: "Chargement du contexte...", de: "Kontext wird geladen..." })}
+                  message={usersContextState.message}
+                  tone={usersContextState.tone === "error" ? "error" : "neutral"}
                 />
               )}
-              {accountError && !accountLoading && (
-                <TableEmptyState colSpan={userTableColumns.length} message={t({ en: "Context error.", fr: "Erreur de contexte.", de: "Kontextfehler." })} />
-              )}
-              {stateError && !accountLoading && !accountError && (
-                <TableEmptyState
-                  colSpan={userTableColumns.length}
-                  message={t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." })}
-                />
-              )}
-              {!accountLoading && !accountError && !stateError && !hasAccountContext && (
-                <TableEmptyState
-                  colSpan={userTableColumns.length}
-                  message={t({ en: "Select an account to continue.", fr: "Selectionnez un compte pour continuer.", de: "Wahlen Sie ein Konto, um fortzufahren." })}
-                />
-              )}
-              {!accountLoading && !accountError && !stateError && hasAccountContext && stateLoading && (
-                <TableEmptyState
-                  colSpan={userTableColumns.length}
-                  message={t({ en: "Loading permissions...", fr: "Chargement des permissions...", de: "Berechtigungen werden geladen..." })}
-                />
-              )}
-              {!accountLoading && !accountError && !stateError && hasAccountContext && !stateLoading && !canManagePortalUsers && (
-                <TableEmptyState
-                  colSpan={userTableColumns.length}
-                  message={t({ en: "Access reserved for portal managers.", fr: "Acces reserve aux managers du portail.", de: "Zugriff nur fur Portal-Manager." })}
-                />
-              )}
-              {canRenderUsers && usersLoading && (
+              {!usersContextState && usersTableStatus === "loading" && (
                 <TableEmptyState
                   colSpan={userTableColumns.length}
                   message={t({ en: "Loading users...", fr: "Chargement des utilisateurs...", de: "Benutzer werden geladen..." })}
                 />
               )}
-              {canRenderUsers && !usersLoading && usersError && (
+              {!usersContextState && usersTableStatus === "error" && (
                 <TableEmptyState
                   colSpan={userTableColumns.length}
                   message={t({ en: "Unable to load users.", fr: "Impossible de charger les utilisateurs.", de: "Benutzer konnen nicht geladen werden." })}
+                  tone="error"
                 />
               )}
-              {canRenderUsers && !usersLoading && !usersError && filteredUsers.length === 0 && (
+              {!usersContextState && usersTableStatus === "empty" && (
                 <TableEmptyState
                   colSpan={userTableColumns.length}
                   message={t({ en: "No portal user.", fr: "Aucun utilisateur portail.", de: "Kein Portal-Benutzer." })}
                 />
               )}
-              {canRenderUsers &&
-                !usersLoading &&
-                !usersError &&
-                filteredUsers.map((user) => {
-                  const isIamOnly = Boolean(user.iam_only);
-                  const isSelf = Boolean(userEmail && user.email === userEmail);
-                  const busy = busyUserId === user.id;
-                  return (
-                    <tr key={user.id ?? user.email} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+              {!usersContextState && filteredUsers.map((user) => {
+                const isIamOnly = Boolean(user.iam_only);
+                const isSelf = Boolean(userEmail && user.email === userEmail);
+                const busy = busyUserId === user.id;
+                return (
+                  <tr key={user.id ?? user.email} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
                         <div className="flex flex-wrap items-center gap-2">
                           <span>{user.email}</span>
@@ -750,12 +738,12 @@ export default function PortalManagePage() {
                         )}
                       </td>
                     </tr>
-                  );
-                })}
+                );
+              })}
             </tbody>
           </table>
         </div>
-      </div>
+      </ListSectionCard>
 
 
       {showCreateModal && (

@@ -18,6 +18,7 @@ import AddS3ConnectionFromKeyModal from "../../components/AddS3ConnectionFromKey
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
 import { buildManagerConnectionDefaults } from "../shared/s3ConnectionFromKey";
@@ -181,6 +182,11 @@ export default function ManagerUserKeysPage() {
     if (!createdKey) return null;
     return buildManagerConnectionDefaults(selectedContext, pageTitle, createdKey.access_key_id);
   }, [createdKey, pageTitle, selectedContext]);
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: keys.length,
+  });
 
   if (!userName) {
     return <div className="ui-body text-slate-600">User not specified.</div>;
@@ -264,6 +270,10 @@ export default function ManagerUserKeysPage() {
       )}
 
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Keys</p>
+          <p className="ui-caption text-slate-500 dark:text-slate-400">IAM access keys for this user.</p>
+        </div>
         <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
@@ -274,10 +284,10 @@ export default function ManagerUserKeysPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {loading && <TableEmptyState colSpan={4} message="Loading keys..." />}
-            {!loading && keys.length === 0 && <TableEmptyState colSpan={4} message="No keys for this user." />}
-            {!loading &&
-              keys.map((k) => (
+            {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading keys..." />}
+            {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load keys." tone="error" />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No keys for this user." />}
+            {keys.map((k) => (
                 <tr
                   key={k.access_key_id}
                   className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isKeyActive(k) ? "" : "bg-slate-50/70 dark:bg-slate-800/40"}`}

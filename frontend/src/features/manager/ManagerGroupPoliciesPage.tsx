@@ -19,6 +19,7 @@ import {
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { confirmAction } from "../../utils/confirm";
 import InlinePolicyEditor from "./InlinePolicyEditor";
 
@@ -166,6 +167,11 @@ export default function ManagerGroupPoliciesPage() {
   }
 
   const options = available.map((p) => ({ value: p.arn, label: p.name }));
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: attached.length,
+  });
 
   return (
     <div className="space-y-4">
@@ -211,7 +217,7 @@ export default function ManagerGroupPoliciesPage() {
 
         <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Attached policies</p>
+            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Policies</p>
             <p className="ui-caption text-slate-500 dark:text-slate-400">Attach/detach managed policies for this group.</p>
           </div>
           <div className="space-y-3 px-4 py-3">
@@ -248,10 +254,12 @@ export default function ManagerGroupPoliciesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {loading && <TableEmptyState colSpan={3} message="Loading policies..." />}
-                {!loading && attached.length === 0 && <TableEmptyState colSpan={3} message="No attached policies." />}
-                {!loading &&
-                  attached.map((p) => (
+                {tableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading policies..." />}
+                {tableStatus === "error" && (
+                  <TableEmptyState colSpan={3} message="Unable to load policies." tone="error" />
+                )}
+                {tableStatus === "empty" && <TableEmptyState colSpan={3} message="No attached policies." />}
+                {attached.map((p) => (
                     <tr key={p.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{p.name}</td>
                       <td className="manager-table-cell px-6 py-4 ui-caption text-slate-600 dark:text-slate-300">{p.arn}</td>

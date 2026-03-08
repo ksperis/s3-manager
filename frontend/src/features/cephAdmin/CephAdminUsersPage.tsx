@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
@@ -937,6 +938,11 @@ export default function CephAdminUsersPage() {
 
     return cols;
   })();
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: items.length,
+  });
 
   return (
     <div className="space-y-4">
@@ -1359,12 +1365,12 @@ export default function CephAdminUsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {loading && <TableEmptyState colSpan={userTableColumns.length} message="Loading users..." />}
-              {!loading && !error && items.length === 0 && (
-                <TableEmptyState colSpan={userTableColumns.length} message="No users found." />
+              {tableStatus === "loading" && <TableEmptyState colSpan={userTableColumns.length} message="Loading users..." />}
+              {tableStatus === "error" && (
+                <TableEmptyState colSpan={userTableColumns.length} message="Unable to load users." tone="error" />
               )}
-              {!loading &&
-                items.map((user) => (
+              {tableStatus === "empty" && <TableEmptyState colSpan={userTableColumns.length} message="No users found." />}
+              {items.map((user) => (
                   <tr key={rowKey(user)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     {userTableColumns.map((col) => {
                       const align = col.align ?? (col.id === "actions" ? "right" : "left");

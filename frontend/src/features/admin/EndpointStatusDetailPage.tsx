@@ -28,6 +28,8 @@ import {
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import {
   buildTimelineSegmentDetails,
   EndpointTimelineBar,
@@ -334,6 +336,16 @@ export default function EndpointStatusDetailPage() {
     if (rawChecksTotal <= 0) return 1;
     return Math.max(1, Math.ceil(rawChecksTotal / RAW_CHECKS_PAGE_SIZE));
   }, [rawChecksTotal]);
+  const rawChecksTableStatus = resolveListTableStatus({
+    loading: rawChecksLoading,
+    error: rawChecksError,
+    rowCount: rawChecks.length,
+  });
+  const incidentsTableStatus = resolveListTableStatus({
+    loading: incidentsLoading,
+    error: incidentsError,
+    rowCount: incidents.length,
+  });
 
   useEffect(() => {
     if (rawChecksPage > rawChecksTotalPages) {
@@ -416,9 +428,9 @@ export default function EndpointStatusDetailPage() {
       />
 
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
-      {actionError && <PageBanner tone="warning">{actionError}</PageBanner>}
-      {summaryError && <PageBanner tone="warning">{summaryError}</PageBanner>}
-      {seriesError && <PageBanner tone="warning">{seriesError}</PageBanner>}
+      {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
+      {summaryError && <PageBanner tone="error">{summaryError}</PageBanner>}
+      {seriesError && <PageBanner tone="error">{seriesError}</PageBanner>}
 
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
@@ -672,35 +684,25 @@ export default function EndpointStatusDetailPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {rawChecksLoading && (
-                        <tr>
-                          <td colSpan={6} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
-                            Loading raw healthchecks...
-                          </td>
-                        </tr>
+                      {rawChecksTableStatus === "loading" && (
+                        <TableEmptyState colSpan={6} message="Loading raw healthchecks..." />
                       )}
-                      {!rawChecksLoading && rawChecksError && (
-                        <tr>
-                          <td colSpan={6} className="px-4 py-3 ui-body text-slate-500 dark:text-slate-400">
-                            {rawChecksError}
-                          </td>
-                        </tr>
+                      {rawChecksTableStatus === "error" && (
+                        <TableEmptyState colSpan={6} message="Unable to load raw healthchecks." tone="error" />
                       )}
-                      {!rawChecksLoading && !rawChecksError && rawChecks.length === 0 && (
+                      {rawChecksTableStatus === "empty" && (
                         <TableEmptyState colSpan={6} message="No raw checks for this range." />
                       )}
-                      {!rawChecksLoading &&
-                        !rawChecksError &&
-                        rawChecks.map((check, index) => (
-                          <tr key={`${check.checked_at}-${index}`}>
-                            <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{formatTimestamp(check.checked_at)}</td>
-                            <td className="px-4 py-3"><StatusPill status={check.status} /></td>
-                            <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{formatLatency(check.latency_ms ?? null)}</td>
-                            <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{check.http_status ?? "-"}</td>
-                            <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{formatCheckMode(check.check_mode)}</td>
-                            <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{check.error_message || "-"}</td>
-                          </tr>
-                        ))}
+                      {rawChecks.map((check, index) => (
+                        <tr key={`${check.checked_at}-${index}`}>
+                          <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{formatTimestamp(check.checked_at)}</td>
+                          <td className="px-4 py-3"><StatusPill status={check.status} /></td>
+                          <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{formatLatency(check.latency_ms ?? null)}</td>
+                          <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{check.http_status ?? "-"}</td>
+                          <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{formatCheckMode(check.check_mode)}</td>
+                          <td className="px-4 py-3 ui-caption text-slate-500 dark:text-slate-400">{check.error_message || "-"}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -728,11 +730,10 @@ export default function EndpointStatusDetailPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-100 px-6 py-4 dark:border-slate-800">
-          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Incidents</p>
-          <p className="ui-caption text-slate-500 dark:text-slate-400">Downtime or degraded periods detected for this endpoint.</p>
-        </div>
+      <ListSectionCard
+        title="Incidents"
+        subtitle="Downtime or degraded periods detected for this endpoint."
+      >
         <div className="overflow-x-auto">
           <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -745,33 +746,27 @@ export default function EndpointStatusDetailPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {incidentsLoading && (
-                <tr>
-                  <td colSpan={4} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">Loading incidents...</td>
-                </tr>
+              {incidentsTableStatus === "loading" && (
+                <TableEmptyState colSpan={4} message="Loading incidents..." />
               )}
-              {!incidentsLoading && incidentsError && (
-                <tr>
-                  <td colSpan={4} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">{incidentsError}</td>
-                </tr>
+              {incidentsTableStatus === "error" && (
+                <TableEmptyState colSpan={4} message="Unable to load incidents." tone="error" />
               )}
-              {!incidentsLoading && !incidentsError && incidents.length === 0 && (
+              {incidentsTableStatus === "empty" && (
                 <TableEmptyState colSpan={4} message="No incidents recorded for this range." />
               )}
-              {!incidentsLoading &&
-                !incidentsError &&
-                incidents.map((incident, index) => (
-                  <tr key={`${incident.start}-${index}`}>
-                    <td className="px-6 py-4"><StatusPill status={incident.status} /></td>
-                    <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{formatTimestamp(incident.start)}</td>
-                    <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{incident.end ? formatTimestamp(incident.end) : "Ongoing"}</td>
-                    <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{incident.duration_minutes != null ? `${incident.duration_minutes} min` : "-"}</td>
-                  </tr>
-                ))}
+              {incidents.map((incident, index) => (
+                <tr key={`${incident.start}-${index}`}>
+                  <td className="px-6 py-4"><StatusPill status={incident.status} /></td>
+                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{formatTimestamp(incident.start)}</td>
+                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{incident.end ? formatTimestamp(incident.end) : "Ongoing"}</td>
+                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{incident.duration_minutes != null ? `${incident.duration_minutes} min` : "-"}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </ListSectionCard>
     </div>
   );
 }

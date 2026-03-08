@@ -22,6 +22,7 @@ import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { confirmAction, confirmDeletion } from "../../utils/confirm";
@@ -647,6 +648,11 @@ export default function BucketsPage() {
 
   const stepTitles = ["General", "Protection"];
   const isBucketNameValid = !bucketForm.name || isValidS3BucketName(bucketForm.name);
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: filteredBuckets.length,
+  });
 
   const openAdvancedModal = () => {
     setBucketForm(buildDefaultForm());
@@ -779,16 +785,12 @@ export default function BucketsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {loading && <TableEmptyState colSpan={bucketTableColumns.length} message="Loading buckets..." />}
-              {error && !loading && filteredBuckets.length === 0 && (
-                <TableEmptyState colSpan={bucketTableColumns.length} message="Unable to load buckets." />
+              {tableStatus === "loading" && <TableEmptyState colSpan={bucketTableColumns.length} message="Loading buckets..." />}
+              {tableStatus === "error" && (
+                <TableEmptyState colSpan={bucketTableColumns.length} message="Unable to load buckets." tone="error" />
               )}
-              {!loading && !error && filteredBuckets.length === 0 && (
-                <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets found." />
-              )}
-              {!loading &&
-                !error &&
-                filteredBuckets.map((bucket) => (
+              {tableStatus === "empty" && <TableEmptyState colSpan={bucketTableColumns.length} message="No buckets found." />}
+              {filteredBuckets.map((bucket) => (
                   <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     {bucketTableColumns.map((col) => {
                       const align = col.align ?? (col.id === "actions" ? "right" : "left");

@@ -19,6 +19,7 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
 import { useS3AccountContext } from "./S3AccountContext";
@@ -404,6 +405,12 @@ export default function TopicsPage() {
     setAttributeItems((prev) => prev.filter((_, idx) => idx !== index));
   };
 
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: topics.length,
+  });
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -459,10 +466,10 @@ export default function TopicsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {loading && <TableEmptyState colSpan={3} message="Loading topics..." />}
-                {!loading && topics.length === 0 && <TableEmptyState colSpan={3} message="No topics." />}
-                {!loading &&
-                  topics.map((topic) => (
+                {tableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading topics..." />}
+                {tableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load topics." tone="error" />}
+                {tableStatus === "empty" && <TableEmptyState colSpan={3} message="No topics." />}
+                {topics.map((topic) => (
                     <tr key={topic.arn} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="manager-table-cell-wide px-6 py-4">
                         <div className="flex flex-col">

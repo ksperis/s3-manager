@@ -6,6 +6,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuditLogEntry, listAuditLogs } from "../../api/audit";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 
 type RoleFilter = "all" | "ui_superadmin" | "ui_admin" | "ui_user" | "ui_none";
@@ -175,7 +178,11 @@ export default function AuditLogsPage() {
       return true;
     });
   }, [actionFilter, logs, statusFilter]);
-  const isEmpty = !loading && filteredLogs.length === 0;
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: filteredLogs.length,
+  });
   const isFiltered = filteredLogs.length !== logs.length;
   const hasActiveFilters =
     roleFilter !== "all" ||
@@ -261,101 +268,105 @@ export default function AuditLogsPage() {
         ]}
       />
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white/95 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+      <ListSectionCard
+        title="Audit trail"
+        subtitle="Administrative actions performed through the UI."
+        className="bg-white/95 dark:bg-slate-900/60"
+      >
         {error && (
-          <PageBanner tone="warning" className="rounded-none border-x-0 border-t-0 px-4 py-3">
+          <PageBanner tone="error" className="rounded-none border-x-0 border-t-0 px-4 py-3">
             {error}
           </PageBanner>
         )}
 
-        {loading && logs.length === 0 ? (
-          <div className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">Loading audit data…</div>
-        ) : isEmpty ? (
-          <div className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
-            {logs.length === 0 && !hasActiveFilters
-              ? "No audit entries found."
-              : "No audit entries match the current filters."}
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-            <table className="compact-table min-w-full divide-y divide-slate-200 text-left ui-body text-slate-700 dark:divide-slate-800 dark:text-slate-200">
-                <thead className="bg-slate-50 ui-caption uppercase tracking-wide text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Time</th>
-                    <th className="px-4 py-3 font-semibold">Actor</th>
-                    <th className="px-4 py-3 font-semibold">Scope</th>
-                    <th className="px-4 py-3 font-semibold">Action</th>
-                    <th className="px-4 py-3 font-semibold">Target</th>
-                    <th className="px-4 py-3 font-semibold">S3Account/User</th>
-                    <th className="px-4 py-3 font-semibold">Details</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                  {filteredLogs.map((log) => (
-                    <tr key={log.id} className="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50">
-                      <td className="px-4 py-3 align-top ui-caption text-slate-500 dark:text-slate-400">
-                        {new Date(log.created_at).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <div className="flex flex-col gap-1">
-                          <span className="font-semibold">{log.user_email}</span>
-                          <RoleBadge role={log.user_role} />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <ScopeBadge scope={log.scope} />
-                      </td>
-                      <td className="px-4 py-3 align-top font-mono ui-caption">{log.action}</td>
-                      <td className="px-4 py-3 align-top">
-                        <div className="ui-caption text-slate-600 dark:text-slate-300">{log.entity_type || "-"}</div>
-                        <div className="ui-body font-medium text-slate-900 dark:text-white">{log.entity_id || "—"}</div>
-                      </td>
-                      <td className="px-4 py-3 align-top ui-body">
-                        {log.account_name ? (
-                          <div className="font-medium text-slate-900 dark:text-white">{log.account_name}</div>
-                        ) : log.account_id ? (
-                          <div className="text-slate-600 dark:text-slate-300">S3Account #{log.account_id}</div>
-                        ) : (
-                          <span className="text-slate-500 dark:text-slate-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <MetadataPreview metadata={log.metadata as Record<string, unknown> | undefined} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        <div className="overflow-x-auto">
+          <table className="compact-table min-w-full divide-y divide-slate-200 text-left ui-body text-slate-700 dark:divide-slate-800 dark:text-slate-200">
+            <thead className="bg-slate-50 ui-caption uppercase tracking-wide text-slate-500 dark:bg-slate-900/70 dark:text-slate-400">
+              <tr>
+                <th className="px-4 py-3 font-semibold">Time</th>
+                <th className="px-4 py-3 font-semibold">Actor</th>
+                <th className="px-4 py-3 font-semibold">Scope</th>
+                <th className="px-4 py-3 font-semibold">Action</th>
+                <th className="px-4 py-3 font-semibold">Target</th>
+                <th className="px-4 py-3 font-semibold">S3Account/User</th>
+                <th className="px-4 py-3 font-semibold">Details</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+              {tableStatus === "loading" && <TableEmptyState colSpan={7} message="Loading audit data..." />}
+              {tableStatus === "error" && <TableEmptyState colSpan={7} message="Unable to load audit logs." tone="error" />}
+              {tableStatus === "empty" && (
+                <TableEmptyState
+                  colSpan={7}
+                  message={
+                    logs.length === 0 && !hasActiveFilters
+                      ? "No audit entries found."
+                      : "No audit entries match the current filters."
+                  }
+                />
+              )}
+              {filteredLogs.map((log) => (
+                <tr key={log.id} className="bg-white/80 hover:bg-slate-50 dark:bg-transparent dark:hover:bg-slate-900/50">
+                  <td className="px-4 py-3 align-top ui-caption text-slate-500 dark:text-slate-400">
+                    {new Date(log.created_at).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <div className="flex flex-col gap-1">
+                      <span className="font-semibold">{log.user_email}</span>
+                      <RoleBadge role={log.user_role} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <ScopeBadge scope={log.scope} />
+                  </td>
+                  <td className="px-4 py-3 align-top font-mono ui-caption">{log.action}</td>
+                  <td className="px-4 py-3 align-top">
+                    <div className="ui-caption text-slate-600 dark:text-slate-300">{log.entity_type || "-"}</div>
+                    <div className="ui-body font-medium text-slate-900 dark:text-white">{log.entity_id || "—"}</div>
+                  </td>
+                  <td className="px-4 py-3 align-top ui-body">
+                    {log.account_name ? (
+                      <div className="font-medium text-slate-900 dark:text-white">{log.account_name}</div>
+                    ) : log.account_id ? (
+                      <div className="text-slate-600 dark:text-slate-300">S3Account #{log.account_id}</div>
+                    ) : (
+                      <span className="text-slate-500 dark:text-slate-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <MetadataPreview metadata={log.metadata as Record<string, unknown> | undefined} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-            <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 ui-body dark:border-slate-800">
-              <span className="text-slate-500 dark:text-slate-400">
-                Showing {filteredLogs.length} entr{filteredLogs.length === 1 ? "y" : "ies"}
-                {isFiltered && ` of ${logs.length}`}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleRefresh}
-                  className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 ui-caption font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-                  disabled={loading}
-                >
-                  Refresh
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLoadMore}
-                  disabled={!hasMore || loadingMore}
-                  className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
-                >
-                  {loadingMore ? "Loading…" : hasMore ? "Load older" : "No more"}
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 ui-body dark:border-slate-800">
+          <span className="text-slate-500 dark:text-slate-400">
+            Showing {filteredLogs.length} entr{filteredLogs.length === 1 ? "y" : "ies"}
+            {isFiltered && ` of ${logs.length}`}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 ui-caption font-medium text-slate-700 shadow-sm transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+              disabled={loading}
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              disabled={!hasMore || loadingMore}
+              className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+            >
+              {loadingMore ? "Loading…" : hasMore ? "Load older" : "No more"}
+            </button>
+          </div>
+        </div>
+      </ListSectionCard>
     </div>
   );
 }

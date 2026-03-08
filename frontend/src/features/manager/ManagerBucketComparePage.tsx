@@ -10,6 +10,7 @@ import { listExecutionContexts, type ExecutionContext } from "../../api/executio
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import ManagerBucketCompareModal from "./ManagerBucketCompareModal";
 import { useS3AccountContext } from "./S3AccountContext";
 
@@ -135,6 +136,12 @@ export default function ManagerBucketComparePage() {
     setShowCompareModal(true);
   };
 
+  const tableStatus = resolveListTableStatus({
+    loading: bucketsLoading,
+    error: bucketsError,
+    rowCount: filteredBuckets.length,
+  });
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -194,7 +201,12 @@ export default function ManagerBucketComparePage() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Buckets</p>
+          <p className="ui-caption text-slate-500 dark:text-slate-400">Select source buckets to compare.</p>
+        </div>
+        <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/70">
             <tr>
@@ -207,10 +219,10 @@ export default function ManagerBucketComparePage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {bucketsLoading && <TableEmptyState colSpan={2} message="Loading source buckets..." />}
-            {!bucketsLoading && filteredBuckets.length === 0 && <TableEmptyState colSpan={2} message="No buckets found." />}
-            {!bucketsLoading &&
-              filteredBuckets.map((bucket) => (
+            {tableStatus === "loading" && <TableEmptyState colSpan={2} message="Loading source buckets..." />}
+            {tableStatus === "error" && <TableEmptyState colSpan={2} message="Unable to load buckets." tone="error" />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={2} message="No buckets found." />}
+            {filteredBuckets.map((bucket) => (
                 <tr key={bucket.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <td className="px-3 py-2">
                     <input
@@ -225,6 +237,7 @@ export default function ManagerBucketComparePage() {
               ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {showCompareModal && sourceContextId && selectedBucketList.length > 0 && (

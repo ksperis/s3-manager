@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
 import SortableHeader from "../../components/SortableHeader";
 import ColumnVisibilityPicker from "../../components/ColumnVisibilityPicker";
@@ -847,6 +848,11 @@ export default function CephAdminAccountsPage() {
 
     return cols;
   })();
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: items.length,
+  });
 
   return (
     <div className="space-y-4">
@@ -1225,12 +1231,12 @@ export default function CephAdminAccountsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {loading && <TableEmptyState colSpan={accountTableColumns.length} message="Loading accounts..." />}
-              {!loading && !error && items.length === 0 && (
-                <TableEmptyState colSpan={accountTableColumns.length} message="No accounts found." />
+              {tableStatus === "loading" && <TableEmptyState colSpan={accountTableColumns.length} message="Loading accounts..." />}
+              {tableStatus === "error" && (
+                <TableEmptyState colSpan={accountTableColumns.length} message="Unable to load accounts." tone="error" />
               )}
-              {!loading &&
-                items.map((account) => (
+              {tableStatus === "empty" && <TableEmptyState colSpan={accountTableColumns.length} message="No accounts found." />}
+              {items.map((account) => (
                   <tr key={rowKey(account)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     {accountTableColumns.map((col) => {
                       const align = col.align ?? "left";

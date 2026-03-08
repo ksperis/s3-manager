@@ -17,6 +17,8 @@ import {
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import {
   EndpointTimelineBar,
   formatCheckMode,
@@ -184,6 +186,11 @@ export default function EndpointStatusPage() {
     if (values.length === 0) return 1;
     return Math.max(...values, 1);
   }, [filteredLatencyEndpoints]);
+  const incidentsTableStatus = resolveListTableStatus({
+    loading: incidentsLoading,
+    error: incidentsError,
+    rowCount: globalIncidents.length,
+  });
 
   return (
     <div className="space-y-4">
@@ -203,10 +210,10 @@ export default function EndpointStatusPage() {
       />
 
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
-      {actionError && <PageBanner tone="warning">{actionError}</PageBanner>}
-      {latencyError && <PageBanner tone="warning">{latencyError}</PageBanner>}
-      {timelineError && <PageBanner tone="warning">{timelineError}</PageBanner>}
-      {incidentsError && <PageBanner tone="warning">{incidentsError}</PageBanner>}
+      {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
+      {latencyError && <PageBanner tone="error">{latencyError}</PageBanner>}
+      {timelineError && <PageBanner tone="error">{timelineError}</PageBanner>}
+      {incidentsError && <PageBanner tone="error">{incidentsError}</PageBanner>}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
@@ -362,12 +369,10 @@ export default function EndpointStatusPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Incidents (Global)</p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">All incidents across endpoints. Default view is 6 months.</p>
-          </div>
+      <ListSectionCard
+        title="Incidents"
+        subtitle="All incidents across endpoints. Default view is 6 months."
+        rightContent={(
           <div className="flex flex-wrap items-center gap-3">
             <span className="rounded-full bg-slate-100 px-2.5 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               {globalIncidentsTotal} incidents
@@ -393,7 +398,8 @@ export default function EndpointStatusPage() {
               ))}
             </div>
           </div>
-        </div>
+        )}
+      >
         <div className="overflow-x-auto">
           <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -413,46 +419,46 @@ export default function EndpointStatusPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {incidentsLoading && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
-                    Loading incidents...
+              {incidentsTableStatus === "loading" && (
+                <TableEmptyState colSpan={6} message="Loading incidents..." />
+              )}
+              {incidentsTableStatus === "error" && (
+                <TableEmptyState colSpan={6} message="Unable to load incidents." tone="error" />
+              )}
+              {incidentsTableStatus === "empty" && (
+                <TableEmptyState colSpan={6} message="No incidents for this range." />
+              )}
+              {globalIncidents.map((incident, index) => (
+                <tr key={`${incident.endpoint_id}-${incident.start}-${index}`}>
+                  <td className="px-6 py-4">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/admin/endpoint-status/${incident.endpoint_id}`)}
+                      className="text-left hover:text-primary"
+                    >
+                      <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{incident.endpoint_name}</p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">{incident.endpoint_url || "-"}</p>
+                    </button>
+                  </td>
+                  <td className="px-6 py-4">
+                    <StatusPill status={incident.status} />
+                  </td>
+                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{formatTimestamp(incident.start)}</td>
+                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">
+                    {incident.end ? formatTimestamp(incident.end) : "Ongoing"}
+                  </td>
+                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">
+                    {incident.duration_minutes != null ? `${incident.duration_minutes} min` : "-"}
+                  </td>
+                  <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">
+                    {(incident.check_type || "availability").toUpperCase()} · {(incident.scope || "endpoint").toUpperCase()} · {formatCheckMode(incident.check_mode)}
                   </td>
                 </tr>
-              )}
-              {!incidentsLoading && globalIncidents.length === 0 && <TableEmptyState colSpan={6} message="No incidents for this range." />}
-              {!incidentsLoading &&
-                globalIncidents.map((incident, index) => (
-                  <tr key={`${incident.endpoint_id}-${incident.start}-${index}`}>
-                    <td className="px-6 py-4">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/admin/endpoint-status/${incident.endpoint_id}`)}
-                        className="text-left hover:text-primary"
-                      >
-                        <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">{incident.endpoint_name}</p>
-                        <p className="ui-caption text-slate-500 dark:text-slate-400">{incident.endpoint_url || "-"}</p>
-                      </button>
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusPill status={incident.status} />
-                    </td>
-                    <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">{formatTimestamp(incident.start)}</td>
-                    <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">
-                      {incident.end ? formatTimestamp(incident.end) : "Ongoing"}
-                    </td>
-                    <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">
-                      {incident.duration_minutes != null ? `${incident.duration_minutes} min` : "-"}
-                    </td>
-                    <td className="px-6 py-4 ui-caption text-slate-500 dark:text-slate-400">
-                      {(incident.check_type || "availability").toUpperCase()} · {(incident.scope || "endpoint").toUpperCase()} · {formatCheckMode(incident.check_mode)}
-                    </td>
-                  </tr>
-                ))}
+              ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </ListSectionCard>
     </div>
   );
 }

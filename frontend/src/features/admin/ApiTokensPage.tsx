@@ -15,6 +15,8 @@ import Modal from "../../components/Modal";
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
 
@@ -114,6 +116,11 @@ export default function ApiTokensPage() {
       return right - left;
     });
   }, [tokens]);
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: sortedTokens.length,
+  });
 
   const loadTokens = useCallback(async () => {
     setLoading(true);
@@ -320,7 +327,10 @@ export default function ApiTokensPage() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <ListSectionCard
+        title="API tokens"
+        subtitle={`${sortedTokens.length} token${sortedTokens.length === 1 ? "" : "s"}${includeRevoked ? " (including revoked/expired)" : ""}`}
+      >
         <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
@@ -333,41 +343,41 @@ export default function ApiTokensPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {loading && <TableEmptyState colSpan={6} message="Loading API tokens..." />}
-            {!loading && sortedTokens.length === 0 && <TableEmptyState colSpan={6} message="No API token found." />}
-            {!loading &&
-              sortedTokens.map((token) => {
-                const status = resolveTokenStatus(token);
-                const isBusy = busyTokenId === token.id;
-                return (
-                  <tr key={token.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="px-6 py-4 ui-body font-semibold text-slate-800 dark:text-slate-100">{token.name}</td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(token.created_at)}</td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(token.expires_at)}</td>
-                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(token.last_used_at)}</td>
-                    <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-                      <StatusBadge status={status} />
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {status === "active" ? (
-                        <button
-                          type="button"
-                          onClick={() => handleRevoke(token)}
-                          disabled={isBusy}
-                          className={tableDeleteActionClasses}
-                        >
-                          {isBusy ? "Revoking..." : "Revoke"}
-                        </button>
-                      ) : (
-                        <span className="ui-caption text-slate-400 dark:text-slate-500">-</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+            {tableStatus === "loading" && <TableEmptyState colSpan={6} message="Loading API tokens..." />}
+            {tableStatus === "error" && <TableEmptyState colSpan={6} message="Unable to load API tokens." tone="error" />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={6} message="No API token found." />}
+            {sortedTokens.map((token) => {
+              const status = resolveTokenStatus(token);
+              const isBusy = busyTokenId === token.id;
+              return (
+                <tr key={token.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <td className="px-6 py-4 ui-body font-semibold text-slate-800 dark:text-slate-100">{token.name}</td>
+                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(token.created_at)}</td>
+                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(token.expires_at)}</td>
+                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(token.last_used_at)}</td>
+                  <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
+                    <StatusBadge status={status} />
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    {status === "active" ? (
+                      <button
+                        type="button"
+                        onClick={() => handleRevoke(token)}
+                        disabled={isBusy}
+                        className={tableDeleteActionClasses}
+                      >
+                        {isBusy ? "Revoking..." : "Revoke"}
+                      </button>
+                    ) : (
+                      <span className="ui-caption text-slate-400 dark:text-slate-500">-</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
-      </div>
+      </ListSectionCard>
 
       {showCreateModal && (
         <Modal title="Create API token" onClose={closeCreateModal} maxWidthClass="max-w-xl">

@@ -12,6 +12,7 @@ import { useS3AccountContext } from "./S3AccountContext";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { confirmAction } from "../../utils/confirm";
 
 export default function ManagerGroupUsersPage() {
@@ -150,6 +151,12 @@ export default function ManagerGroupUsersPage() {
     }
   };
 
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: users.length,
+  });
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -209,6 +216,10 @@ export default function ManagerGroupUsersPage() {
       </form>
 
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Users</p>
+          <p className="ui-caption text-slate-500 dark:text-slate-400">Members of this group.</p>
+        </div>
         <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
@@ -218,12 +229,10 @@ export default function ManagerGroupUsersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {loading && <TableEmptyState colSpan={3} message="Loading members..." />}
-            {!loading && users.length === 0 && (
-              <TableEmptyState colSpan={3} message="No members in this group." />
-            )}
-            {!loading &&
-              users.map((u) => (
+            {tableStatus === "loading" && <TableEmptyState colSpan={3} message="Loading members..." />}
+            {tableStatus === "error" && <TableEmptyState colSpan={3} message="Unable to load users." tone="error" />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={3} message="No members in this group." />}
+            {users.map((u) => (
                 <tr key={u.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{u.name}</td>
                   <td className="manager-table-cell px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{u.arn ?? "-"}</td>

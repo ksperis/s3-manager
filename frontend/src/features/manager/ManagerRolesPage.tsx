@@ -21,6 +21,7 @@ import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPo
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
@@ -339,6 +340,12 @@ export default function ManagerRolesPage() {
     }
   };
 
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: roles.length,
+  });
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -375,10 +382,10 @@ export default function ManagerRolesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {loading && <TableEmptyState colSpan={5} message="Loading roles..." />}
-            {!loading && roles.length === 0 && <TableEmptyState colSpan={5} message="No roles." />}
-            {!loading &&
-              roles.map((r) => (
+            {tableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading roles..." />}
+            {tableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load roles." tone="error" />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={5} message="No roles." />}
+            {roles.map((r) => (
                 <tr key={r.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
                     <span>{r.name}</span>

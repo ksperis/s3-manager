@@ -21,6 +21,7 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
@@ -190,6 +191,11 @@ export default function ManagerUsersPage() {
       return name.includes(query) || arn.includes(query);
     });
   }, [policies, policySearch]);
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: filteredUsers.length,
+  });
 
   const toggleSort = (field: SortField) => {
     setSort((prev) => {
@@ -413,15 +419,12 @@ export default function ManagerUsersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {loading && <TableEmptyState colSpan={userTableColumns.length} message="Loading users..." />}
-            {error && !loading && filteredUsers.length === 0 && (
-              <TableEmptyState colSpan={userTableColumns.length} message="Unable to load users." />
+            {tableStatus === "loading" && <TableEmptyState colSpan={userTableColumns.length} message="Loading users..." />}
+            {tableStatus === "error" && (
+              <TableEmptyState colSpan={userTableColumns.length} message="Unable to load users." tone="error" />
             )}
-            {!loading && !error && filteredUsers.length === 0 && (
-              <TableEmptyState colSpan={userTableColumns.length} message="No users." />
-            )}
-            {!loading &&
-              filteredUsers.map((u) => {
+            {tableStatus === "empty" && <TableEmptyState colSpan={userTableColumns.length} message="No users." />}
+            {filteredUsers.map((u) => {
                 const hasGroups = (u.groups?.length ?? 0) > 0;
                 const hasPolicies = (u.policies?.length ?? 0) > 0;
                 const hasInlinePolicies = (u.inline_policies?.length ?? 0) > 0;

@@ -23,6 +23,8 @@ import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
 import SortableHeader from "../../components/SortableHeader";
 import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
 import {
@@ -411,7 +413,35 @@ export default function PortalBucketsPage() {
 
   const isBucketNameValid = !newBucketName || isValidS3BucketName(newBucketName);
   const userBlocked = !accountLoading && !accountError && hasAccountContext && !stateLoading && !canManageBuckets;
-  const showTable = hasAccountContext && (canManageBuckets || stateLoading);
+  const bucketTableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: buckets.length,
+  });
+  const bucketContextState =
+    accountLoading
+      ? {
+          message: t({ en: "Loading context...", fr: "Chargement du contexte...", de: "Kontext wird geladen..." }),
+          tone: "neutral" as const,
+        }
+      : accountError
+        ? { message: accountError, tone: "error" as const }
+        : !hasAccountContext
+          ? {
+              message: t({ en: "Select an account before displaying buckets.", fr: "Selectionnez un compte avant d'afficher les buckets.", de: "Wahlen Sie ein Konto, bevor Sie Buckets anzeigen." }),
+              tone: "neutral" as const,
+            }
+          : stateLoading
+            ? {
+                message: t({ en: "Loading permissions...", fr: "Chargement des permissions...", de: "Berechtigungen werden geladen..." }),
+                tone: "neutral" as const,
+              }
+            : userBlocked
+              ? {
+                  message: t({ en: "This page is reserved for portal managers.", fr: "Cette page est reservee aux portal managers.", de: "Diese Seite ist nur fur Portal-Manager vorgesehen." }),
+                  tone: "neutral" as const,
+                }
+              : null;
 
   return (
     <div className="space-y-4">
@@ -429,74 +459,62 @@ export default function PortalBucketsPage() {
       {actionError && <PageBanner tone="error">{actionError}</PageBanner>}
       {actionMessage && <PageBanner tone="success">{actionMessage}</PageBanner>}
 
-      {!hasAccountContext && (
-        <PageBanner tone="warning">{t({ en: "Select an account before displaying buckets.", fr: "Selectionnez un compte avant d'afficher les buckets.", de: "Wahlen Sie ein Konto, bevor Sie Buckets anzeigen." })}</PageBanner>
-      )}
-
-      {userBlocked && (
-        <PageBanner tone="warning">{t({ en: "This page is reserved for portal managers.", fr: "Cette page est reservee aux portal managers.", de: "Diese Seite ist nur fur Portal-Manager vorgesehen." })}</PageBanner>
-      )}
-
-      {showTable ? (
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">{t({ en: "Buckets", fr: "Buckets", de: "Buckets" })}</p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">{t({ en: "Filterable list (portal manager).", fr: "Liste filtrable (portal manager).", de: "Filterbare Liste (Portal-Manager)." })}</p>
+      <ListSectionCard
+        title={t({ en: "Buckets", fr: "Buckets", de: "Buckets" })}
+        subtitle={t({ en: "Filterable list (portal manager).", fr: "Liste filtrable (portal manager).", de: "Filterbare Liste (Portal-Manager)." })}
+        rightContent={(
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <span className="ui-caption text-slate-500 dark:text-slate-400">
+              {t({
+                en: `${buckets.length} bucket(s)`,
+                fr: `${buckets.length} bucket(s)`,
+                de: `${buckets.length} Bucket(s)`,
+              })}
+            </span>
+            <div className="flex items-center gap-2 sm:justify-end">
+              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{t({ en: "Filter", fr: "Filtre", de: "Filter" })}</span>
+              <input
+                type="search"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder={t({ en: "Search...", fr: "Rechercher...", de: "Suchen..." })}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
+                disabled={!canManageBuckets}
+              />
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <span className="ui-caption text-slate-500 dark:text-slate-400">
-                {t({
-                  en: `${buckets.length} bucket(s)`,
-                  fr: `${buckets.length} bucket(s)`,
-                  de: `${buckets.length} Bucket(s)`,
-                })}
-              </span>
-              <div className="flex items-center gap-2 sm:justify-end">
-                <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{t({ en: "Filter", fr: "Filtre", de: "Filter" })}</span>
+            {canManageBuckets ? (
+              <form onSubmit={handleCreateBucket} className="flex items-center gap-2">
                 <input
-                  type="search"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                  placeholder={t({ en: "Search...", fr: "Rechercher...", de: "Suchen..." })}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:w-64 md:w-72"
-                  disabled={!canManageBuckets}
+                  type="text"
+                  value={newBucketName}
+                  onChange={(e) => setNewBucketName(normalizeS3BucketNameInput(e.target.value))}
+                  maxLength={MAX_BUCKET_NAME_LENGTH}
+                  title={
+                    isBucketNameValid
+                      ? undefined
+                      : t({ en: "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.", fr: "Nom invalide. 3-63 caracteres, minuscules, chiffres, points ou tirets.", de: "Ungueltiger Name. 3-63 Zeichen, Kleinbuchstaben, Zahlen, Punkte oder Bindestriche." })
+                  }
+                  className={`w-full rounded-md border px-3 py-2 ui-body focus:outline-none focus:ring-2 sm:w-56 md:w-64 ${
+                    isBucketNameValid
+                      ? "border-slate-200 focus:border-primary focus:ring-primary/30 dark:border-slate-700"
+                      : "border-rose-400 text-rose-700 focus:border-rose-500 focus:ring-rose-200 dark:border-rose-500 dark:text-rose-200 dark:focus:ring-rose-900/50"
+                  } dark:bg-slate-900 dark:text-slate-100`}
+                  placeholder={t({ en: "new-bucket", fr: "nouveau-bucket", de: "neuer-bucket" })}
                 />
-              </div>
-              {canManageBuckets ? (
-                <form onSubmit={handleCreateBucket} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={newBucketName}
-                    onChange={(e) => setNewBucketName(normalizeS3BucketNameInput(e.target.value))}
-                    maxLength={MAX_BUCKET_NAME_LENGTH}
-                    title={
-                      isBucketNameValid
-                        ? undefined
-                        : t({ en: "Invalid name. 3-63 characters, lowercase letters, numbers, dots or hyphens.", fr: "Nom invalide. 3-63 caracteres, minuscules, chiffres, points ou tirets.", de: "Ungueltiger Name. 3-63 Zeichen, Kleinbuchstaben, Zahlen, Punkte oder Bindestriche." })
-                    }
-                    className={`w-full rounded-md border px-3 py-2 ui-body focus:outline-none focus:ring-2 sm:w-56 md:w-64 ${
-                      isBucketNameValid
-                        ? "border-slate-200 focus:border-primary focus:ring-primary/30 dark:border-slate-700"
-                        : "border-rose-400 text-rose-700 focus:border-rose-500 focus:ring-rose-200 dark:border-rose-500 dark:text-rose-200 dark:focus:ring-rose-900/50"
-                    } dark:bg-slate-900 dark:text-slate-100`}
-                    placeholder={t({ en: "new-bucket", fr: "nouveau-bucket", de: "neuer-bucket" })}
-                  />
-                  <button
-                    type="submit"
-                    disabled={creating || !newBucketName.trim() || !isBucketNameValid}
-                    className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                  >
-                    {creating
-                      ? t({ en: "Creating...", fr: "Creation...", de: "Erstellung..." })
-                      : t({ en: "Create", fr: "Creer", de: "Erstellen" })}
-                  </button>
-                </form>
-              ) : null}
-            </div>
+                <button
+                  type="submit"
+                  disabled={creating || !newBucketName.trim() || !isBucketNameValid}
+                  className="rounded-md bg-primary px-4 py-2 ui-body font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                >
+                  {creating
+                    ? t({ en: "Creating...", fr: "Creation...", de: "Erstellung..." })
+                    : t({ en: "Create", fr: "Creer", de: "Erstellen" })}
+                </button>
+              </form>
+            ) : null}
           </div>
-        </div>
+        )}
+      >
         <div className="overflow-x-auto">
           <table className="manager-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
@@ -515,27 +533,40 @@ export default function PortalBucketsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {loading && (
+              {bucketContextState && buckets.length === 0 && (
+                <TableEmptyState
+                  colSpan={bucketTableColumns.length}
+                  message={bucketContextState.message}
+                  tone={bucketContextState.tone === "error" ? "error" : "neutral"}
+                />
+              )}
+              {!bucketContextState && stateError && buckets.length === 0 && (
+                <TableEmptyState
+                  colSpan={bucketTableColumns.length}
+                  message={t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." })}
+                  tone="error"
+                />
+              )}
+              {!bucketContextState && !stateError && bucketTableStatus === "loading" && (
                 <TableEmptyState
                   colSpan={bucketTableColumns.length}
                   message={t({ en: "Loading buckets...", fr: "Chargement des buckets...", de: "Buckets werden geladen..." })}
                 />
               )}
-              {error && !loading && buckets.length === 0 && (
+              {!bucketContextState && !stateError && bucketTableStatus === "error" && (
                 <TableEmptyState
                   colSpan={bucketTableColumns.length}
                   message={t({ en: "Unable to load buckets.", fr: "Impossible de charger les buckets.", de: "Buckets konnen nicht geladen werden." })}
+                  tone="error"
                 />
               )}
-              {!loading && !error && buckets.length === 0 && (
+              {!bucketContextState && !stateError && bucketTableStatus === "empty" && (
                 <TableEmptyState
                   colSpan={bucketTableColumns.length}
                   message={t({ en: "No bucket found.", fr: "Aucun bucket trouve.", de: "Kein Bucket gefunden." })}
                 />
               )}
-              {!loading &&
-                !error &&
-                sortedBuckets.map((bucket) => (
+              {sortedBuckets.map((bucket) => (
                   <tr
                     key={bucket.name}
                     data-portal-bucket-row
@@ -583,8 +614,7 @@ export default function PortalBucketsPage() {
             </tbody>
           </table>
         </div>
-      </div>
-      ) : null}
+      </ListSectionCard>
 
       {showAccessModal && accessBucket && (
         <Modal

@@ -12,6 +12,7 @@ import { IamPolicy, InlinePolicy, listIamPolicies } from "../../api/managerIamPo
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import Modal from "../../components/Modal";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmDeletion } from "../../utils/confirm";
@@ -213,6 +214,12 @@ export default function ManagerGroupsPage() {
     }
   };
 
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: groups.length,
+  });
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -248,10 +255,10 @@ export default function ManagerGroupsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {loading && <TableEmptyState colSpan={4} message="Loading groups..." />}
-            {!loading && groups.length === 0 && <TableEmptyState colSpan={4} message="No groups." />}
-            {!loading &&
-              groups.map((g) => (
+            {tableStatus === "loading" && <TableEmptyState colSpan={4} message="Loading groups..." />}
+            {tableStatus === "error" && <TableEmptyState colSpan={4} message="Unable to load groups." tone="error" />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={4} message="No groups." />}
+            {groups.map((g) => (
                 <tr key={g.name} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                   <td className="manager-table-cell px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
                     <span>{g.name}</span>

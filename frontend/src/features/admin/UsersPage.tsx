@@ -22,6 +22,9 @@ import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import PageTabs from "../../components/PageTabs";
 import PaginationControls from "../../components/PaginationControls";
+import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
@@ -1466,6 +1469,11 @@ export default function UsersPage() {
   const usersDescription = "Create, edit, delete, and link UI users to RGW accounts, S3 users, and S3 connections.";
   const associationLabel = "S3 Accounts / Users / Connections";
   const filterPlaceholder = "Search by email, role, account, user, or connection";
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: users.length,
+  });
 
   return (
     <div className="space-y-4">
@@ -1686,14 +1694,10 @@ export default function UsersPage() {
         </Modal>
       )}
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">UI Users</p>
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              {totalUsers} entr{totalUsers === 1 ? "y" : "ies"} · search matches all records
-            </p>
-          </div>
+      <ListSectionCard
+        title="Users"
+        subtitle={`${totalUsers} entr${totalUsers === 1 ? "y" : "ies"} · search matches all records`}
+        rightContent={(
           <div className="flex items-center gap-2">
             <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filter</span>
             <input
@@ -1704,18 +1708,19 @@ export default function UsersPage() {
               className={`${toolbarCompactInputClasses} w-full sm:w-64 md:w-72`}
             />
           </div>
-        </div>
+        )}
+      >
         <div className="overflow-x-auto">
-        <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+          <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                    {[
-                      { label: "Email", field: "email" as SortField },
-                      { label: "Role", field: "role" as SortField },
-                      { label: "Last login", field: "last_login_at" as SortField },
-                      { label: associationLabel, field: "accounts" as SortField },
-                      { label: "Actions", field: null as SortField | null },
-                    ].map((col) => (
+                {[
+                  { label: "Email", field: "email" as SortField },
+                  { label: "Role", field: "role" as SortField },
+                  { label: "Last login", field: "last_login_at" as SortField },
+                  { label: associationLabel, field: "accounts" as SortField },
+                  { label: "Actions", field: null as SortField | null },
+                ].map((col) => (
                   <th
                     key={col.label}
                     onClick={col.field ? () => toggleSort(col.field) : undefined}
@@ -1734,32 +1739,12 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {loading && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
-                    Loading...
-                  </td>
-                </tr>
-              )}
-              {error && !loading && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-4 ui-body text-rose-600 dark:text-rose-200">
-                    {error}
-                  </td>
-                </tr>
-              )}
-              {!loading && !error && totalUsers === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-4 ui-body text-slate-500 dark:text-slate-400">
-                    No users.
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                !error &&
-                users.map((user) => {
-                  const isCurrentUser = currentUserId !== null && user.id === currentUserId;
-                  return (
+              {tableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading users..." />}
+              {tableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load users." tone="error" />}
+              {tableStatus === "empty" && <TableEmptyState colSpan={5} message="No users." />}
+              {users.map((user) => {
+                const isCurrentUser = currentUserId !== null && user.id === currentUserId;
+                return (
                   <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                     <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">
                       <div className="flex flex-col gap-1">
@@ -1807,8 +1792,8 @@ export default function UsersPage() {
                       </div>
                     </td>
                   </tr>
-                  );
-                })}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1820,7 +1805,7 @@ export default function UsersPage() {
           onPageSizeChange={handlePageSizeChange}
           disabled={loading}
         />
-      </div>
+      </ListSectionCard>
 
       {editingUser && showEditModal && (
         <Modal

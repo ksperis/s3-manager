@@ -19,6 +19,8 @@ import {
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
+import ListSectionCard from "../../components/list/ListSectionCard";
+import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
 
@@ -167,6 +169,11 @@ export default function S3UserKeysPage() {
   }, [user?.name, userId]);
 
   const interfaceKey = keys.find((k) => k.is_ui_managed);
+  const tableStatus = resolveListTableStatus({
+    loading,
+    error,
+    rowCount: keys.length,
+  });
 
   if (!userId || Number.isNaN(numericUserId)) {
     return (
@@ -239,7 +246,10 @@ export default function S3UserKeysPage() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <ListSectionCard
+        title="Keys"
+        subtitle={`${keys.length} key${keys.length === 1 ? "" : "s"}`}
+      >
         <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900/50">
             <tr>
@@ -251,61 +261,61 @@ export default function S3UserKeysPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {loading && <TableEmptyState colSpan={5} message="Loading keys..." />}
-            {!loading && keys.length === 0 && <TableEmptyState colSpan={5} message="No keys for this user." />}
-            {!loading &&
-              keys.map((k) => (
-                <tr
-                  key={k.access_key_id}
-                  className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isKeyActive(k) ? "" : "bg-slate-50/70 dark:bg-slate-800/40"}`}
-                >
-                  <td className="px-6 py-4 font-mono ui-body text-slate-800 dark:text-slate-100">{k.access_key_id}</td>
-                  <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
-                    {isKeyActive(k) ? k.status ?? "Active" : k.status ?? "Disabled"}
-                  </td>
-                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(k.created_at)}</td>
-                  <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
-                    {k.is_ui_managed ? (
-                      <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        Interface key
-                      </span>
-                    ) : (
-                      <span className="ui-caption text-slate-500 dark:text-slate-400">Custom</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    {k.is_ui_managed ? (
+            {tableStatus === "loading" && <TableEmptyState colSpan={5} message="Loading keys..." />}
+            {tableStatus === "error" && <TableEmptyState colSpan={5} message="Unable to load keys." tone="error" />}
+            {tableStatus === "empty" && <TableEmptyState colSpan={5} message="No keys for this user." />}
+            {keys.map((k) => (
+              <tr
+                key={k.access_key_id}
+                className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isKeyActive(k) ? "" : "bg-slate-50/70 dark:bg-slate-800/40"}`}
+              >
+                <td className="px-6 py-4 font-mono ui-body text-slate-800 dark:text-slate-100">{k.access_key_id}</td>
+                <td className="px-6 py-4 ui-body text-slate-700 dark:text-slate-200">
+                  {isKeyActive(k) ? k.status ?? "Active" : k.status ?? "Disabled"}
+                </td>
+                <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">{formatDate(k.created_at)}</td>
+                <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                  {k.is_ui_managed ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-1 ui-caption font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      Interface key
+                    </span>
+                  ) : (
+                    <span className="ui-caption text-slate-500 dark:text-slate-400">Custom</span>
+                  )}
+                </td>
+                <td className="px-6 py-4 text-right">
+                  {k.is_ui_managed ? (
+                    <button
+                      onClick={handleRotateUiKey}
+                      className={tableActionButtonClasses}
+                      disabled={busy === "rotate"}
+                    >
+                      {busy === "rotate" ? "Rotating..." : "Rotate"}
+                    </button>
+                  ) : (
+                    <div className="flex flex-wrap justify-end gap-2">
                       <button
-                        onClick={handleRotateUiKey}
+                        onClick={() => handleToggleKey(k.access_key_id, !isKeyActive(k))}
                         className={tableActionButtonClasses}
-                        disabled={busy === "rotate"}
+                        disabled={Boolean(busy)}
                       >
-                        {busy === "rotate" ? "Rotating..." : "Rotate"}
+                        {busy === `toggle:${k.access_key_id}` ? "Saving..." : isKeyActive(k) ? "Disable" : "Enable"}
                       </button>
-                    ) : (
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <button
-                          onClick={() => handleToggleKey(k.access_key_id, !isKeyActive(k))}
-                          className={tableActionButtonClasses}
-                          disabled={Boolean(busy)}
-                        >
-                          {busy === `toggle:${k.access_key_id}` ? "Saving..." : isKeyActive(k) ? "Disable" : "Enable"}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteKey(k.access_key_id)}
-                          className={tableDeleteActionClasses}
-                          disabled={Boolean(busy)}
-                        >
-                          {busy === `delete:${k.access_key_id}` ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                      <button
+                        onClick={() => handleDeleteKey(k.access_key_id)}
+                        className={tableDeleteActionClasses}
+                        disabled={Boolean(busy)}
+                      >
+                        {busy === `delete:${k.access_key_id}` ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
-      </div>
+      </ListSectionCard>
     </div>
   );
 }
