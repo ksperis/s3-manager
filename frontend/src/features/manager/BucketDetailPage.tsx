@@ -3873,6 +3873,54 @@ export default function BucketDetailPage({
                   />
                 </BucketFeatureCard>
 
+                <BucketFeatureCard
+                  title="CORS"
+                  description="CORS rules in AWS format (CORSRules)."
+                  mode="json"
+                  visualState={corsCardState}
+                  testId="bucket-feature-cors"
+                  className="space-y-3"
+                  actions={
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={removeCors}
+                        disabled={deletingCors}
+                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
+                      >
+                        {deletingCors ? "Deleting..." : "Delete"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveCors}
+                        disabled={savingCors || corsLoading}
+                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                      >
+                        {savingCors ? "Saving..." : "Save"}
+                      </button>
+                    </div>
+                  }
+                >
+                  {corsError && (
+                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
+                      {corsError}
+                    </div>
+                  )}
+                  <textarea
+                    value={corsText}
+                    onChange={(e) => setCorsText(e.target.value)}
+                    className="h-56 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    placeholder='[{"AllowedMethods":["GET"],"AllowedOrigins":["*"]}]'
+                    spellCheck={false}
+                  />
+                  <BucketFeatureJsonExample
+                    show={showCorsExample}
+                    onToggle={() => setShowCorsExample((prev) => !prev)}
+                    example={defaultCorsExample}
+                    onUseExample={() => setCorsText(defaultCorsExample)}
+                  />
+                </BucketFeatureCard>
+
               </div>
             ),
           },
@@ -4274,53 +4322,6 @@ export default function BucketDetailPage({
                     )}
                   </BucketFeatureCard>
                 )}
-                <BucketFeatureCard
-                  title="CORS"
-                  description="CORS rules in AWS format (CORSRules)."
-                  mode="json"
-                  visualState={corsCardState}
-                  testId="bucket-feature-cors"
-                  className="space-y-3"
-                  actions={
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={removeCors}
-                        disabled={deletingCors}
-                        className="rounded-md border border-rose-200 px-3 py-1 ui-caption font-semibold text-rose-700 hover:border-rose-400 hover:text-rose-800 disabled:opacity-60 dark:border-rose-900/50 dark:text-rose-200 dark:hover:border-rose-800"
-                      >
-                        {deletingCors ? "Deleting..." : "Delete"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={saveCors}
-                        disabled={savingCors || corsLoading}
-                        className="rounded-md bg-primary px-3 py-1 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
-                      >
-                        {savingCors ? "Saving..." : "Save"}
-                      </button>
-                    </div>
-                  }
-                >
-                  {corsError && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/60 dark:text-rose-100">
-                      {corsError}
-                    </div>
-                  )}
-                  <textarea
-                    value={corsText}
-                    onChange={(e) => setCorsText(e.target.value)}
-                    className="h-56 w-full rounded-md border border-slate-200 px-3 py-2 font-mono ui-caption text-slate-800 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    placeholder='[{"AllowedMethods":["GET"],"AllowedOrigins":["*"]}]'
-                    spellCheck={false}
-                  />
-                  <BucketFeatureJsonExample
-                    show={showCorsExample}
-                    onToggle={() => setShowCorsExample((prev) => !prev)}
-                    example={defaultCorsExample}
-                    onUseExample={() => setCorsText(defaultCorsExample)}
-                  />
-                </BucketFeatureCard>
                 <BucketFeatureCard
                   title="Server access logging"
                   description="Deliver S3 server access logs to another bucket."
