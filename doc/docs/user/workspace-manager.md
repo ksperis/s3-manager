@@ -31,6 +31,7 @@ Tenant resources are managed in the right scope with explicit context control.
 ## Related pages
 
 - [Feature: Buckets](feature-buckets.md)
+- [How-to: Configure a bucket from Manager](howto-manager-bucket-configuration.md)
 - [Feature: IAM](feature-iam.md)
 - [Feature: SNS topics](feature-topics.md)
 - [Feature: Bucket compare](feature-bucket-compare.md)

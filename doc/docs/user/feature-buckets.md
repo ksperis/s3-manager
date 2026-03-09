@@ -35,6 +35,7 @@ Bucket configuration is applied as native backend settings and visible in detail
 
 - [Workspace: Manager](workspace-manager.md)
 - [Workspace: Ceph Admin](workspace-ceph-admin.md)
+- [How-to: Configure a bucket from Manager](howto-manager-bucket-configuration.md)
 - [Feature: Object operations in Browser](feature-objects-browser.md)
 
 ## Visual example

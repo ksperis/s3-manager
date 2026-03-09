@@ -62,6 +62,12 @@ async function runAction(page: Page, action: ScenarioAction) {
     await locator.click();
     return;
   }
+  if (action.type === "select") {
+    const locator = page.locator(action.selector).first();
+    await locator.waitFor({ state: "visible" });
+    await locator.selectOption(action.value);
+    return;
+  }
   const locator = page.locator(action.selector).first();
   await locator.waitFor({ state: "visible" });
   await locator.press(action.key);

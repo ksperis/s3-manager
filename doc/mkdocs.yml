@@ -65,9 +65,12 @@ nav:
       - "Workspace: Portal": user/workspace-portal.md
       - "Workspace: Ceph Admin": user/workspace-ceph-admin.md
       - "Feature: Buckets": user/feature-buckets.md
+      - "How-to: Configure a bucket from Manager": user/howto-manager-bucket-configuration.md
       - "Feature: IAM": user/feature-iam.md
       - "Feature: Object operations in Browser": user/feature-objects-browser.md
       - "Feature: SNS topics": user/feature-topics.md
+      - "How-to: Ceph Admin advanced filter": user/howto-ceph-advanced-filter.md
+      - "How-to: Ceph Admin UI tags": user/howto-ceph-ui-tags.md
       - "Feature: Bucket compare": user/feature-bucket-compare.md
       - "Feature: Bucket migration": user/feature-bucket-migration.md
       - Troubleshooting: user/troubleshooting.md

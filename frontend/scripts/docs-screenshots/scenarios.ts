@@ -85,6 +85,63 @@ const noManagerContextsRule: MockRule = {
   },
 };
 
+const bucketCompareWithDifferencesRule: MockRule = {
+  id: "manager-bucket-compare-with-differences",
+  method: "POST",
+  path: /^\/manager\/buckets\/compare$/,
+  body: ({ requestBodyText }) => {
+    let payload: Record<string, unknown> = {};
+    try {
+      payload = JSON.parse(requestBodyText || "{}") as Record<string, unknown>;
+    } catch {
+      payload = {};
+    }
+    const sourceBucket = String(payload.source_bucket ?? "helios-retail-logs");
+    const targetBucket = String(payload.target_bucket ?? "blueharbor-curated");
+    return {
+      source_context_id: "acc-helios",
+      target_context_id: String(payload.target_context_id ?? "conn-blueharbor"),
+      source_bucket: sourceBucket,
+      target_bucket: targetBucket,
+      compare_mode: "md5_or_size",
+      has_differences: true,
+      content_diff: {
+        compare_mode: "md5_or_size",
+        source_count: 1284,
+        target_count: 1278,
+        matched_count: 1272,
+        different_count: 4,
+        only_source_count: 6,
+        only_target_count: 2,
+        only_source_sample: ["daily/2026-03-07/report.json", "logs/part-0081.gz"],
+        only_target_sample: ["daily/2026-03-06/report.json"],
+        different_sample: [
+          {
+            key: "daily/2026-03-08/report.json",
+            source_size: 84251,
+            target_size: 84912,
+            source_etag: "\"3d4f1a\"",
+            target_etag: "\"44af18\"",
+            compare_by: "md5",
+          },
+        ],
+      },
+      config_diff: {
+        changed: true,
+        sections: [
+          {
+            key: "versioning_status",
+            label: "Versioning",
+            source: "Enabled",
+            target: "Suspended",
+            changed: true,
+          },
+        ],
+      },
+    };
+  },
+};
+
 export const scenarios: DocScreenshotScenario[] = [
   {
     id: "user-overview",
@@ -228,6 +285,20 @@ export const scenarios: DocScreenshotScenario[] = [
     mockRules: withBaseRules(),
   },
   {
+    id: "howto-manager-bucket-configuration",
+    docPage: "user/howto-manager-bucket-configuration.md",
+    route: "/manager/buckets",
+    outputFile: "manager-bucket-configuration.png",
+    waitFor: "h1:has-text('Buckets')",
+    storage: { ...baseStorage(adminUser), selectedWorkspace: "manager" },
+    annotations: [
+      { selector: "h1:has-text('Buckets')", label: "Start from the Manager bucket inventory", side: "bottom" },
+      { selector: "table tbody tr:first-child a:has-text('Configure')", label: "Open bucket configuration for the selected bucket", side: "right" },
+      { selector: "button:has-text('Create bucket')", label: "Create new buckets when needed", side: "top" },
+    ],
+    mockRules: withBaseRules(),
+  },
+  {
     id: "feature-iam",
     docPage: "user/feature-iam.md",
     route: "/manager/users",
@@ -270,18 +341,66 @@ export const scenarios: DocScreenshotScenario[] = [
     mockRules: withBaseRules(),
   },
   {
+    id: "howto-ceph-advanced-filter",
+    docPage: "user/howto-ceph-advanced-filter.md",
+    route: "/ceph-admin/buckets",
+    outputFile: "ceph-admin-advanced-filter.png",
+    waitFor: "h1:has-text('Buckets')",
+    storage: { ...baseStorage(adminUser), selectedWorkspace: "ceph-admin" },
+    actions: [
+      { type: "click", selector: "button:has-text('Advanced filter')" },
+      { type: "wait", selector: "p:has-text('Advanced filter')" },
+    ],
+    annotations: [
+      { selector: "button:has-text('Advanced filter')", label: "Open the advanced filtering drawer", side: "top" },
+      { selector: "p:has-text('Advanced filter')", label: "Compose filter rules by scope and cost", side: "left" },
+      { selector: "button:has-text('Apply filters')", label: "Apply the draft filters to the bucket table", side: "left" },
+    ],
+    mockRules: withBaseRules(),
+  },
+  {
+    id: "howto-ceph-ui-tags",
+    docPage: "user/howto-ceph-ui-tags.md",
+    route: "/ceph-admin/buckets",
+    outputFile: "ceph-admin-ui-tags.png",
+    waitFor: "h1:has-text('Buckets')",
+    storage: { ...baseStorage(adminUser), selectedWorkspace: "ceph-admin" },
+    actions: [
+      { type: "click", selector: "table tbody tr:first-child input[type='checkbox']" },
+      { type: "click", selector: "summary:has-text('Tag selection')" },
+      { type: "wait", selector: "input[placeholder='new-tag']" },
+    ],
+    annotations: [
+      { selector: "text=bucket selected", label: "Select one or more buckets to enable bulk tagging", side: "top" },
+      { selector: "summary:has-text('Tag selection')", label: "Use tag actions for the current selection", side: "top", offsetX: 120 },
+      { selector: "input[placeholder='new-tag']", label: "Add a custom UI tag and apply it", side: "right" },
+    ],
+    mockRules: withBaseRules(),
+  },
+  {
     id: "feature-bucket-compare",
     docPage: "user/feature-bucket-compare.md",
     route: "/manager/bucket-compare",
     outputFile: "feature-bucket-compare.png",
     waitFor: "h1:has-text('Bucket compare')",
     storage: { ...baseStorage(adminUser), selectedWorkspace: "manager" },
-    annotations: [
-      { selector: "text=SOURCE CONTEXT", label: "Source and target contexts", side: "top" },
-      { selector: "button:has-text('Compare selected')", label: "Launch comparison", side: "right" },
-      { selector: "table", label: "Review selected bucket pairs", side: "bottom" },
+    actions: [
+      { type: "click", selector: "table tbody tr:first-child input[type='checkbox']" },
+      { type: "click", selector: "button:has-text('Compare selected')" },
+      { type: "wait", selector: "label:has-text('Target context')" },
+      { type: "select", selector: "label:has-text('Target context') + select", value: "conn-blueharbor" },
+      { type: "click", selector: "button:has-text('Run comparison')" },
+      { type: "wait", selector: "text=With differences: 1" },
+      { type: "click", selector: "summary:has-text('Matched')" },
+      { type: "click", selector: "summary:has-text('Content diff')" },
+      { type: "wait", selector: "text=Different objects (4)" },
     ],
-    mockRules: withBaseRules(),
+    annotations: [
+      { selector: "button:has-text('Run comparison')", label: "Run the comparison on selected bucket mappings", side: "top" },
+      { selector: "text=With differences: 1", label: "Comparison summary confirms detected differences", side: "bottom" },
+      { selector: "text=Different objects (4)", label: "Inspect object-level differences in the result details", side: "right" },
+    ],
+    mockRules: withBaseRules(bucketCompareWithDifferencesRule),
   },
   {
     id: "feature-bucket-migration",

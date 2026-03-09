@@ -34,4 +34,4 @@ You get an actionable diff view to support controlled bucket alignment.
 
 ## Visual example
 
-![Bucket compare workflow with source context and selection table](../assets/screenshots/user/feature-bucket-compare.png)
+![Bucket compare result showing detected differences and remediation actions](../assets/screenshots/user/feature-bucket-compare.png)

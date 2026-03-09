@@ -37,6 +37,7 @@ export type MockRule = {
 export type ScenarioAction =
   | { type: "click"; selector: string }
   | { type: "wait"; selector: string }
+  | { type: "select"; selector: string; value: string }
   | { type: "press"; selector: string; key: string };
 
 export type DocScreenshotScenario = {

@@ -17,8 +17,11 @@ This page defines coverage expectations for audience-oriented documentation.
 | `/admin/api-tokens` | `ops/operations-api-tokens.md` | Covered |
 | `/admin/*-settings` | `ops/configuration.md` | Covered |
 | `/ceph-admin` and children | `user/workspace-ceph-admin.md` | Covered |
+| `/ceph-admin/buckets` advanced drawer | `user/howto-ceph-advanced-filter.md` | Covered |
+| `/ceph-admin/buckets` UI tags operations | `user/howto-ceph-ui-tags.md` | Covered |
 | `/manager` dashboard/nav | `user/workspace-manager.md` | Covered |
 | `/manager/buckets` and detail | `user/feature-buckets.md` | Covered |
+| `/manager/buckets/:bucket` configuration flow | `user/howto-manager-bucket-configuration.md` | Covered |
 | `/manager/browser` | `user/feature-objects-browser.md` | Covered |
 | `/manager/users|groups|roles|iam/policies` | `user/feature-iam.md` | Covered |
 | `/manager/topics` | `user/feature-topics.md` | Covered |
