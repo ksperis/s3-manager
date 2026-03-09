@@ -89,6 +89,7 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `SEED_SUPERVISION_ACCESS_KEY` / `SEED_SUPERVISION_SECRET_KEY` (optional read-only credentials for usage/metrics)
 - `CORS_ORIGINS` (default: `["http://localhost:5173"]`)
 - `SEED_SUPER_ADMIN_EMAIL` / `SEED_SUPER_ADMIN_PASSWORD` / `SEED_SUPER_ADMIN_FULL_NAME`
+- `SEED_SUPER_ADMIN_MODE` (default: `if_empty`, values: `if_empty|if_missing|disabled`)
 - `OIDC_STATE_TTL_SECONDS` (default: `600`, validity of login `state`)
 - `OIDC_PROVIDERS__<key>__*` to configure OpenID Connect providers (see below)
 
@@ -98,6 +99,7 @@ Security notes:
 - Production environments should set strong non-default values for `FERNET_KEY`/`JWT_KEYS` and `CREDENTIAL_KEY`/`CREDENTIAL_KEYS` (>=32 chars, high entropy).
 - Production environments should set `REFRESH_TOKEN_COOKIE_SECURE=true` when using non-local origins.
 - Keep `SEED_SUPER_ADMIN_PASSWORD` as a bootstrap credential only and rotate it immediately.
+- Prefer `SEED_SUPER_ADMIN_MODE=if_empty` (default) or `disabled` in production to avoid accidental super-admin reseeding on restart.
 
 ### Credential key rotation (manual)
 

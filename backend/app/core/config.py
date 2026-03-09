@@ -3,7 +3,7 @@
 import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -39,6 +39,9 @@ class OIDCProviderSettings(BaseModel):
                     raise ValueError("Unable to parse scopes JSON") from exc
             return [item.strip() for item in text.split(",") if item.strip()]
         return value
+
+
+SuperAdminSeedMode = Literal["if_empty", "if_missing", "disabled"]
 
 ENV_FILE_PATH = Path(__file__).resolve().parents[2] / ".env"
 MIN_SECRET_LENGTH = 32
@@ -184,6 +187,13 @@ class Settings(BaseSettings):
     seed_super_admin_full_name: Optional[str] = Field(
         "Admin",
         description="Seed default super-admin name",
+    )
+    seed_super_admin_mode: SuperAdminSeedMode = Field(
+        "if_empty",
+        description=(
+            "Controls bootstrap super-admin seeding strategy "
+            "(SEED_SUPER_ADMIN_MODE: if_empty|if_missing|disabled)"
+        ),
     )
 
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
@@ -362,6 +372,13 @@ class Settings(BaseSettings):
                     raise ValueError("Unable to parse keys JSON") from exc
             return [item.strip() for item in text.split(",") if item.strip()]
         return value
+
+    @field_validator("seed_super_admin_mode", mode="before")
+    @classmethod
+    def normalize_seed_super_admin_mode(cls, value):
+        if value is None:
+            return value
+        return str(value).strip().lower()
 
     @field_validator("bucket_migration_webhook_allowed_hosts", mode="before")
     @classmethod
