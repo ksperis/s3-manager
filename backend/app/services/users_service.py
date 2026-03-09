@@ -120,6 +120,8 @@ class UsersService:
             user.can_access_ceph_admin = bool(payload.can_access_ceph_admin) if is_admin_ui_role(next_role) else False
         elif not is_admin_ui_role(next_role):
             user.can_access_ceph_admin = False
+        if not is_admin_ui_role(next_role):
+            user.quota_alerts_global_watch = False
         if payload.s3_user_ids is not None:
             self._set_s3_user_links(user, payload.s3_user_ids)
         if payload.s3_connection_ids is not None:
@@ -137,6 +139,10 @@ class UsersService:
         full_name: Optional[str] = None,
         ui_language: Optional[str] = None,
         update_ui_language: bool = False,
+        quota_alerts_enabled: Optional[bool] = None,
+        update_quota_alerts_enabled: bool = False,
+        quota_alerts_global_watch: Optional[bool] = None,
+        update_quota_alerts_global_watch: bool = False,
         current_password: Optional[str] = None,
         new_password: Optional[str] = None,
     ) -> User:
@@ -146,6 +152,12 @@ class UsersService:
             user.display_name = normalized_name or None
         if update_ui_language:
             user.ui_language = ui_language or None
+        if update_quota_alerts_enabled:
+            user.quota_alerts_enabled = bool(quota_alerts_enabled)
+        if update_quota_alerts_global_watch:
+            if not is_admin_ui_role(user.role) and bool(quota_alerts_global_watch):
+                raise ValueError("Global quota watch requires admin role")
+            user.quota_alerts_global_watch = bool(quota_alerts_global_watch) if is_admin_ui_role(user.role) else False
 
         if current_password is not None or new_password is not None:
             if not current_password or not new_password:
@@ -520,6 +532,8 @@ class UsersService:
             is_root=user.is_root,
             can_access_ceph_admin=bool(user.can_access_ceph_admin),
             ui_language=user.ui_language,
+            quota_alerts_enabled=bool(user.quota_alerts_enabled),
+            quota_alerts_global_watch=bool(user.quota_alerts_global_watch),
             accounts=account_ids,
             account_links=account_links,
             s3_users=s3_user_ids,

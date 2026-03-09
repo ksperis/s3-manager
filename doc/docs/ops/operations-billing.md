@@ -21,7 +21,15 @@ curl -X POST "http://localhost:8000/api/internal/billing/collect/daily?day=YYYY-
 - Compose scheduler calls daily collection with configurable day offset.
 - Helm supports `billingCronJob` values (`schedule`, `dayOffset`, token).
 
+## Retention
+
+Billing daily tables are purged by the shared `DataRetentionService` (used by billing and quota jobs).
+
+- `BILLING_DAILY_RETENTION_DAYS` (default `365`)
+- `0` disables billing purge
+
 ## Related pages
 
 - [Operations: API tokens](operations-api-tokens.md)
+- [Operations: quota monitoring and history](operations-quota-monitoring.md)
 - [Operations: observability](operations-observability.md)

@@ -156,6 +156,8 @@ export default function ProfilePage({
   const [preferencesMessage, setPreferencesMessage] = useState<string | null>(null);
   const [preferencesTheme, setPreferencesTheme] = useState<"light" | "dark">(theme);
   const [preferencesLanguage, setPreferencesLanguage] = useState<UiLanguagePreference>(languagePreference);
+  const [quotaAlertsEnabled, setQuotaAlertsEnabled] = useState(true);
+  const [quotaAlertsGlobalWatch, setQuotaAlertsGlobalWatch] = useState(false);
   const [connections, setConnections] = useState<S3Connection[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState(false);
   const [connectionsError, setConnectionsError] = useState<string | null>(null);
@@ -185,6 +187,7 @@ export default function ProfilePage({
     [generalSettings, storedUser]
   );
   const [preferredWorkspace, setPreferredWorkspace] = useState<WorkspaceId | null>(() => readStoredWorkspaceId());
+  const canConfigureGlobalQuotaWatch = isAdminLikeRole(storedUser?.role);
   const canManagePrivateConnections =
     !isS3Session &&
     (isAdminLikeRole(storedUser?.role) ||
@@ -316,6 +319,8 @@ export default function ProfilePage({
       .then((user) => {
         setFullName(user.full_name ?? "");
         setLanguagePreference(user.ui_language ?? "auto");
+        setQuotaAlertsEnabled(user.quota_alerts_enabled !== false);
+        setQuotaAlertsGlobalWatch(Boolean(user.quota_alerts_global_watch));
         persistStoredUser({ uiLanguage: user.ui_language ?? null });
       })
       .catch((error) => {
@@ -573,8 +578,12 @@ export default function ProfilePage({
       try {
         const updated = await updateCurrentUser({
           ui_language: preferencesLanguage === "auto" ? null : preferencesLanguage,
+          quota_alerts_enabled: quotaAlertsEnabled,
+          quota_alerts_global_watch: canConfigureGlobalQuotaWatch ? quotaAlertsGlobalWatch : false,
         });
         setLanguagePreference(updated.ui_language ?? "auto");
+        setQuotaAlertsEnabled(updated.quota_alerts_enabled !== false);
+        setQuotaAlertsGlobalWatch(Boolean(updated.quota_alerts_global_watch));
         persistStoredUser({ uiLanguage: updated.ui_language ?? null });
       } catch (error) {
         console.error(error);
@@ -958,6 +967,30 @@ export default function ProfilePage({
                 </select>
               </label>
             </div>
+            {!isS3Session && (
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={quotaAlertsEnabled}
+                    onChange={(event) => setQuotaAlertsEnabled(event.target.checked)}
+                  />
+                  <span className="ui-body text-slate-700 dark:text-slate-200">Receive quota alert emails</span>
+                </label>
+                {canConfigureGlobalQuotaWatch && (
+                  <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={quotaAlertsGlobalWatch}
+                      onChange={(event) => setQuotaAlertsGlobalWatch(event.target.checked)}
+                    />
+                    <span className="ui-body text-slate-700 dark:text-slate-200">
+                      Global quota watch (all storage spaces)
+                    </span>
+                  </label>
+                )}
+              </div>
+            )}
             {preferencesMessage && (
               <p className="ui-caption font-semibold text-emerald-700 dark:text-emerald-300">{preferencesMessage}</p>
             )}

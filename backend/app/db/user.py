@@ -32,6 +32,8 @@ class User(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
     last_login_at = Column(DateTime, nullable=True)
     ui_language = Column(String, nullable=True)
+    quota_alerts_enabled = Column(Boolean, default=True, nullable=False, server_default="1")
+    quota_alerts_global_watch = Column(Boolean, default=False, nullable=False, server_default="0")
 
     accounts = relationship(
         "S3Account",

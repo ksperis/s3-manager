@@ -40,6 +40,7 @@ from app.models.billing import (
 )
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError
 from app.services.traffic_service import aggregate_usage, flatten_usage_entries
+from app.services.data_retention_service import DataRetentionService
 from app.utils.rgw import extract_bucket_list, resolve_admin_uid
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.utils.usage_stats import extract_usage_stats
@@ -240,6 +241,7 @@ class BillingCollector:
             storage_records, storage_errors = self._collect_storage_for_endpoint(rgw_admin, endpoint, day)
             summary["storage_records"] += storage_records
             summary["errors"].extend(storage_errors)
+        summary["retention"] = DataRetentionService(self.db).purge_all()
         return summary
 
     def _collect_usage_for_endpoint(

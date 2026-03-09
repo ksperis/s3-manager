@@ -17,6 +17,8 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,
+  quota_alerts_enabled: false,
+  usage_history_enabled: false,
   bucket_migration_enabled: true,
   bucket_compare_enabled: true,
   allow_ui_user_bucket_migration: false,

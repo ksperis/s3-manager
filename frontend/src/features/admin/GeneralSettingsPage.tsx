@@ -2,6 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
+import axios from "axios";
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -16,6 +17,7 @@ import {
   fetchAppSettings,
   fetchDefaultAppSettings,
   fetchGeneralFeatureLocks,
+  sendQuotaNotificationTestEmail,
   updateAppSettings,
 } from "../../api/appSettings";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
@@ -54,7 +56,9 @@ type ToggleField =
   | "allow_login_access_keys"
   | "allow_login_endpoint_list"
   | "allow_login_custom_endpoint"
-  | "allow_user_private_connections";
+  | "allow_user_private_connections"
+  | "quota_alerts_enabled"
+  | "usage_history_enabled";
 
 function isFeatureField(field: ToggleField): field is FeatureField {
   return FEATURE_FIELDS.includes(field as FeatureField);
@@ -73,6 +77,16 @@ function isValidLoginLogoUrl(value: string): boolean {
   }
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
+  }
+  return fallback;
+}
+
 export default function GeneralSettingsPage() {
   const { setGeneralSettings } = useGeneralSettings();
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -80,7 +94,10 @@ export default function GeneralSettingsPage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [billingReminder, setBillingReminder] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [testEmailError, setTestEmailError] = useState<string | null>(null);
+  const [testEmailMessage, setTestEmailMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [loginLogoUrlDraft, setLoginLogoUrlDraft] = useState("");
 
@@ -96,6 +113,8 @@ export default function GeneralSettingsPage() {
       .catch(() => setError("Unable to load settings."));
   }, [setGeneralSettings]);
   const isLogoUrlValid = isValidLoginLogoUrl(loginLogoUrlDraft);
+  const quotaThreshold = settings?.quota_notifications.threshold_percent ?? 85;
+  const isQuotaThresholdValid = quotaThreshold >= 1 && quotaThreshold <= 100;
 
   const isFeatureLocked = (field: FeatureField): boolean => Boolean(featureLocks?.[field]?.forced);
   const getFeatureLockHint = (field: FeatureField): string | null => {
@@ -144,6 +163,23 @@ export default function GeneralSettingsPage() {
     );
   };
 
+  const handleQuotaNotificationsChange = <K extends keyof AppSettings["quota_notifications"]>(
+    field: K,
+    value: AppSettings["quota_notifications"][K]
+  ) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            quota_notifications: {
+              ...prev.quota_notifications,
+              [field]: value,
+            },
+          }
+        : prev
+    );
+  };
+
   const handleSave = async (event?: React.FormEvent | React.MouseEvent) => {
     event?.preventDefault();
     if (!settings) return;
@@ -168,6 +204,22 @@ export default function GeneralSettingsPage() {
     }
   };
 
+  const handleSendTestEmail = async () => {
+    if (!settings) return;
+    setSendingTestEmail(true);
+    setTestEmailError(null);
+    setTestEmailMessage(null);
+    try {
+      const result = await sendQuotaNotificationTestEmail(settings.quota_notifications);
+      setTestEmailMessage(`Test email sent to ${result.recipient}.`);
+    } catch (err) {
+      console.error(err);
+      setTestEmailError(getErrorMessage(err, "Unable to send test email."));
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
+
   const handleResetDefaults = async () => {
     if (!settings) return;
     if (!confirmAction("Reset general and branding settings to defaults? Save changes to apply.")) return;
@@ -187,6 +239,7 @@ export default function GeneralSettingsPage() {
                 bucket_compare_enabled: prev.general.bucket_compare_enabled,
                 allow_ui_user_bucket_migration: prev.general.allow_ui_user_bucket_migration,
               },
+              quota_notifications: defaults.quota_notifications,
               branding: defaults.branding,
             }
           : defaults
@@ -224,7 +277,7 @@ export default function GeneralSettingsPage() {
             <button
               type="button"
               onClick={handleSave}
-              disabled={!settings || saving || resetting || !isLogoUrlValid}
+              disabled={!settings || saving || resetting || !isLogoUrlValid || !isQuotaThresholdValid}
               className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:pointer-events-none disabled:opacity-60"
             >
               {saving ? "Saving..." : "Save changes"}
@@ -234,8 +287,13 @@ export default function GeneralSettingsPage() {
       />
       <form className="space-y-4" onSubmit={handleSave}>
         {error && <PageBanner tone="error">{error}</PageBanner>}
+        {testEmailError && <PageBanner tone="error">{testEmailError}</PageBanner>}
+        {testEmailMessage && <PageBanner tone="success">{testEmailMessage}</PageBanner>}
         {savedMessage && <PageBanner tone="success">{savedMessage}</PageBanner>}
         {billingReminder && <PageBanner tone="info">{billingReminder}</PageBanner>}
+        {!isQuotaThresholdValid && (
+          <PageBanner tone="error">Quota threshold must be between 1 and 100.</PageBanner>
+        )}
         {forcedFeaturesCount > 0 && (
           <PageBanner tone="info">
             {forcedFeaturesCount} feature switch(es) are currently forced by environment variables.
@@ -373,6 +431,170 @@ export default function GeneralSettingsPage() {
                       {getFeatureLockHint("endpoint_status_enabled")}
                     </p>
                   )}
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="Quota alerts feature"
+                  description="Enables quota threshold/full email notifications for S3 Accounts and S3 Users."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.quota_alerts_enabled)}
+                      onChange={(value) => handleToggle("quota_alerts_enabled", value)}
+                      ariaLabel="Quota alerts feature"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="Usage history feature"
+                  description="Collects quota usage history snapshots for future metrics trends."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.usage_history_enabled)}
+                      onChange={(value) => handleToggle("usage_history_enabled", value)}
+                      ariaLabel="Usage history feature"
+                    />
+                  }
+                />
+              </PortalSettingsSection>
+            </div>
+            <div className="ui-surface-card p-5">
+              <PortalSettingsSection
+                title="QUOTA NOTIFICATIONS"
+                description="Configure threshold notifications and SMTP delivery."
+                layout="grid"
+                columns={1}
+              >
+                <PortalSettingsItem
+                  title="Threshold percent"
+                  description="Alert when usage reaches this percent of quota (full alerts are always sent at 100%)."
+                >
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={settings.quota_notifications.threshold_percent}
+                    onChange={(event) =>
+                      handleQuotaNotificationsChange(
+                        "threshold_percent",
+                        Math.max(1, Math.min(100, Number(event.target.value || 0)))
+                      )
+                    }
+                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="Include subject contact email"
+                  description="Also send alerts to account.email / s3_user.email when defined."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.quota_notifications.include_subject_contact_email)}
+                      onChange={(value) => handleQuotaNotificationsChange("include_subject_contact_email", value)}
+                      ariaLabel="Include subject contact email"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="SMTP host"
+                  description="SMTP host used to send quota notifications."
+                >
+                  <input
+                    type="text"
+                    value={settings.quota_notifications.smtp_host ?? ""}
+                    onChange={(event) => handleQuotaNotificationsChange("smtp_host", event.target.value || null)}
+                    placeholder="smtp.example.com"
+                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="SMTP port"
+                  description="SMTP server port."
+                >
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={settings.quota_notifications.smtp_port}
+                    onChange={(event) =>
+                      handleQuotaNotificationsChange(
+                        "smtp_port",
+                        Math.max(1, Math.min(65535, Number(event.target.value || 0)))
+                      )
+                    }
+                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="SMTP username"
+                  description="Optional SMTP username (required if SMTP_PASSWORD is set)."
+                >
+                  <input
+                    type="text"
+                    value={settings.quota_notifications.smtp_username ?? ""}
+                    onChange={(event) => handleQuotaNotificationsChange("smtp_username", event.target.value || null)}
+                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="SMTP from email"
+                  description="Sender email address used for notifications."
+                >
+                  <input
+                    type="email"
+                    value={settings.quota_notifications.smtp_from_email ?? ""}
+                    onChange={(event) => handleQuotaNotificationsChange("smtp_from_email", event.target.value || null)}
+                    placeholder="alerts@example.com"
+                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="SMTP from name"
+                  description="Optional sender display name."
+                >
+                  <input
+                    type="text"
+                    value={settings.quota_notifications.smtp_from_name ?? ""}
+                    onChange={(event) => handleQuotaNotificationsChange("smtp_from_name", event.target.value || null)}
+                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="SMTP STARTTLS"
+                  description="Enable STARTTLS upgrade for SMTP transport."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.quota_notifications.smtp_starttls)}
+                      onChange={(value) => handleQuotaNotificationsChange("smtp_starttls", value)}
+                      ariaLabel="SMTP STARTTLS"
+                    />
+                  }
+                />
+                <PortalSettingsItem
+                  title="SMTP timeout (seconds)"
+                  description="Connection timeout used by SMTP delivery."
+                >
+                  <input
+                    type="number"
+                    min={1}
+                    max={300}
+                    value={settings.quota_notifications.smtp_timeout_seconds}
+                    onChange={(event) =>
+                      handleQuotaNotificationsChange(
+                        "smtp_timeout_seconds",
+                        Math.max(1, Math.min(300, Number(event.target.value || 0)))
+                      )
+                    }
+                    className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 ui-body text-slate-700 shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                  <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
+                    SMTP password must be provided through the backend environment variable <code>SMTP_PASSWORD</code>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSendTestEmail}
+                    disabled={sendingTestEmail || saving || resetting}
+                    className="mt-3 inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 shadow-sm transition hover:border-primary hover:text-primary disabled:pointer-events-none disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:border-primary-500 dark:hover:text-primary-200"
+                  >
+                    {sendingTestEmail ? "Sending test..." : "Send test email"}
+                  </button>
                 </PortalSettingsItem>
               </PortalSettingsSection>
             </div>

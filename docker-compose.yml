@@ -6,6 +6,10 @@ services:
       DATABASE_URL: sqlite:////data/app.db
       APP_SETTINGS_PATH: /data/app_settings.json
       INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:-change-me-internal-token}
+      BILLING_DAILY_RETENTION_DAYS: ${BILLING_DAILY_RETENTION_DAYS:-365}
+      QUOTA_HISTORY_HOURLY_RETENTION_DAYS: ${QUOTA_HISTORY_HOURLY_RETENTION_DAYS:-30}
+      QUOTA_HISTORY_DAILY_RETENTION_DAYS: ${QUOTA_HISTORY_DAILY_RETENTION_DAYS:-365}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     volumes:
       - backend-data:/data
     ports:
@@ -25,6 +29,7 @@ services:
       INTERNAL_CRON_TOKEN: ${INTERNAL_CRON_TOKEN:-change-me-internal-token}
       HEALTHCHECK_CRON_SCHEDULE: ${HEALTHCHECK_CRON_SCHEDULE:-*/5 * * * *}
       BILLING_CRON_SCHEDULE: ${BILLING_CRON_SCHEDULE:-0 2 * * *}
+      QUOTA_MONITOR_CRON_SCHEDULE: ${QUOTA_MONITOR_CRON_SCHEDULE:-0 * * * *}
       BILLING_DAY_OFFSET: ${BILLING_DAY_OFFSET:-1}
       CRON_HTTP_TIMEOUT_SECONDS: ${CRON_HTTP_TIMEOUT_SECONDS:-30}
       SCHEDULER_RUNTIME_ENV_FILE: /tmp/s3-manager-scheduler.env
@@ -42,6 +47,7 @@ services:
           echo 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
           echo "$$HEALTHCHECK_CRON_SCHEDULE /bin/sh /opt/cron/run-healthcheck.sh >> /proc/1/fd/1 2>&1"
           echo "$$BILLING_CRON_SCHEDULE /bin/sh /opt/cron/run-billing.sh >> /proc/1/fd/1 2>&1"
+          echo "$$QUOTA_MONITOR_CRON_SCHEDULE /bin/sh /opt/cron/run-quota-monitor.sh >> /proc/1/fd/1 2>&1"
         } > /etc/crontabs/root
         exec crond -f -l 8
 

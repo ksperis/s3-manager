@@ -33,6 +33,10 @@ def update_users_me(
             full_name=payload.full_name if "full_name" in update_fields else None,
             ui_language=payload.ui_language,
             update_ui_language="ui_language" in update_fields,
+            quota_alerts_enabled=payload.quota_alerts_enabled,
+            update_quota_alerts_enabled="quota_alerts_enabled" in update_fields,
+            quota_alerts_global_watch=payload.quota_alerts_global_watch,
+            update_quota_alerts_global_watch="quota_alerts_global_watch" in update_fields,
             current_password=payload.current_password,
             new_password=payload.new_password,
         )

@@ -20,6 +20,8 @@ export type User = {
   role?: string | null;
   can_access_ceph_admin?: boolean;
   ui_language?: "en" | "fr" | "de" | null;
+  quota_alerts_enabled?: boolean;
+  quota_alerts_global_watch?: boolean;
   accounts?: number[];
   account_links?: AccountMembership[];
   s3_users?: number[];
@@ -62,6 +64,8 @@ export type UpdateUserPayload = {
 export type UpdateCurrentUserPayload = {
   full_name?: string | null;
   ui_language?: "en" | "fr" | "de" | null;
+  quota_alerts_enabled?: boolean;
+  quota_alerts_global_watch?: boolean;
   current_password?: string;
   new_password?: string;
 };

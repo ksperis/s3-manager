@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppSettings, GeneralFeatureLocks } from "../../api/appSettings";
+import type { AppSettings, GeneralFeatureLocks, QuotaNotificationSettings } from "../../api/appSettings";
 import GeneralSettingsPage from "./GeneralSettingsPage";
 
 const setGeneralSettingsMock = vi.fn();
@@ -9,6 +9,9 @@ const fetchAppSettingsMock = vi.fn<() => Promise<AppSettings>>();
 const fetchDefaultAppSettingsMock = vi.fn<() => Promise<AppSettings>>();
 const fetchGeneralFeatureLocksMock = vi.fn<() => Promise<GeneralFeatureLocks>>();
 const updateAppSettingsMock = vi.fn<(payload: AppSettings) => Promise<AppSettings>>();
+const sendQuotaNotificationTestEmailMock = vi.fn<
+  (payload: QuotaNotificationSettings) => Promise<{ status: string; recipient: string; sent_at: string }>
+>();
 const applyBrandingMock = vi.fn();
 
 vi.mock("../../components/GeneralSettingsContext", () => ({
@@ -22,6 +25,7 @@ vi.mock("../../api/appSettings", () => ({
   fetchDefaultAppSettings: () => fetchDefaultAppSettingsMock(),
   fetchGeneralFeatureLocks: () => fetchGeneralFeatureLocksMock(),
   updateAppSettings: (payload: AppSettings) => updateAppSettingsMock(payload),
+  sendQuotaNotificationTestEmail: (payload: QuotaNotificationSettings) => sendQuotaNotificationTestEmailMock(payload),
 }));
 
 vi.mock("../../components/ui/brandingRuntime", async () => {
@@ -52,6 +56,8 @@ function buildSettings(): AppSettings {
       portal_enabled: false,
       billing_enabled: false,
       endpoint_status_enabled: false,
+      quota_alerts_enabled: false,
+      usage_history_enabled: false,
       bucket_migration_enabled: true,
       bucket_compare_enabled: true,
       allow_ui_user_bucket_migration: false,
@@ -103,6 +109,17 @@ function buildSettings(): AppSettings {
       bucket_migration_parallelism_max: 16,
       bucket_migration_max_active_per_endpoint: 2,
     },
+    quota_notifications: {
+      threshold_percent: 85,
+      include_subject_contact_email: false,
+      smtp_host: null,
+      smtp_port: 587,
+      smtp_username: null,
+      smtp_from_email: null,
+      smtp_from_name: null,
+      smtp_starttls: true,
+      smtp_timeout_seconds: 15,
+    },
     browser: {
       allow_proxy_transfers: true,
       direct_upload_parallelism: 5,
@@ -141,6 +158,11 @@ describe("GeneralSettingsPage branding", () => {
     fetchGeneralFeatureLocksMock.mockResolvedValue(unlockedFeatureLocks());
     fetchDefaultAppSettingsMock.mockResolvedValue(buildSettings());
     updateAppSettingsMock.mockImplementation(async (payload: AppSettings) => payload);
+    sendQuotaNotificationTestEmailMock.mockResolvedValue({
+      status: "sent",
+      recipient: "superadmin@example.com",
+      sent_at: "2026-01-01T00:00:00",
+    });
   });
 
   it("only shows color picker (no hex input)", async () => {
@@ -182,5 +204,19 @@ describe("GeneralSettingsPage branding", () => {
     await screen.findByLabelText("Primary color picker");
     expect(screen.queryByLabelText("Bucket migration tool")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Bucket compare tool")).not.toBeInTheDocument();
+  });
+
+  it("sends a quota SMTP test email with current quota notification settings", async () => {
+    const user = userEvent.setup();
+    render(<GeneralSettingsPage />);
+
+    await screen.findByLabelText("Primary color picker");
+    await user.click(screen.getByRole("button", { name: /send test email/i }));
+
+    await waitFor(() => {
+      expect(sendQuotaNotificationTestEmailMock).toHaveBeenCalledTimes(1);
+    });
+    expect(sendQuotaNotificationTestEmailMock.mock.calls[0][0]).toEqual(buildSettings().quota_notifications);
+    expect(await screen.findByText(/test email sent to superadmin@example.com/i)).toBeInTheDocument();
   });
 });

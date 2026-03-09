@@ -27,6 +27,8 @@ export type GeneralSettings = {
   portal_enabled: boolean;
   billing_enabled: boolean;
   endpoint_status_enabled: boolean;
+  quota_alerts_enabled: boolean;
+  usage_history_enabled: boolean;
   bucket_migration_enabled: boolean;
   bucket_compare_enabled: boolean;
   allow_ui_user_bucket_migration: boolean;
@@ -119,6 +121,18 @@ export type ManagerSettings = {
   bucket_migration_max_active_per_endpoint: number;
 };
 
+export type QuotaNotificationSettings = {
+  threshold_percent: number;
+  include_subject_contact_email: boolean;
+  smtp_host?: string | null;
+  smtp_port: number;
+  smtp_username?: string | null;
+  smtp_from_email?: string | null;
+  smtp_from_name?: string | null;
+  smtp_starttls: boolean;
+  smtp_timeout_seconds: number;
+};
+
 export type BrowserSettings = {
   allow_proxy_transfers: boolean;
   direct_upload_parallelism: number;
@@ -137,9 +151,16 @@ export type AppSettings = {
   general: GeneralSettings;
   portal: PortalSettings;
   manager: ManagerSettings;
+  quota_notifications: QuotaNotificationSettings;
   browser: BrowserSettings;
   onboarding: OnboardingSettings;
   branding: BrandingSettings;
+};
+
+export type QuotaNotificationTestEmailResult = {
+  status: string;
+  recipient: string;
+  sent_at: string;
 };
 
 export type PublicStorageEndpoint = {
@@ -208,5 +229,12 @@ export async function fetchBrandingSettings(): Promise<BrandingSettings> {
 
 export async function updateAppSettings(payload: AppSettings): Promise<AppSettings> {
   const { data } = await client.put<AppSettings>("/admin/settings", payload);
+  return data;
+}
+
+export async function sendQuotaNotificationTestEmail(
+  payload: QuotaNotificationSettings
+): Promise<QuotaNotificationTestEmailResult> {
+  const { data } = await client.post<QuotaNotificationTestEmailResult>("/admin/settings/quota-notifications/test-email", payload);
   return data;
 }

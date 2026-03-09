@@ -7,7 +7,7 @@ from app.routers import dependencies
 from uuid import uuid4
 
 
-def _seed_user(db_session, *, hashed_password: str | None) -> User:
+def _seed_user(db_session, *, hashed_password: str | None, role: str = UserRole.UI_USER.value) -> User:
     email = f"profile-user-{uuid4().hex[:8]}@example.com"
     user = User(
         email=email,
@@ -15,7 +15,7 @@ def _seed_user(db_session, *, hashed_password: str | None) -> User:
         display_name="Profile User",
         hashed_password=hashed_password,
         is_active=True,
-        role=UserRole.UI_USER.value,
+        role=role,
     )
     db_session.add(user)
     db_session.commit()
@@ -65,6 +65,41 @@ def test_update_users_me_clears_ui_language(client, db_session):
 
     db_session.refresh(user)
     assert user.ui_language is None
+
+
+def test_update_users_me_updates_quota_alert_toggle(client, db_session):
+    user = _seed_user(db_session, hashed_password=get_password_hash("old-password"))
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+
+    response = client.put("/api/users/me", json={"quota_alerts_enabled": False})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["quota_alerts_enabled"] is False
+
+    db_session.refresh(user)
+    assert user.quota_alerts_enabled is False
+
+
+def test_update_users_me_updates_global_watch_for_admin(client, db_session):
+    user = _seed_user(db_session, hashed_password=get_password_hash("old-password"), role=UserRole.UI_ADMIN.value)
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+
+    response = client.put("/api/users/me", json={"quota_alerts_global_watch": True})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["quota_alerts_global_watch"] is True
+
+    db_session.refresh(user)
+    assert user.quota_alerts_global_watch is True
+
+
+def test_update_users_me_rejects_global_watch_for_non_admin(client, db_session):
+    user = _seed_user(db_session, hashed_password=get_password_hash("old-password"), role=UserRole.UI_USER.value)
+    app.dependency_overrides[dependencies.get_current_user] = lambda: user
+
+    response = client.put("/api/users/me", json={"quota_alerts_global_watch": True})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Global quota watch requires admin role"
 
 
 def test_update_users_me_changes_password_with_current_password(client, db_session):

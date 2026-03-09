@@ -227,6 +227,25 @@ class Settings(BaseSettings):
         None,
         description="Default billing rate card name when no explicit assignment exists",
     )
+    billing_daily_retention_days: int = Field(
+        365,
+        ge=0,
+        description="Retention in days for billing daily tables; 0 disables purge (BILLING_DAILY_RETENTION_DAYS)",
+    )
+    quota_history_hourly_retention_days: int = Field(
+        30,
+        ge=0,
+        description="Retention in days for quota_usage_hourly; 0 disables purge (QUOTA_HISTORY_HOURLY_RETENTION_DAYS)",
+    )
+    quota_history_daily_retention_days: int = Field(
+        365,
+        ge=0,
+        description="Retention in days for quota_usage_daily; 0 disables purge (QUOTA_HISTORY_DAILY_RETENTION_DAYS)",
+    )
+    smtp_password: Optional[str] = Field(
+        None,
+        description="SMTP password used for quota notifications (SMTP_PASSWORD)",
+    )
 
     healthcheck_enabled: bool = Field(
         True,

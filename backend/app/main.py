@@ -35,6 +35,7 @@ from app.routers.ceph_admin import buckets as ceph_admin_buckets
 from app.routers.ceph_admin import metrics as ceph_admin_metrics
 from app.routers.internal import billing_collect as internal_billing
 from app.routers.internal import healthchecks as internal_healthchecks
+from app.routers.internal import quota_monitor as internal_quota_monitor
 from app.routers.internal import s3_connections as internal_s3_connections
 from app.routers.manager import s3_accounts as manager_accounts
 from app.routers.manager import browser as manager_browser
@@ -136,6 +137,7 @@ app.include_router(ceph_admin_buckets.router, prefix=settings.api_v1_prefix, dep
 app.include_router(ceph_admin_metrics.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(internal_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_healthchecks.router, prefix=settings.api_v1_prefix)
+app.include_router(internal_quota_monitor.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_s3_connections.router, prefix=settings.api_v1_prefix)
 app.include_router(
     manager_accounts.router,

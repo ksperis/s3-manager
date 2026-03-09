@@ -133,6 +133,8 @@ class GeneralSettings(BaseModel):
     portal_enabled: bool = False
     billing_enabled: bool = False
     endpoint_status_enabled: bool = False
+    quota_alerts_enabled: bool = False
+    usage_history_enabled: bool = False
     bucket_migration_enabled: bool = False
     bucket_compare_enabled: bool = False
     allow_ui_user_bucket_migration: bool = False
@@ -249,6 +251,28 @@ class ManagerSettings(BaseModel):
         return self
 
 
+class QuotaNotificationSettings(BaseModel):
+    threshold_percent: int = Field(default=85, ge=1, le=100)
+    include_subject_contact_email: bool = False
+    smtp_host: Optional[str] = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: Optional[str] = None
+    smtp_from_email: Optional[str] = None
+    smtp_from_name: Optional[str] = None
+    smtp_starttls: bool = True
+    smtp_timeout_seconds: int = Field(default=15, ge=1, le=300)
+
+    @field_validator("smtp_host", "smtp_username", "smtp_from_email", "smtp_from_name", mode="before")
+    @classmethod
+    def normalize_optional_strings(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("SMTP settings must be strings")
+        normalized = value.strip()
+        return normalized or None
+
+
 class BrowserSettings(BaseModel):
     allow_proxy_transfers: bool = True
     direct_upload_parallelism: int = Field(default=5, ge=1, le=20)
@@ -267,6 +291,7 @@ class AppSettings(BaseModel):
     general: GeneralSettings = GeneralSettings()
     portal: PortalSettings = PortalSettings()
     manager: ManagerSettings = ManagerSettings()
+    quota_notifications: QuotaNotificationSettings = QuotaNotificationSettings()
     browser: BrowserSettings = BrowserSettings()
     onboarding: OnboardingSettings = OnboardingSettings()
     branding: BrandingSettings = BrandingSettings()

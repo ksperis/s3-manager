@@ -53,6 +53,8 @@ class User(BaseModel):
     is_root: bool = False
     can_access_ceph_admin: bool = False
     ui_language: Optional[UiLanguage] = None
+    quota_alerts_enabled: bool = True
+    quota_alerts_global_watch: bool = False
     auth_provider: Optional[str] = None
     last_login_at: Optional[datetime] = None
 
@@ -80,6 +82,8 @@ class UserUpdate(BaseModel):
 class UserSelfUpdate(BaseModel):
     full_name: Optional[str] = None
     ui_language: Optional[UiLanguage] = None
+    quota_alerts_enabled: Optional[bool] = None
+    quota_alerts_global_watch: Optional[bool] = None
     current_password: Optional[str] = None
     new_password: Optional[str] = None
 
@@ -103,6 +107,8 @@ class UserOut(BaseModel):
     is_root: bool = False
     can_access_ceph_admin: bool = False
     ui_language: Optional[UiLanguage] = None
+    quota_alerts_enabled: bool = True
+    quota_alerts_global_watch: bool = False
     accounts: list[int] = []
     account_links: list[AccountMembership] = []
     s3_users: list[int] = []

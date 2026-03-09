@@ -78,6 +78,7 @@ nav:
       - Configuration: ops/configuration.md
       - "Operations: healthchecks": ops/operations-healthchecks.md
       - "Operations: billing": ops/operations-billing.md
+      - "Operations: quota monitoring and history": ops/operations-quota-monitoring.md
       - "Operations: API tokens": ops/operations-api-tokens.md
       - "Operations: admin automation API": ops/operations-admin-automation.md
       - "Operations: security": ops/operations-security.md

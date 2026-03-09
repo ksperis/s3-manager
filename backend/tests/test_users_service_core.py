@@ -120,6 +120,9 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
 def test_update_user_and_link_validations(db_session):
     service = UsersService(db_session)
     user = _seed_user(db_session, "update-me@example.com", role=UserRole.UI_ADMIN.value)
+    user.quota_alerts_global_watch = True
+    db_session.add(user)
+    db_session.commit()
     _seed_user(db_session, "already-used@example.com", role=UserRole.UI_USER.value)
     s3_user = _seed_s3_user(db_session, "linked-user")
     shared_conn = _seed_connection(db_session, owner_user_id=None, name="shared-conn", is_shared=True)
@@ -151,6 +154,7 @@ def test_update_user_and_link_validations(db_session):
     assert updated.role == UserRole.UI_USER.value
     # Non-admin roles cannot keep ceph-admin access.
     assert updated.can_access_ceph_admin is False
+    assert updated.quota_alerts_global_watch is False
     assert updated.is_active is False
     assert updated.is_root is True
 

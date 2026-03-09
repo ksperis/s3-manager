@@ -13,6 +13,7 @@ from .s3_user import S3User, UserS3User
 from .s3_connection import S3Connection, UserS3Connection
 from .oidc import OidcLoginState
 from .billing import BillingAssignment, BillingRateCard, BillingStorageDaily, BillingUsageDaily
+from .quota_monitoring import QuotaAlertState, QuotaUsageDaily, QuotaUsageHourly
 from .healthcheck import (
     EndpointHealthCheck,
     EndpointHealthLatest,
@@ -47,6 +48,9 @@ __all__ = [
     "BillingRateCard",
     "BillingStorageDaily",
     "BillingUsageDaily",
+    "QuotaUsageHourly",
+    "QuotaUsageDaily",
+    "QuotaAlertState",
     "EndpointHealthCheck",
     "EndpointHealthLatest",
     "EndpointHealthStatusSegment",

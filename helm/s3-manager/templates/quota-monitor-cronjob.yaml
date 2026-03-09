@@ -1,0 +1,60 @@
+{{- if .Values.quotaMonitorCronJob.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "s3-manager.fullname" . }}-quota-monitor
+  labels:
+    {{- include "s3-manager.labels" . | nindent 4 }}
+    app.kubernetes.io/component: quota-monitor-cron
+spec:
+  schedule: {{ .Values.quotaMonitorCronJob.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.quotaMonitorCronJob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.quotaMonitorCronJob.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.quotaMonitorCronJob.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "s3-manager.labels" . | nindent 12 }}
+            app.kubernetes.io/component: quota-monitor-cron
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: quota-monitor-runner
+              image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+              imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+              env:
+                - name: QUOTA_MONITOR_API_BASE
+                  value: {{ printf "http://%s-backend:%d" (include "s3-manager.fullname" .) (.Values.service.backend.port | int) | quote }}
+                {{- $backendToken := get .Values.backend.env "INTERNAL_CRON_TOKEN" }}
+                {{- if $backendToken }}
+                - name: INTERNAL_CRON_TOKEN
+                  value: {{ $backendToken | quote }}
+                {{- else if .Values.quotaMonitorCronJob.internalToken }}
+                - name: INTERNAL_CRON_TOKEN
+                  value: {{ .Values.quotaMonitorCronJob.internalToken | quote }}
+                {{- end }}
+                {{- range .Values.quotaMonitorCronJob.extraEnv }}
+                - name: {{ .name }}
+                  value: {{ .value | quote }}
+                {{- end }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  python - <<'PY'
+                  import os
+                  import sys
+                  import requests
+
+                  base = os.environ.get("QUOTA_MONITOR_API_BASE")
+                  token = os.environ.get("INTERNAL_CRON_TOKEN")
+                  if not base or not token:
+                      print("Missing QUOTA_MONITOR_API_BASE or INTERNAL_CRON_TOKEN", file=sys.stderr)
+                      sys.exit(1)
+                  url = f"{base}/api/internal/quota-monitor/run"
+                  resp = requests.post(url, headers={"X-Internal-Token": token}, timeout=30)
+                  print(resp.status_code, resp.text)
+                  resp.raise_for_status()
+                  PY
+{{- end }}
