@@ -1474,6 +1474,7 @@ const persistBulkConfigClipboard = (value: BulkConfigClipboard | null) => {
 
 type BucketUiTags = Record<string, string[]>;
 type BucketTagTarget = { key: string; name: string; tenant: string | null };
+type OrphanedTagBucketDetail = { key: string; name: string; tenant: string | null; tags: string[] };
 
 const buildBucketUiTagKey = (bucketName: string, tenant?: string | null) => {
   const normalizedName = bucketName.trim();
@@ -5114,13 +5115,33 @@ export default function CephAdminBucketsPage() {
     if (orphanedTagBuckets.length === 0) return;
     setUiTags((prev) => {
       const next = { ...prev };
-      orphanedTagBuckets.forEach((bucketName) => {
-        delete next[bucketName];
+      orphanedTagBuckets.forEach((bucketKey) => {
+        delete next[bucketKey];
       });
       return next;
     });
     setOrphanedTagBuckets([]);
   };
+  const orphanedTagDetails = useMemo<OrphanedTagBucketDetail[]>(
+    () =>
+      orphanedTagBuckets
+        .map((bucketKey) => {
+          const parsed = parseBucketUiTagKey(bucketKey);
+          const tags = normalizeUiTagValues(uiTags[bucketKey] ?? []);
+          return {
+            key: bucketKey,
+            name: parsed?.name ?? bucketKey,
+            tenant: parsed?.tenant ?? null,
+            tags,
+          };
+        })
+        .sort((a, b) => {
+          const tenantCompare = (a.tenant ?? "").localeCompare(b.tenant ?? "");
+          if (tenantCompare !== 0) return tenantCompare;
+          return a.name.localeCompare(b.name);
+        }),
+    [orphanedTagBuckets, uiTags]
+  );
   const previewStats = useMemo(() => {
     const errors = bulkPreview.filter((item) => item.error).length;
     const changed = bulkPreview.filter((item) => !item.error && item.changed).length;
@@ -6233,20 +6254,60 @@ export default function CephAdminBucketsPage() {
         </PageBanner>
       )}
       {error && <PageBanner tone="error">{error}</PageBanner>}
-      {orphanedTagBuckets.length > 0 && (
+      {orphanedTagDetails.length > 0 && (
         <PageBanner tone="warning">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              UI tags exist for {orphanedTagBuckets.length} bucket{orphanedTagBuckets.length > 1 ? "s" : ""} that{" "}
-              {orphanedTagBuckets.length > 1 ? "no longer exist" : "no longer exists"}.
-            </span>
-            <button
-              type="button"
-              onClick={clearOrphanedTags}
-              className="rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 ui-caption font-semibold text-amber-800 hover:border-amber-400 dark:border-amber-700/60 dark:bg-amber-900/40 dark:text-amber-100"
-            >
-              Remove tags
-            </button>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                UI tags exist for {orphanedTagDetails.length} bucket{orphanedTagDetails.length > 1 ? "s" : ""} that{" "}
+                {orphanedTagDetails.length > 1 ? "no longer exist" : "no longer exists"}.
+              </span>
+              <button
+                type="button"
+                onClick={clearOrphanedTags}
+                className="rounded-md border border-amber-300 bg-amber-100 px-3 py-1.5 ui-caption font-semibold text-amber-800 hover:border-amber-400 dark:border-amber-700/60 dark:bg-amber-900/40 dark:text-amber-100"
+              >
+                Remove tags
+              </button>
+            </div>
+            <details className="rounded-md border border-amber-300/70 bg-amber-50/70 px-2 py-1.5 dark:border-amber-700/50 dark:bg-amber-950/20">
+              <summary className="list-none cursor-pointer ui-caption font-semibold text-amber-900 dark:text-amber-100 [&::-webkit-details-marker]:hidden">
+                Show affected bucket/tag details
+              </summary>
+              <div className="mt-2 max-h-40 space-y-2 overflow-auto pr-1">
+                {orphanedTagDetails.map((item) => (
+                  <div
+                    key={item.key}
+                    className="rounded-md border border-amber-200/80 bg-white/80 px-2 py-1.5 dark:border-amber-700/40 dark:bg-slate-900/50"
+                  >
+                    <p className="ui-caption font-semibold text-amber-900 dark:text-amber-100">
+                      {item.name}
+                      {item.tenant ? (
+                        <span className="ml-1 font-normal text-amber-800/90 dark:text-amber-200/90">(tenant: {item.tenant})</span>
+                      ) : null}
+                    </p>
+                    {item.tags.length > 0 ? (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {item.tags.map((tag) => {
+                          const colors = getTagColors(tag);
+                          return (
+                            <span
+                              key={`${item.key}:${tag}`}
+                              className="rounded-full border px-2 py-0.5 ui-caption font-semibold"
+                              style={{ backgroundColor: colors.background, color: colors.text, borderColor: colors.border }}
+                            >
+                              {tag}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="mt-1 ui-caption text-amber-800/90 dark:text-amber-200/90">No tag values found.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
           </div>
         </PageBanner>
       )}
