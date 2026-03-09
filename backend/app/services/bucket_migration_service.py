@@ -1315,7 +1315,23 @@ class BucketMigrationService:
             )
             if updated == 1:
                 self._commit()
-                return migration_id
+                if self._claimed_migration_within_endpoint_limit(
+                    migration_id,
+                    endpoint_keys=endpoint_keys,
+                    max_active_per_endpoint=max_active_per_endpoint,
+                    now=utcnow(),
+                    cache=endpoint_cache,
+                ):
+                    return migration_id
+                logger.info(
+                    "Bucket migration claim released after endpoint limit recheck: migration=%s worker=%s",
+                    migration_id,
+                    worker_id,
+                )
+                self._release_migration_lease(migration_id, worker_id=worker_id)
+                self._commit()
+                endpoint_usage = self._active_endpoint_usage(now=utcnow())
+                continue
             self.db.rollback()
         return None
 
@@ -3870,6 +3886,49 @@ class BucketMigrationService:
             ):
                 usage[key] = usage.get(key, 0) + 1
         return usage
+
+    def _claimed_migration_within_endpoint_limit(
+        self,
+        migration_id: int,
+        *,
+        endpoint_keys: set[str],
+        max_active_per_endpoint: int,
+        now,
+        cache: dict[str, str],
+    ) -> bool:
+        if not endpoint_keys:
+            return True
+        allowed_per_endpoint = max(1, int(max_active_per_endpoint))
+        rows = (
+            self.db.query(
+                BucketMigration.id,
+                BucketMigration.source_context_id,
+                BucketMigration.target_context_id,
+            )
+            .filter(
+                BucketMigration.status.in_(_RUNNABLE_MIGRATION_STATUSES),
+                BucketMigration.worker_lease_until.isnot(None),
+                BucketMigration.worker_lease_until >= now,
+            )
+            .order_by(BucketMigration.created_at.asc(), BucketMigration.id.asc())
+            .all()
+        )
+        ranked_by_endpoint: dict[str, list[int]] = {}
+        for row in rows:
+            row_keys = self._endpoint_keys_for_contexts(
+                row.source_context_id,
+                row.target_context_id,
+                cache=cache,
+            )
+            for key in row_keys:
+                ranked_by_endpoint.setdefault(key, []).append(int(row.id))
+        for key in endpoint_keys:
+            ranked_ids = ranked_by_endpoint.get(key, [])
+            if migration_id not in ranked_ids:
+                return False
+            if ranked_ids.index(migration_id) >= allowed_per_endpoint:
+                return False
+        return True
 
     def _endpoint_keys_for_contexts(
         self,

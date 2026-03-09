@@ -651,6 +651,65 @@ def test_claim_next_runnable_migration_respects_max_active_per_endpoint(db_sessi
     assert first_claim == migration_a.id
     assert second_claim == migration_c.id
 
+
+def test_claim_next_runnable_migration_rechecks_endpoint_limit_after_claim(db_session):
+    user = _create_user(db_session)
+    source_a = _create_account(db_session, name="source-a", endpoint_url="https://shared.example.test", account_id="RGW001")
+    source_b_user = _create_s3_user(
+        db_session,
+        name="source-b-user",
+        endpoint=source_a.storage_endpoint,
+        uid="source-b-uid",
+    )
+    target_a = _create_account(db_session, name="target-a", endpoint_url="https://target-a.example.test", account_id="RGW101")
+    target_b = _create_account(db_session, name="target-b", endpoint_url="https://target-b.example.test", account_id="RGW102")
+    db_session.commit()
+
+    service = BucketMigrationService(db_session)
+    migration_a = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=str(source_a.id),
+            target_context_id=str(target_a.id),
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-a")],
+        ),
+        user,
+    )
+    migration_b = service.create_migration(
+        BucketMigrationCreateRequest(
+            source_context_id=f"s3u-{source_b_user.id}",
+            target_context_id=str(target_b.id),
+            buckets=[BucketMigrationBucketMapping(source_bucket="bucket-b")],
+        ),
+        user,
+    )
+    for migration in (migration_a, migration_b):
+        migration.status = "queued"
+        migration.precheck_status = "passed"
+    db_session.commit()
+
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind())
+    with test_session_factory() as db_worker_1, test_session_factory() as db_worker_2:
+        service_worker_1 = BucketMigrationService(db_worker_1)
+        service_worker_2 = BucketMigrationService(db_worker_2)
+        with patch(
+            "app.services.bucket_migration_service.load_app_settings",
+            return_value=_app_settings_stub(max_active_per_endpoint=1),
+        ):
+            with patch.object(service_worker_1, "_active_endpoint_usage", return_value={}), patch.object(
+                service_worker_2, "_active_endpoint_usage", return_value={}
+            ):
+                first_claim = service_worker_1.claim_next_runnable_migration_id(worker_id="worker-1", lease_seconds=120)
+                second_claim = service_worker_2.claim_next_runnable_migration_id(worker_id="worker-2", lease_seconds=120)
+
+    db_session.refresh(migration_a)
+    db_session.refresh(migration_b)
+
+    assert first_claim == migration_a.id
+    assert second_claim is None
+    assert migration_a.worker_lease_owner == "worker-1"
+    assert migration_b.worker_lease_owner is None
+
+
 def test_bucket_already_exists_error_detection(db_session):
     service = BucketMigrationService(db_session)
     assert service._is_bucket_already_exists_error(RuntimeError("An error occurred (BucketAlreadyExists)"))
