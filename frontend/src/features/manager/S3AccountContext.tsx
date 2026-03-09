@@ -10,6 +10,12 @@ import { fetchManagerContext, type ManagerAccessMode } from "../../api/managerCo
 
 const EXECUTION_CONTEXT_STORAGE_KEY = "selectedExecutionContextId";
 const EXECUTION_CONTEXT_URL_PARAM = "ctx";
+export const EXECUTION_CONTEXTS_REFRESH_EVENT = "execution-contexts:refresh";
+
+export function notifyExecutionContextsRefresh(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(EXECUTION_CONTEXTS_REFRESH_EVENT));
+}
 
 type S3AccountContextType = {
   accounts: ExecutionContext[];
@@ -92,6 +98,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
   const sessionInfo = useMemo(() => readSessionInfo(), []);
   const requiresS3AccountSelection = !sessionInfo.isSession;
   const [accounts, setS3Accounts] = useState<ExecutionContext[]>([]);
+  const [contextsRefreshToken, setContextsRefreshToken] = useState(0);
   const [selectedS3AccountId, setSelectedS3AccountId] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
@@ -100,6 +107,13 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
   const [managerStatsEnabled, setManagerStatsEnabled] = useState<boolean | null>(null);
   const [managerBrowserEnabled, setManagerBrowserEnabled] = useState<boolean | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleRefresh = () => setContextsRefreshToken((value) => value + 1);
+    window.addEventListener(EXECUTION_CONTEXTS_REFRESH_EVENT, handleRefresh);
+    return () => window.removeEventListener(EXECUTION_CONTEXTS_REFRESH_EVENT, handleRefresh);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -121,7 +135,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
       }
     };
     load();
-  }, [requiresS3AccountSelection, scope]);
+  }, [contextsRefreshToken, requiresS3AccountSelection, scope]);
 
   useEffect(() => {
     if (!requiresS3AccountSelection) {

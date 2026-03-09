@@ -111,7 +111,11 @@ describe("TopbarContextAccountSelector", () => {
     const input = screen.getByPlaceholderText("Search account...");
     expect(input).toBeInTheDocument();
 
-    await user.type(input, "filter target");
+    await user.type(input, "f");
+    expect(input).toHaveFocus();
+
+    await user.type(input, "ilter target");
+    expect(input).toHaveFocus();
     expect(visibleOptionLabels(listbox)).toEqual(["Filter target"]);
   });
 

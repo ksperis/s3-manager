@@ -18,13 +18,13 @@ import {
   createConnection,
   deleteConnection,
   listConnections,
-  rotateConnectionCredentials,
   updateConnection,
   validateConnectionCredentials,
 } from "../../api/connections";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "./useLiveS3CredentialsValidation";
+import { notifyExecutionContextsRefresh } from "../manager/S3AccountContext";
 import {
   WORKSPACE_STORAGE_KEY,
   isAdminLikeRole,
@@ -165,13 +165,13 @@ export default function ProfilePage({
   const [showCreateConnectionModal, setShowCreateConnectionModal] = useState(false);
   const [creatingConnection, setCreatingConnection] = useState(false);
   const [savingConnectionBusyId, setSavingConnectionBusyId] = useState<number | null>(null);
-  const [rotatingConnectionBusyId, setRotatingConnectionBusyId] = useState<number | null>(null);
   const [deletingConnectionBusyId, setDeletingConnectionBusyId] = useState<number | null>(null);
   const [editingConnectionId, setEditingConnectionId] = useState<number | null>(null);
-  const [rotatingCredentialsConnectionId, setRotatingCredentialsConnectionId] = useState<number | null>(null);
   const [createConnectionForm, setCreateConnectionForm] = useState(defaultCreateConnectionForm);
   const [createConnectionEndpointMode, setCreateConnectionEndpointMode] = useState<CreateConnectionEndpointMode>("custom");
   const [createConnectionEndpointId, setCreateConnectionEndpointId] = useState("");
+  const [editConnectionEndpointMode, setEditConnectionEndpointMode] = useState<CreateConnectionEndpointMode>("custom");
+  const [editConnectionEndpointId, setEditConnectionEndpointId] = useState("");
   const [availableStorageEndpoints, setAvailableStorageEndpoints] = useState<StorageEndpoint[]>([]);
   const [loadingStorageEndpoints, setLoadingStorageEndpoints] = useState(false);
   const [storageEndpointsError, setStorageEndpointsError] = useState<string | null>(null);
@@ -281,13 +281,6 @@ export default function ProfilePage({
       editingConnectionId == null ? null : connections.find((connection) => connection.id === editingConnectionId) ?? null,
     [connections, editingConnectionId]
   );
-  const rotatingConnection = useMemo(
-    () =>
-      rotatingCredentialsConnectionId == null
-        ? null
-        : connections.find((connection) => connection.id === rotatingCredentialsConnectionId) ?? null,
-    [connections, rotatingCredentialsConnectionId]
-  );
 
   useEffect(() => {
     setPreferencesTheme(theme);
@@ -341,7 +334,6 @@ export default function ProfilePage({
       setConnectionsLoading(false);
       setShowCreateConnectionModal(false);
       setEditingConnectionId(null);
-      setRotatingCredentialsConnectionId(null);
       setConnectionsFilter("");
       setConnectionsPage(1);
       return;
@@ -427,13 +419,7 @@ export default function ProfilePage({
     if (editingConnectionId != null && !connections.some((item) => item.id === editingConnectionId)) {
       setEditingConnectionId(null);
     }
-    if (
-      rotatingCredentialsConnectionId != null &&
-      !connections.some((item) => item.id === rotatingCredentialsConnectionId)
-    ) {
-      setRotatingCredentialsConnectionId(null);
-    }
-  }, [connections, editingConnectionId, rotatingCredentialsConnectionId, showConnectionsSection]);
+  }, [connections, editingConnectionId, showConnectionsSection]);
 
   useEffect(() => {
     if (!showCreateConnectionModal) return;
@@ -456,6 +442,29 @@ export default function ProfilePage({
     createConnectionEndpointId,
     createConnectionEndpointMode,
     showCreateConnectionModal,
+  ]);
+
+  useEffect(() => {
+    if (!editingConnection) return;
+    if (editConnectionEndpointMode !== "preset") return;
+    if (availableStorageEndpoints.length === 0) {
+      setEditConnectionEndpointMode("custom");
+      setEditConnectionEndpointId("");
+      return;
+    }
+    if (
+      editConnectionEndpointId &&
+      availableStorageEndpoints.some((item) => String(item.id) === editConnectionEndpointId)
+    ) {
+      return;
+    }
+    const preferred = availableStorageEndpoints.find((item) => item.is_default) ?? availableStorageEndpoints[0];
+    setEditConnectionEndpointId(String(preferred.id));
+  }, [
+    availableStorageEndpoints,
+    editConnectionEndpointId,
+    editConnectionEndpointMode,
+    editingConnection,
   ]);
 
   const refreshConnections = async () => {
@@ -507,17 +516,18 @@ export default function ProfilePage({
       ...prev,
       [connection.id]: prev[connection.id] ?? buildConnectionDraft(connection),
     }));
-    setEditingConnectionId(connection.id);
-  };
-
-  const openRotateCredentialsModal = (connection: S3Connection) => {
-    setConnectionsError(null);
-    setConnectionsMessage(null);
+    if (connection.storage_endpoint_id != null) {
+      setEditConnectionEndpointMode("preset");
+      setEditConnectionEndpointId(String(connection.storage_endpoint_id));
+    } else {
+      setEditConnectionEndpointMode("custom");
+      setEditConnectionEndpointId("");
+    }
     setConnectionCredentialDrafts((prev) => ({
       ...prev,
       [connection.id]: { access_key_id: "", secret_access_key: "" },
     }));
-    setRotatingCredentialsConnectionId(connection.id);
+    setEditingConnectionId(connection.id);
   };
 
   const handleProfileSave = async (event: FormEvent) => {
@@ -654,6 +664,7 @@ export default function ProfilePage({
       setConnectionsPage(1);
       setConnectionsMessage("Private S3 connection created.");
       await refreshConnections();
+      notifyExecutionContextsRefresh();
     } catch (error) {
       console.error(error);
       setConnectionsError(getErrorMessage(error, "Unable to create private S3 connection."));
@@ -690,13 +701,21 @@ export default function ProfilePage({
     if (!canManagePrivateConnections) return false;
     const draft = connectionDrafts[connectionId];
     if (!draft) return false;
+    const credentialDraft = connectionCredentialDrafts[connectionId] ?? { access_key_id: "", secret_access_key: "" };
+    const accessKeyId = credentialDraft.access_key_id.trim();
+    const secretAccessKey = credentialDraft.secret_access_key.trim();
+    const usePresetEndpoint = editConnectionEndpointMode === "preset";
     setConnectionsError(null);
     setConnectionsMessage(null);
     if (!draft.name.trim()) {
       setConnectionsError("Connection name is required.");
       return false;
     }
-    if (!draft.storage_endpoint_id && !draft.endpoint_url.trim()) {
+    if (usePresetEndpoint && !editConnectionEndpointId) {
+      setConnectionsError("Select a configured endpoint.");
+      return false;
+    }
+    if (!usePresetEndpoint && !draft.endpoint_url.trim()) {
       setConnectionsError("Endpoint URL is required.");
       return false;
     }
@@ -704,20 +723,43 @@ export default function ProfilePage({
       setConnectionsError("Enable access to manager and/or browser.");
       return false;
     }
+    if ((accessKeyId && !secretAccessKey) || (!accessKeyId && secretAccessKey)) {
+      setConnectionsError("Provide both access key ID and secret access key to update credentials.");
+      return false;
+    }
     setSavingConnectionBusyId(connectionId);
     try {
+      const endpointPayload = usePresetEndpoint
+        ? {
+            storage_endpoint_id: Number(editConnectionEndpointId),
+          }
+        : {
+            storage_endpoint_id: null,
+            provider_hint: draft.provider_hint.trim() || undefined,
+            endpoint_url: draft.endpoint_url.trim(),
+            region: draft.region.trim() || undefined,
+            force_path_style: draft.force_path_style,
+            verify_tls: draft.verify_tls,
+          };
       await updateConnection(connectionId, {
         name: draft.name.trim(),
-        provider_hint: draft.provider_hint.trim() || undefined,
-        endpoint_url: draft.storage_endpoint_id ? undefined : draft.endpoint_url.trim(),
-        region: draft.region.trim() || undefined,
         access_manager: draft.access_manager,
         access_browser: draft.access_browser,
-        force_path_style: draft.force_path_style,
-        verify_tls: draft.verify_tls,
+        ...endpointPayload,
+        ...(accessKeyId && secretAccessKey
+          ? {
+              access_key_id: accessKeyId,
+              secret_access_key: secretAccessKey,
+            }
+          : {}),
       });
+      setConnectionCredentialDrafts((prev) => ({
+        ...prev,
+        [connectionId]: { access_key_id: "", secret_access_key: "" },
+      }));
       setConnectionsMessage("Private S3 connection updated.");
       await refreshConnections();
+      notifyExecutionContextsRefresh();
       return true;
     } catch (error) {
       console.error(error);
@@ -728,33 +770,45 @@ export default function ProfilePage({
     }
   };
 
-  const handleRotatePrivateConnectionCredentials = async (connectionId: number): Promise<boolean> => {
-    if (!canManagePrivateConnections) return false;
-    const draft = connectionCredentialDrafts[connectionId];
-    if (!draft) return false;
-    setConnectionsError(null);
-    setConnectionsMessage(null);
-    if (!draft.access_key_id.trim() || !draft.secret_access_key.trim()) {
-      setConnectionsError("Enter the new Access Key and Secret Key.");
-      return false;
+  const editConnectionValidationPayload = useMemo(() => {
+    if (!editingConnection) return null;
+    const draft = connectionDrafts[editingConnection.id] ?? buildConnectionDraft(editingConnection);
+    const credentialDraft = connectionCredentialDrafts[editingConnection.id] ?? { access_key_id: "", secret_access_key: "" };
+    const accessKeyId = credentialDraft.access_key_id.trim();
+    const secretAccessKey = credentialDraft.secret_access_key.trim();
+    if (!accessKeyId || !secretAccessKey) return null;
+    if (editConnectionEndpointMode === "preset") {
+      if (!editConnectionEndpointId) return null;
+      return {
+        storage_endpoint_id: Number(editConnectionEndpointId),
+        access_key_id: accessKeyId,
+        secret_access_key: secretAccessKey,
+      };
     }
-    setRotatingConnectionBusyId(connectionId);
-    try {
-      await rotateConnectionCredentials(connectionId, {
-        access_key_id: draft.access_key_id.trim(),
-        secret_access_key: draft.secret_access_key,
-      });
-      setConnectionsMessage("Credentials S3 modifies.");
-      await refreshConnections();
-      return true;
-    } catch (error) {
-      console.error(error);
-      setConnectionsError(getErrorMessage(error, "Unable to update S3 credentials."));
-      return false;
-    } finally {
-      setRotatingConnectionBusyId(null);
-    }
-  };
+    const endpointUrl = draft.endpoint_url.trim();
+    if (!endpointUrl) return null;
+    return {
+      endpoint_url: endpointUrl,
+      region: draft.region.trim() || null,
+      access_key_id: accessKeyId,
+      secret_access_key: secretAccessKey,
+      force_path_style: draft.force_path_style,
+      verify_tls: draft.verify_tls,
+    };
+  }, [
+    connectionCredentialDrafts,
+    connectionDrafts,
+    editConnectionEndpointId,
+    editConnectionEndpointMode,
+    editingConnection,
+  ]);
+
+  const editConnectionValidation = useLiveS3CredentialsValidation({
+    enabled: Boolean(editingConnection) && canManagePrivateConnections,
+    payload: editConnectionValidationPayload,
+    validate: validatePrivateCreateCredentials,
+    debounceMs: 450,
+  });
 
   const handleDeletePrivateConnection = async (connectionId: number) => {
     if (!canManagePrivateConnections) return;
@@ -766,6 +820,7 @@ export default function ProfilePage({
       await deleteConnection(connectionId);
       setConnectionsMessage("Private S3 connection deleted.");
       await refreshConnections();
+      notifyExecutionContextsRefresh();
     } catch (error) {
       console.error(error);
       setConnectionsError(getErrorMessage(error, "Unable to delete private S3 connection."));
@@ -1120,13 +1175,6 @@ export default function ProfilePage({
                                   </button>
                                   <button
                                     type="button"
-                                    className={tableActionButtonClasses}
-                                    onClick={() => openRotateCredentialsModal(connection)}
-                                  >
-                                    Credentials
-                                  </button>
-                                  <button
-                                    type="button"
                                     className={tableDeleteActionClasses}
                                     disabled={deletingConnectionBusyId === connection.id}
                                     onClick={() => void handleDeletePrivateConnection(connection.id)}
@@ -1431,7 +1479,10 @@ export default function ProfilePage({
           >
             {(() => {
               const draft = connectionDrafts[editingConnection.id] ?? buildConnectionDraft(editingConnection);
-              const isManagedEndpoint = Boolean(draft.storage_endpoint_id);
+              const credentialDraft = connectionCredentialDrafts[editingConnection.id] ?? {
+                access_key_id: "",
+                secret_access_key: "",
+              };
               return (
                 <>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1446,79 +1497,210 @@ export default function ProfilePage({
                         className={inputClasses}
                       />
                     </label>
-                    <label className="block">
-                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Provider
-                      </span>
-                      <input
-                        type="text"
-                        value={draft.provider_hint}
-                        onChange={(event) =>
-                          handleUpdateConnectionDraft(editingConnection.id, "provider_hint", event.target.value)
-                        }
-                        className={inputClasses}
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Endpoint URL
-                      </span>
-                      <input
-                        type="url"
-                        value={draft.endpoint_url}
-                        onChange={(event) =>
-                          handleUpdateConnectionDraft(editingConnection.id, "endpoint_url", event.target.value)
-                        }
-                        disabled={isManagedEndpoint}
-                        className={`${inputClasses} ${isManagedEndpoint ? "cursor-not-allowed opacity-70" : ""}`}
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        Region
-                      </span>
-                      <input
-                        type="text"
-                        value={draft.region}
-                        onChange={(event) =>
-                          handleUpdateConnectionDraft(editingConnection.id, "region", event.target.value)
-                        }
-                        disabled={isManagedEndpoint}
-                        className={`${inputClasses} ${isManagedEndpoint ? "cursor-not-allowed opacity-70" : ""}`}
-                      />
-                    </label>
                   </div>
-                  {isManagedEndpoint && (
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      This connection uses a platform-managed endpoint.
+
+                  <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                    <div>
+                      <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Endpoint
+                      </p>
+                      <p className="ui-caption text-slate-500 dark:text-slate-400">
+                        Choose a configured endpoint or enter a custom endpoint.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                        <input
+                          type="radio"
+                          name={`edit-connection-endpoint-mode-${editingConnection.id}`}
+                          checked={editConnectionEndpointMode === "preset"}
+                          onChange={() => setEditConnectionEndpointMode("preset")}
+                          disabled={availableStorageEndpoints.length === 0}
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                        />
+                        Endpoint UI existant
+                      </label>
+                      <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                        <input
+                          type="radio"
+                          name={`edit-connection-endpoint-mode-${editingConnection.id}`}
+                          checked={editConnectionEndpointMode === "custom"}
+                          onChange={() => setEditConnectionEndpointMode("custom")}
+                          className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        Endpoint custom
+                      </label>
+                    </div>
+                    {editConnectionEndpointMode === "preset" ? (
+                      <label className="block">
+                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Configured endpoint
+                        </span>
+                        <select
+                          value={editConnectionEndpointId}
+                          onChange={(event) => setEditConnectionEndpointId(event.target.value)}
+                          disabled={loadingStorageEndpoints || availableStorageEndpoints.length === 0}
+                          className={inputClasses}
+                        >
+                          <option value="">
+                            {loadingStorageEndpoints
+                              ? "Loading endpoints..."
+                              : availableStorageEndpoints.length === 0
+                                ? "No configured endpoint"
+                                : "Select endpoint"}
+                          </option>
+                          {availableStorageEndpoints.map((endpoint) => (
+                            <option key={endpoint.id} value={endpoint.id}>
+                              {endpoint.name} ({endpoint.endpoint_url})
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block">
+                          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Provider
+                          </span>
+                          <input
+                            type="text"
+                            value={draft.provider_hint}
+                            onChange={(event) =>
+                              handleUpdateConnectionDraft(editingConnection.id, "provider_hint", event.target.value)
+                            }
+                            className={inputClasses}
+                            placeholder="aws | minio | ceph ..."
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Region
+                          </span>
+                          <input
+                            type="text"
+                            value={draft.region}
+                            onChange={(event) =>
+                              handleUpdateConnectionDraft(editingConnection.id, "region", event.target.value)
+                            }
+                            className={inputClasses}
+                            placeholder="us-east-1"
+                          />
+                        </label>
+                        <label className="block sm:col-span-2">
+                          <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Endpoint URL
+                          </span>
+                          <input
+                            type="url"
+                            value={draft.endpoint_url}
+                            onChange={(event) =>
+                              handleUpdateConnectionDraft(editingConnection.id, "endpoint_url", event.target.value)
+                            }
+                            className={inputClasses}
+                            placeholder="https://s3.example.com"
+                          />
+                        </label>
+                        <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
+                          <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(draft.force_path_style)}
+                              onChange={(event) =>
+                                handleUpdateConnectionDraft(
+                                  editingConnection.id,
+                                  "force_path_style",
+                                  event.target.checked
+                                )
+                              }
+                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                            />
+                            Force path style
+                          </label>
+                          <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(draft.verify_tls)}
+                              onChange={(event) =>
+                                handleUpdateConnectionDraft(editingConnection.id, "verify_tls", event.target.checked)
+                              }
+                              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                            />
+                            Verify TLS
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                    {storageEndpointsError && (
+                      <p className="ui-caption text-amber-700 dark:text-amber-300">
+                        Unable to load configured endpoints ({storageEndpointsError}). Use custom mode.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                    <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Credentials
                     </p>
-                  )}
-                  <div className="flex flex-wrap items-center gap-4">
-                    <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(draft.force_path_style)}
-                        onChange={(event) =>
-                          handleUpdateConnectionDraft(editingConnection.id, "force_path_style", event.target.checked)
-                        }
-                        disabled={isManagedEndpoint}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
-                      Force path style
-                    </label>
-                    <label className="flex items-center gap-2 ui-caption font-semibold text-slate-600 dark:text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(draft.verify_tls)}
-                        onChange={(event) =>
-                          handleUpdateConnectionDraft(editingConnection.id, "verify_tls", event.target.checked)
-                        }
-                        disabled={isManagedEndpoint}
-                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                      />
-                      Verify TLS
-                    </label>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Current Access Key: <span className="ui-mono">{editingConnection.access_key_id || "-"}</span>
+                    </p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Leave blank to keep current credentials.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Access key ID
+                        </span>
+                        <input
+                          type="text"
+                          value={credentialDraft.access_key_id}
+                          onChange={(event) =>
+                            handleUpdateConnectionCredentialDraft(editingConnection.id, "access_key_id", event.target.value)
+                          }
+                          className={inputClasses}
+                          placeholder="AKIA..."
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Secret access key
+                        </span>
+                        <input
+                          type="password"
+                          value={credentialDraft.secret_access_key}
+                          onChange={(event) =>
+                            handleUpdateConnectionCredentialDraft(
+                              editingConnection.id,
+                              "secret_access_key",
+                              event.target.value
+                            )
+                          }
+                          className={inputClasses}
+                          placeholder="********"
+                        />
+                      </label>
+                    </div>
+                    {editConnectionValidation.status === "loading" && (
+                      <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 ui-caption text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-100">
+                        Validating credentials...
+                      </p>
+                    )}
+                    {editConnectionValidation.status === "done" && editConnectionValidation.result && (
+                      <p
+                        className={`rounded-md px-3 py-2 ui-caption ${
+                          editConnectionValidation.result.severity === "success"
+                            ? "border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-200"
+                            : editConnectionValidation.result.severity === "warning"
+                              ? "border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100"
+                              : "border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200"
+                        }`}
+                      >
+                        {editConnectionValidation.result.message}
+                      </p>
+                    )}
                   </div>
+
                   <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/40">
                     <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workspace access</p>
                     <div className="flex flex-wrap items-center gap-4">
@@ -1565,91 +1747,6 @@ export default function ProfilePage({
                 disabled={savingConnectionBusyId === editingConnection.id}
               >
                 {savingConnectionBusyId === editingConnection.id ? "Sauvegarde..." : "Sauvegarder"}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {showConnectionsSection && rotatingConnection && (
-        <Modal
-          title={`Rotation credentials - ${rotatingConnection.name}`}
-          onClose={() =>
-            rotatingConnectionBusyId === rotatingConnection.id ? null : setRotatingCredentialsConnectionId(null)
-          }
-          maxWidthClass="max-w-2xl"
-        >
-          {connectionsError && (
-            <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-caption font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
-              {connectionsError}
-            </div>
-          )}
-          <form
-            className="space-y-4"
-            onSubmit={async (event) => {
-              event.preventDefault();
-              const success = await handleRotatePrivateConnectionCredentials(rotatingConnection.id);
-              if (success) setRotatingCredentialsConnectionId(null);
-            }}
-          >
-            <p className="ui-caption text-slate-500 dark:text-slate-400">
-              Current Access Key: <span className="ui-mono">{rotatingConnection.access_key_id || "-"}</span>
-            </p>
-            {(() => {
-              const credentialDraft = connectionCredentialDrafts[rotatingConnection.id] ?? {
-                access_key_id: "",
-                secret_access_key: "",
-              };
-              return (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      New Access Key
-                    </span>
-                    <input
-                      type="text"
-                      value={credentialDraft.access_key_id}
-                      onChange={(event) =>
-                        handleUpdateConnectionCredentialDraft(rotatingConnection.id, "access_key_id", event.target.value)
-                      }
-                      className={inputClasses}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      New Secret Key
-                    </span>
-                    <input
-                      type="password"
-                      value={credentialDraft.secret_access_key}
-                      onChange={(event) =>
-                        handleUpdateConnectionCredentialDraft(
-                          rotatingConnection.id,
-                          "secret_access_key",
-                          event.target.value
-                        )
-                      }
-                      className={inputClasses}
-                    />
-                  </label>
-                </div>
-              );
-            })()}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className={secondaryButtonClasses}
-                onClick={() => setRotatingCredentialsConnectionId(null)}
-                disabled={rotatingConnectionBusyId === rotatingConnection.id}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className={primaryButtonClasses}
-                disabled={rotatingConnectionBusyId === rotatingConnection.id}
-              >
-                {rotatingConnectionBusyId === rotatingConnection.id ? "Rotation..." : "Update credentials"}
               </button>
             </div>
           </form>

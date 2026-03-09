@@ -173,10 +173,14 @@ export default function TopbarContextAccountSelector({
     if (!menuOpen) return;
     const currentIndex = filteredItems.findIndex((item) => item.id === selectedContextId);
     setActiveIndex(currentIndex >= 0 ? currentIndex : filteredItems.length > 0 ? 0 : -1);
+  }, [filteredItems, menuOpen, selectedContextId]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
     requestAnimationFrame(() => {
       listboxRef.current?.focus();
     });
-  }, [filteredItems, menuOpen, selectedContextId]);
+  }, [menuOpen]);
 
   useEffect(() => {
     if (!menuOpen) return;

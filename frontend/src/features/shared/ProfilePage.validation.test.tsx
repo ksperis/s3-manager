@@ -1,11 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProfilePage from "./ProfilePage";
 
 const listConnectionsMock = vi.fn();
 const createConnectionMock = vi.fn();
 const updateConnectionMock = vi.fn();
-const rotateConnectionCredentialsMock = vi.fn();
 const deleteConnectionMock = vi.fn();
 const validateConnectionCredentialsMock = vi.fn();
 const listStorageEndpointsMock = vi.fn();
@@ -45,7 +44,6 @@ vi.mock("../../api/connections", () => ({
   listConnections: () => listConnectionsMock(),
   createConnection: (payload: unknown) => createConnectionMock(payload),
   updateConnection: (id: number, payload: unknown) => updateConnectionMock(id, payload),
-  rotateConnectionCredentials: (id: number, payload: unknown) => rotateConnectionCredentialsMock(id, payload),
   deleteConnection: (id: number) => deleteConnectionMock(id),
   validateConnectionCredentials: (payload: unknown) => validateConnectionCredentialsMock(payload),
 }));
@@ -66,6 +64,28 @@ vi.mock("../../utils/workspaces", () => ({
 }));
 
 describe("ProfilePage live validation", () => {
+  const makeConnection = (overrides?: Partial<Record<string, unknown>>) => ({
+    id: 42,
+    name: "managed-connection",
+    storage_endpoint_id: 2,
+    is_public: false,
+    is_shared: false,
+    visibility: "private",
+    access_manager: false,
+    access_browser: true,
+    endpoint_url: "https://managed-a.example.test",
+    region: "us-east-1",
+    provider_hint: "ceph",
+    access_key_id: "AKIA***1234",
+    force_path_style: false,
+    verify_tls: true,
+    capabilities: {},
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-02T00:00:00Z",
+    last_used_at: null,
+    ...overrides,
+  });
+
   beforeEach(() => {
     listConnectionsMock.mockResolvedValue([]);
     listStorageEndpointsMock.mockResolvedValue([]);
@@ -101,5 +121,114 @@ describe("ProfilePage live validation", () => {
     }, { timeout: 3000 });
     expect(await screen.findByText("Invalid S3 credentials.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create connection" })).toBeEnabled();
+  });
+
+  it("hides credentials action in private connections table", async () => {
+    listConnectionsMock.mockResolvedValue([makeConnection()]);
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+
+    await screen.findByText("managed-connection");
+    expect(screen.queryByRole("button", { name: "Credentials" })).not.toBeInTheDocument();
+  });
+
+  it("edits a managed connection by changing endpoint preset", async () => {
+    listConnectionsMock.mockResolvedValue([makeConnection()]);
+    listStorageEndpointsMock.mockResolvedValue([
+      { id: 2, name: "Endpoint A", endpoint_url: "https://managed-a.example.test", is_default: true },
+      { id: 3, name: "Endpoint B", endpoint_url: "https://managed-b.example.test", is_default: false },
+    ]);
+    updateConnectionMock.mockResolvedValue(makeConnection({ storage_endpoint_id: 3 }));
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    await screen.findByText("managed-connection");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await screen.findByText("Edit connection - managed-connection");
+
+    const dialog = screen.getByRole("dialog");
+    const presetRadio = within(dialog).getByLabelText("Endpoint UI existant") as HTMLInputElement;
+    expect(presetRadio.checked).toBe(true);
+
+    fireEvent.change(within(dialog).getByLabelText("Configured endpoint"), { target: { value: "3" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Sauvegarder" }));
+
+    await waitFor(() => {
+      expect(updateConnectionMock).toHaveBeenCalledTimes(1);
+    });
+    const [id, payload] = updateConnectionMock.mock.calls[0] as [number, Record<string, unknown>];
+    expect(id).toBe(42);
+    expect(payload).toMatchObject({
+      name: "managed-connection",
+      storage_endpoint_id: 3,
+      access_manager: false,
+      access_browser: true,
+    });
+    expect(payload).not.toHaveProperty("endpoint_url");
+    expect(payload).not.toHaveProperty("access_key_id");
+    expect(payload).not.toHaveProperty("secret_access_key");
+  });
+
+  it("updates credentials from edit modal in custom mode and keeps save non-blocking", async () => {
+    listConnectionsMock.mockResolvedValue([makeConnection()]);
+    listStorageEndpointsMock.mockResolvedValue([
+      { id: 2, name: "Endpoint A", endpoint_url: "https://managed-a.example.test", is_default: true },
+    ]);
+    updateConnectionMock.mockResolvedValue(makeConnection({ storage_endpoint_id: null, endpoint_url: "https://custom.example.test" }));
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    await screen.findByText("managed-connection");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await screen.findByText("Edit connection - managed-connection");
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByLabelText("Endpoint custom"));
+    fireEvent.change(within(dialog).getByLabelText("Endpoint URL"), { target: { value: "https://custom.example.test" } });
+    fireEvent.change(within(dialog).getByLabelText("Access key ID"), { target: { value: "AKIA-NEW" } });
+    fireEvent.change(within(dialog).getByLabelText("Secret access key"), { target: { value: "SECRET-NEW" } });
+
+    await waitFor(() => {
+      expect(validateConnectionCredentialsMock).toHaveBeenCalled();
+    }, { timeout: 3000 });
+    expect(await within(dialog).findByText("Invalid S3 credentials.")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Sauvegarder" }));
+
+    await waitFor(() => {
+      expect(updateConnectionMock).toHaveBeenCalledTimes(1);
+    });
+    const [, payload] = updateConnectionMock.mock.calls[0] as [number, Record<string, unknown>];
+    expect(payload).toMatchObject({
+      storage_endpoint_id: null,
+      endpoint_url: "https://custom.example.test",
+      access_key_id: "AKIA-NEW",
+      secret_access_key: "SECRET-NEW",
+    });
+  });
+
+  it("shows validation error when only one credential field is provided in edit modal", async () => {
+    listConnectionsMock.mockResolvedValue([makeConnection()]);
+    listStorageEndpointsMock.mockResolvedValue([
+      { id: 2, name: "Endpoint A", endpoint_url: "https://managed-a.example.test", is_default: true },
+    ]);
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    await screen.findByText("managed-connection");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await screen.findByText("Edit connection - managed-connection");
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByLabelText("Endpoint custom"));
+    fireEvent.change(within(dialog).getByLabelText("Access key ID"), { target: { value: "AKIA-ONLY" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Sauvegarder" }));
+
+    await waitFor(() => {
+      expect(
+        within(dialog).getByText("Provide both access key ID and secret access key to update credentials.")
+      ).toBeInTheDocument();
+    });
+    expect(updateConnectionMock).not.toHaveBeenCalled();
   });
 });

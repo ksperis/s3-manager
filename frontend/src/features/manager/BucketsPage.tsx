@@ -689,7 +689,7 @@ export default function BucketsPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="ui-body font-semibold text-slate-900 dark:text-slate-50">Buckets</p>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">Paginated list (account root keys).</p>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">Paginated list of buckets.</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
               <span className="ui-caption text-slate-500 dark:text-slate-400">{filteredBuckets.length} bucket(s)</span>

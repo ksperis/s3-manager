@@ -1,10 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExecutionContext } from "../../api/executionContexts";
 import { fetchManagerContext } from "../../api/managerContext";
-import { S3AccountProvider, useS3AccountContext } from "./S3AccountContext";
+import { EXECUTION_CONTEXTS_REFRESH_EVENT, S3AccountProvider, useS3AccountContext } from "./S3AccountContext";
 
 const listExecutionContextsMock = vi.fn();
 const fetchManagerContextMock = vi.mocked(fetchManagerContext);
@@ -99,5 +99,30 @@ describe("S3AccountProvider", () => {
 
     await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
     expect(localStorage.getItem("selectedExecutionContextId")).toBe("conn-1");
+  });
+
+  it("reloads execution contexts when refresh event is emitted", async () => {
+    listExecutionContextsMock
+      .mockResolvedValueOnce(CONTEXTS)
+      .mockResolvedValueOnce([
+        ...CONTEXTS,
+        {
+          kind: "connection",
+          id: "conn-9",
+          display_name: "Connection 9",
+          capabilities: { can_manage_iam: true, sts_capable: true, admin_api_capable: true },
+        },
+      ]);
+
+    renderProvider("/manager");
+
+    await waitFor(() => expect(screen.getByTestId("selected")).toHaveTextContent("conn-1"));
+    expect(listExecutionContextsMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      window.dispatchEvent(new Event(EXECUTION_CONTEXTS_REFRESH_EVENT));
+    });
+
+    await waitFor(() => expect(listExecutionContextsMock).toHaveBeenCalledTimes(2));
   });
 });
