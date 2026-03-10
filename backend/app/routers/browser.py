@@ -214,6 +214,20 @@ def list_bucket_configs(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
+@router.get("/buckets/config/{bucket_name}/stats", response_model=Bucket)
+def get_bucket_config_stats(
+    bucket_name: str,
+    with_stats: bool = Query(True, description="Include usage/quota stats when available"),
+    account: S3Account = Depends(get_account_context),
+    service: BucketsService = Depends(get_buckets_service),
+    _: BrowserActor = Depends(get_current_account_admin),
+) -> Bucket:
+    try:
+        return service.get_bucket_stats(bucket_name, account, with_stats=with_stats)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
 @router.post("/buckets/config", status_code=status.HTTP_201_CREATED)
 def create_bucket_config(
     payload: BucketCreate,

@@ -12,7 +12,7 @@ const getBucketCorsStatusMock = vi.fn();
 const listMultipartUploadsMock = vi.fn();
 const abortMultipartUploadMock = vi.fn();
 
-const listBucketsMock = vi.fn();
+const getBucketStatsMock = vi.fn();
 const getBucketPropertiesMock = vi.fn();
 const getBucketPolicyMock = vi.fn();
 const getBucketLoggingMock = vi.fn();
@@ -61,7 +61,7 @@ vi.mock("../../api/buckets", async () => {
   const actual = await vi.importActual<typeof import("../../api/buckets")>("../../api/buckets");
   return {
     ...actual,
-    listBuckets: (...args: unknown[]) => listBucketsMock(...args),
+    getBucketStats: (...args: unknown[]) => getBucketStatsMock(...args),
     getBucketProperties: (...args: unknown[]) => getBucketPropertiesMock(...args),
     getBucketPolicy: (...args: unknown[]) => getBucketPolicyMock(...args),
     getBucketLogging: (...args: unknown[]) => getBucketLoggingMock(...args),
@@ -110,16 +110,14 @@ describe("BrowserPage multipart uploads modal", () => {
     getBucketVersioningMock.mockResolvedValue({ enabled: false, status: "Disabled" });
     getBucketCorsStatusMock.mockResolvedValue({ enabled: true, rules: [] });
 
-    listBucketsMock.mockResolvedValue([
-      {
-        name: "bucket-1",
-        creation_date: "2026-03-10T10:00:00Z",
-        used_bytes: 0,
-        object_count: 0,
-        quota_max_size_bytes: 0,
-        quota_max_objects: 0,
-      },
-    ]);
+    getBucketStatsMock.mockResolvedValue({
+      name: "bucket-1",
+      creation_date: "2026-03-10T10:00:00Z",
+      used_bytes: 0,
+      object_count: 0,
+      quota_max_size_bytes: 0,
+      quota_max_objects: 0,
+    });
     getBucketPropertiesMock.mockResolvedValue({
       versioning_status: "Disabled",
       object_lock_enabled: false,

@@ -51,6 +51,17 @@ export async function listBuckets(
   return data;
 }
 
+export async function getBucketStats(
+  accountId: S3AccountSelector,
+  bucketName: string,
+  options?: { with_stats?: boolean }
+): Promise<Bucket> {
+  const { data } = await client.get<Bucket>(`${bucketPath(bucketName)}/stats`, {
+    params: withS3AccountParam({ with_stats: options?.with_stats }, accountId),
+  });
+  return data;
+}
+
 type CreateBucketOptions = {
   versioning?: boolean;
   locationConstraint?: string;

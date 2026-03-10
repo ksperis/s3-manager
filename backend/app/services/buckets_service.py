@@ -128,6 +128,27 @@ class BucketsService:
             "session_token": session_token,
         }
 
+    def _extract_quota_from_admin_stats(self, stats: Any) -> tuple[Optional[int], Optional[int]]:
+        quota_size: Optional[int] = None
+        quota_objects: Optional[int] = None
+        quota = stats.get("bucket_quota") if isinstance(stats, dict) else None
+        if isinstance(quota, dict):
+            try:
+                # RGW may expose both max_size (bytes) and max_size_kb (KiB).
+                # Prefer max_size when available to avoid double-scaling.
+                if quota.get("max_size") is not None:
+                    quota_size = int(quota.get("max_size"))
+                elif quota.get("max_size_kb") is not None:
+                    quota_size = int(quota.get("max_size_kb")) * 1024
+            except (TypeError, ValueError):
+                quota_size = None
+            try:
+                if quota.get("max_objects") is not None:
+                    quota_objects = int(quota.get("max_objects"))
+            except (TypeError, ValueError):
+                quota_objects = None
+        return quota_size, quota_objects
+
     def list_buckets(
         self,
         account: S3Account,
@@ -178,22 +199,7 @@ class BucketsService:
             stats = admin_by_name.get(bucket_name)
             usage = stats.get("usage") if isinstance(stats, dict) else None
             usage_bytes, objects = extract_usage_stats(usage)
-            quota = stats.get("bucket_quota") if isinstance(stats, dict) else None
-            if isinstance(quota, dict):
-                try:
-                    # RGW may expose both max_size (bytes) and max_size_kb (KiB).
-                    # Prefer max_size when available to avoid double-scaling.
-                    if quota.get("max_size") is not None:
-                        quota_size = int(quota.get("max_size"))
-                    elif quota.get("max_size_kb") is not None:
-                        quota_size = int(quota.get("max_size_kb")) * 1024
-                except (TypeError, ValueError):
-                    quota_size = None
-                try:
-                    if quota.get("max_objects") is not None:
-                        quota_objects = int(quota.get("max_objects"))
-                except (TypeError, ValueError):
-                    quota_objects = None
+            quota_size, quota_objects = self._extract_quota_from_admin_stats(stats)
 
             enriched.append(
                 Bucket(
@@ -400,6 +406,63 @@ class BucketsService:
             )
 
         return result
+
+    def get_bucket_stats(
+        self,
+        bucket_name: str,
+        account: S3Account,
+        with_stats: bool = True,
+    ) -> Bucket:
+        normalized_bucket = (bucket_name or "").strip()
+        if not normalized_bucket:
+            raise RuntimeError("Bucket name is required")
+
+        access_key, secret_key = self._account_credentials(account)
+        buckets = s3_client.list_buckets(access_key=access_key, secret_key=secret_key, **self._client_kwargs(account))
+        creation_date = None
+        for entry in buckets:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("name") != normalized_bucket:
+                continue
+            creation_date = entry.get("creation_date")
+            break
+
+        usage_bytes: Optional[int] = None
+        object_count: Optional[int] = None
+        quota_size: Optional[int] = None
+        quota_objects: Optional[int] = None
+
+        if with_stats:
+            account_uid = resolve_admin_uid(account.rgw_account_id, account.rgw_user_uid)
+            if account_uid:
+                endpoint = getattr(account, "storage_endpoint", None)
+                storage_metrics_enabled = bool(resolve_feature_flags(endpoint).metrics_enabled) if endpoint else True
+                if storage_metrics_enabled:
+                    try:
+                        rgw_admin = self._rgw_admin_for_account(account)
+                        stats = rgw_admin.get_bucket_info(normalized_bucket, uid=account_uid, allow_not_found=True)
+                        if stats is None:
+                            stats = rgw_admin.get_bucket_info(normalized_bucket, allow_not_found=True)
+                        usage = stats.get("usage") if isinstance(stats, dict) else None
+                        usage_bytes, object_count = extract_usage_stats(usage)
+                        quota_size, quota_objects = self._extract_quota_from_admin_stats(stats)
+                    except (RuntimeError, RGWAdminError) as exc:
+                        logger.warning(
+                            "Unable to fetch bucket stats for %s on %s: %s",
+                            normalized_bucket,
+                            account.rgw_account_id or account.id,
+                            exc,
+                        )
+
+        return Bucket(
+            name=normalized_bucket,
+            creation_date=creation_date,
+            used_bytes=usage_bytes,
+            object_count=object_count,
+            quota_max_size_bytes=quota_size,
+            quota_max_objects=quota_objects,
+        )
 
     def get_bucket_tags(self, name: str, account: S3Account) -> list[BucketTag]:
         access_key, secret_key = self._account_credentials(account)

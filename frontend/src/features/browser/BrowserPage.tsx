@@ -19,7 +19,7 @@ import {
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
 import { withS3AccountParam, type S3AccountSelector } from "../../api/accountParams";
-import { getBucketLogging, getBucketPolicy, getBucketProperties, getBucketWebsite, listBuckets } from "../../api/buckets";
+import { getBucketLogging, getBucketPolicy, getBucketProperties, getBucketStats, getBucketWebsite } from "../../api/buckets";
 import {
   BrowserBucket,
   BrowserObject,
@@ -123,10 +123,15 @@ import {
   DEFAULT_PROXY_UPLOAD_PARALLELISM,
   DEFAULT_QUEUED_VISIBLE_COUNT,
   MULTIPART_CONCURRENCY,
+  MULTIPART_UPLOADS_HARD_LIMIT,
   MULTIPART_UPLOADS_PAGE_SIZE,
   MULTIPART_THRESHOLD,
+  OBJECTS_LIST_HARD_LIMIT,
   OBJECTS_PAGE_SIZE,
   PART_SIZE,
+  TREE_PREFIXES_HARD_LIMIT,
+  TREE_PREFIXES_PAGE_SIZE,
+  VERSIONS_LIST_HARD_LIMIT,
   VERSIONS_PAGE_SIZE,
   bucketButtonClasses,
   bulkActionClasses,
@@ -267,10 +272,40 @@ const PANELS_DISABLE_MEDIA_QUERY = `(max-width: ${PANELS_DISABLE_MAX_WIDTH_PX}px
 const CONTEXT_MENU_PADDING_PX = 8;
 const CONTEXT_MENU_FALLBACK_WIDTH_PX = 240;
 const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 320;
+const TREE_PREFIXES_PAGE_BUDGET = 50;
 const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
   history: 300,
   local: 200,
   remote: 100,
+};
+
+const getDeletedObjectEntryId = (value: Pick<BrowserObject, "key" | "version_id">) =>
+  `${value.key}::${value.version_id ?? "null"}`;
+
+const mergeUniqueStringsWithLimit = (base: string[], incoming: string[], limit: number) => {
+  if (base.length >= limit || incoming.length === 0) {
+    return { items: base.slice(0, limit), limitReached: base.length >= limit };
+  }
+  const merged = Array.from(new Set([...base, ...incoming]));
+  return {
+    items: merged.slice(0, limit),
+    limitReached: merged.length > limit,
+  };
+};
+
+const mergeDeletedObjectsWithLimit = (base: BrowserObject[], incoming: BrowserObject[], limit: number) => {
+  const byId = new Map<string, BrowserObject>();
+  base.forEach((item) => byId.set(getDeletedObjectEntryId(item), item));
+  incoming.forEach((item) => {
+    if (byId.size < limit || byId.has(getDeletedObjectEntryId(item))) {
+      byId.set(getDeletedObjectEntryId(item), item);
+    }
+  });
+  const items = Array.from(byId.values());
+  return {
+    items: items.slice(0, limit),
+    limitReached: items.length > limit || byId.size > limit,
+  };
 };
 const BUCKET_INSPECTOR_FEATURE_ORDER = [
   "versioning",
@@ -473,6 +508,9 @@ export default function BrowserPage({
   const [objects, setObjects] = useState<BrowserObject[]>([]);
   const [deletedObjects, setDeletedObjects] = useState<BrowserObject[]>([]);
   const [deletedPrefixes, setDeletedPrefixes] = useState<string[]>([]);
+  const [deletedObjectsNextKeyMarker, setDeletedObjectsNextKeyMarker] = useState<string | null>(null);
+  const [deletedObjectsNextVersionIdMarker, setDeletedObjectsNextVersionIdMarker] = useState<string | null>(null);
+  const [deletedObjectsIsTruncated, setDeletedObjectsIsTruncated] = useState(false);
   const [prefixes, setPrefixes] = useState<string[]>([]);
   const [objectsNextToken, setObjectsNextToken] = useState<string | null>(null);
   const [objectsIsTruncated, setObjectsIsTruncated] = useState(false);
@@ -1377,6 +1415,9 @@ export default function BrowserPage({
         setPrefix("");
         setDeletedObjects([]);
         setDeletedPrefixes([]);
+        setDeletedObjectsNextKeyMarker(null);
+        setDeletedObjectsNextVersionIdMarker(null);
+        setDeletedObjectsIsTruncated(false);
         return;
       }
       setLoadingBuckets(true);
@@ -1448,6 +1489,9 @@ export default function BrowserPage({
         setPrefix("");
         setDeletedObjects([]);
         setDeletedPrefixes([]);
+        setDeletedObjectsNextKeyMarker(null);
+        setDeletedObjectsNextVersionIdMarker(null);
+        setDeletedObjectsIsTruncated(false);
       } finally {
         setLoadingBuckets(false);
       }
@@ -1570,22 +1614,32 @@ export default function BrowserPage({
       recursive?: boolean;
       exactMatch?: boolean;
       caseSensitive?: boolean;
+      keyMarker?: string | null;
+      versionIdMarker?: string | null;
     }
   ) => {
     if (!bucketName || !hasS3AccountContext || !isVersioningEnabled || !showDeletedObjects) {
-      return { deletedObjects: [] as BrowserObject[], deletedPrefixes: [] as string[] };
+      return {
+        deletedObjects: [] as BrowserObject[],
+        deletedPrefixes: [] as string[],
+        nextKeyMarker: null as string | null,
+        nextVersionIdMarker: null as string | null,
+        isTruncated: false,
+      };
     }
     if (storageFilter !== "all") {
-      return { deletedObjects: [] as BrowserObject[], deletedPrefixes: [] as string[] };
+      return {
+        deletedObjects: [] as BrowserObject[],
+        deletedPrefixes: [] as string[],
+        nextKeyMarker: null as string | null,
+        nextVersionIdMarker: null as string | null,
+        isTruncated: false,
+      };
     }
     const activeKeys = new Set(existingObjects.map((item) => item.key));
     const activePrefixes = new Set(existingPrefixes);
     const latestMarkersByKey = new Map<string, BrowserObjectVersion>();
     const markerPrefixes = new Set<string>();
-    let keyMarker: string | null = null;
-    let versionIdMarker: string | null = null;
-    let hasMore = true;
-    let pageGuard = 0;
     const isRecursiveSearch = Boolean(opts?.recursive);
     const exactMatch = Boolean(opts?.exactMatch);
     const caseSensitive = Boolean(opts?.caseSensitive);
@@ -1607,62 +1661,53 @@ export default function BrowserPage({
       return comparable.includes(normalizedQuery);
     };
 
-    while (hasMore) {
-      const data = await listObjectVersions(accountIdForApi, bucketName, {
-        prefix: targetPrefix,
-        keyMarker: keyMarker ?? undefined,
-        versionIdMarker: versionIdMarker ?? undefined,
-        maxKeys: VERSIONS_PAGE_SIZE,
-      });
-      data.delete_markers.forEach((marker) => {
-        if (!marker.is_latest) return;
-        if (!marker.key || !marker.key.startsWith(targetPrefix)) return;
-        const relative = marker.key.slice(targetPrefix.length);
-        if (!relative) return;
-        const isFolderMarker = marker.key.endsWith("/");
-        if (relative.includes("/") && !isRecursiveSearch) {
-          if (typeFilter === "file") return;
-          const child = relative.split("/")[0];
-          if (!child) return;
-          const childPrefix = `${targetPrefix}${child}/`;
-          if (activePrefixes.has(childPrefix)) return;
-          if (!matchesQuery(childPrefix)) return;
-          markerPrefixes.add(childPrefix);
-          return;
-        }
-        if (typeFilter !== "file") {
-          if (isRecursiveSearch) {
-            const segments = relative.split("/").filter(Boolean);
-            if (segments.length > 1) {
-              let running = targetPrefix;
-              for (const segment of segments.slice(0, -1)) {
-                running = `${running}${segment}/`;
-                if (activePrefixes.has(running)) continue;
-                if (!matchesQuery(running)) continue;
-                markerPrefixes.add(running);
-              }
+    const data = await listObjectVersions(accountIdForApi, bucketName, {
+      prefix: targetPrefix,
+      keyMarker: opts?.keyMarker ?? undefined,
+      versionIdMarker: opts?.versionIdMarker ?? undefined,
+      maxKeys: VERSIONS_PAGE_SIZE,
+    });
+    data.delete_markers.forEach((marker) => {
+      if (!marker.is_latest) return;
+      if (!marker.key || !marker.key.startsWith(targetPrefix)) return;
+      const relative = marker.key.slice(targetPrefix.length);
+      if (!relative) return;
+      const isFolderMarker = marker.key.endsWith("/");
+      if (relative.includes("/") && !isRecursiveSearch) {
+        if (typeFilter === "file") return;
+        const child = relative.split("/")[0];
+        if (!child) return;
+        const childPrefix = `${targetPrefix}${child}/`;
+        if (activePrefixes.has(childPrefix)) return;
+        if (!matchesQuery(childPrefix)) return;
+        markerPrefixes.add(childPrefix);
+        return;
+      }
+      if (typeFilter !== "file") {
+        if (isRecursiveSearch) {
+          const segments = relative.split("/").filter(Boolean);
+          if (segments.length > 1) {
+            let running = targetPrefix;
+            for (const segment of segments.slice(0, -1)) {
+              running = `${running}${segment}/`;
+              if (activePrefixes.has(running)) continue;
+              if (!matchesQuery(running)) continue;
+              markerPrefixes.add(running);
             }
-            if (isFolderMarker) {
-              if (!activePrefixes.has(marker.key) && matchesQuery(marker.key)) {
-                markerPrefixes.add(marker.key);
-              }
+          }
+          if (isFolderMarker) {
+            if (!activePrefixes.has(marker.key) && matchesQuery(marker.key)) {
+              markerPrefixes.add(marker.key);
             }
           }
         }
-        if (typeFilter === "folder") return;
-        if (isFolderMarker) return;
-        if (activeKeys.has(marker.key)) return;
-        if (!matchesQuery(marker.key)) return;
-        latestMarkersByKey.set(marker.key, marker);
-      });
-      keyMarker = data.next_key_marker ?? null;
-      versionIdMarker = data.next_version_id_marker ?? null;
-      hasMore = Boolean(data.is_truncated && (keyMarker || versionIdMarker));
-      pageGuard += 1;
-      if (pageGuard > 1000) {
-        hasMore = false;
       }
-    }
+      if (typeFilter === "folder") return;
+      if (isFolderMarker) return;
+      if (activeKeys.has(marker.key)) return;
+      if (!matchesQuery(marker.key)) return;
+      latestMarkersByKey.set(marker.key, marker);
+    });
 
     const deletedObjectRows = Array.from(latestMarkersByKey.values())
       .sort((a, b) => a.key.localeCompare(b.key))
@@ -1676,7 +1721,15 @@ export default function BrowserPage({
         version_id: marker.version_id ?? null,
       }));
     const deletedFolderRows = Array.from(markerPrefixes.values()).sort((a, b) => a.localeCompare(b));
-    return { deletedObjects: deletedObjectRows, deletedPrefixes: deletedFolderRows };
+    const nextKeyMarker = data.next_key_marker ?? null;
+    const nextVersionIdMarker = data.next_version_id_marker ?? null;
+    return {
+      deletedObjects: deletedObjectRows,
+      deletedPrefixes: deletedFolderRows,
+      nextKeyMarker,
+      nextVersionIdMarker,
+      isTruncated: Boolean(data.is_truncated && (nextKeyMarker || nextVersionIdMarker)),
+    };
   };
 
   const loadObjects = async (opts?: {
@@ -1684,11 +1737,13 @@ export default function BrowserPage({
     continuationToken?: string | null;
     prefixOverride?: string;
     silent?: boolean;
+    loadDeletedOnly?: boolean;
   }) => {
     if (!bucketName || !hasS3AccountContext) return;
     const targetPrefix = normalizePrefix(opts?.prefixOverride ?? prefix);
     const isAppend = Boolean(opts?.append);
     const isSilent = Boolean(opts?.silent);
+    const loadDeletedOnly = Boolean(opts?.loadDeletedOnly);
     const { requestSeq, controller } = prepareLatestRequest(objectsAbortControllerRef.current, objectsRequestSeqRef.current);
     objectsRequestSeqRef.current = requestSeq;
     objectsAbortControllerRef.current = controller;
@@ -1706,65 +1761,134 @@ export default function BrowserPage({
     const requestPrefix = searchFromBucket ? "" : targetPrefix;
     const requestRecursive = Boolean(query) && (searchFromBucket || searchRecursive);
     try {
-      const data = await listBrowserObjects(accountIdForApi, bucketName, {
-        prefix: requestPrefix,
-        continuationToken: opts?.continuationToken ?? undefined,
-        maxKeys: OBJECTS_PAGE_SIZE,
-        query: query || undefined,
-        exactMatch: searchExactMatch,
-        caseSensitive: searchCaseSensitive,
-        type: typeFilter,
-        storageClass: storageFilter,
-        recursive: requestRecursive,
-        signal: controller.signal,
-      });
-      if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
-        return;
+      let loadedObjects: BrowserObject[] = [];
+      let loadedPrefixes: string[] = [];
+      let loadedObjectsNextToken: string | null = null;
+      let loadedObjectsTruncated = false;
+
+      if (!loadDeletedOnly) {
+        const data = await listBrowserObjects(accountIdForApi, bucketName, {
+          prefix: requestPrefix,
+          continuationToken: opts?.continuationToken ?? undefined,
+          maxKeys: OBJECTS_PAGE_SIZE,
+          query: query || undefined,
+          exactMatch: searchExactMatch,
+          caseSensitive: searchCaseSensitive,
+          type: typeFilter,
+          storageClass: storageFilter,
+          recursive: requestRecursive,
+          signal: controller.signal,
+        });
+        if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
+          return;
+        }
+        loadedObjects = data.objects;
+        loadedPrefixes = data.prefixes;
+        loadedObjectsNextToken = data.next_continuation_token ?? null;
+        loadedObjectsTruncated = Boolean(data.is_truncated);
       }
-      let deletedObjectsResult: BrowserObject[] = [];
-      let deletedPrefixesResult: string[] = [];
-      if (!opts?.append) {
-        if (showDeletedObjects && isVersioningEnabled && storageFilter === "all") {
-          try {
-            const deletedResult = await listDeletedObjectsForPrefix(
-              requestPrefix,
-              data.objects,
-              data.prefixes,
-              query,
-              {
-                recursive: requestRecursive,
-                exactMatch: searchExactMatch,
-                caseSensitive: searchCaseSensitive,
-              }
-            );
-            deletedObjectsResult = deletedResult.deletedObjects;
-            deletedPrefixesResult = deletedResult.deletedPrefixes;
-          } catch {
-            deletedObjectsResult = [];
-            deletedPrefixesResult = [];
+
+      const mergedObjects = isAppend ? [...objects, ...loadedObjects] : loadedObjects;
+      const mergedPrefixesRaw = isAppend ? Array.from(new Set([...prefixes, ...loadedPrefixes])) : loadedPrefixes;
+      const objectsLimitReached = mergedObjects.length > OBJECTS_LIST_HARD_LIMIT;
+      const prefixesLimitReached = mergedPrefixesRaw.length > OBJECTS_LIST_HARD_LIMIT;
+      const boundedObjects = mergedObjects.slice(0, OBJECTS_LIST_HARD_LIMIT);
+      const boundedPrefixes = mergedPrefixesRaw.slice(0, OBJECTS_LIST_HARD_LIMIT);
+
+      const shouldLoadDeleted = showDeletedObjects && isVersioningEnabled && storageFilter === "all";
+      let nextDeletedObjects = isAppend ? deletedObjects : [];
+      let nextDeletedPrefixes = isAppend ? deletedPrefixes : [];
+      let nextDeletedKeyMarker = isAppend ? deletedObjectsNextKeyMarker : null;
+      let nextDeletedVersionIdMarker = isAppend ? deletedObjectsNextVersionIdMarker : null;
+      let nextDeletedTruncated = isAppend ? deletedObjectsIsTruncated : false;
+      let deletedLimitReached = false;
+
+      if (shouldLoadDeleted) {
+        try {
+          const deletedResult = await listDeletedObjectsForPrefix(
+            requestPrefix,
+            boundedObjects,
+            boundedPrefixes,
+            query,
+            {
+              recursive: requestRecursive,
+              exactMatch: searchExactMatch,
+              caseSensitive: searchCaseSensitive,
+              keyMarker: isAppend ? deletedObjectsNextKeyMarker : null,
+              versionIdMarker: isAppend ? deletedObjectsNextVersionIdMarker : null,
+            }
+          );
+          if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
+            return;
           }
-        } else {
-          deletedObjectsResult = [];
-          deletedPrefixesResult = [];
+          const deletedObjectsMerged = isAppend
+            ? mergeDeletedObjectsWithLimit(deletedObjects, deletedResult.deletedObjects, OBJECTS_LIST_HARD_LIMIT)
+            : {
+                items: deletedResult.deletedObjects.slice(0, OBJECTS_LIST_HARD_LIMIT),
+                limitReached: deletedResult.deletedObjects.length > OBJECTS_LIST_HARD_LIMIT,
+              };
+          const deletedPrefixesMerged = isAppend
+            ? mergeUniqueStringsWithLimit(deletedPrefixes, deletedResult.deletedPrefixes, OBJECTS_LIST_HARD_LIMIT)
+            : {
+                items: deletedResult.deletedPrefixes.slice(0, OBJECTS_LIST_HARD_LIMIT),
+                limitReached: deletedResult.deletedPrefixes.length > OBJECTS_LIST_HARD_LIMIT,
+              };
+          deletedLimitReached = deletedObjectsMerged.limitReached || deletedPrefixesMerged.limitReached;
+          nextDeletedObjects = deletedObjectsMerged.items;
+          nextDeletedPrefixes = deletedPrefixesMerged.items;
+          if (deletedLimitReached) {
+            nextDeletedKeyMarker = null;
+            nextDeletedVersionIdMarker = null;
+            nextDeletedTruncated = false;
+          } else {
+            nextDeletedKeyMarker = deletedResult.nextKeyMarker;
+            nextDeletedVersionIdMarker = deletedResult.nextVersionIdMarker;
+            nextDeletedTruncated = deletedResult.isTruncated;
+          }
+        } catch {
+          if (!isAppend) {
+            nextDeletedObjects = [];
+            nextDeletedPrefixes = [];
+            nextDeletedKeyMarker = null;
+            nextDeletedVersionIdMarker = null;
+            nextDeletedTruncated = false;
+          }
         }
+      } else {
+        nextDeletedObjects = [];
+        nextDeletedPrefixes = [];
+        nextDeletedKeyMarker = null;
+        nextDeletedVersionIdMarker = null;
+        nextDeletedTruncated = false;
       }
+
       if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
         return;
       }
-      setObjects((prev) => (opts?.append ? [...prev, ...data.objects] : data.objects));
-      if (!opts?.append) {
-        setDeletedObjects(deletedObjectsResult);
-        setDeletedPrefixes(deletedPrefixesResult);
+
+      setObjects(boundedObjects);
+      setPrefixes(boundedPrefixes);
+      setDeletedObjects(nextDeletedObjects);
+      setDeletedPrefixes(nextDeletedPrefixes);
+      setDeletedObjectsNextKeyMarker(nextDeletedKeyMarker);
+      setDeletedObjectsNextVersionIdMarker(nextDeletedVersionIdMarker);
+      setDeletedObjectsIsTruncated(nextDeletedTruncated);
+
+      if (objectsLimitReached || prefixesLimitReached) {
+        setObjectsNextToken(null);
+        setObjectsIsTruncated(false);
+        setWarningMessage(
+          `Object listing is limited to ${OBJECTS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path or search to continue.`
+        );
+      } else {
+        setObjectsNextToken(loadedObjectsNextToken);
+        setObjectsIsTruncated(!loadDeletedOnly && loadedObjectsTruncated);
       }
-      setPrefixes((prev) => {
-        if (!opts?.append) {
-          return data.prefixes;
-        }
-        const merged = [...prev, ...data.prefixes];
-        return Array.from(new Set(merged));
-      });
-      setObjectsNextToken(data.next_continuation_token ?? null);
-      setObjectsIsTruncated(data.is_truncated);
+      if (deletedLimitReached) {
+        setWarningMessage(
+          `Deleted markers listing is limited to ${OBJECTS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path or search to continue.`
+        );
+      }
     } catch (err) {
       if (isAbortError(err)) {
         return;
@@ -1807,10 +1931,22 @@ export default function BrowserPage({
         versionIdMarker: resolvedVersionIdMarker ?? undefined,
         maxKeys: VERSIONS_PAGE_SIZE,
       });
-      setPrefixVersionKeyMarker(data.next_key_marker ?? null);
-      setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
-      setPrefixVersions((prev) => (opts?.append ? [...prev, ...data.versions] : data.versions));
-      setPrefixDeleteMarkers((prev) => (opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers));
+      const mergedVersions = opts?.append ? [...prefixVersions, ...data.versions] : data.versions;
+      const mergedDeleteMarkers = opts?.append ? [...prefixDeleteMarkers, ...data.delete_markers] : data.delete_markers;
+      const versionsLimitReached =
+        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT || mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
+      setPrefixVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
+      setPrefixDeleteMarkers(mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT));
+      if (versionsLimitReached) {
+        setPrefixVersionKeyMarker(null);
+        setPrefixVersionIdMarker(null);
+        setWarningMessage(
+          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`
+        );
+      } else {
+        setPrefixVersionKeyMarker(data.next_key_marker ?? null);
+        setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
+      }
     } catch (err) {
       setPrefixVersionsError(extractApiError(err, "Unable to list versions for this prefix."));
       if (!opts?.append) {
@@ -1846,10 +1982,22 @@ export default function BrowserPage({
         versionIdMarker: resolvedVersionIdMarker ?? undefined,
         maxKeys: VERSIONS_PAGE_SIZE,
       });
-      setObjectVersionKeyMarker(data.next_key_marker ?? null);
-      setObjectVersionIdMarker(data.next_version_id_marker ?? null);
-      setObjectVersions((prev) => (opts?.append ? [...prev, ...data.versions] : data.versions));
-      setObjectDeleteMarkers((prev) => (opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers));
+      const mergedVersions = opts?.append ? [...objectVersions, ...data.versions] : data.versions;
+      const mergedDeleteMarkers = opts?.append ? [...objectDeleteMarkers, ...data.delete_markers] : data.delete_markers;
+      const versionsLimitReached =
+        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT || mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
+      setObjectVersions(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
+      setObjectDeleteMarkers(mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT));
+      if (versionsLimitReached) {
+        setObjectVersionKeyMarker(null);
+        setObjectVersionIdMarker(null);
+        setWarningMessage(
+          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`
+        );
+      } else {
+        setObjectVersionKeyMarker(data.next_key_marker ?? null);
+        setObjectVersionIdMarker(data.next_version_id_marker ?? null);
+      }
     } catch (err) {
       setObjectVersionsError(extractApiError(err, "Unable to list versions for this object."));
       if (!opts?.append) {
@@ -1887,12 +2035,24 @@ export default function BrowserPage({
         versionIdMarker: resolvedVersionIdMarker ?? undefined,
         maxKeys: VERSIONS_PAGE_SIZE,
       });
-      setObjectVersionModalKeyMarker(data.next_key_marker ?? null);
-      setObjectVersionModalIdMarker(data.next_version_id_marker ?? null);
-      setObjectVersionsModal((prev) => (opts?.append ? [...prev, ...data.versions] : data.versions));
-      setObjectDeleteMarkersModal((prev) =>
-        opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers
-      );
+      const mergedVersions = opts?.append ? [...objectVersionsModal, ...data.versions] : data.versions;
+      const mergedDeleteMarkers = opts?.append
+        ? [...objectDeleteMarkersModal, ...data.delete_markers]
+        : data.delete_markers;
+      const versionsLimitReached =
+        mergedVersions.length > VERSIONS_LIST_HARD_LIMIT || mergedDeleteMarkers.length > VERSIONS_LIST_HARD_LIMIT;
+      setObjectVersionsModal(mergedVersions.slice(0, VERSIONS_LIST_HARD_LIMIT));
+      setObjectDeleteMarkersModal(mergedDeleteMarkers.slice(0, VERSIONS_LIST_HARD_LIMIT));
+      if (versionsLimitReached) {
+        setObjectVersionModalKeyMarker(null);
+        setObjectVersionModalIdMarker(null);
+        setWarningMessage(
+          `Versions listing is limited to ${VERSIONS_LIST_HARD_LIMIT.toLocaleString()} entries. Narrow your path to continue.`
+        );
+      } else {
+        setObjectVersionModalKeyMarker(data.next_key_marker ?? null);
+        setObjectVersionModalIdMarker(data.next_version_id_marker ?? null);
+      }
     } catch (err) {
       setObjectVersionsModalError(extractApiError(err, "Unable to list versions for this object."));
       if (!opts?.append) {
@@ -1918,6 +2078,9 @@ export default function BrowserPage({
     setActiveItem(null);
     setDeletedObjects([]);
     setDeletedPrefixes([]);
+    setDeletedObjectsNextKeyMarker(null);
+    setDeletedObjectsNextVersionIdMarker(null);
+    setDeletedObjectsIsTruncated(false);
   }, [accountIdForApi]);
 
   useEffect(() => {
@@ -1936,6 +2099,9 @@ export default function BrowserPage({
       setObjects([]);
       setDeletedObjects([]);
       setDeletedPrefixes([]);
+      setDeletedObjectsNextKeyMarker(null);
+      setDeletedObjectsNextVersionIdMarker(null);
+      setDeletedObjectsIsTruncated(false);
       setPrefixes([]);
       setObjectsNextToken(null);
       setObjectsIsTruncated(false);
@@ -2009,6 +2175,9 @@ export default function BrowserPage({
     setShowDeletedObjects(false);
     setDeletedObjects([]);
     setDeletedPrefixes([]);
+    setDeletedObjectsNextKeyMarker(null);
+    setDeletedObjectsNextVersionIdMarker(null);
+    setDeletedObjectsIsTruncated(false);
     setShowPrefixVersions(false);
     closeObjectVersionsModal();
     setPrefixVersions([]);
@@ -2027,7 +2196,49 @@ export default function BrowserPage({
     if (showDeletedObjects) return;
     setDeletedObjects([]);
     setDeletedPrefixes([]);
+    setDeletedObjectsNextKeyMarker(null);
+    setDeletedObjectsNextVersionIdMarker(null);
+    setDeletedObjectsIsTruncated(false);
   }, [showDeletedObjects]);
+
+  const listTreePrefixes = useCallback(
+    async (targetPrefix: string) => {
+      if (!bucketName || !hasS3AccountContext) {
+        return { prefixes: [] as string[], truncated: false };
+      }
+      const prefixesCollected: string[] = [];
+      let continuationToken: string | null = null;
+      let hasMore = true;
+      let pagesScanned = 0;
+
+      while (
+        hasMore &&
+        pagesScanned < TREE_PREFIXES_PAGE_BUDGET &&
+        prefixesCollected.length < TREE_PREFIXES_HARD_LIMIT
+      ) {
+        const data = await listBrowserObjects(accountIdForApi, bucketName, {
+          prefix: targetPrefix,
+          continuationToken: continuationToken ?? undefined,
+          maxKeys: TREE_PREFIXES_PAGE_SIZE,
+        });
+        if (data.prefixes.length > 0) {
+          prefixesCollected.push(...data.prefixes);
+        }
+        continuationToken = data.next_continuation_token ?? null;
+        hasMore = Boolean(data.is_truncated && continuationToken);
+        pagesScanned += 1;
+      }
+
+      const uniquePrefixes = Array.from(new Set(prefixesCollected));
+      const reachedHardLimit = uniquePrefixes.length > TREE_PREFIXES_HARD_LIMIT;
+      const truncated = hasMore || reachedHardLimit;
+      return {
+        prefixes: uniquePrefixes.slice(0, TREE_PREFIXES_HARD_LIMIT),
+        truncated,
+      };
+    },
+    [accountIdForApi, bucketName, hasS3AccountContext]
+  );
 
   useEffect(() => {
     if (accountSwitchInFlight || !bucketName || !hasS3AccountContext) {
@@ -2047,9 +2258,14 @@ export default function BrowserPage({
     setTreeNodes([rootNode]);
     const loadRoot = async () => {
       try {
-        const data = await listBrowserObjects(accountIdForApi, bucketName, { prefix: "" });
+        const data = await listTreePrefixes("");
         if (!isMounted) return;
         const children = buildTreeNodes(data.prefixes, "");
+        if (data.truncated) {
+          setWarningMessage(
+            `Folders panel is limited to ${TREE_PREFIXES_HARD_LIMIT.toLocaleString()} prefixes. Narrow the path to continue.`
+          );
+        }
         setTreeNodes([
           {
             ...rootNode,
@@ -2068,7 +2284,7 @@ export default function BrowserPage({
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, accessMode, accountSwitchInFlight, bucketName, hasS3AccountContext]);
+  }, [accessMode, accountSwitchInFlight, bucketName, hasS3AccountContext, listTreePrefixes]);
 
   useEffect(() => {
     if (!bucketName || !hasS3AccountContext || treeNodes.length === 0) return;
@@ -2990,7 +3206,7 @@ export default function BrowserPage({
         const usageFeatureEnabled = effectiveCaps ? effectiveCaps.metrics !== false : true;
         const staticWebsiteEnabled = effectiveCaps?.static_website ?? true;
         const results = await Promise.allSettled([
-          listBuckets(accountIdForApi, { with_stats: usageFeatureEnabled }),
+          getBucketStats(accountIdForApi, bucketName, { with_stats: usageFeatureEnabled }),
           getBucketProperties(accountIdForApi, bucketName),
           getBucketPolicy(accountIdForApi, bucketName),
           getBucketLogging(accountIdForApi, bucketName),
@@ -3003,8 +3219,7 @@ export default function BrowserPage({
         const loggingResult = results[3];
         const websiteResult = results[4];
 
-        const bucketList = bucketsResult.status === "fulfilled" ? bucketsResult.value : [];
-        const selectedBucket = bucketList.find((entry) => entry.name === bucketName) ?? null;
+        const selectedBucket = bucketsResult.status === "fulfilled" ? bucketsResult.value : null;
 
         const unavailableFeature = (state = "Unavailable"): BucketInspectorFeature => ({ state, tone: "unknown" });
         const activeFeature = (state: string): BucketInspectorFeature => ({ state, tone: "active" });
@@ -3121,7 +3336,7 @@ export default function BrowserPage({
         }
       }
     },
-    [accountIdForApi, bucketInspectorByName, bucketName, effectiveCaps?.static_website, hasS3AccountContext]
+    [accountIdForApi, bucketInspectorByName, bucketName, effectiveCaps?.metrics, effectiveCaps?.static_website, hasS3AccountContext]
   );
 
   const handleOpenBucketInspector = useCallback(() => {
@@ -3294,16 +3509,27 @@ export default function BrowserPage({
         uploadIdMarker: append ? (options?.uploadIdMarker ?? undefined) : undefined,
         maxUploads: MULTIPART_UPLOADS_PAGE_SIZE,
       });
-      setMultipartUploads((prev) => {
-        if (!append) return data.uploads;
-        const knownIds = new Set(prev.map((upload) => getMultipartUploadEntryId(upload)));
-        const appended = data.uploads.filter((upload) => !knownIds.has(getMultipartUploadEntryId(upload)));
-        return [...prev, ...appended];
-      });
+      const baseUploads = append ? multipartUploads : [];
+      const knownIds = new Set(baseUploads.map((upload) => getMultipartUploadEntryId(upload)));
+      const incomingUploads = append
+        ? data.uploads.filter((upload) => !knownIds.has(getMultipartUploadEntryId(upload)))
+        : data.uploads;
+      const mergedUploads = append ? [...baseUploads, ...incomingUploads] : incomingUploads;
+      const limitReached = mergedUploads.length > MULTIPART_UPLOADS_HARD_LIMIT;
+      setMultipartUploads(mergedUploads.slice(0, MULTIPART_UPLOADS_HARD_LIMIT));
       setMultipartUploadsError(null);
-      setMultipartUploadsNextKey(data.next_key ?? null);
-      setMultipartUploadsNextUploadId(data.next_upload_id ?? null);
-      setMultipartUploadsIsTruncated(Boolean(data.is_truncated));
+      if (limitReached) {
+        setMultipartUploadsNextKey(null);
+        setMultipartUploadsNextUploadId(null);
+        setMultipartUploadsIsTruncated(false);
+        setWarningMessage(
+          `Multipart uploads listing is limited to ${MULTIPART_UPLOADS_HARD_LIMIT.toLocaleString()} entries. Narrow your scope to continue.`
+        );
+      } else {
+        setMultipartUploadsNextKey(data.next_key ?? null);
+        setMultipartUploadsNextUploadId(data.next_upload_id ?? null);
+        setMultipartUploadsIsTruncated(Boolean(data.is_truncated));
+      }
     } catch (err) {
       setMultipartUploadsError(extractApiError(err, "Unable to list multipart uploads."));
       if (!append) {
@@ -3596,6 +3822,19 @@ export default function BrowserPage({
     }
   };
 
+  const canLoadMoreObjectResults = Boolean((objectsIsTruncated && objectsNextToken) || deletedObjectsIsTruncated);
+
+  const handleLoadMoreObjectResults = () => {
+    if (objectsLoadingMore) return;
+    if (objectsIsTruncated && objectsNextToken) {
+      void loadObjects({ append: true, continuationToken: objectsNextToken });
+      return;
+    }
+    if (deletedObjectsIsTruncated) {
+      void loadObjects({ append: true, loadDeletedOnly: true });
+    }
+  };
+
   const loadTreeChildren = async (targetPrefix: string, options?: { expand?: boolean }) => {
     if (!bucketName || !hasS3AccountContext) return;
     const normalized = targetPrefix ? normalizePrefix(targetPrefix) : "";
@@ -3604,8 +3843,13 @@ export default function BrowserPage({
       updateTreeNodes(prev, targetPrefix, (node) => ({ ...node, isLoading: true }))
     );
     try {
-      const data = await listBrowserObjects(accountIdForApi, bucketName, { prefix: normalized });
+      const data = await listTreePrefixes(normalized);
       const children = buildTreeNodes(data.prefixes, normalized);
+      if (data.truncated) {
+        setWarningMessage(
+          `Folders panel is limited to ${TREE_PREFIXES_HARD_LIMIT.toLocaleString()} prefixes. Narrow the path to continue.`
+        );
+      }
       setTreeNodes((prev) =>
         updateTreeNodes(prev, targetPrefix, (node) => ({
           ...node,
@@ -7907,12 +8151,12 @@ export default function BrowserPage({
                           </tbody>
                         </table>
                       </div>
-                    {objectsIsTruncated && objectsNextToken && (
+                    {canLoadMoreObjectResults && (
                       <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-right dark:border-slate-800 dark:bg-slate-900/60">
                         <button
                           type="button"
                           className={toolbarButtonClasses}
-                          onClick={() => loadObjects({ append: true, continuationToken: objectsNextToken })}
+                          onClick={handleLoadMoreObjectResults}
                           disabled={objectsLoadingMore}
                         >
                           {objectsLoadingMore ? "Loading..." : "Load more"}
