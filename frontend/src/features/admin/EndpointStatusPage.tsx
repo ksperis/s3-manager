@@ -19,6 +19,7 @@ import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { extractApiError } from "../../utils/apiError";
 import {
   EndpointTimelineBar,
   formatCheckMode,
@@ -95,9 +96,9 @@ export default function EndpointStatusPage() {
       const payload = await fetchHealthLatencyOverview("day");
       setLatencyEndpoints(payload.endpoints ?? []);
       setLatencyUpdatedAt(payload.generated_at ?? null);
-    } catch {
+    } catch (err) {
       setLatencyEndpoints([]);
-      setLatencyError("Unable to load latency overview.");
+      setLatencyError(extractApiError(err, "Unable to load latency overview."));
     } finally {
       setLatencyLoading(false);
     }
@@ -111,11 +112,11 @@ export default function EndpointStatusPage() {
       setTimelineEndpoints(payload.endpoints ?? []);
       setTimelineStart(payload.start ?? null);
       setTimelineEnd(payload.end ?? null);
-    } catch {
+    } catch (err) {
       setTimelineEndpoints([]);
       setTimelineStart(null);
       setTimelineEnd(null);
-      setTimelineError("Unable to load endpoint timelines.");
+      setTimelineError(extractApiError(err, "Unable to load endpoint timelines."));
     } finally {
       setTimelineLoading(false);
     }
@@ -128,10 +129,10 @@ export default function EndpointStatusPage() {
       const payload = await fetchHealthGlobalIncidents(windowValue, 300);
       setGlobalIncidents(payload.incidents ?? []);
       setGlobalIncidentsTotal(payload.total ?? 0);
-    } catch {
+    } catch (err) {
       setGlobalIncidents([]);
       setGlobalIncidentsTotal(0);
-      setIncidentsError("Unable to load global incidents.");
+      setIncidentsError(extractApiError(err, "Unable to load global incidents."));
     } finally {
       setIncidentsLoading(false);
     }
@@ -150,8 +151,8 @@ export default function EndpointStatusPage() {
       await runHealthchecks();
       setActionMessage("Healthchecks executed.");
       await loadAll();
-    } catch {
-      setActionError("Unable to run healthchecks.");
+    } catch (err) {
+      setActionError(extractApiError(err, "Unable to run healthchecks."));
     } finally {
       setRunLoading(false);
     }

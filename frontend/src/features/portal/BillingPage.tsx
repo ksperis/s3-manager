@@ -19,6 +19,7 @@ import PageBanner from "../../components/PageBanner";
 import StatCards from "../../components/StatCards";
 import { useI18n } from "../../i18n";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
+import { extractApiError } from "../../utils/apiError";
 import { BillingSubjectDetail, getPortalBillingMe } from "../../api/billing";
 import { usePortalAccountContext } from "./PortalAccountContext";
 
@@ -56,10 +57,19 @@ export default function PortalBillingPage() {
         if (!cancelled) {
           setDetail(data);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
           setDetail(null);
-          setError(t({ en: "Unable to load billing data.", fr: "Impossible de charger les donnees de facturation.", de: "Abrechnungsdaten konnen nicht geladen werden." }));
+          setError(
+            extractApiError(
+              err,
+              t({
+                en: "Unable to load billing data.",
+                fr: "Impossible de charger les donnees de facturation.",
+                de: "Abrechnungsdaten konnen nicht geladen werden.",
+              })
+            )
+          );
         }
       } finally {
         if (!cancelled) {
@@ -71,7 +81,7 @@ export default function PortalBillingPage() {
     return () => {
       cancelled = true;
     };
-  }, [month, accountIdForApi, hasAccountContext]);
+  }, [month, accountIdForApi, hasAccountContext, t]);
 
   const stats = useMemo(() => {
     return [

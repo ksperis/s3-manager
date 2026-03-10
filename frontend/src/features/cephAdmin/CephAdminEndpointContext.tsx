@@ -3,9 +3,9 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { useSearchParams } from "react-router-dom";
 import { CephAdminEndpoint, CephAdminEndpointAccess, getCephAdminEndpointAccess, listCephAdminEndpoints } from "../../api/cephAdmin";
+import { extractApiError } from "../../utils/apiError";
 
 const ENDPOINT_STORAGE_KEY = "selectedCephAdminEndpointId";
 const ENDPOINT_URL_PARAM = "ep";
@@ -42,10 +42,7 @@ function parseEndpointId(value: string | null): number | null {
 }
 
 function extractError(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    return ((err.response?.data as { detail?: string } | undefined)?.detail || err.message || "Unexpected error");
-  }
-  return err instanceof Error ? err.message : "Unexpected error";
+  return extractApiError(err, "Unexpected error");
 }
 
 export function CephAdminEndpointProvider({ children }: { children: ReactNode }) {

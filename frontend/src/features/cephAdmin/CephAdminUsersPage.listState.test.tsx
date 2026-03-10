@@ -86,4 +86,17 @@ describe("CephAdminUsersPage list states", () => {
       expect(listCephAdminUsersMock).toHaveBeenCalled();
     });
   });
+
+  it("shows backend detail when list loading fails with detail payload", async () => {
+    listCephAdminUsersMock.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { data: { detail: "Forbidden by policy" } },
+      message: "Request failed with status code 403",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Forbidden by policy")).toBeInTheDocument();
+    expect(screen.getByText("Unable to load users.")).toBeInTheDocument();
+  });
 });

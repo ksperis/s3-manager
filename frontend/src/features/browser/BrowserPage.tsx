@@ -11,6 +11,7 @@ import Modal from "../../components/Modal";
 import TableEmptyState from "../../components/TableEmptyState";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import { formatBytes } from "../../utils/format";
+import { extractApiError } from "../../utils/apiError";
 import {
   S3_BUCKET_NAME_MAX_LENGTH,
   isValidS3BucketName,
@@ -941,9 +942,9 @@ export default function BrowserPage({
           setStsCredentialsError(null);
           return creds;
         })
-        .catch(() => {
+        .catch((err) => {
           setStsCredentials(null);
-          setStsCredentialsError("Unable to load STS credentials.");
+          setStsCredentialsError(extractApiError(err, "Unable to load STS credentials."));
           return null;
         })
         .finally(() => {
@@ -1417,8 +1418,8 @@ export default function BrowserPage({
           setPrefix("");
         }
         setBucketName(nextBucket);
-      } catch {
-        setBucketError("Unable to list buckets for this account.");
+      } catch (err) {
+        setBucketError(extractApiError(err, "Unable to list buckets for this account."));
         setBucketMenuItems([]);
         setBucketMenuPage(1);
         setBucketMenuHasNext(false);
@@ -1481,11 +1482,11 @@ export default function BrowserPage({
         if (!searchValue) {
           setBucketTotalCount(data.total);
         }
-      } catch {
+      } catch (err) {
         if (requestId !== bucketSearchRequestIdRef.current) {
           return;
         }
-        setBucketError("Unable to list buckets for this account.");
+        setBucketError(extractApiError(err, "Unable to list buckets for this account."));
         if (!append) {
           setBucketMenuItems([]);
           setBucketMenuPage(1);
@@ -1749,14 +1750,14 @@ export default function BrowserPage({
       });
       setObjectsNextToken(data.next_continuation_token ?? null);
       setObjectsIsTruncated(data.is_truncated);
-    } catch {
+    } catch (err) {
       if (isAbortError(err)) {
         return;
       }
       if (isStaleRequest(requestSeq, objectsRequestSeqRef.current)) {
         return;
       }
-      setObjectsError("Unable to list objects for this prefix.");
+      setObjectsError(extractApiError(err, "Unable to list objects for this prefix."));
     } finally {
       if (objectsAbortControllerRef.current === controller) {
         objectsAbortControllerRef.current = null;
@@ -1795,8 +1796,8 @@ export default function BrowserPage({
       setPrefixVersionIdMarker(data.next_version_id_marker ?? null);
       setPrefixVersions((prev) => (opts?.append ? [...prev, ...data.versions] : data.versions));
       setPrefixDeleteMarkers((prev) => (opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers));
-    } catch {
-      setPrefixVersionsError("Unable to list versions for this prefix.");
+    } catch (err) {
+      setPrefixVersionsError(extractApiError(err, "Unable to list versions for this prefix."));
       if (!opts?.append) {
         setPrefixVersions([]);
         setPrefixDeleteMarkers([]);
@@ -1834,8 +1835,8 @@ export default function BrowserPage({
       setObjectVersionIdMarker(data.next_version_id_marker ?? null);
       setObjectVersions((prev) => (opts?.append ? [...prev, ...data.versions] : data.versions));
       setObjectDeleteMarkers((prev) => (opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers));
-    } catch {
-      setObjectVersionsError("Unable to list versions for this object.");
+    } catch (err) {
+      setObjectVersionsError(extractApiError(err, "Unable to list versions for this object."));
       if (!opts?.append) {
         setObjectVersions([]);
         setObjectDeleteMarkers([]);
@@ -1877,8 +1878,8 @@ export default function BrowserPage({
       setObjectDeleteMarkersModal((prev) =>
         opts?.append ? [...prev, ...data.delete_markers] : data.delete_markers
       );
-    } catch {
-      setObjectVersionsModalError("Unable to list versions for this object.");
+    } catch (err) {
+      setObjectVersionsModalError(extractApiError(err, "Unable to list versions for this object."));
       if (!opts?.append) {
         setObjectVersionsModal([]);
         setObjectDeleteMarkersModal([]);
@@ -2133,9 +2134,12 @@ export default function BrowserPage({
         if (!isMounted) return;
         setStsStatus(status);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!isMounted) return;
-        setStsStatus({ available: false, error: "Unable to reach STS endpoint." });
+        setStsStatus({
+          available: false,
+          error: extractApiError(err, "Unable to reach STS endpoint."),
+        });
       });
     return () => {
       isMounted = false;
@@ -2810,9 +2814,9 @@ export default function BrowserPage({
         setInspectedTags(tags.tags ?? []);
         setInspectedTagsVersionId(tags.version_id ?? null);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!isMounted) return;
-        setMetadataError("Unable to load object details.");
+        setMetadataError(extractApiError(err, "Unable to load object details."));
         setInspectedMetadata(null);
         setInspectedTags([]);
         setInspectedTagsVersionId(null);
@@ -3093,9 +3097,9 @@ export default function BrowserPage({
           ...prev,
           [bucketName]: payload,
         }));
-      } catch {
+      } catch (err) {
         if (bucketInspectorRequestIdRef.current !== requestId) return;
-        setBucketInspectorError("Unable to load bucket stats and features.");
+        setBucketInspectorError(extractApiError(err, "Unable to load bucket stats and features."));
       } finally {
         if (bucketInspectorRequestIdRef.current === requestId) {
           setBucketInspectorLoading(false);
@@ -5991,8 +5995,8 @@ export default function BrowserPage({
       setInspectedMetadata(meta);
       setInspectedTags(tags.tags ?? []);
       setInspectedTagsVersionId(tags.version_id ?? null);
-    } catch {
-      setMetadataError("Unable to load object details.");
+    } catch (err) {
+      setMetadataError(extractApiError(err, "Unable to load object details."));
       setInspectedMetadata(null);
       setInspectedTags([]);
       setInspectedTagsVersionId(null);

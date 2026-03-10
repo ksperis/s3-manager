@@ -13,6 +13,7 @@ import {
 import UiButton from "../../components/ui/UiButton";
 import { cx, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
+import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 
 const PORTAL_KEY_ROTATION_WARNING = "When enabled, key rotations can immediately impact portal users relying on the displayed key.";
@@ -38,7 +39,7 @@ export default function PortalSettingsPage() {
   useEffect(() => {
     fetchAppSettings()
       .then((data) => setSettings(data))
-      .catch(() => setError("Unable to load settings."));
+      .catch((err) => setError(extractApiError(err, "Unable to load settings.")));
   }, []);
 
   useEffect(() => {
@@ -186,7 +187,7 @@ export default function PortalSettingsPage() {
       setTimeout(() => setSavedMessage(null), 3000);
     } catch (err) {
       console.error(err);
-      setError("Unable to save.");
+      setError(extractApiError(err, "Unable to save."));
     } finally {
       setSaving(false);
     }
@@ -204,7 +205,7 @@ export default function PortalSettingsPage() {
       setSettings((prev) => (prev ? { ...prev, portal: defaults.portal } : defaults));
     } catch (err) {
       console.error(err);
-      setError("Unable to load default settings.");
+      setError(extractApiError(err, "Unable to load default settings."));
     } finally {
       setResetting(false);
     }
@@ -231,7 +232,7 @@ export default function PortalSettingsPage() {
       });
     } catch (err) {
       console.error(err);
-      setError("Unable to load default settings.");
+      setError(extractApiError(err, "Unable to load default settings."));
     } finally {
       setResettingPolicy(null);
     }

@@ -20,6 +20,7 @@ import StatCards from "../../components/StatCards";
 import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 import { listStorageEndpoints, type StorageEndpoint } from "../../api/storageEndpoints";
 import {
@@ -116,11 +117,11 @@ export default function BillingPage() {
           setSelectedEndpointId((current) => current ?? preferred.id);
           setPageError(null);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
           setEndpoints([]);
           setSelectedEndpointId(null);
-          setPageError("Unable to retrieve the endpoint list.");
+          setPageError(extractApiError(err, "Unable to retrieve the endpoint list."));
         }
       }
     }
@@ -145,10 +146,10 @@ export default function BillingPage() {
         if (!cancelled) {
           setSummary(data);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
           setSummary(null);
-          setSummaryError("Unable to load billing summary.");
+          setSummaryError(extractApiError(err, "Unable to load billing summary."));
           setBillingDisabled(true);
         }
       } finally {
@@ -177,10 +178,10 @@ export default function BillingPage() {
         if (!cancelled) {
           setSubjects(data.items);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
           setSubjects([]);
-          setSubjectsError("Unable to load billing subjects.");
+          setSubjectsError(extractApiError(err, "Unable to load billing subjects."));
         }
       } finally {
         if (!cancelled) {
@@ -218,9 +219,9 @@ export default function BillingPage() {
         if (!cancelled) {
           setDetail(data);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setDetailError("Unable to load billing detail.");
+          setDetailError(extractApiError(err, "Unable to load billing detail."));
         }
       } finally {
         if (!cancelled) {
@@ -286,9 +287,9 @@ export default function BillingPage() {
     try {
       const data = await getBillingSubjectDetail(month, selectedEndpointId, subject.subject_type as "account" | "s3_user", subject.subject_id);
       setDetail(data);
-    } catch {
+    } catch (err) {
       setDetail(null);
-      setDetailError("Unable to load billing detail.");
+      setDetailError(extractApiError(err, "Unable to load billing detail."));
     } finally {
       setDetailLoading(false);
     }
@@ -306,8 +307,8 @@ export default function BillingPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch {
-      setPageError("Unable to export CSV.");
+    } catch (err) {
+      setPageError(extractApiError(err, "Unable to export CSV."));
     }
   }
 
@@ -320,8 +321,8 @@ export default function BillingPage() {
       await collectBillingDaily(collectDay);
       setCollectMessage(`Collection completed for ${collectDay}.`);
       setReloadToken((prev) => prev + 1);
-    } catch {
-      setCollectError("Unable to trigger billing collection.");
+    } catch (err) {
+      setCollectError(extractApiError(err, "Unable to trigger billing collection."));
     } finally {
       setCollectLoading(false);
     }

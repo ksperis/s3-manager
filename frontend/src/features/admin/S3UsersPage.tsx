@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -27,6 +26,7 @@ import PaginationControls from "../../components/PaginationControls";
 import StorageUsageCard from "../../components/StorageUsageCard";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { extractApiError } from "../../utils/apiError";
 import { useAdminS3UserStats } from "./useAdminS3UserStats";
 
 type TextMatchMode = "contains" | "exact";
@@ -133,16 +133,7 @@ export default function S3UsersPage() {
     error: editingUsageError,
   } = useAdminS3UserStats(editingUserId, Boolean(editingUserId));
 
-  const extractError = (err: unknown) => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
-  };
+  const extractError = (err: unknown) => extractApiError(err, "Unexpected error");
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);

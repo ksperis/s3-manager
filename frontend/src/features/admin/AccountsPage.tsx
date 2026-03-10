@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { uiCheckboxClass } from "../../components/ui/styles";
 import {
@@ -36,6 +35,7 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { useAdminAccountStats } from "./useAdminAccountStats";
+import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 import { isAdminLikeRole } from "../../utils/workspaces";
 
@@ -374,7 +374,7 @@ export default function S3AccountsPage() {
       .then((data) => setPortalAccountSettings(data))
       .catch((err) => {
         console.error(err);
-        setPortalSettingsError("Unable to load portal overrides.");
+        setPortalSettingsError(extractApiError(err, "Unable to load portal overrides."));
       })
       .finally(() => setPortalSettingsLoading(false));
   }, [editingAccountId, portalEnabled]);
@@ -504,16 +504,7 @@ export default function S3AccountsPage() {
     fetchS3Accounts();
   }, [fetchS3Accounts]);
 
-  const extractError = (err: unknown) => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
-  };
+  const extractError = (err: unknown) => extractApiError(err, "Unexpected error");
 
   const fetchEndpointAccountsWritePermission = useCallback(
     async (endpointId: number) => {
@@ -826,7 +817,7 @@ export default function S3AccountsPage() {
       setPortalSettingsMessage("Portal overrides saved.");
     } catch (err) {
       console.error(err);
-      setPortalSettingsError("Unable to save portal overrides.");
+      setPortalSettingsError(extractApiError(err, "Unable to save portal overrides."));
     } finally {
       setPortalSettingsSaving(false);
     }
@@ -844,7 +835,7 @@ export default function S3AccountsPage() {
       setPortalSettingsMessage("Portal overrides reset.");
     } catch (err) {
       console.error(err);
-      setPortalSettingsError("Unable to reset portal overrides.");
+      setPortalSettingsError(extractApiError(err, "Unable to reset portal overrides."));
     } finally {
       setPortalSettingsSaving(false);
     }

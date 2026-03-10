@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
+import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 
 function clampInt(value: number, min: number, max: number, fallback: number): number {
@@ -23,7 +24,7 @@ export default function ManagerSettingsPage() {
   useEffect(() => {
     fetchAppSettings()
       .then((data) => setSettings(data))
-      .catch(() => setError("Unable to load settings."));
+      .catch((err) => setError(extractApiError(err, "Unable to load settings.")));
   }, []);
 
   const handleToggleAllowManagerUserStats = (value: boolean) => {
@@ -147,7 +148,7 @@ export default function ManagerSettingsPage() {
       setTimeout(() => setSavedMessage(null), 3000);
     } catch (err) {
       console.error(err);
-      setError("Unable to save.");
+      setError(extractApiError(err, "Unable to save."));
     } finally {
       setSaving(false);
     }
@@ -178,7 +179,7 @@ export default function ManagerSettingsPage() {
       );
     } catch (err) {
       console.error(err);
-      setError("Unable to load default settings.");
+      setError(extractApiError(err, "Unable to load default settings."));
     } finally {
       setResetting(false);
     }

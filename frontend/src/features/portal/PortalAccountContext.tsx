@@ -7,6 +7,7 @@ import { S3AccountSelector } from "../../api/accountParams";
 import { S3Account } from "../../api/accounts";
 import { useI18n } from "../../i18n";
 import { listPortalAccounts } from "../../api/portal";
+import { extractApiError } from "../../utils/apiError";
 
 type PortalAccountContextType = {
   accounts: S3Account[];
@@ -63,11 +64,14 @@ export function PortalAccountProvider({ children }: { children: ReactNode }) {
         console.error(err);
         if (!cancelled) {
           setError(
-            t({
-              en: "Unable to load S3 accounts.",
-              fr: "Impossible de charger les comptes S3.",
-              de: "S3-Konten konnen nicht geladen werden.",
-            })
+            extractApiError(
+              err,
+              t({
+                en: "Unable to load S3 accounts.",
+                fr: "Impossible de charger les comptes S3.",
+                de: "S3-Konten konnen nicht geladen werden.",
+              })
+            )
           );
           setAccounts([]);
           setSelectedAccountId(null);

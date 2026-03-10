@@ -20,6 +20,7 @@ import Modal from "../../components/Modal";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
+import { extractApiError } from "../../utils/apiError";
 import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type FormState = {
@@ -185,19 +186,7 @@ function createEmptyForm(): FormState {
 const EMPTY_FORM: FormState = createEmptyForm();
 
 function extractError(err: unknown): string {
-  if (!err) return "Action failed.";
-  if (typeof err === "string") return err;
-  if (typeof err === "object" && err !== null) {
-    const axiosErr = err as { response?: { data?: unknown; status?: number } };
-    const data = axiosErr.response?.data;
-    if (typeof data === "string") return data;
-    if (typeof data === "object" && data && "detail" in data) {
-      const detail = (data as { detail?: unknown }).detail;
-      if (typeof detail === "string") return detail;
-      if (Array.isArray(detail) && detail.length > 0 && typeof detail[0] === "string") return detail[0];
-    }
-  }
-  return "An error occurred.";
+  return extractApiError(err, "An error occurred.");
 }
 
 function isMethodNotAllowedError(message?: string | null): boolean {

@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import {
   CreateUserPayload,
   UpdateUserPayload,
@@ -28,6 +27,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
+import { extractApiError } from "../../utils/apiError";
 import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
@@ -1049,16 +1049,7 @@ export default function UsersPage() {
     setPage(1);
   };
 
-  const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
-  };
+  const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -1080,7 +1071,7 @@ export default function UsersPage() {
       setUsers(response.items);
       setTotalUsers(response.total);
     } catch (err) {
-      setError("Unable to load users.");
+      setError(extractApiError(err, "Unable to load users."));
     } finally {
       setLoading(false);
     }

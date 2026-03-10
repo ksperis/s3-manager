@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
@@ -22,6 +21,7 @@ import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 
 export default function S3UserKeysPage() {
@@ -35,16 +35,7 @@ export default function S3UserKeysPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [createdKey, setCreatedKey] = useState<CreatedS3UserAccessKey | null>(null);
 
-  const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        "Unexpected error"
-      );
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
-  };
+  const extractError = (err: unknown): string => extractApiError(err, "Unexpected error");
 
   const formatDate = (value?: string | null) => {
     if (!value) return "-";

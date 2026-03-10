@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bucket } from "../../api/buckets";
 import {
@@ -27,6 +26,7 @@ import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { confirmAction } from "../../utils/confirm";
+import { extractApiError } from "../../utils/apiError";
 import {
   S3_BUCKET_NAME_MAX_LENGTH as MAX_BUCKET_NAME_LENGTH,
   isValidS3BucketName,
@@ -103,16 +103,8 @@ export default function PortalBucketsPage() {
   const canManageBuckets =
     Boolean(portalState?.can_manage_buckets) || portalState?.account_role === "portal_manager";
 
-  const extractError = (err: unknown): string => {
-    if (axios.isAxiosError(err)) {
-      return (
-        (err.response?.data as { detail?: string })?.detail ||
-        err.message ||
-        t({ en: "Unexpected error", fr: "Erreur inattendue", de: "Unerwarteter Fehler" })
-      );
-    }
-    return err instanceof Error ? err.message : t({ en: "Unexpected error", fr: "Erreur inattendue", de: "Unerwarteter Fehler" });
-  };
+  const extractError = (err: unknown): string =>
+    extractApiError(err, t({ en: "Unexpected error", fr: "Erreur inattendue", de: "Unerwarteter Fehler" }));
 
   const fetchBuckets = useCallback(async () => {
     if (!accountIdForApi || !canManageBuckets) {
@@ -129,7 +121,12 @@ export default function PortalBucketsPage() {
       setBuckets(data);
     } catch (err) {
       console.error(err);
-      setError(t({ en: "Unable to load portal buckets.", fr: "Impossible de charger les buckets du portail.", de: "Portal-Buckets konnen nicht geladen werden." }));
+      setError(
+        extractApiError(
+          err,
+          t({ en: "Unable to load portal buckets.", fr: "Impossible de charger les buckets du portail.", de: "Portal-Buckets konnen nicht geladen werden." })
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -186,7 +183,12 @@ export default function PortalBucketsPage() {
       .catch((err) => {
         console.error(err);
         setPortalState(null);
-        setStateError(t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." }));
+        setStateError(
+          extractApiError(
+            err,
+            t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." })
+          )
+        );
       })
       .finally(() => setStateLoading(false));
   }, [accountIdForApi, t]);

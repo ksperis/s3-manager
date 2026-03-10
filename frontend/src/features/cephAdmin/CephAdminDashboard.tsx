@@ -9,6 +9,7 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import PageHeader from "../../components/PageHeader";
 import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
 import { cx, uiCardClass } from "../../components/ui/styles";
+import { extractApiError } from "../../utils/apiError";
 import { useCephAdminEndpoint } from "./CephAdminEndpointContext";
 
 type CardLink = {
@@ -46,10 +47,10 @@ export default function CephAdminDashboard() {
         if (cancelled) return;
         setWorkspaceHealth(data);
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
         setWorkspaceHealth(null);
-        setWorkspaceHealthError("Unable to load endpoint health for this endpoint.");
+        setWorkspaceHealthError(extractApiError(err, "Unable to load endpoint health for this endpoint."));
       })
       .finally(() => {
         if (!cancelled) {

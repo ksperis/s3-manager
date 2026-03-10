@@ -30,6 +30,7 @@ import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { extractApiError } from "../../utils/apiError";
 import {
   buildTimelineSegmentDetails,
   EndpointTimelineBar,
@@ -99,9 +100,9 @@ export default function EndpointStatusDetailPage() {
     try {
       const payload = await fetchHealthSummary();
       setSummary(payload.endpoints ?? []);
-    } catch {
+    } catch (err) {
       setSummary([]);
-      setSummaryError("Unable to load endpoint summary.");
+      setSummaryError(extractApiError(err, "Unable to load endpoint summary."));
     } finally {
       setSummaryLoading(false);
     }
@@ -119,11 +120,11 @@ export default function EndpointStatusDetailPage() {
       ]);
       setSeries(seriesData);
       setIncidents(incidentsData.incidents ?? []);
-    } catch {
+    } catch (err) {
       setSeries(null);
       setIncidents([]);
-      setSeriesError("Unable to load endpoint series.");
-      setIncidentsError("Unable to load endpoint incidents.");
+      setSeriesError(extractApiError(err, "Unable to load endpoint series."));
+      setIncidentsError(extractApiError(err, "Unable to load endpoint incidents."));
     } finally {
       setSeriesLoading(false);
       setIncidentsLoading(false);
@@ -138,10 +139,10 @@ export default function EndpointStatusDetailPage() {
         const payload = await fetchHealthRawChecks(selectedEndpointId, window, page, RAW_CHECKS_PAGE_SIZE);
         setRawChecks(payload.checks ?? []);
         setRawChecksTotal(payload.total ?? 0);
-      } catch {
+      } catch (err) {
         setRawChecks([]);
         setRawChecksTotal(0);
-        setRawChecksError("Unable to load raw healthchecks.");
+        setRawChecksError(extractApiError(err, "Unable to load raw healthchecks."));
       } finally {
         setRawChecksLoading(false);
       }
@@ -163,8 +164,8 @@ export default function EndpointStatusDetailPage() {
       await runHealthchecks();
       setActionMessage("Healthchecks executed.");
       await loadAll();
-    } catch {
-      setActionError("Unable to run healthchecks.");
+    } catch (err) {
+      setActionError(extractApiError(err, "Unable to run healthchecks."));
     } finally {
       setRunLoading(false);
     }

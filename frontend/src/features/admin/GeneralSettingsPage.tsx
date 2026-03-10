@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
@@ -22,6 +21,7 @@ import {
 } from "../../api/appSettings";
 import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { applyBranding } from "../../components/ui/brandingRuntime";
+import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 
 const CEPH_ADMIN_WARNING_MESSAGE =
@@ -78,13 +78,7 @@ function isValidLoginLogoUrl(value: string): boolean {
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (axios.isAxiosError(error)) {
-    const detail = error.response?.data?.detail;
-    if (typeof detail === "string" && detail.trim()) {
-      return detail;
-    }
-  }
-  return fallback;
+  return extractApiError(error, fallback);
 }
 
 export default function GeneralSettingsPage() {
@@ -110,7 +104,7 @@ export default function GeneralSettingsPage() {
         setLoginLogoUrlDraft(data.branding.login_logo_url ?? "");
         applyBranding(data.branding.primary_color);
       })
-      .catch(() => setError("Unable to load settings."));
+      .catch((err) => setError(extractApiError(err, "Unable to load settings.")));
   }, [setGeneralSettings]);
   const isLogoUrlValid = isValidLoginLogoUrl(loginLogoUrlDraft);
   const quotaThreshold = settings?.quota_notifications.threshold_percent ?? 85;
@@ -198,7 +192,7 @@ export default function GeneralSettingsPage() {
       setTimeout(() => setSavedMessage(null), 3000);
     } catch (err) {
       console.error(err);
-      setError("Unable to save.");
+      setError(extractApiError(err, "Unable to save."));
     } finally {
       setSaving(false);
     }
@@ -248,7 +242,7 @@ export default function GeneralSettingsPage() {
       applyBranding(defaults.branding.primary_color);
     } catch (err) {
       console.error(err);
-      setError("Unable to load default settings.");
+      setError(extractApiError(err, "Unable to load default settings."));
     } finally {
       setResetting(false);
     }

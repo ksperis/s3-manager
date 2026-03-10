@@ -6,7 +6,7 @@ import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import { fetchIamOverview, IamOverview } from "../../api/iamOverview";
 import { S3AccountSelector } from "../../api/accountParams";
-import { extractManagerError } from "./errorUtils";
+import { extractApiError } from "../../utils/apiError";
 
 type UseIamOverviewResult = {
   overview: IamOverview | null;
@@ -42,7 +42,7 @@ export function useIamOverview(
       if (axios.isAxiosError(err) && err.response?.status === 403) {
         setError("IAM inventory unavailable for this credential.");
       } else {
-        setError(extractManagerError(err, "Unable to load IAM overview."));
+        setError(extractApiError(err, "Unable to load IAM overview."));
       }
       setOverview(null);
     } finally {

@@ -2,7 +2,6 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { fetchAppSettings } from "../../api/appSettings";
 import { KeyRotationResponse, KeyRotationType, rotateS3Keys } from "../../api/keyRotation";
@@ -12,6 +11,7 @@ import PageHeader from "../../components/PageHeader";
 import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { extractApiError } from "../../utils/apiError";
 
 type RotationTypeOption = {
   value: KeyRotationType;
@@ -62,10 +62,7 @@ function isEndpointEligible(endpoint: StorageEndpoint): boolean {
 }
 
 function extractError(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    return (err.response?.data as { detail?: string })?.detail || err.message || "Unable to run key rotation.";
-  }
-  return err instanceof Error ? err.message : "Unable to run key rotation.";
+  return extractApiError(err, "Unable to run key rotation.");
 }
 
 export default function KeyRotationPage() {

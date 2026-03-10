@@ -9,6 +9,7 @@ import PageBanner from "../../components/PageBanner";
 import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
+import { extractApiError } from "../../utils/apiError";
 import { toolbarCompactInputClasses, toolbarCompactSelectClasses } from "../../components/toolbarControlClasses";
 
 type RoleFilter = "all" | "ui_superadmin" | "ui_admin" | "ui_user" | "ui_none";
@@ -121,7 +122,7 @@ export default function AuditLogsPage() {
       } catch (err) {
         if (!cancelled) {
           console.error(err);
-          setError("Unable to load audit logs.");
+          setError(extractApiError(err, "Unable to load audit logs."));
         }
       } finally {
         if (!cancelled) {
@@ -141,7 +142,7 @@ export default function AuditLogsPage() {
       await fetchLogs({ append: false });
     } catch (err) {
       console.error(err);
-      setError("Unable to refresh audit logs.");
+      setError(extractApiError(err, "Unable to refresh audit logs."));
     } finally {
       setLoading(false);
     }
@@ -154,7 +155,7 @@ export default function AuditLogsPage() {
       await fetchLogs({ append: true, cursor: nextCursor });
     } catch (err) {
       console.error(err);
-      setError("Unable to load older logs.");
+      setError(extractApiError(err, "Unable to load older logs."));
     } finally {
       setLoadingMore(false);
     }

@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -67,12 +66,10 @@ import {
   type FeatureDetailFilters,
   type NumericComparisonOpUi,
 } from "./filtering/bucketAdvancedFilter";
+import { extractApiError } from "../../utils/apiError";
 
 const extractError = (err: unknown): string => {
-  if (axios.isAxiosError(err)) {
-    return ((err.response?.data as { detail?: string } | undefined)?.detail || err.message || "Unexpected error");
-  }
-  return err instanceof Error ? err.message : "Unexpected error";
+  return extractApiError(err, "Unexpected error");
 };
 
 const formatBytes = (value?: number | null) => {

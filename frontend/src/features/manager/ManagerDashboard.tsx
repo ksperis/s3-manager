@@ -12,7 +12,7 @@ import PageHeader from "../../components/PageHeader";
 import UsageOverview from "./UsageOverview";
 import { useManagerStats } from "./useManagerStats";
 import { useIamOverview } from "./useIamOverview";
-import { extractManagerError } from "./errorUtils";
+import { extractApiError } from "../../utils/apiError";
 
 type SessionCapabilities = {
   can_manage_iam?: boolean;
@@ -92,7 +92,7 @@ export default function ManagerDashboard() {
       .catch((err) => {
         if (cancelled) return;
         setWorkspaceHealth(null);
-        setWorkspaceHealthError(extractManagerError(err, "Unable to load endpoint health for this account."));
+        setWorkspaceHealthError(extractApiError(err, "Unable to load endpoint health for this account."));
       })
       .finally(() => {
         if (!cancelled) setWorkspaceHealthLoading(false);

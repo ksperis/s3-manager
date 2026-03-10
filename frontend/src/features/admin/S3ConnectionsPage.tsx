@@ -2,7 +2,6 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import Modal from "../../components/Modal";
@@ -24,6 +23,7 @@ import {
 } from "../../api/s3ConnectionsAdmin";
 import { listMinimalUsers, UserSummary } from "../../api/users";
 import { listStorageEndpoints, StorageEndpoint } from "../../api/storageEndpoints";
+import { extractApiError } from "../../utils/apiError";
 import { S3CredentialsValidationPayload, useLiveS3CredentialsValidation } from "../shared/useLiveS3CredentialsValidation";
 
 const providerHintOptions = [
@@ -105,12 +105,7 @@ export default function S3ConnectionsPage() {
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
-  const extractError = (err: unknown) => {
-    if (axios.isAxiosError(err)) {
-      return ((err.response?.data as { detail?: string })?.detail || err.message || "Unexpected error");
-    }
-    return err instanceof Error ? err.message : "Unexpected error";
-  };
+  const extractError = (err: unknown) => extractApiError(err, "Unexpected error");
 
   const resetCreateForm = () => {
     setCreateEndpointPresetId("");

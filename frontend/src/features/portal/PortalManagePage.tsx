@@ -29,6 +29,7 @@ import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { useI18n } from "../../i18n";
 import { confirmAction } from "../../utils/confirm";
+import { extractApiError } from "../../utils/apiError";
 import { usePortalAccountContext } from "./PortalAccountContext";
 
 type SortField = "email" | "iam_username" | "role";
@@ -142,7 +143,12 @@ export default function PortalManagePage() {
       .catch((err) => {
         console.error(err);
         setPortalState(null);
-        setStateError(t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." }));
+        setStateError(
+          extractApiError(
+            err,
+            t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." })
+          )
+        );
       })
       .finally(() => setStateLoading(false));
   }, [accountIdForApi, t]);
@@ -159,7 +165,12 @@ export default function PortalManagePage() {
       })
       .catch((err) => {
         console.error(err);
-        setUsersError(t({ en: "Unable to load portal users.", fr: "Impossible de charger les utilisateurs du portail.", de: "Portal-Benutzer konnen nicht geladen werden." }));
+        setUsersError(
+          extractApiError(
+            err,
+            t({ en: "Unable to load portal users.", fr: "Impossible de charger les utilisateurs du portail.", de: "Portal-Benutzer konnen nicht geladen werden." })
+          )
+        );
       })
       .finally(() => setUsersLoading(false));
   }, [accountIdForApi, canManagePortalUsers, t]);
@@ -296,8 +307,13 @@ export default function PortalManagePage() {
         const buckets = resp.buckets || [];
         setEditBuckets(buckets);
       })
-      .catch(() => {
-        setEditError(t({ en: "Unable to load bucket permissions.", fr: "Impossible de charger les droits buckets.", de: "Bucket-Berechtigungen konnen nicht geladen werden." }));
+      .catch((err) => {
+        setEditError(
+          extractApiError(
+            err,
+            t({ en: "Unable to load bucket permissions.", fr: "Impossible de charger les droits buckets.", de: "Bucket-Berechtigungen konnen nicht geladen werden." })
+          )
+        );
       })
       .finally(() => setEditLoading(false));
   };

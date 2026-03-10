@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import {
   AdminStats,
   AdminTrafficStats,
@@ -16,19 +15,11 @@ import MetricsTrafficOverview, { MetricsSnapshotCard } from "../../components/Me
 import PageBanner from "../../components/PageBanner";
 import PageHeader from "../../components/PageHeader";
 import UsageBreakdown from "../../components/UsageBreakdown";
+import { extractApiError } from "../../utils/apiError";
 import { formatBytes, formatCompactNumber } from "../../utils/format";
 
 function extractError(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err)) {
-    const detail = (err.response?.data as { detail?: string } | undefined)?.detail;
-    if (detail && detail.trim()) {
-      return detail;
-    }
-  }
-  if (err instanceof Error && err.message.trim()) {
-    return err.message;
-  }
-  return fallback;
+  return extractApiError(err, fallback);
 }
 
 export default function AdminMetricsPage() {

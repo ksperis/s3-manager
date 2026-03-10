@@ -21,6 +21,7 @@ import UiButton from "../../components/ui/UiButton";
 import { cx, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
 import { useI18n } from "../../i18n";
 import { confirmAction } from "../../utils/confirm";
+import { extractApiError } from "../../utils/apiError";
 import { usePortalAccountContext } from "./PortalAccountContext";
 
 type TriState = "inherit" | "enabled" | "disabled";
@@ -139,7 +140,12 @@ export default function PortalSettingsPage() {
       .catch((err) => {
         console.error(err);
         setPortalState(null);
-        setStateError(t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." }));
+        setStateError(
+          extractApiError(
+            err,
+            t({ en: "Unable to load portal context.", fr: "Impossible de charger le contexte portail.", de: "Portal-Kontext kann nicht geladen werden." })
+          )
+        );
       })
       .finally(() => setStateLoading(false));
   }, [accountIdForApi, t]);
@@ -154,7 +160,12 @@ export default function PortalSettingsPage() {
       .then((data) => setPortalAccountSettings(data))
       .catch((err) => {
         console.error(err);
-        setPortalSettingsError(t({ en: "Unable to load portal settings.", fr: "Impossible de charger les parametres du portail.", de: "Portal-Einstellungen konnen nicht geladen werden." }));
+        setPortalSettingsError(
+          extractApiError(
+            err,
+            t({ en: "Unable to load portal settings.", fr: "Impossible de charger les parametres du portail.", de: "Portal-Einstellungen konnen nicht geladen werden." })
+          )
+        );
       })
       .finally(() => setPortalSettingsLoading(false));
   }, [accountIdForApi, canManagePortalUsers, t]);
@@ -267,7 +278,12 @@ export default function PortalSettingsPage() {
       setPortalSettingsMessage(t({ en: "Portal settings updated.", fr: "Parametres portail mis a jour.", de: "Portal-Einstellungen aktualisiert." }));
     } catch (err) {
       console.error(err);
-      setPortalSettingsError(t({ en: "Unable to save portal settings.", fr: "Impossible d'enregistrer les parametres portail.", de: "Portal-Einstellungen konnen nicht gespeichert werden." }));
+      setPortalSettingsError(
+        extractApiError(
+          err,
+          t({ en: "Unable to save portal settings.", fr: "Impossible d'enregistrer les parametres portail.", de: "Portal-Einstellungen konnen nicht gespeichert werden." })
+        )
+      );
     } finally {
       setPortalSettingsSaving(false);
     }
@@ -294,7 +310,12 @@ export default function PortalSettingsPage() {
       setPortalSettingsMessage(t({ en: "Portal overrides reset.", fr: "Surcharges portail reinitialisees.", de: "Portal-Overrides zuruckgesetzt." }));
     } catch (err) {
       console.error(err);
-      setPortalSettingsError(t({ en: "Unable to reset overrides.", fr: "Impossible de reinitialiser les surcharges.", de: "Overrides konnen nicht zuruckgesetzt werden." }));
+      setPortalSettingsError(
+        extractApiError(
+          err,
+          t({ en: "Unable to reset overrides.", fr: "Impossible de reinitialiser les surcharges.", de: "Overrides konnen nicht zuruckgesetzt werden." })
+        )
+      );
     } finally {
       setPortalSettingsSaving(false);
     }

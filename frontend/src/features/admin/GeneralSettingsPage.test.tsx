@@ -219,4 +219,28 @@ describe("GeneralSettingsPage branding", () => {
     expect(sendQuotaNotificationTestEmailMock.mock.calls[0][0]).toEqual(buildSettings().quota_notifications);
     expect(await screen.findByText(/test email sent to superadmin@example.com/i)).toBeInTheDocument();
   });
+
+  it("shows backend detail when initial settings load fails with detail", async () => {
+    fetchAppSettingsMock.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { data: { detail: "Forbidden by policy" } },
+      message: "Request failed with status code 403",
+    });
+
+    render(<GeneralSettingsPage />);
+
+    expect(await screen.findByText("Forbidden by policy")).toBeInTheDocument();
+  });
+
+  it("falls back to error.message when initial settings load fails without detail", async () => {
+    fetchAppSettingsMock.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { data: {} },
+      message: "Network Error",
+    });
+
+    render(<GeneralSettingsPage />);
+
+    expect(await screen.findByText("Network Error")).toBeInTheDocument();
+  });
 });

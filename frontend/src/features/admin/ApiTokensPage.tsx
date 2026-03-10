@@ -2,7 +2,6 @@
  * Copyright (c) 2026 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import axios from "axios";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
@@ -18,6 +17,7 @@ import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
+import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 
 type TokenStatus = "active" | "expired" | "revoked";
@@ -30,13 +30,7 @@ type RevealedToken = {
 const DEFAULT_EXPIRY_DAYS = 90;
 
 function extractError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const detail = (error.response?.data as { detail?: string } | undefined)?.detail;
-    if (detail) return detail;
-    return error.message || "Unable to complete request.";
-  }
-  if (error instanceof Error) return error.message;
-  return "Unable to complete request.";
+  return extractApiError(error, "Unable to complete request.");
 }
 
 function formatDate(value?: string | null): string {

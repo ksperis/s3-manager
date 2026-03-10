@@ -42,6 +42,7 @@ import {
   normalizeS3BucketName,
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
+import { extractApiError } from "../../utils/apiError";
 
 function CopyButton({ value, label, iconOnly = false }: { value: string; label: string; iconOnly?: boolean }) {
   const handleCopy = () => {
@@ -448,7 +449,16 @@ export default function PortalDashboard() {
       } catch (err) {
         console.error(err);
         if (!cancelled) {
-          setError("Impossible de charger les informations du portail.");
+          setError(
+            extractApiError(
+              err,
+              t({
+                en: "Unable to load portal information.",
+                fr: "Impossible de charger les informations du portail.",
+                de: "Portal-Informationen konnen nicht geladen werden.",
+              })
+            )
+          );
           setState(null);
         }
       } finally {
@@ -461,7 +471,7 @@ export default function PortalDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi, hasAccountContext]);
+  }, [accountIdForApi, hasAccountContext, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -488,7 +498,16 @@ export default function PortalDashboard() {
         console.error(err);
         if (cancelled) return;
         setAccountUsage(null);
-        setAccountUsageError("Usage du compte indisponible.");
+        setAccountUsageError(
+          extractApiError(
+            err,
+            t({
+              en: "Account usage unavailable.",
+              fr: "Usage du compte indisponible.",
+              de: "Kontonutzung nicht verfugbar.",
+            })
+          )
+        );
       })
       .finally(() => {
         if (!cancelled) {
@@ -498,7 +517,7 @@ export default function PortalDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [accountIdForApi]);
+  }, [accountIdForApi, t]);
 
   useEffect(() => {
     bucketStatsLoadedRef.current.clear();

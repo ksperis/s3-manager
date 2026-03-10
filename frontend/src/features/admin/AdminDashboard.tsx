@@ -15,6 +15,7 @@ import StatCards from "../../components/StatCards";
 import WorkspaceEndpointHealthCards from "../../components/WorkspaceEndpointHealthCards";
 import UiBadge from "../../components/ui/UiBadge";
 import { cx, uiButtonBaseClass, uiButtonVariants, uiCardClass, uiCardMutedClass } from "../../components/ui/styles";
+import { extractApiError } from "../../utils/apiError";
 import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 const ENDPOINT_STATUS_MAX_AGE_HOURS = 24;
@@ -63,7 +64,7 @@ export default function AdminDashboard() {
         setSummary(data);
         setError(null);
       } catch (err) {
-        setError("Unable to load admin overview.");
+        setError(extractApiError(err, "Unable to load admin overview."));
       }
     };
     load();
@@ -76,7 +77,7 @@ export default function AdminDashboard() {
         setOnboarding(data);
         setOnboardingError(null);
       } catch (err) {
-        setOnboardingError("Unable to load onboarding status.");
+        setOnboardingError(extractApiError(err, "Unable to load onboarding status."));
       }
     };
     loadOnboarding();
@@ -175,10 +176,10 @@ export default function AdminDashboard() {
         if (cancelled) return;
         setWorkspaceHealth(data);
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
         setWorkspaceHealth(null);
-        setWorkspaceHealthError("Unable to load workspace endpoint health.");
+        setWorkspaceHealthError(extractApiError(err, "Unable to load workspace endpoint health."));
       })
       .finally(() => {
         if (!cancelled) {
@@ -197,7 +198,7 @@ export default function AdminDashboard() {
       const data = await dismissOnboarding();
       setOnboarding(data);
     } catch (err) {
-      setOnboardingError("Unable to dismiss onboarding yet.");
+      setOnboardingError(extractApiError(err, "Unable to dismiss onboarding yet."));
     } finally {
       setDismissBusy(false);
     }
