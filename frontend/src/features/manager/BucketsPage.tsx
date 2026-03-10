@@ -345,7 +345,7 @@ export default function BucketsPage() {
     } catch (err) {
       if (fetchRequestRef.current !== requestId) return;
       console.error(err);
-      setError("Unable to fetch buckets. Ensure the backend is running.");
+      setError(extractError(err) || "Unable to fetch buckets.");
       setBuckets([]);
       setEnrichingColumns(false);
     } finally {

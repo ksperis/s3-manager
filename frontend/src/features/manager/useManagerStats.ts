@@ -6,6 +6,7 @@ import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import { S3AccountSelector } from "../../api/accountParams";
 import { fetchManagerStats, ManagerStats } from "../../api/stats";
+import { extractManagerError } from "./errorUtils";
 
 type UseManagerStatsResult = {
   stats: ManagerStats | null;
@@ -40,7 +41,7 @@ export function useManagerStats(
       if (axios.isAxiosError(err) && err.response?.status === 403) {
         setError("Storage metrics are not available for this credential.");
       } else {
-        setError("Unable to load manager stats.");
+        setError(extractManagerError(err, "Unable to load manager stats."));
       }
       setStats(null);
     } finally {

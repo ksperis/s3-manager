@@ -16,6 +16,7 @@ import { fetchPortalTraffic } from "../../api/portal";
 import { fetchCephAdminClusterTraffic } from "../../api/cephAdmin";
 import TrafficBytesChart from "../../components/TrafficBytesChart";
 import { formatBytes, formatCompactNumber, formatPercentage } from "../../utils/format";
+import { extractManagerError } from "./errorUtils";
 import {
   Bar,
   BarChart,
@@ -91,7 +92,7 @@ export default function TrafficAnalytics({ accountId, endpointId, bucketName, sc
       } catch (err) {
         if (!cancelled) {
           setTraffic(null);
-          setError("Unable to retrieve traffic logs.");
+          setError(extractManagerError(err, "Unable to retrieve traffic logs."));
         }
       } finally {
         if (!cancelled) {

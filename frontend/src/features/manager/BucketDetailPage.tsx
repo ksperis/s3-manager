@@ -138,6 +138,7 @@ import {
   resolveFeatureVisualState,
   stableBucketJsonSignature,
 } from "./bucketDetail";
+import { extractManagerError } from "./errorUtils";
 
 function getUserRole(): string | null {
   if (typeof window === "undefined") return null;
@@ -676,7 +677,7 @@ export default function BucketDetailPage({
         setBucket(found);
       }
     } catch (err) {
-      setBucketError("Unable to load bucket details.");
+      setBucketError(extractManagerError(err, "Unable to load bucket details."));
     } finally {
       setLoadingBucket(false);
     }
@@ -714,7 +715,7 @@ export default function BucketDetailPage({
       applyObjectLockState(lockConfig);
     } catch (err) {
       setProperties(null);
-      setPropsError("Unable to load bucket properties.");
+      setPropsError(extractManagerError(err, "Unable to load bucket properties."));
       applyObjectLockState(null);
     } finally {
       setPropsLoading(false);
@@ -756,7 +757,7 @@ export default function BucketDetailPage({
       setLifecycleText("");
       setSimpleLifecycleRules([emptySimpleLifecycleRule()]);
       setSimpleLifecycleWarning(null);
-      setLifecycleError("Unable to load lifecycle rules.");
+      setLifecycleError(extractManagerError(err, "Unable to load lifecycle rules."));
     } finally {
       setLifecycleLoading(false);
     }
@@ -779,7 +780,7 @@ export default function BucketDetailPage({
       setPolicy(data);
       setPolicyText(data.policy ? JSON.stringify(data.policy, null, 2) : "");
     } catch (err) {
-      setPolicyError("Unable to load the bucket policy.");
+      setPolicyError(extractManagerError(err, "Unable to load the bucket policy."));
       setPolicy(null);
       setPolicyText("");
     } finally {
@@ -804,7 +805,7 @@ export default function BucketDetailPage({
       setCors(data);
       setCorsText(data.rules && data.rules.length > 0 ? JSON.stringify(data.rules, null, 2) : "[]");
     } catch (err) {
-      setCorsError("Unable to load the CORS configuration.");
+      setCorsError(extractManagerError(err, "Unable to load the CORS configuration."));
       setCors(null);
       setCorsText("");
     } finally {
@@ -835,7 +836,7 @@ export default function BucketDetailPage({
     } catch (err) {
       setEncryption(null);
       setEncryptionText("[]");
-      setEncryptionError("Unable to load bucket encryption settings.");
+      setEncryptionError(extractManagerError(err, "Unable to load bucket encryption settings."));
     } finally {
       setEncryptionLoading(false);
     }
@@ -907,7 +908,7 @@ export default function BucketDetailPage({
     } catch (err) {
       setNotificationText(defaultNotificationTemplate);
       setNotificationConfigSnapshot({});
-      setNotificationsError("Unable to load bucket notifications.");
+      setNotificationsError(extractManagerError(err, "Unable to load bucket notifications."));
     } finally {
       setNotificationsLoading(false);
     }
@@ -932,7 +933,7 @@ export default function BucketDetailPage({
       applyAccessLoggingState(data);
     } catch (err) {
       applyAccessLoggingState(null);
-      setAccessLoggingError("Unable to load bucket access logging.");
+      setAccessLoggingError(extractManagerError(err, "Unable to load bucket access logging."));
     } finally {
       setAccessLoggingLoading(false);
     }
@@ -957,7 +958,7 @@ export default function BucketDetailPage({
       applyWebsiteState(data);
     } catch (err) {
       applyWebsiteState(null);
-      setWebsiteError("Unable to load bucket website configuration.");
+      setWebsiteError(extractManagerError(err, "Unable to load bucket website configuration."));
     } finally {
       setWebsiteLoading(false);
     }
@@ -1033,7 +1034,7 @@ export default function BucketDetailPage({
       setBucketAclCustom("");
     } catch (err) {
       setBucketAcl(null);
-      setBucketAclError("Unable to load bucket ACL.");
+      setBucketAclError(extractManagerError(err, "Unable to load bucket ACL."));
     } finally {
       setBucketAclLoading(false);
     }
@@ -1088,7 +1089,7 @@ export default function BucketDetailPage({
       } catch (err) {
         setObjects([]);
         setPrefixes([]);
-        setObjectsError("Unable to list objects (check the backend service).");
+        setObjectsError(extractManagerError(err, "Unable to list objects."));
       } finally {
         setObjectsLoading(false);
       }
@@ -1868,7 +1869,7 @@ export default function BucketDetailPage({
       }
       await loadProperties();
     } catch (err) {
-      setPropsError("Failed to update versioning.");
+      setPropsError(extractManagerError(err, "Failed to update versioning."));
     } finally {
       setUpdatingVersioning(false);
     }
@@ -1976,7 +1977,7 @@ export default function BucketDetailPage({
       setCors({ rules: [] });
       setCorsText("[]");
     } catch (err) {
-      setCorsError("Unable to delete the CORS configuration.");
+      setCorsError(extractManagerError(err, "Unable to delete the CORS configuration."));
     } finally {
       setDeletingCors(false);
     }
@@ -2026,7 +2027,7 @@ export default function BucketDetailPage({
       setEncryptionText("[]");
       setEncryptionStatus("Bucket encryption disabled.");
     } catch (err) {
-      setEncryptionError("Unable to disable bucket encryption.");
+      setEncryptionError(extractManagerError(err, "Unable to disable bucket encryption."));
     } finally {
       setDeletingEncryption(false);
     }
@@ -2156,7 +2157,7 @@ export default function BucketDetailPage({
       applyAccessLoggingState(saved);
       setAccessLoggingStatus(accessLoggingEnabled ? "Access logging updated." : "Access logging disabled.");
     } catch (err) {
-      setAccessLoggingError("Unable to update access logging.");
+      setAccessLoggingError(extractManagerError(err, "Unable to update access logging."));
     } finally {
       setSavingAccessLogging(false);
     }
@@ -2177,7 +2178,7 @@ export default function BucketDetailPage({
       applyAccessLoggingState({ enabled: false });
       setAccessLoggingStatus("Access logging disabled.");
     } catch (err) {
-      setAccessLoggingError("Unable to disable access logging.");
+      setAccessLoggingError(extractManagerError(err, "Unable to disable access logging."));
     } finally {
       setClearingAccessLogging(false);
     }
@@ -2205,7 +2206,7 @@ export default function BucketDetailPage({
       setNotificationsStatus("Notifications updated.");
       await loadNotifications();
     } catch (err) {
-      setNotificationsError("Unable to update bucket notifications.");
+      setNotificationsError(extractManagerError(err, "Unable to update bucket notifications."));
     } finally {
       setSavingNotifications(false);
     }
@@ -2228,7 +2229,7 @@ export default function BucketDetailPage({
       await loadNotifications();
       setNotificationsStatus("Notifications cleared.");
     } catch (err) {
-      setNotificationsError("Unable to delete bucket notifications.");
+      setNotificationsError(extractManagerError(err, "Unable to delete bucket notifications."));
     } finally {
       setClearingNotifications(false);
     }
@@ -2468,7 +2469,7 @@ export default function BucketDetailPage({
       applyWebsiteState(null);
       setWebsiteStatus("Website configuration cleared.");
     } catch (err) {
-      setWebsiteError("Unable to delete website configuration.");
+      setWebsiteError(extractManagerError(err, "Unable to delete website configuration."));
     } finally {
       setClearingWebsite(false);
     }
@@ -2490,7 +2491,7 @@ export default function BucketDetailPage({
       setPolicy({ policy: null });
       setPolicyText("");
     } catch (err) {
-      setPolicyError("Unable to delete the bucket policy.");
+      setPolicyError(extractManagerError(err, "Unable to delete the bucket policy."));
     } finally {
       setDeletingPolicy(false);
     }
@@ -2617,7 +2618,7 @@ export default function BucketDetailPage({
       setQuotaStatus("Quota updated");
       await refreshBucketMeta();
     } catch (err) {
-      setQuotaError("Unable to update the quota.");
+      setQuotaError(extractManagerError(err, "Unable to update the quota."));
     } finally {
       setUpdatingQuota(false);
     }
@@ -2702,7 +2703,7 @@ export default function BucketDetailPage({
       setObjectLockStatus("Object Lock updated");
       await loadProperties();
     } catch (err) {
-      setObjectLockError("Unable to update the Object Lock configuration.");
+      setObjectLockError(extractManagerError(err, "Unable to update the Object Lock configuration."));
     } finally {
       setSavingObjectLock(false);
     }

@@ -238,7 +238,7 @@ export default function TopicsPage() {
       const policy = data.policy ?? {};
       setPolicyText(Object.keys(policy).length > 0 ? JSON.stringify(policy, null, 2) : defaultPolicyTemplate);
     } catch (err) {
-      setPolicyError("Unable to load the topic policy.");
+      setPolicyError(extractError(err));
     } finally {
       setPolicyLoading(false);
     }
@@ -260,7 +260,7 @@ export default function TopicsPage() {
       await updateTopicPolicy(accountIdForApi, policyTopicArn, parsed);
       setPolicyStatus("Policy updated.");
     } catch (err) {
-      setPolicyError("Unable to update the topic policy.");
+      setPolicyError(extractError(err));
     } finally {
       setPolicySaving(false);
     }
@@ -289,7 +289,7 @@ export default function TopicsPage() {
         const data = await getTopicConfiguration(accountIdForApi, topic.arn);
         applyAttributesConfiguration(data.configuration ?? {});
       } catch (err) {
-        setAttributesError("Unable to load the topic attributes.");
+        setAttributesError(extractError(err));
       } finally {
         setAttributesLoading(false);
       }
@@ -350,7 +350,7 @@ export default function TopicsPage() {
         )
       );
     } catch (err) {
-      setAttributesError("Unable to update the topic attributes.");
+      setAttributesError(extractError(err));
     } finally {
       setAttributesSaving(false);
     }
