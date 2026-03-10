@@ -6,7 +6,6 @@ import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 
 from app.db import S3Account, User
 from app.models.browser import (
@@ -43,39 +42,21 @@ from app.services.audit_service import AuditService
 from app.services.browser_service import BrowserService, get_browser_service
 from app.services.app_settings_service import load_app_settings
 from app.models.app_settings import BrowserSettings
+from app.routers.browser_common import (
+    CreateFolderPayload,
+    EnsureCorsPayload,
+    ProxyUploadResponse,
+    record_browser_action as _common_record_browser_action,
+    require_sse_feature as _common_require_sse_feature,
+)
 from app.routers.dependencies import (
     get_account_context,
     get_audit_logger,
     get_current_account_admin,
     get_optional_sse_customer_context,
 )
-from app.utils.storage_endpoint_features import resolve_feature_flags
 
 router = APIRouter(prefix="/manager/browser", tags=["manager-browser"])
-
-
-class CreateFolderPayload(BaseModel):
-    prefix: str
-
-
-class ProxyUploadResponse(BaseModel):
-    message: str
-    key: str
-
-
-class EnsureCorsPayload(BaseModel):
-    origin: str
-
-
-def _require_sse_feature(account: S3Account) -> None:
-    endpoint = getattr(account, "storage_endpoint", None)
-    if endpoint is None:
-        return
-    if not resolve_feature_flags(endpoint).sse_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Server-side encryption is disabled for this endpoint",
-        )
 
 
 @router.get("/settings", response_model=BrowserSettings)
@@ -177,8 +158,8 @@ def ensure_bucket_cors(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing origin")
     try:
         status_result = service.ensure_bucket_cors(bucket_name, account, payload.origin)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="ensure_bucket_cors",
             entity_type="bucket",
@@ -251,7 +232,7 @@ def head_object(
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
-        _require_sse_feature(account)
+        _common_require_sse_feature(account)
     try:
         return service.head_object(bucket_name, account, key, version_id=version_id, sse_customer=sse_customer)
     except RuntimeError as exc:
@@ -271,8 +252,8 @@ def update_object_metadata(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         updated = service.update_object_metadata(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="update_object_metadata",
             entity_type="object",
@@ -315,8 +296,8 @@ def put_object_tags(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         result = service.put_object_tags(bucket_name, account, payload.key, payload.tags, version_id=payload.version_id)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="put_object_tags",
             entity_type="object",
@@ -342,8 +323,8 @@ def put_object_acl(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key or acl")
     try:
         result = service.put_object_acl(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="put_object_acl",
             entity_type="object",
@@ -386,8 +367,8 @@ def put_object_legal_hold(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         result = service.put_object_legal_hold(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="put_object_legal_hold",
             entity_type="object",
@@ -430,8 +411,8 @@ def put_object_retention(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         result = service.put_object_retention(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="put_object_retention",
             entity_type="object",
@@ -457,8 +438,8 @@ def restore_object(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         service.restore_object(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="restore_object",
             entity_type="object",
@@ -483,7 +464,7 @@ def presign_object(
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
-        _require_sse_feature(account)
+        _common_require_sse_feature(account)
     try:
         return service.presign(bucket_name, account, payload, sse_customer=sse_customer)
     except RuntimeError as exc:
@@ -504,13 +485,13 @@ def proxy_upload(
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
-        _require_sse_feature(account)
+        _common_require_sse_feature(account)
     if not load_app_settings().browser.allow_proxy_transfers:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Proxy transfers are disabled")
     try:
         service.proxy_upload(bucket_name, account, key, file.file, file.content_type, sse_customer=sse_customer)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="proxy_upload",
             entity_type="object",
@@ -536,7 +517,7 @@ def proxy_download(
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
-        _require_sse_feature(account)
+        _common_require_sse_feature(account)
     if not load_app_settings().browser.allow_proxy_transfers:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Proxy transfers are disabled")
     try:
@@ -550,8 +531,8 @@ def proxy_download(
         content_length = resp.get("ContentLength")
         if content_length is not None:
             headers["Content-Length"] = str(content_length)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="proxy_download",
             entity_type="object",
@@ -577,8 +558,8 @@ def copy_object(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing source or destination key")
     try:
         service.copy_object(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="move_object" if payload.move else "copy_object",
             entity_type="object",
@@ -611,8 +592,8 @@ def delete_objects(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No objects provided")
     try:
         deleted = service.delete_objects(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="delete_objects",
             entity_type="object",
@@ -636,8 +617,8 @@ def cleanup_object_versions(
 ) -> CleanupObjectVersionsResponse:
     try:
         result = service.cleanup_object_versions(bucket_name, account, payload)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="cleanup_object_versions",
             entity_type="object_prefix",
@@ -672,8 +653,8 @@ def create_folder(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing prefix")
     try:
         service.create_folder(bucket_name, account, payload.prefix)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="create_folder",
             entity_type="object_prefix",
@@ -699,11 +680,11 @@ def initiate_multipart_upload(
     if not payload.key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     if sse_customer:
-        _require_sse_feature(account)
+        _common_require_sse_feature(account)
     try:
         result = service.initiate_multipart_upload(bucket_name, account, payload, sse_customer=sse_customer)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="initiate_multipart_upload",
             entity_type="object",
@@ -780,7 +761,7 @@ def presign_part(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     payload.upload_id = upload_id
     if sse_customer:
-        _require_sse_feature(account)
+        _common_require_sse_feature(account)
     try:
         return service.presign_part(bucket_name, account, payload, sse_customer=sse_customer)
     except RuntimeError as exc:
@@ -802,8 +783,8 @@ def complete_multipart_upload(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         service.complete_multipart_upload(bucket_name, account, key, upload_id, payload)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="complete_multipart_upload",
             entity_type="object",
@@ -830,8 +811,8 @@ def abort_multipart_upload(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
         service.abort_multipart_upload(bucket_name, account, key, upload_id)
-        audit_service.record_action(
-            user=current_user,
+        _common_record_browser_action(audit_service,
+            actor=current_user,
             scope="manager",
             action="abort_multipart_upload",
             entity_type="object",

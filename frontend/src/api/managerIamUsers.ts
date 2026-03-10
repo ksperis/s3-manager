@@ -3,8 +3,19 @@
  * Licensed under the Apache License, Version 2.0
  */
 import client from "./client";
-import { IamPolicy, InlinePolicy } from "./managerIamPolicies";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
+import { IamPolicy, InlinePolicy } from "./managerIamPolicies";
+import {
+  attachEntityPolicy,
+  createIamEntity,
+  deleteEntityInlinePolicy,
+  deleteIamEntity,
+  detachEntityPolicy,
+  listEntityInlinePolicies,
+  listEntityPolicies,
+  listIamEntities,
+  putEntityInlinePolicy,
+} from "./managerIamEntityClient";
 
 export type AccessKey = {
   access_key_id: string;
@@ -21,11 +32,11 @@ export type IAMUser = {
   inline_policies?: string[];
   has_keys?: boolean;
 };
+
 export type IAMUserWithKey = IAMUser & { access_key?: AccessKey };
 
 export async function listIamUsers(accountId?: S3AccountSelector): Promise<IAMUser[]> {
-  const { data } = await client.get<IAMUser[]>("/manager/iam/users", { params: withS3AccountParam(undefined, accountId) });
-  return data;
+  return listIamEntities<IAMUser>("users", accountId);
 }
 
 export async function createIamUser(
@@ -36,25 +47,23 @@ export async function createIamUser(
   policies?: string[],
   inlinePolicies?: InlinePolicy[]
 ): Promise<IAMUserWithKey> {
-  const { data } = await client.post<IAMUserWithKey>(
-    "/manager/iam/users",
-    { name, create_key: createKey, groups, policies, inline_policies: inlinePolicies },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
-export async function deleteIamUser(accountId: S3AccountSelector, name: string): Promise<void> {
-  await client.delete(`/manager/iam/users/${encodeURIComponent(name)}`, {
-    params: withS3AccountParam(undefined, accountId),
+  return createIamEntity<IAMUserWithKey>("users", accountId, {
+    name,
+    create_key: createKey,
+    groups,
+    policies,
+    inline_policies: inlinePolicies,
   });
 }
 
+export async function deleteIamUser(accountId: S3AccountSelector, name: string): Promise<void> {
+  await deleteIamEntity("users", accountId, name);
+}
+
 export async function listIamAccessKeys(accountId: S3AccountSelector, userName: string): Promise<AccessKey[]> {
-  const { data } = await client.get<AccessKey[]>(
-    `/manager/iam/users/${encodeURIComponent(userName)}/keys`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
+  const { data } = await client.get<AccessKey[]>(`/manager/iam/users/${encodeURIComponent(userName)}/keys`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
   return data;
 }
 
@@ -72,10 +81,9 @@ export async function deleteIamAccessKey(
   userName: string,
   accessKeyId: string
 ): Promise<void> {
-  await client.delete(
-    `/manager/iam/users/${encodeURIComponent(userName)}/keys/${encodeURIComponent(accessKeyId)}`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
+  await client.delete(`/manager/iam/users/${encodeURIComponent(userName)}/keys/${encodeURIComponent(accessKeyId)}`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
 }
 
 export async function updateIamAccessKeyStatus(
@@ -93,46 +101,19 @@ export async function updateIamAccessKeyStatus(
 }
 
 export async function listUserPolicies(accountId: S3AccountSelector, userName: string): Promise<IamPolicy[]> {
-  const { data } = await client.get<IamPolicy[]>(
-    `/manager/iam/users/${encodeURIComponent(userName)}/policies`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
+  return listEntityPolicies("users", accountId, userName);
 }
 
-export async function attachUserPolicy(
-  accountId: S3AccountSelector,
-  userName: string,
-  policy: IamPolicy
-): Promise<IamPolicy> {
-  const { data } = await client.post<IamPolicy>(
-    `/manager/iam/users/${encodeURIComponent(userName)}/policies`,
-    policy,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
+export async function attachUserPolicy(accountId: S3AccountSelector, userName: string, policy: IamPolicy): Promise<IamPolicy> {
+  return attachEntityPolicy("users", accountId, userName, policy);
 }
 
-export async function detachUserPolicy(
-  accountId: S3AccountSelector,
-  userName: string,
-  policyArn: string
-): Promise<void> {
-  await client.delete(
-    `/manager/iam/users/${encodeURIComponent(userName)}/policies/${encodeURIComponent(policyArn)}`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
+export async function detachUserPolicy(accountId: S3AccountSelector, userName: string, policyArn: string): Promise<void> {
+  await detachEntityPolicy("users", accountId, userName, policyArn);
 }
 
-export async function listUserInlinePolicies(
-  accountId: S3AccountSelector,
-  userName: string
-): Promise<InlinePolicy[]> {
-  const { data } = await client.get<InlinePolicy[]>(
-    `/manager/iam/users/${encodeURIComponent(userName)}/inline-policies`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
+export async function listUserInlinePolicies(accountId: S3AccountSelector, userName: string): Promise<InlinePolicy[]> {
+  return listEntityInlinePolicies("users", accountId, userName);
 }
 
 export async function putUserInlinePolicy(
@@ -141,21 +122,9 @@ export async function putUserInlinePolicy(
   policyName: string,
   document: Record<string, unknown>
 ): Promise<InlinePolicy> {
-  const { data } = await client.put<InlinePolicy>(
-    `/manager/iam/users/${encodeURIComponent(userName)}/inline-policies/${encodeURIComponent(policyName)}`,
-    { name: policyName, document },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
+  return putEntityInlinePolicy("users", accountId, userName, policyName, document);
 }
 
-export async function deleteUserInlinePolicy(
-  accountId: S3AccountSelector,
-  userName: string,
-  policyName: string
-): Promise<void> {
-  await client.delete(
-    `/manager/iam/users/${encodeURIComponent(userName)}/inline-policies/${encodeURIComponent(policyName)}`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
+export async function deleteUserInlinePolicy(accountId: S3AccountSelector, userName: string, policyName: string): Promise<void> {
+  await deleteEntityInlinePolicy("users", accountId, userName, policyName);
 }

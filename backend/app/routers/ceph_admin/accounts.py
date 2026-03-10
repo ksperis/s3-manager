@@ -2,16 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import json
 from collections import OrderedDict
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Lock
-from time import monotonic
 from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import ValidationError
 
 from app.models.ceph_admin import (
     CephAdminAccountFilterQuery,
@@ -24,6 +20,27 @@ from app.models.ceph_admin import (
     CephAdminRgwQuotaConfig,
     CephAdminRgwAccountSummary,
     PaginatedCephAdminAccountsResponse,
+)
+from app.routers.ceph_admin.listing_common import (
+    EndpointCacheEntry as _common_EndpointCacheEntry,
+    EndpointListCacheKey as _common_EndpointListCacheKey,
+    EndpointPayloadCacheKey as _common_EndpointPayloadCacheKey,
+    apply_advanced_filter as _common_apply_advanced_filter,
+    apply_simple_search as _common_apply_simple_search,
+    coerce_number as _common_coerce_number,
+    collect_filter_fields as _common_collect_filter_fields,
+    fields_set as _common_fields_set,
+    get_or_set_cache as _common_get_or_set_cache,
+    invalidate_cache as _common_invalidate_cache,
+    normalize_optional_str as _common_normalize_optional_str,
+    normalize_text as _common_normalize_text,
+    paginate as _common_paginate,
+    parse_bool as _common_parse_bool,
+    parse_filter_query as _common_parse_filter_query,
+    parse_includes as _common_parse_includes,
+    parse_int as _common_parse_int,
+    serialize_filter as _common_serialize_filter,
+    sort_value as _common_sort_value,
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.services.rgw_admin import RGWAdminError
@@ -38,104 +55,38 @@ ACCOUNTS_LIST_CACHE_TTL_SECONDS = 30.0
 ACCOUNTS_LIST_CACHE_MAX_ENTRIES = 64
 RGW_ACCOUNTS_PAYLOAD_CACHE_MAX_ENTRIES = 16
 
-
-@dataclass(frozen=True)
-class _AccountsListCacheKey:
-    endpoint_id: int
-    advanced_filter: str | None
-    sort_by: str
-    sort_dir: str
+_AccountsListCacheKey = _common_EndpointListCacheKey
+_RgwAccountsPayloadCacheKey = _common_EndpointPayloadCacheKey
 
 
-@dataclass
-class _AccountsListCacheEntry:
-    endpoint_id: int
-    expires_at: float
-    items: list[CephAdminRgwAccountSummary]
-
-
-@dataclass(frozen=True)
-class _RgwAccountsPayloadCacheKey:
-    endpoint_id: int
-
-
-@dataclass
-class _RgwAccountsPayloadCacheEntry:
-    endpoint_id: int
-    expires_at: float
-    payload: list[Any]
-
-
-_ACCOUNTS_LIST_CACHE: OrderedDict[_AccountsListCacheKey, _AccountsListCacheEntry] = OrderedDict()
+_ACCOUNTS_LIST_CACHE: OrderedDict[_AccountsListCacheKey, _common_EndpointCacheEntry] = OrderedDict()
 _ACCOUNTS_LIST_CACHE_LOCK = Lock()
-_RGW_ACCOUNTS_PAYLOAD_CACHE: OrderedDict[_RgwAccountsPayloadCacheKey, _RgwAccountsPayloadCacheEntry] = OrderedDict()
+_RGW_ACCOUNTS_PAYLOAD_CACHE: OrderedDict[_RgwAccountsPayloadCacheKey, _common_EndpointCacheEntry] = OrderedDict()
 _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK = Lock()
 
 
 def _parse_includes(include: list[str]) -> set[str]:
-    include_set: set[str] = set()
-    for item in include:
-        if not isinstance(item, str):
-            continue
-        for part in item.split(","):
-            normalized = part.strip()
-            if normalized:
-                include_set.add(normalized)
-    return include_set
+    return _common_parse_includes(include)
 
 
 def _normalize_optional_str(value: Any) -> Optional[str]:
-    if not isinstance(value, str):
-        return None
-    cleaned = value.strip()
-    return cleaned or None
+    return _common_normalize_optional_str(value)
 
 
 def _parse_int(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, (int, float)):
-        return int(value)
-    if isinstance(value, str):
-        cleaned = value.strip()
-        if not cleaned:
-            return None
-        try:
-            return int(float(cleaned))
-        except ValueError:
-            return None
-    return None
+    return _common_parse_int(value)
 
 
 def _parse_bool(value: Any) -> Optional[bool]:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"true", "1", "yes", "enabled", "enable", "on"}:
-            return True
-        if normalized in {"false", "0", "no", "disabled", "disable", "off"}:
-            return False
-    return None
+    return _common_parse_bool(value)
 
 
 def _fields_set(model: Any) -> set[str]:
-    if hasattr(model, "model_fields_set"):
-        return set(getattr(model, "model_fields_set"))
-    if hasattr(model, "__fields_set__"):
-        return set(getattr(model, "__fields_set__"))
-    return set()
+    return _common_fields_set(model)
 
 
 def _serialize_filter(query: CephAdminAccountFilterQuery | None) -> str | None:
-    if not query:
-        return None
-    payload = query.model_dump(mode="json") if hasattr(query, "model_dump") else query.dict()
-    return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    return _common_serialize_filter(query)
 
 
 def _clone_account(account: CephAdminRgwAccountSummary) -> CephAdminRgwAccountSummary:
@@ -152,40 +103,15 @@ def _clone_account_list(items: list[CephAdminRgwAccountSummary]) -> list[CephAdm
 
 
 def _parse_advanced_filter(raw: str | None) -> CephAdminAccountFilterQuery | None:
-    if raw is None:
-        return None
-    text = raw.strip()
-    if not text:
-        return None
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid advanced_filter JSON") from exc
-    if not isinstance(parsed, dict):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="advanced_filter must be a JSON object")
-    try:
-        if hasattr(CephAdminAccountFilterQuery, "model_validate"):
-            return CephAdminAccountFilterQuery.model_validate(parsed)
-        return CephAdminAccountFilterQuery(**parsed)
-    except ValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _common_parse_filter_query(raw, query_cls=CephAdminAccountFilterQuery)
 
 
 def _normalize_text(value: str) -> str:
-    return value.strip().lower()
+    return _common_normalize_text(value)
 
 
 def _coerce_number(value: object) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
-    return None
+    return _common_coerce_number(value)
 
 
 def _match_account_field_rule(account: CephAdminRgwAccountSummary, rule: CephAdminAccountFilterRule) -> bool:
@@ -364,20 +290,8 @@ def _build_account_detail(payload: dict[str, Any], account_id_fallback: str) -> 
 
 
 def _invalidate_accounts_listing_cache(endpoint_id: int | None = None) -> None:
-    with _ACCOUNTS_LIST_CACHE_LOCK:
-        if endpoint_id is None:
-            _ACCOUNTS_LIST_CACHE.clear()
-        else:
-            keys = [key for key in _ACCOUNTS_LIST_CACHE.keys() if key.endpoint_id == endpoint_id]
-            for key in keys:
-                _ACCOUNTS_LIST_CACHE.pop(key, None)
-    with _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK:
-        if endpoint_id is None:
-            _RGW_ACCOUNTS_PAYLOAD_CACHE.clear()
-        else:
-            keys = [key for key in _RGW_ACCOUNTS_PAYLOAD_CACHE.keys() if key.endpoint_id == endpoint_id]
-            for key in keys:
-                _RGW_ACCOUNTS_PAYLOAD_CACHE.pop(key, None)
+    _common_invalidate_cache(_ACCOUNTS_LIST_CACHE, _ACCOUNTS_LIST_CACHE_LOCK, endpoint_id=endpoint_id)
+    _common_invalidate_cache(_RGW_ACCOUNTS_PAYLOAD_CACHE, _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK, endpoint_id=endpoint_id)
 
 
 def _enrich_accounts(
@@ -418,70 +332,40 @@ def _enrich_accounts(
     return enriched
 
 
-def _prune_accounts_listing_cache(now: float) -> None:
-    expired_keys = [key for key, entry in _ACCOUNTS_LIST_CACHE.items() if entry.expires_at <= now]
-    for key in expired_keys:
-        _ACCOUNTS_LIST_CACHE.pop(key, None)
-    while len(_ACCOUNTS_LIST_CACHE) > ACCOUNTS_LIST_CACHE_MAX_ENTRIES:
-        _ACCOUNTS_LIST_CACHE.popitem(last=False)
-
-
-def _prune_rgw_accounts_payload_cache(now: float) -> None:
-    expired_keys = [key for key, entry in _RGW_ACCOUNTS_PAYLOAD_CACHE.items() if entry.expires_at <= now]
-    for key in expired_keys:
-        _RGW_ACCOUNTS_PAYLOAD_CACHE.pop(key, None)
-    while len(_RGW_ACCOUNTS_PAYLOAD_CACHE) > RGW_ACCOUNTS_PAYLOAD_CACHE_MAX_ENTRIES:
-        _RGW_ACCOUNTS_PAYLOAD_CACHE.popitem(last=False)
-
-
 def _get_cached_rgw_accounts_payload(ctx: CephAdminContext) -> list[Any]:
     key = _RgwAccountsPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0))
-    now = monotonic()
-    with _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK:
-        _prune_rgw_accounts_payload_cache(now)
-        cached = _RGW_ACCOUNTS_PAYLOAD_CACHE.get(key)
-        if cached is not None:
-            _RGW_ACCOUNTS_PAYLOAD_CACHE.move_to_end(key)
-            return cached.payload
-    try:
+    def _fetch_payload() -> list[Any]:
         try:
-            payload = ctx.rgw_admin.list_accounts(include_details=True)
-        except TypeError:
-            payload = ctx.rgw_admin.list_accounts()
-    except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    expires_at = monotonic() + ACCOUNTS_LIST_CACHE_TTL_SECONDS
-    with _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK:
-        _prune_rgw_accounts_payload_cache(monotonic())
-        _RGW_ACCOUNTS_PAYLOAD_CACHE[key] = _RgwAccountsPayloadCacheEntry(
-            endpoint_id=key.endpoint_id,
-            expires_at=expires_at,
-            payload=payload or [],
-        )
-        _RGW_ACCOUNTS_PAYLOAD_CACHE.move_to_end(key)
-        _prune_rgw_accounts_payload_cache(monotonic())
-    return payload or []
+            try:
+                payload = ctx.rgw_admin.list_accounts(include_details=True)
+            except TypeError:
+                payload = ctx.rgw_admin.list_accounts()
+        except RGWAdminError as exc:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        return payload or []
+
+    return _common_get_or_set_cache(
+        _RGW_ACCOUNTS_PAYLOAD_CACHE,
+        _RGW_ACCOUNTS_PAYLOAD_CACHE_LOCK,
+        key,
+        ttl_seconds=ACCOUNTS_LIST_CACHE_TTL_SECONDS,
+        max_entries=RGW_ACCOUNTS_PAYLOAD_CACHE_MAX_ENTRIES,
+        builder=_fetch_payload,
+    )
 
 
 def _get_cached_accounts_listing(
     key: _AccountsListCacheKey,
     builder: Callable[[], list[CephAdminRgwAccountSummary]],
 ) -> list[CephAdminRgwAccountSummary]:
-    now = monotonic()
-    with _ACCOUNTS_LIST_CACHE_LOCK:
-        _prune_accounts_listing_cache(now)
-        cached = _ACCOUNTS_LIST_CACHE.get(key)
-        if cached is not None:
-            _ACCOUNTS_LIST_CACHE.move_to_end(key)
-            return cached.items
-    items = builder()
-    expires_at = monotonic() + ACCOUNTS_LIST_CACHE_TTL_SECONDS
-    with _ACCOUNTS_LIST_CACHE_LOCK:
-        _prune_accounts_listing_cache(monotonic())
-        _ACCOUNTS_LIST_CACHE[key] = _AccountsListCacheEntry(endpoint_id=key.endpoint_id, expires_at=expires_at, items=items)
-        _ACCOUNTS_LIST_CACHE.move_to_end(key)
-        _prune_accounts_listing_cache(monotonic())
-    return items
+    return _common_get_or_set_cache(
+        _ACCOUNTS_LIST_CACHE,
+        _ACCOUNTS_LIST_CACHE_LOCK,
+        key,
+        ttl_seconds=ACCOUNTS_LIST_CACHE_TTL_SECONDS,
+        max_entries=ACCOUNTS_LIST_CACHE_MAX_ENTRIES,
+        builder=builder,
+    )
 
 
 @router.get("", response_model=PaginatedCephAdminAccountsResponse)
@@ -497,7 +381,6 @@ def list_rgw_accounts(
 ) -> PaginatedCephAdminAccountsResponse:
     include_set = _parse_includes(include)
     requested = include_set & {"profile", "limits", "quota", "stats"}
-    simple_search = search.strip() if isinstance(search, str) and search.strip() else None
     parsed_advanced_filter = _parse_advanced_filter(advanced_filter)
     cache_key = _AccountsListCacheKey(
         endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
@@ -550,20 +433,13 @@ def list_rgw_accounts(
                 )
             )
 
-        advanced_fields: set[str] = set()
-        if parsed_advanced_filter and parsed_advanced_filter.rules:
-            advanced_fields = {rule.field for rule in parsed_advanced_filter.rules if rule.field}
+        advanced_fields = _common_collect_filter_fields(parsed_advanced_filter)
         sort_fields = {sort_by} if sort_by else {"account_id"}
         needed_for_listing = _includes_for_account_fields(advanced_fields | sort_fields)
         if needed_for_listing:
             results = _enrich_accounts(results, needed_for_listing, ctx)
 
-        if parsed_advanced_filter and parsed_advanced_filter.rules:
-            results = [
-                account
-                for account in results
-                if _match_account_rules(account, parsed_advanced_filter.rules, parsed_advanced_filter.match)
-            ]
+        results = _common_apply_advanced_filter(results, parsed_advanced_filter, _match_account_rules)
 
         def sort_key(item: CephAdminRgwAccountSummary):
             if sort_by in ("account_name", "name"):
@@ -584,34 +460,27 @@ def list_rgw_accounts(
                 value = item.user_count
             else:
                 value = item.account_id
-            if value is None:
-                return (1, "")
-            if isinstance(value, str):
-                return (0, value.lower(), (item.account_id or "").lower())
-            return (0, value, (item.account_id or "").lower())
+            return _common_sort_value(value, item.account_id or "")
 
         results.sort(key=sort_key, reverse=sort_dir == "desc")
         return results
 
     results = _get_cached_accounts_listing(cache_key, build_listing)
-    filtered_results = results
-    if simple_search:
-        search_value = simple_search.lower()
-        if parsed_advanced_filter:
-            filtered_results = [account for account in filtered_results if search_value in account.account_id.lower()]
-        else:
-            filtered_results = [
-                account
-                for account in filtered_results
-                if search_value in account.account_id.lower()
-                or search_value in (account.account_name or "").lower()
-            ]
-
-    total = len(filtered_results)
-    start = max(page - 1, 0) * page_size
-    end = start + page_size
-    page_items = _clone_account_list(filtered_results[start:end])
-    has_next = end < total
+    filtered_results = _common_apply_simple_search(
+        results,
+        search=search,
+        parsed_filter=parsed_advanced_filter,
+        match_with_filter=lambda account, needle: needle in account.account_id.lower(),
+        match_without_filter=lambda account, needle: (
+            needle in account.account_id.lower() or needle in (account.account_name or "").lower()
+        ),
+    )
+    page_items, total, has_next = _common_paginate(
+        filtered_results,
+        page=page,
+        page_size=page_size,
+        clone=_clone_account_list,
+    )
     requested_for_page = requested & {"stats"}
     if requested_for_page and page_items:
         page_items = _enrich_accounts(page_items, requested_for_page, ctx)

@@ -5,6 +5,17 @@
 import client from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 import { IamPolicy, InlinePolicy } from "./managerIamPolicies";
+import {
+  attachEntityPolicy,
+  createIamEntity,
+  deleteEntityInlinePolicy,
+  deleteIamEntity,
+  detachEntityPolicy,
+  listEntityInlinePolicies,
+  listEntityPolicies,
+  listIamEntities,
+  putEntityInlinePolicy,
+} from "./managerIamEntityClient";
 
 export type IAMRole = {
   name: string;
@@ -27,83 +38,45 @@ export type UpdateRolePayload = {
 };
 
 export async function listIamRoles(accountId?: S3AccountSelector): Promise<IAMRole[]> {
-  const { data } = await client.get<IAMRole[]>("/manager/iam/roles", { params: withS3AccountParam(undefined, accountId) });
-  return data;
+  return listIamEntities<IAMRole>("roles", accountId);
 }
 
 export async function getIamRole(accountId: S3AccountSelector, roleName: string): Promise<IAMRole> {
-  const { data } = await client.get<IAMRole>(
-    `/manager/iam/roles/${encodeURIComponent(roleName)}`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
+  const { data } = await client.get<IAMRole>(`/manager/iam/roles/${encodeURIComponent(roleName)}`, {
+    params: withS3AccountParam(undefined, accountId),
+  });
   return data;
 }
 
 export async function createIamRole(accountId: S3AccountSelector, payload: CreateRolePayload): Promise<IAMRole> {
-  const { data } = await client.post<IAMRole>(
-    "/manager/iam/roles",
-    payload,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
+  return createIamEntity<IAMRole>("roles", accountId, payload as Record<string, unknown>);
 }
 
 export async function updateIamRole(accountId: S3AccountSelector, roleName: string, payload: UpdateRolePayload): Promise<IAMRole> {
-  const { data } = await client.put<IAMRole>(
-    `/manager/iam/roles/${encodeURIComponent(roleName)}`,
-    payload,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
+  const { data } = await client.put<IAMRole>(`/manager/iam/roles/${encodeURIComponent(roleName)}`, payload, {
+    params: withS3AccountParam(undefined, accountId),
+  });
   return data;
 }
 
 export async function deleteIamRole(accountId: S3AccountSelector, name: string): Promise<void> {
-  await client.delete(`/manager/iam/roles/${encodeURIComponent(name)}`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
+  await deleteIamEntity("roles", accountId, name);
 }
 
 export async function listRolePolicies(accountId: S3AccountSelector, roleName: string): Promise<IamPolicy[]> {
-  const { data } = await client.get<IamPolicy[]>(
-    `/manager/iam/roles/${encodeURIComponent(roleName)}/policies`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
+  return listEntityPolicies("roles", accountId, roleName);
 }
 
-export async function attachRolePolicy(
-  accountId: S3AccountSelector,
-  roleName: string,
-  policy: IamPolicy
-): Promise<IamPolicy> {
-  const { data } = await client.post<IamPolicy>(
-    `/manager/iam/roles/${encodeURIComponent(roleName)}/policies`,
-    policy,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
+export async function attachRolePolicy(accountId: S3AccountSelector, roleName: string, policy: IamPolicy): Promise<IamPolicy> {
+  return attachEntityPolicy("roles", accountId, roleName, policy);
 }
 
-export async function detachRolePolicy(
-  accountId: S3AccountSelector,
-  roleName: string,
-  policyArn: string
-): Promise<void> {
-  await client.delete(
-    `/manager/iam/roles/${encodeURIComponent(roleName)}/policies/${encodeURIComponent(policyArn)}`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
+export async function detachRolePolicy(accountId: S3AccountSelector, roleName: string, policyArn: string): Promise<void> {
+  await detachEntityPolicy("roles", accountId, roleName, policyArn);
 }
 
-export async function listRoleInlinePolicies(
-  accountId: S3AccountSelector,
-  roleName: string
-): Promise<InlinePolicy[]> {
-  const { data } = await client.get<InlinePolicy[]>(
-    `/manager/iam/roles/${encodeURIComponent(roleName)}/inline-policies`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
+export async function listRoleInlinePolicies(accountId: S3AccountSelector, roleName: string): Promise<InlinePolicy[]> {
+  return listEntityInlinePolicies("roles", accountId, roleName);
 }
 
 export async function putRoleInlinePolicy(
@@ -112,21 +85,9 @@ export async function putRoleInlinePolicy(
   policyName: string,
   document: Record<string, unknown>
 ): Promise<InlinePolicy> {
-  const { data } = await client.put<InlinePolicy>(
-    `/manager/iam/roles/${encodeURIComponent(roleName)}/inline-policies/${encodeURIComponent(policyName)}`,
-    { name: policyName, document },
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
+  return putEntityInlinePolicy("roles", accountId, roleName, policyName, document);
 }
 
-export async function deleteRoleInlinePolicy(
-  accountId: S3AccountSelector,
-  roleName: string,
-  policyName: string
-): Promise<void> {
-  await client.delete(
-    `/manager/iam/roles/${encodeURIComponent(roleName)}/inline-policies/${encodeURIComponent(policyName)}`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
+export async function deleteRoleInlinePolicy(accountId: S3AccountSelector, roleName: string, policyName: string): Promise<void> {
+  await deleteEntityInlinePolicy("roles", accountId, roleName, policyName);
 }

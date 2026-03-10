@@ -39,6 +39,7 @@ from app.db import (
 from app.models.bucket_migration import BucketMigrationCreateRequest
 from app.services.app_settings_service import load_app_settings
 from app.services.buckets_service import BucketsService
+from app.services.object_diff_common import compare_object_entries
 from app.services.s3_client import get_s3_client
 from app.utils.rgw import resolve_admin_uid
 from app.utils.s3_connection_endpoint import resolve_connection_endpoint
@@ -2469,15 +2470,10 @@ class BucketMigrationService:
     ) -> list[str]:
         keys: list[str] = []
         for key in sorted(set(source_objects.keys()) & set(target_objects.keys())):
-            src = source_objects[key]
-            dst = target_objects[key]
-            src_md5 = self._etag_md5(src.get("etag") if isinstance(src.get("etag"), str) else None)
-            dst_md5 = self._etag_md5(dst.get("etag") if isinstance(dst.get("etag"), str) else None)
-            if src_md5 and dst_md5:
+            comparison = compare_object_entries(source_objects[key], target_objects[key], md5_resolver=self._etag_md5)
+            if comparison.compare_by == "md5":
                 continue
-            src_size = int(src.get("size") or 0)
-            dst_size = int(dst.get("size") or 0)
-            if src_size != dst_size:
+            if not comparison.equal:
                 continue
             keys.append(key)
         return keys
@@ -3798,23 +3794,8 @@ class BucketMigrationService:
 
         different_sample: list[dict[str, Any]] = []
         for key in common_keys:
-            src = source_objects[key]
-            dst = target_objects[key]
-            src_size = int(src.get("size") or 0)
-            dst_size = int(dst.get("size") or 0)
-            src_etag = src.get("etag")
-            dst_etag = dst.get("etag")
-
-            src_md5 = self._etag_md5(src_etag if isinstance(src_etag, str) else None)
-            dst_md5 = self._etag_md5(dst_etag if isinstance(dst_etag, str) else None)
-            if src_md5 and dst_md5:
-                equal = src_md5 == dst_md5
-                compare_by = "md5"
-            else:
-                equal = src_size == dst_size
-                compare_by = "size"
-
-            if equal:
+            comparison = compare_object_entries(source_objects[key], target_objects[key], md5_resolver=self._etag_md5)
+            if comparison.equal:
                 matched_count += 1
                 continue
 
@@ -3824,11 +3805,11 @@ class BucketMigrationService:
                 different_sample.append(
                     {
                         "key": key,
-                        "source_size": src_size,
-                        "target_size": dst_size,
-                        "source_etag": src_etag,
-                        "target_etag": dst_etag,
-                        "compare_by": compare_by,
+                        "source_size": comparison.source_size,
+                        "target_size": comparison.target_size,
+                        "source_etag": comparison.source_etag,
+                        "target_etag": comparison.target_etag,
+                        "compare_by": comparison.compare_by,
                     }
                 )
 

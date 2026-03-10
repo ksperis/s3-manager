@@ -2,16 +2,12 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
-import json
 from collections import OrderedDict
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Lock
-from time import monotonic
 from typing import Any, Callable, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pydantic import ValidationError
 
 from app.models.ceph_admin import (
     CephAdminEntityMetrics,
@@ -28,6 +24,26 @@ from app.models.ceph_admin import (
     CephAdminRgwUserSummary,
     PaginatedCephAdminUsersResponse,
 )
+from app.routers.ceph_admin.listing_common import (
+    EndpointCacheEntry as _common_EndpointCacheEntry,
+    EndpointListCacheKey as _common_EndpointListCacheKey,
+    EndpointPayloadCacheKey as _common_EndpointPayloadCacheKey,
+    apply_advanced_filter as _common_apply_advanced_filter,
+    apply_simple_search as _common_apply_simple_search,
+    coerce_number as _common_coerce_number,
+    collect_filter_fields as _common_collect_filter_fields,
+    fields_set as _common_fields_set,
+    get_or_set_cache as _common_get_or_set_cache,
+    invalidate_cache as _common_invalidate_cache,
+    normalize_optional_str as _common_normalize_optional_str,
+    normalize_text as _common_normalize_text,
+    paginate as _common_paginate,
+    parse_filter_query as _common_parse_filter_query,
+    parse_includes as _common_parse_includes,
+    parse_int as _common_parse_int,
+    serialize_filter as _common_serialize_filter,
+    sort_value as _common_sort_value,
+)
 from app.routers.ceph_admin.dependencies import CephAdminContext, get_ceph_admin_context
 from app.services.rgw_admin import RGWAdminError
 from app.utils.quota_stats import extract_quota_limits
@@ -41,37 +57,13 @@ USERS_LIST_CACHE_TTL_SECONDS = 30.0
 USERS_LIST_CACHE_MAX_ENTRIES = 64
 RGW_USERS_PAYLOAD_CACHE_MAX_ENTRIES = 16
 
-
-@dataclass(frozen=True)
-class _UsersListCacheKey:
-    endpoint_id: int
-    advanced_filter: str | None
-    sort_by: str
-    sort_dir: str
+_UsersListCacheKey = _common_EndpointListCacheKey
+_RgwUsersPayloadCacheKey = _common_EndpointPayloadCacheKey
 
 
-@dataclass
-class _UsersListCacheEntry:
-    endpoint_id: int
-    expires_at: float
-    items: list[CephAdminRgwUserSummary]
-
-
-@dataclass(frozen=True)
-class _RgwUsersPayloadCacheKey:
-    endpoint_id: int
-
-
-@dataclass
-class _RgwUsersPayloadCacheEntry:
-    endpoint_id: int
-    expires_at: float
-    payload: list[Any]
-
-
-_USERS_LIST_CACHE: OrderedDict[_UsersListCacheKey, _UsersListCacheEntry] = OrderedDict()
+_USERS_LIST_CACHE: OrderedDict[_UsersListCacheKey, _common_EndpointCacheEntry] = OrderedDict()
 _USERS_LIST_CACHE_LOCK = Lock()
-_RGW_USERS_PAYLOAD_CACHE: OrderedDict[_RgwUsersPayloadCacheKey, _RgwUsersPayloadCacheEntry] = OrderedDict()
+_RGW_USERS_PAYLOAD_CACHE: OrderedDict[_RgwUsersPayloadCacheKey, _common_EndpointCacheEntry] = OrderedDict()
 _RGW_USERS_PAYLOAD_CACHE_LOCK = Lock()
 
 
@@ -91,22 +83,11 @@ def _extract_access_key(payload: dict) -> tuple[Optional[str], Optional[str]]:
 
 
 def _parse_includes(include: list[str]) -> set[str]:
-    include_set: set[str] = set()
-    for item in include:
-        if not isinstance(item, str):
-            continue
-        for part in item.split(","):
-            normalized = part.strip()
-            if normalized:
-                include_set.add(normalized)
-    return include_set
+    return _common_parse_includes(include)
 
 
 def _normalize_optional_str(value: Any) -> Optional[str]:
-    if not isinstance(value, str):
-        return None
-    cleaned = value.strip()
-    return cleaned or None
+    return _common_normalize_optional_str(value)
 
 
 def _extract_user_payload(raw: dict) -> dict:
@@ -144,36 +125,15 @@ def _parse_suspended(raw: Any) -> Optional[bool]:
 
 
 def _parse_int(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, (int, float)):
-        return int(value)
-    if isinstance(value, str):
-        cleaned = value.strip()
-        if not cleaned:
-            return None
-        try:
-            return int(float(cleaned))
-        except ValueError:
-            return None
-    return None
+    return _common_parse_int(value)
 
 
 def _fields_set(model: Any) -> set[str]:
-    if hasattr(model, "model_fields_set"):
-        return set(getattr(model, "model_fields_set"))
-    if hasattr(model, "__fields_set__"):
-        return set(getattr(model, "__fields_set__"))
-    return set()
+    return _common_fields_set(model)
 
 
 def _serialize_filter(query: CephAdminUserFilterQuery | None) -> str | None:
-    if not query:
-        return None
-    payload = query.model_dump(mode="json") if hasattr(query, "model_dump") else query.dict()
-    return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    return _common_serialize_filter(query)
 
 
 def _clone_user(user: CephAdminRgwUserSummary) -> CephAdminRgwUserSummary:
@@ -201,40 +161,15 @@ def _clear_optional_user_details(item: CephAdminRgwUserSummary) -> None:
 
 
 def _parse_advanced_filter(raw: str | None) -> CephAdminUserFilterQuery | None:
-    if raw is None:
-        return None
-    text = raw.strip()
-    if not text:
-        return None
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid advanced_filter JSON") from exc
-    if not isinstance(parsed, dict):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="advanced_filter must be a JSON object")
-    try:
-        if hasattr(CephAdminUserFilterQuery, "model_validate"):
-            return CephAdminUserFilterQuery.model_validate(parsed)
-        return CephAdminUserFilterQuery(**parsed)
-    except ValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _common_parse_filter_query(raw, query_cls=CephAdminUserFilterQuery)
 
 
 def _normalize_text(value: str) -> str:
-    return value.strip().lower()
+    return _common_normalize_text(value)
 
 
 def _coerce_number(value: object) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
-    return None
+    return _common_coerce_number(value)
 
 
 def _coerce_bool(value: object) -> bool | None:
@@ -406,84 +341,42 @@ def _enrich_users(
     return enriched
 
 
-def _prune_users_listing_cache(now: float) -> None:
-    expired_keys = [key for key, entry in _USERS_LIST_CACHE.items() if entry.expires_at <= now]
-    for key in expired_keys:
-        _USERS_LIST_CACHE.pop(key, None)
-    while len(_USERS_LIST_CACHE) > USERS_LIST_CACHE_MAX_ENTRIES:
-        _USERS_LIST_CACHE.popitem(last=False)
-
-
-def _prune_rgw_users_payload_cache(now: float) -> None:
-    expired_keys = [key for key, entry in _RGW_USERS_PAYLOAD_CACHE.items() if entry.expires_at <= now]
-    for key in expired_keys:
-        _RGW_USERS_PAYLOAD_CACHE.pop(key, None)
-    while len(_RGW_USERS_PAYLOAD_CACHE) > RGW_USERS_PAYLOAD_CACHE_MAX_ENTRIES:
-        _RGW_USERS_PAYLOAD_CACHE.popitem(last=False)
-
-
 def _get_cached_rgw_users_payload(ctx: CephAdminContext) -> list[Any]:
     key = _RgwUsersPayloadCacheKey(endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0))
-    now = monotonic()
-    with _RGW_USERS_PAYLOAD_CACHE_LOCK:
-        _prune_rgw_users_payload_cache(now)
-        cached = _RGW_USERS_PAYLOAD_CACHE.get(key)
-        if cached is not None:
-            _RGW_USERS_PAYLOAD_CACHE.move_to_end(key)
-            return cached.payload
-    try:
-        payload = ctx.rgw_admin.list_users()
-    except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    expires_at = monotonic() + USERS_LIST_CACHE_TTL_SECONDS
-    with _RGW_USERS_PAYLOAD_CACHE_LOCK:
-        _prune_rgw_users_payload_cache(monotonic())
-        _RGW_USERS_PAYLOAD_CACHE[key] = _RgwUsersPayloadCacheEntry(
-            endpoint_id=key.endpoint_id,
-            expires_at=expires_at,
-            payload=payload or [],
-        )
-        _RGW_USERS_PAYLOAD_CACHE.move_to_end(key)
-        _prune_rgw_users_payload_cache(monotonic())
-    return payload or []
+    def _fetch_payload() -> list[Any]:
+        try:
+            payload = ctx.rgw_admin.list_users()
+        except RGWAdminError as exc:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        return payload or []
+
+    return _common_get_or_set_cache(
+        _RGW_USERS_PAYLOAD_CACHE,
+        _RGW_USERS_PAYLOAD_CACHE_LOCK,
+        key,
+        ttl_seconds=USERS_LIST_CACHE_TTL_SECONDS,
+        max_entries=RGW_USERS_PAYLOAD_CACHE_MAX_ENTRIES,
+        builder=_fetch_payload,
+    )
 
 
 def _get_cached_users_listing(
     key: _UsersListCacheKey,
     builder: Callable[[], list[CephAdminRgwUserSummary]],
 ) -> list[CephAdminRgwUserSummary]:
-    now = monotonic()
-    with _USERS_LIST_CACHE_LOCK:
-        _prune_users_listing_cache(now)
-        cached = _USERS_LIST_CACHE.get(key)
-        if cached is not None:
-            _USERS_LIST_CACHE.move_to_end(key)
-            return cached.items
-    items = builder()
-    expires_at = monotonic() + USERS_LIST_CACHE_TTL_SECONDS
-    with _USERS_LIST_CACHE_LOCK:
-        _prune_users_listing_cache(monotonic())
-        _USERS_LIST_CACHE[key] = _UsersListCacheEntry(endpoint_id=key.endpoint_id, expires_at=expires_at, items=items)
-        _USERS_LIST_CACHE.move_to_end(key)
-        _prune_users_listing_cache(monotonic())
-    return items
+    return _common_get_or_set_cache(
+        _USERS_LIST_CACHE,
+        _USERS_LIST_CACHE_LOCK,
+        key,
+        ttl_seconds=USERS_LIST_CACHE_TTL_SECONDS,
+        max_entries=USERS_LIST_CACHE_MAX_ENTRIES,
+        builder=builder,
+    )
 
 
 def _invalidate_users_listing_cache(endpoint_id: int | None = None) -> None:
-    with _USERS_LIST_CACHE_LOCK:
-        if endpoint_id is None:
-            _USERS_LIST_CACHE.clear()
-        else:
-            keys = [key for key in _USERS_LIST_CACHE.keys() if key.endpoint_id == endpoint_id]
-            for key in keys:
-                _USERS_LIST_CACHE.pop(key, None)
-    with _RGW_USERS_PAYLOAD_CACHE_LOCK:
-        if endpoint_id is None:
-            _RGW_USERS_PAYLOAD_CACHE.clear()
-        else:
-            keys = [key for key in _RGW_USERS_PAYLOAD_CACHE.keys() if key.endpoint_id == endpoint_id]
-            for key in keys:
-                _RGW_USERS_PAYLOAD_CACHE.pop(key, None)
+    _common_invalidate_cache(_USERS_LIST_CACHE, _USERS_LIST_CACHE_LOCK, endpoint_id=endpoint_id)
+    _common_invalidate_cache(_RGW_USERS_PAYLOAD_CACHE, _RGW_USERS_PAYLOAD_CACHE_LOCK, endpoint_id=endpoint_id)
 
 
 def _extract_quota_enabled(payload: dict[str, Any], keys: tuple[str, ...] = ("user_quota", "quota")) -> Optional[bool]:
@@ -759,7 +652,6 @@ def list_rgw_users(
 ) -> PaginatedCephAdminUsersResponse:
     include_set = _parse_includes(include)
     requested = include_set & {"account", "profile", "status", "limits", "quota"}
-    simple_search = search.strip() if isinstance(search, str) and search.strip() else None
     parsed_advanced_filter = _parse_advanced_filter(advanced_filter)
     cache_key = _UsersListCacheKey(
         endpoint_id=int(getattr(ctx.endpoint, "id", 0) or 0),
@@ -783,20 +675,13 @@ def list_rgw_users(
             tenant, user_uid = _split_tenant_uid(uid)
             results.append(CephAdminRgwUserSummary(uid=user_uid if tenant else uid, tenant=tenant))
 
-        advanced_fields: set[str] = set()
-        if parsed_advanced_filter and parsed_advanced_filter.rules:
-            advanced_fields = {rule.field for rule in parsed_advanced_filter.rules if rule.field}
+        advanced_fields = _common_collect_filter_fields(parsed_advanced_filter)
         sort_fields = {sort_by} if sort_by else {"uid"}
         needed_for_listing = _includes_for_user_fields(advanced_fields | sort_fields)
         if needed_for_listing:
             results = _enrich_users(results, needed_for_listing, ctx)
 
-        if parsed_advanced_filter and parsed_advanced_filter.rules:
-            results = [
-                user
-                for user in results
-                if _match_user_rules(user, parsed_advanced_filter.rules, parsed_advanced_filter.match)
-            ]
+        results = _common_apply_advanced_filter(results, parsed_advanced_filter, _match_user_rules)
 
         def sort_key(item: CephAdminRgwUserSummary):
             if sort_by == "tenant":
@@ -817,11 +702,7 @@ def list_rgw_users(
                 value = item.quota_max_objects
             else:
                 value = item.uid
-            if value is None:
-                return (1, "")
-            if isinstance(value, str):
-                return (0, value.lower(), (item.uid or "").lower())
-            return (0, value, (item.uid or "").lower())
+            return _common_sort_value(value, item.uid or "")
 
         results.sort(key=sort_key, reverse=sort_dir == "desc")
         if needed_for_listing:
@@ -830,24 +711,21 @@ def list_rgw_users(
         return results
 
     results = _get_cached_users_listing(cache_key, build_listing)
-    filtered_results = results
-    if simple_search:
-        search_value = simple_search.lower()
-        if parsed_advanced_filter:
-            filtered_results = [user for user in filtered_results if search_value in user.uid.lower()]
-        else:
-            filtered_results = [
-                user
-                for user in filtered_results
-                if search_value in user.uid.lower()
-                or search_value in (user.tenant or "").lower()
-            ]
-
-    total = len(filtered_results)
-    start = max(page - 1, 0) * page_size
-    end = start + page_size
-    page_items = _clone_user_list(filtered_results[start:end])
-    has_next = end < total
+    filtered_results = _common_apply_simple_search(
+        results,
+        search=search,
+        parsed_filter=parsed_advanced_filter,
+        match_with_filter=lambda user, needle: needle in user.uid.lower(),
+        match_without_filter=lambda user, needle: (
+            needle in user.uid.lower() or needle in (user.tenant or "").lower()
+        ),
+    )
+    page_items, total, has_next = _common_paginate(
+        filtered_results,
+        page=page,
+        page_size=page_size,
+        clone=_clone_user_list,
+    )
     if requested and page_items:
         page_items = _enrich_users(page_items, requested, ctx)
 

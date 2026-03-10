@@ -10,6 +10,7 @@ import re
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.db import S3Account
+from app.services.object_diff_common import compare_object_entries
 from app.services import s3_client
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.models.bucket import (
@@ -676,20 +677,9 @@ class BucketsService:
         for key in common_keys:
             source_entry = source_objects[key]
             target_entry = target_objects[key]
-            source_size = int(source_entry.get("size") or 0)
-            target_size = int(target_entry.get("size") or 0)
-            source_etag = source_entry.get("etag")
-            target_etag = target_entry.get("etag")
-            compare_by: str = "size"
-            source_md5 = self._etag_md5(source_etag if isinstance(source_etag, str) else None)
-            target_md5 = self._etag_md5(target_etag if isinstance(target_etag, str) else None)
-            if source_md5 and target_md5:
-                compare_by = "md5"
-                equal = source_md5 == target_md5
-            else:
-                equal = source_size == target_size
+            comparison = compare_object_entries(source_entry, target_entry, md5_resolver=self._etag_md5)
 
-            if equal:
+            if comparison.equal:
                 matched_count += 1
                 continue
 
@@ -699,11 +689,11 @@ class BucketsService:
             different_sample.append(
                 CephAdminBucketObjectDiffEntry(
                     key=key,
-                    source_size=source_size,
-                    target_size=target_size,
-                    source_etag=source_etag if isinstance(source_etag, str) else None,
-                    target_etag=target_etag if isinstance(target_etag, str) else None,
-                    compare_by="md5" if compare_by == "md5" else "size",
+                    source_size=comparison.source_size,
+                    target_size=comparison.target_size,
+                    source_etag=comparison.source_etag,
+                    target_etag=comparison.target_etag,
+                    compare_by=comparison.compare_by,
                 )
             )
 
@@ -734,18 +724,8 @@ class BucketsService:
         for key in common_keys:
             source_entry = source_objects[key]
             target_entry = target_objects[key]
-            source_size = int(source_entry.get("size") or 0)
-            target_size = int(target_entry.get("size") or 0)
-            source_etag = source_entry.get("etag")
-            target_etag = target_entry.get("etag")
-            source_md5 = self._etag_md5(source_etag if isinstance(source_etag, str) else None)
-            target_md5 = self._etag_md5(target_etag if isinstance(target_etag, str) else None)
-            if source_md5 and target_md5:
-                equal = source_md5 == target_md5
-            else:
-                equal = source_size == target_size
-
-            if not equal:
+            comparison = compare_object_entries(source_entry, target_entry, md5_resolver=self._etag_md5)
+            if not comparison.equal:
                 different_keys.append(key)
 
         return BucketCompareContentKeySets(

@@ -13,9 +13,14 @@ from app.routers.dependencies import (
     get_audit_logger,
     require_iam_capable_manager,
 )
+from app.routers.manager.iam_common import (
+    ensure_inline_policy_name,
+    get_account_and_service,
+    load_inline_policies,
+    resolve_attached_policy,
+    save_inline_policy,
+)
 from app.services.audit_service import AuditService
-from app.services.rgw_iam import RGWIAMService, get_iam_service
-from app.utils.s3_endpoint import resolve_s3_client_options
 
 DEFAULT_ASSUME_ROLE = """
 {
@@ -31,21 +36,6 @@ DEFAULT_ASSUME_ROLE = """
 """.strip()
 
 router = APIRouter(prefix="/manager/iam/roles", tags=["manager-iam-roles"])
-
-
-def get_account_and_service(account: S3Account) -> tuple[S3Account, RGWIAMService]:
-    access_key, secret_key = account.effective_rgw_credentials()
-    if not access_key or not secret_key:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="S3Account root keys missing")
-    endpoint, region, _, verify_tls = resolve_s3_client_options(account)
-    service = get_iam_service(
-        access_key,
-        secret_key,
-        endpoint=endpoint,
-        region=region,
-        verify_tls=verify_tls,
-    )
-    return account, service
 
 
 @router.get("", response_model=list[IAMRole])
@@ -189,12 +179,11 @@ def list_role_inline_policies(
 ) -> list[InlinePolicy]:
     _, service = get_account_and_service(account)
     try:
-        names = service.list_role_inline_policies(role_name)
-        policies: list[InlinePolicy] = []
-        for name in names:
-            document = service.get_role_inline_policy(role_name, name) or {}
-            policies.append(InlinePolicy(name=name, document=document))
-        return policies
+        return load_inline_policies(
+            role_name,
+            list_names_fn=service.list_role_inline_policies,
+            get_policy_fn=service.get_role_inline_policy,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -208,15 +197,16 @@ def put_role_inline_policy(
     current_user: User = Depends(require_iam_capable_manager),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> InlinePolicy:
-    if payload.name and payload.name != policy_name:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Inline policy name in payload does not match the URL."
-        )
+    ensure_inline_policy_name(payload, policy_name)
     _, service = get_account_and_service(account)
     try:
-        document = payload.document
-        service.put_role_inline_policy(role_name, policy_name, document)
-        saved = service.get_role_inline_policy(role_name, policy_name) or document
+        saved = save_inline_policy(
+            role_name,
+            policy_name=policy_name,
+            document=payload.document,
+            put_policy_fn=service.put_role_inline_policy,
+            get_policy_fn=service.get_role_inline_policy,
+        )
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -226,7 +216,7 @@ def put_role_inline_policy(
             account=account,
             metadata={"policy_name": policy_name},
         )
-        return InlinePolicy(name=policy_name, document=saved)
+        return saved
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -279,7 +269,6 @@ def attach_role_policy(
     _, service = get_account_and_service(account)
     try:
         service.attach_role_policy(role_name, payload.arn)
-        fetched = service.get_policy(payload.arn)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -289,9 +278,7 @@ def attach_role_policy(
             account=account,
             metadata={"policy_arn": payload.arn},
         )
-        if fetched:
-            return fetched
-        return Policy(name=payload.name, arn=payload.arn, path=payload.path, default_version_id=payload.default_version_id)
+        return resolve_attached_policy(payload, get_policy_fn=service.get_policy)
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
