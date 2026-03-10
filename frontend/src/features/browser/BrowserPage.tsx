@@ -26,6 +26,7 @@ import {
   BrowserObjectVersion,
   BrowserSettings,
   BucketCorsStatus,
+  MultipartUploadItem,
   ObjectMetadata,
   ObjectTag,
   PresignPartRequest,
@@ -46,6 +47,7 @@ import {
   getStsStatus,
   initiateMultipartUpload,
   listBrowserObjects,
+  listMultipartUploads,
   listObjectVersions,
   searchBrowserBuckets,
   updateObjectAcl,
@@ -71,6 +73,7 @@ import BrowserContextMenu from "./BrowserContextMenu";
 import BrowserOperationsModal from "./BrowserOperationsModal";
 import BrowserObjectVersionsList from "./BrowserObjectVersionsList";
 import BrowserObjectVersionsModal from "./BrowserObjectVersionsModal";
+import BrowserMultipartUploadsModal from "./BrowserMultipartUploadsModal";
 import BrowserPrefixVersionsModal from "./BrowserPrefixVersionsModal";
 import BrowserPreviewModal from "./BrowserPreviewModal";
 import ObjectAdvancedModal from "./ObjectAdvancedModal";
@@ -120,6 +123,7 @@ import {
   DEFAULT_PROXY_UPLOAD_PARALLELISM,
   DEFAULT_QUEUED_VISIBLE_COUNT,
   MULTIPART_CONCURRENCY,
+  MULTIPART_UPLOADS_PAGE_SIZE,
   MULTIPART_THRESHOLD,
   OBJECTS_PAGE_SIZE,
   PART_SIZE,
@@ -303,6 +307,8 @@ const inspectorEmptyStateClasses =
   "rounded-lg border border-dashed border-slate-200 px-3 py-3 ui-caption text-slate-500 dark:border-slate-800 dark:text-slate-400";
 const inspectorInlineActionClasses =
   "ui-caption font-semibold text-slate-500 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200 dark:disabled:text-slate-500";
+const getMultipartUploadEntryId = (upload: Pick<MultipartUploadItem, "key" | "upload_id">) =>
+  `${upload.key}::${upload.upload_id}`;
 const normalizePathDraftValue = (value: string) => value.trim().replace(/^\/+/, "");
 
 const resolvePathDraftContext = (value: string): PathDraftContext => {
@@ -501,6 +507,15 @@ export default function BrowserPage({
   const [objectVersionsModalError, setObjectVersionsModalError] = useState<string | null>(null);
   const [objectVersionModalKeyMarker, setObjectVersionModalKeyMarker] = useState<string | null>(null);
   const [objectVersionModalIdMarker, setObjectVersionModalIdMarker] = useState<string | null>(null);
+  const [showMultipartUploadsModal, setShowMultipartUploadsModal] = useState(false);
+  const [multipartUploads, setMultipartUploads] = useState<MultipartUploadItem[]>([]);
+  const [multipartUploadsLoading, setMultipartUploadsLoading] = useState(false);
+  const [multipartUploadsLoadingMore, setMultipartUploadsLoadingMore] = useState(false);
+  const [multipartUploadsError, setMultipartUploadsError] = useState<string | null>(null);
+  const [multipartUploadsNextKey, setMultipartUploadsNextKey] = useState<string | null>(null);
+  const [multipartUploadsNextUploadId, setMultipartUploadsNextUploadId] = useState<string | null>(null);
+  const [multipartUploadsIsTruncated, setMultipartUploadsIsTruncated] = useState(false);
+  const [abortingMultipartUploadIds, setAbortingMultipartUploadIds] = useState<Set<string>>(new Set());
   const [loadingBuckets, setLoadingBuckets] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
   const [objectsLoading, setObjectsLoading] = useState(false);
@@ -3248,6 +3263,136 @@ export default function BrowserPage({
     }
   };
 
+  const resetMultipartUploadsState = () => {
+    setMultipartUploads([]);
+    setMultipartUploadsLoading(false);
+    setMultipartUploadsLoadingMore(false);
+    setMultipartUploadsError(null);
+    setMultipartUploadsNextKey(null);
+    setMultipartUploadsNextUploadId(null);
+    setMultipartUploadsIsTruncated(false);
+    setAbortingMultipartUploadIds(new Set());
+  };
+
+  const loadMultipartUploadsPage = async (options?: {
+    append?: boolean;
+    keyMarker?: string | null;
+    uploadIdMarker?: string | null;
+  }) => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const append = Boolean(options?.append);
+    if (append) {
+      if (!multipartUploadsIsTruncated || multipartUploadsLoadingMore) return;
+      setMultipartUploadsLoadingMore(true);
+    } else {
+      setMultipartUploadsLoading(true);
+      setMultipartUploadsError(null);
+    }
+    try {
+      const data = await listMultipartUploads(accountIdForApi, bucketName, {
+        keyMarker: append ? (options?.keyMarker ?? undefined) : undefined,
+        uploadIdMarker: append ? (options?.uploadIdMarker ?? undefined) : undefined,
+        maxUploads: MULTIPART_UPLOADS_PAGE_SIZE,
+      });
+      setMultipartUploads((prev) => {
+        if (!append) return data.uploads;
+        const knownIds = new Set(prev.map((upload) => getMultipartUploadEntryId(upload)));
+        const appended = data.uploads.filter((upload) => !knownIds.has(getMultipartUploadEntryId(upload)));
+        return [...prev, ...appended];
+      });
+      setMultipartUploadsError(null);
+      setMultipartUploadsNextKey(data.next_key ?? null);
+      setMultipartUploadsNextUploadId(data.next_upload_id ?? null);
+      setMultipartUploadsIsTruncated(Boolean(data.is_truncated));
+    } catch (err) {
+      setMultipartUploadsError(extractApiError(err, "Unable to list multipart uploads."));
+      if (!append) {
+        setMultipartUploads([]);
+        setMultipartUploadsNextKey(null);
+        setMultipartUploadsNextUploadId(null);
+        setMultipartUploadsIsTruncated(false);
+      }
+    } finally {
+      if (append) {
+        setMultipartUploadsLoadingMore(false);
+      } else {
+        setMultipartUploadsLoading(false);
+      }
+    }
+  };
+
+  const openMultipartUploadsModal = () => {
+    if (!bucketName || !hasS3AccountContext) return;
+    setShowMultipartUploadsModal(true);
+    resetMultipartUploadsState();
+    void loadMultipartUploadsPage();
+  };
+
+  const refreshMultipartUploads = () => {
+    if (!bucketName || !hasS3AccountContext) return;
+    void loadMultipartUploadsPage();
+  };
+
+  const loadMoreMultipartUploads = () => {
+    if (!bucketName || !hasS3AccountContext || !multipartUploadsIsTruncated) return;
+    void loadMultipartUploadsPage({
+      append: true,
+      keyMarker: multipartUploadsNextKey,
+      uploadIdMarker: multipartUploadsNextUploadId,
+    });
+  };
+
+  const closeMultipartUploadsModal = () => {
+    setShowMultipartUploadsModal(false);
+  };
+
+  const confirmAbortMultipartUpload = async (upload: MultipartUploadItem) => {
+    if (!bucketName || !hasS3AccountContext) return;
+    const uploadRowId = getMultipartUploadEntryId(upload);
+    setAbortingMultipartUploadIds((prev) => {
+      const next = new Set(prev);
+      next.add(uploadRowId);
+      return next;
+    });
+    try {
+      await abortMultipartUpload(accountIdForApi, bucketName, upload.upload_id, upload.key);
+      setMultipartUploads((prev) => prev.filter((entry) => getMultipartUploadEntryId(entry) !== uploadRowId));
+      setStatusMessage(`Multipart upload aborted for ${upload.key}.`);
+    } catch (err) {
+      const message = extractApiError(err, "Unable to abort multipart upload.");
+      setMultipartUploadsError(message);
+      setStatusMessage(message);
+    } finally {
+      setAbortingMultipartUploadIds((prev) => {
+        const next = new Set(prev);
+        next.delete(uploadRowId);
+        return next;
+      });
+    }
+  };
+
+  const requestAbortMultipartUpload = (upload: MultipartUploadItem) => {
+    openConfirmDialog({
+      title: "Abort multipart upload",
+      message: `Abort multipart upload for ${upload.key}?`,
+      confirmLabel: "Abort",
+      tone: "danger",
+      onConfirm: () => confirmAbortMultipartUpload(upload),
+    });
+  };
+
+  useEffect(() => {
+    setShowMultipartUploadsModal(false);
+    setMultipartUploads([]);
+    setMultipartUploadsLoading(false);
+    setMultipartUploadsLoadingMore(false);
+    setMultipartUploadsError(null);
+    setMultipartUploadsNextKey(null);
+    setMultipartUploadsNextUploadId(null);
+    setMultipartUploadsIsTruncated(false);
+    setAbortingMultipartUploadIds(new Set());
+  }, [bucketName, hasS3AccountContext]);
+
   const openCreateBucketDialog = () => {
     if (!bucketManagementEnabled) return;
     setShowBucketMenu(false);
@@ -5897,6 +6042,7 @@ export default function BrowserPage({
       showCleanupModal ||
       showPrefixVersions ||
       showObjectVersionsModal ||
+      showMultipartUploadsModal ||
       Boolean(previewItem) ||
       Boolean(confirmDialog) ||
       Boolean(copyDialog);
@@ -5978,6 +6124,7 @@ export default function BrowserPage({
     showCleanupModal,
     confirmDialog,
     copyDialog,
+    showMultipartUploadsModal,
     showObjectVersionsModal,
     showOperationsModal,
     showPrefixVersions,
@@ -8048,6 +8195,14 @@ export default function BrowserPage({
                                 <button
                                   type="button"
                                   className={inspectorInlineActionClasses}
+                                  onClick={openMultipartUploadsModal}
+                                  disabled={!bucketName || !hasS3AccountContext}
+                                >
+                                  Multipart uploads
+                                </button>
+                                <button
+                                  type="button"
+                                  className={inspectorInlineActionClasses}
                                   onClick={() => void loadBucketInspectorData(true)}
                                   disabled={!bucketName || !hasS3AccountContext || bucketInspectorLoading}
                                 >
@@ -8741,6 +8896,21 @@ export default function BrowserPage({
           sseCustomerKeyBase64={sseCustomerKeyBase64}
           onClose={() => setShowAdvancedModal(false)}
           onRefresh={handleAdvancedRefresh}
+        />
+      )}
+      {showMultipartUploadsModal && bucketName && hasS3AccountContext && (
+        <BrowserMultipartUploadsModal
+          bucketName={bucketName}
+          uploads={multipartUploads}
+          loading={multipartUploadsLoading}
+          loadingMore={multipartUploadsLoadingMore}
+          error={multipartUploadsError}
+          canLoadMore={multipartUploadsIsTruncated && Boolean(multipartUploadsNextKey || multipartUploadsNextUploadId)}
+          abortingUploadIds={abortingMultipartUploadIds}
+          onRefresh={refreshMultipartUploads}
+          onLoadMore={loadMoreMultipartUploads}
+          onAbort={requestAbortMultipartUpload}
+          onClose={closeMultipartUploadsModal}
         />
       )}
       {showPrefixVersions && isVersioningEnabled && (
