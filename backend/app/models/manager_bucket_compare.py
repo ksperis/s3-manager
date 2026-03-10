@@ -20,7 +20,6 @@ class ManagerBucketCompareRequest(BaseModel):
     include_content: bool = True
     include_config: bool = False
     config_features: Optional[list[BucketCompareConfigFeature]] = None
-    size_only: bool = False
     diff_sample_limit: int = Field(default=200, ge=1, le=2000)
 
     @model_validator(mode="after")
@@ -48,7 +47,6 @@ class ManagerBucketCompareResult(BaseModel):
     target_context_id: str
     source_bucket: str
     target_bucket: str
-    compare_mode: Optional[Literal["size_only", "md5_or_size"]] = None
     has_differences: bool = False
     content_diff: Optional[CephAdminBucketContentDiff] = None
     config_diff: Optional[CephAdminBucketConfigDiff] = None
@@ -59,7 +57,6 @@ class ManagerBucketCompareActionRequest(BaseModel):
     source_bucket: str
     target_bucket: str
     action: ManagerBucketCompareAction
-    size_only: bool = False
     parallelism: int = Field(default=4, ge=1, le=32)
 
     @model_validator(mode="after")

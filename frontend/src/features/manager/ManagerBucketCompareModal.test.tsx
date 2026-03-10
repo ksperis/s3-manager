@@ -41,10 +41,8 @@ function buildCompareResult(overrides?: Partial<ManagerBucketCompareResult>): Ma
     target_context_id: "ctx-target",
     source_bucket: "bucket-a",
     target_bucket: "bucket-a",
-    compare_mode: "md5_or_size",
     has_differences: true,
     content_diff: {
-      compare_mode: "md5_or_size",
       source_count: 10,
       target_count: 9,
       matched_count: 7,

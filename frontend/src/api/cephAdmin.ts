@@ -687,7 +687,6 @@ export type CephAdminBucketCompareRequest = {
   include_content?: boolean;
   include_config?: boolean;
   config_features?: CephAdminBucketCompareConfigFeature[];
-  size_only?: boolean;
   diff_sample_limit?: number;
 };
 
@@ -711,7 +710,6 @@ export type CephAdminBucketObjectDiffEntry = {
 };
 
 export type CephAdminBucketContentDiff = {
-  compare_mode: "size_only" | "md5_or_size";
   source_count: number;
   target_count: number;
   matched_count: number;
@@ -741,7 +739,6 @@ export type CephAdminBucketCompareResult = {
   target_endpoint_id: number;
   source_bucket: string;
   target_bucket: string;
-  compare_mode?: "size_only" | "md5_or_size" | null;
   has_differences: boolean;
   content_diff?: CephAdminBucketContentDiff | null;
   config_diff?: CephAdminBucketConfigDiff | null;

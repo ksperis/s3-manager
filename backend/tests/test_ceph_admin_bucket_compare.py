@@ -50,16 +50,13 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         include_config=True,
-        size_only=False,
     )
     monkeypatch.setattr(buckets_router, "_resolve_storage_endpoint", lambda _db, _endpoint_id: _build_target_endpoint(2))
 
     def fake_compare_content(self, source_bucket, source_account, target_bucket, target_account, **kwargs):
         assert source_bucket == "bucket-a"
         assert target_bucket == "bucket-b"
-        assert kwargs["size_only"] is False
         return CephAdminBucketContentDiff(
-            compare_mode="md5_or_size",
             source_count=10,
             target_count=9,
             matched_count=8,
@@ -95,14 +92,12 @@ def test_compare_bucket_pair_returns_no_diff(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-a",
         include_config=False,
-        size_only=True,
     )
     monkeypatch.setattr(buckets_router, "_resolve_storage_endpoint", lambda _db, _endpoint_id: _build_target_endpoint(2))
     monkeypatch.setattr(
         buckets_router.BucketsService,
         "compare_bucket_content",
         lambda *_args, **_kwargs: CephAdminBucketContentDiff(
-            compare_mode="size_only",
             source_count=5,
             target_count=5,
             matched_count=5,
@@ -163,7 +158,6 @@ def test_compare_bucket_pair_supports_config_only(monkeypatch):
 
     response = buckets_router.compare_bucket_pair(endpoint_id=1, payload=payload, db=SimpleNamespace(), ctx=_build_ctx(1))
 
-    assert response.compare_mode is None
     assert response.content_diff is None
     assert response.config_diff is not None
     assert response.has_differences is True

@@ -440,7 +440,6 @@ class CephAdminBucketCompareRequest(BaseModel):
     include_content: bool = True
     include_config: bool = False
     config_features: Optional[list[BucketCompareConfigFeature]] = None
-    size_only: bool = False
     diff_sample_limit: int = Field(default=200, ge=1, le=2000)
 
     @model_validator(mode="after")
@@ -470,7 +469,6 @@ class CephAdminBucketObjectDiffEntry(BaseModel):
 
 
 class CephAdminBucketContentDiff(BaseModel):
-    compare_mode: Literal["size_only", "md5_or_size"]
     source_count: int = 0
     target_count: int = 0
     matched_count: int = 0
@@ -500,7 +498,6 @@ class CephAdminBucketCompareResult(BaseModel):
     target_endpoint_id: int
     source_bucket: str
     target_bucket: str
-    compare_mode: Optional[Literal["size_only", "md5_or_size"]] = None
     has_differences: bool = False
     content_diff: Optional[CephAdminBucketContentDiff] = None
     config_diff: Optional[CephAdminBucketConfigDiff] = None

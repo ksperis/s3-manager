@@ -36,7 +36,6 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         include_config=True,
-        size_only=False,
     )
     source_account = _build_account(1)
     target_account = _build_account(2)
@@ -50,9 +49,7 @@ def test_compare_bucket_pair_returns_diff_and_config(monkeypatch):
         assert target_bucket == "bucket-b"
         assert source_ctx is source_account
         assert target_ctx is target_account
-        assert kwargs["size_only"] is False
         return CephAdminBucketContentDiff(
-            compare_mode="md5_or_size",
             source_count=10,
             target_count=9,
             matched_count=8,
@@ -97,7 +94,6 @@ def test_compare_bucket_pair_returns_no_diff(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-a",
         include_config=False,
-        size_only=True,
     )
     source_account = _build_account(1)
     target_account = _build_account(2)
@@ -106,7 +102,6 @@ def test_compare_bucket_pair_returns_no_diff(monkeypatch):
         buckets_router.BucketsService,
         "compare_bucket_content",
         lambda *_args, **_kwargs: CephAdminBucketContentDiff(
-            compare_mode="size_only",
             source_count=5,
             target_count=5,
             matched_count=5,
@@ -192,7 +187,6 @@ def test_compare_bucket_pair_supports_config_only(monkeypatch):
         service=buckets_router.BucketsService(),
     )
 
-    assert response.compare_mode is None
     assert response.content_diff is None
     assert response.config_diff is not None
     assert response.has_differences is True
@@ -297,7 +291,6 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         action="sync_source_only",
-        size_only=False,
         parallelism=8,
     )
     source_account = _build_account(1)
@@ -312,7 +305,6 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
         captured["target_bucket"] = target_bucket
         captured["target_ctx"] = target_ctx
         captured["action"] = kwargs.get("action")
-        captured["size_only"] = kwargs.get("size_only")
         captured["parallelism"] = kwargs.get("parallelism")
         return SimpleNamespace(
             action="sync_source_only",
@@ -346,17 +338,15 @@ def test_compare_bucket_action_sync_source_only(monkeypatch):
     assert captured["target_bucket"] == "bucket-b"
     assert captured["target_ctx"] is target_account
     assert captured["action"] == "sync_source_only"
-    assert captured["size_only"] is False
     assert captured["parallelism"] == 8
 
 
-def test_compare_bucket_action_forwards_size_only_for_sync_different(monkeypatch):
+def test_compare_bucket_action_runs_sync_different(monkeypatch):
     payload = ManagerBucketCompareActionRequest(
         target_context_id="2",
         source_bucket="bucket-a",
         target_bucket="bucket-b",
         action="sync_different",
-        size_only=True,
     )
     source_account = _build_account(1)
     target_account = _build_account(2)
@@ -364,7 +354,7 @@ def test_compare_bucket_action_forwards_size_only_for_sync_different(monkeypatch
     captured: dict[str, object] = {}
 
     def fake_run_action(self, *_args, **kwargs):
-        captured["size_only"] = kwargs.get("size_only")
+        captured["action"] = kwargs.get("action")
         return SimpleNamespace(
             action="sync_different",
             planned_count=1,
@@ -385,7 +375,7 @@ def test_compare_bucket_action_forwards_size_only_for_sync_different(monkeypatch
     )
 
     assert response.action == "sync_different"
-    assert captured["size_only"] is True
+    assert captured["action"] == "sync_different"
 
 
 def test_compare_bucket_action_delete_returns_partial_failure(monkeypatch):

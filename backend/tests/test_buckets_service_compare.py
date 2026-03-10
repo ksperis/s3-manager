@@ -44,9 +44,8 @@ def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
         lambda bucket_name, _account: payloads[bucket_name],
     )
 
-    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target, size_only=False, diff_sample_limit=20)
+    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target, diff_sample_limit=20)
 
-    assert diff.compare_mode == "md5_or_size"
     assert diff.source_count == 3
     assert diff.target_count == 3
     assert diff.matched_count == 2
@@ -57,7 +56,7 @@ def test_compare_bucket_content_uses_md5_then_size_fallback(monkeypatch):
     assert diff.only_target_sample == ["only-target"]
 
 
-def test_compare_bucket_content_size_only_ignores_md5_mismatch(monkeypatch):
+def test_compare_bucket_content_detects_md5_mismatch(monkeypatch):
     service = BucketsService()
     source = _build_account("source")
     target = _build_account("target")
@@ -75,13 +74,14 @@ def test_compare_bucket_content_size_only_ignores_md5_mismatch(monkeypatch):
         lambda bucket_name, _account: payloads[bucket_name],
     )
 
-    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target, size_only=True, diff_sample_limit=20)
+    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target, diff_sample_limit=20)
 
-    assert diff.compare_mode == "size_only"
-    assert diff.matched_count == 1
-    assert diff.different_count == 0
+    assert diff.matched_count == 0
+    assert diff.different_count == 1
     assert diff.only_source_count == 0
     assert diff.only_target_count == 0
+    assert len(diff.different_sample) == 1
+    assert diff.different_sample[0].compare_by == "md5"
 
 
 def test_compare_bucket_content_reports_different_sample(monkeypatch):
@@ -102,7 +102,7 @@ def test_compare_bucket_content_reports_different_sample(monkeypatch):
         lambda bucket_name, _account: payloads[bucket_name],
     )
 
-    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target, size_only=False, diff_sample_limit=20)
+    diff = service.compare_bucket_content("source-bucket", source, "target-bucket", target, diff_sample_limit=20)
 
     assert diff.different_count == 1
     assert len(diff.different_sample) == 1

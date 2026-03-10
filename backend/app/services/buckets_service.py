@@ -659,7 +659,6 @@ class BucketsService:
         target_bucket: str,
         target_account: S3Account,
         *,
-        size_only: bool = False,
         diff_sample_limit: int = 200,
     ) -> CephAdminBucketContentDiff:
         source_objects = self._list_bucket_objects_for_compare(source_bucket, source_account)
@@ -682,18 +681,13 @@ class BucketsService:
             source_etag = source_entry.get("etag")
             target_etag = target_entry.get("etag")
             compare_by: str = "size"
-            equal = False
-
-            if size_only:
-                equal = source_size == target_size
+            source_md5 = self._etag_md5(source_etag if isinstance(source_etag, str) else None)
+            target_md5 = self._etag_md5(target_etag if isinstance(target_etag, str) else None)
+            if source_md5 and target_md5:
+                compare_by = "md5"
+                equal = source_md5 == target_md5
             else:
-                source_md5 = self._etag_md5(source_etag if isinstance(source_etag, str) else None)
-                target_md5 = self._etag_md5(target_etag if isinstance(target_etag, str) else None)
-                if source_md5 and target_md5:
-                    compare_by = "md5"
-                    equal = source_md5 == target_md5
-                else:
-                    equal = source_size == target_size
+                equal = source_size == target_size
 
             if equal:
                 matched_count += 1
@@ -714,7 +708,6 @@ class BucketsService:
             )
 
         return CephAdminBucketContentDiff(
-            compare_mode="size_only" if size_only else "md5_or_size",
             source_count=len(source_keys),
             target_count=len(target_keys),
             matched_count=matched_count,
@@ -730,8 +723,6 @@ class BucketsService:
         self,
         source_objects: dict[str, dict[str, Any]],
         target_objects: dict[str, dict[str, Any]],
-        *,
-        size_only: bool,
     ) -> BucketCompareContentKeySets:
         source_keys = set(source_objects.keys())
         target_keys = set(target_objects.keys())
@@ -747,16 +738,12 @@ class BucketsService:
             target_size = int(target_entry.get("size") or 0)
             source_etag = source_entry.get("etag")
             target_etag = target_entry.get("etag")
-
-            if size_only:
-                equal = source_size == target_size
+            source_md5 = self._etag_md5(source_etag if isinstance(source_etag, str) else None)
+            target_md5 = self._etag_md5(target_etag if isinstance(target_etag, str) else None)
+            if source_md5 and target_md5:
+                equal = source_md5 == target_md5
             else:
-                source_md5 = self._etag_md5(source_etag if isinstance(source_etag, str) else None)
-                target_md5 = self._etag_md5(target_etag if isinstance(target_etag, str) else None)
-                if source_md5 and target_md5:
-                    equal = source_md5 == target_md5
-                else:
-                    equal = source_size == target_size
+                equal = source_size == target_size
 
             if not equal:
                 different_keys.append(key)
@@ -773,12 +760,10 @@ class BucketsService:
         source_account: S3Account,
         target_bucket: str,
         target_account: S3Account,
-        *,
-        size_only: bool = False,
     ) -> BucketCompareContentKeySets:
         source_objects = self._list_bucket_objects_for_compare(source_bucket, source_account)
         target_objects = self._list_bucket_objects_for_compare(target_bucket, target_account)
-        return self._build_compare_content_key_sets(source_objects, target_objects, size_only=size_only)
+        return self._build_compare_content_key_sets(source_objects, target_objects)
 
     def _account_client(self, account: S3Account):
         access_key, secret_key = self._account_credentials(account)
@@ -901,7 +886,6 @@ class BucketsService:
         target_account: S3Account,
         *,
         action: BucketCompareRemediationAction,
-        size_only: bool = False,
         parallelism: int = 4,
         failed_keys_sample_limit: int = 50,
     ) -> BucketCompareRemediationResult:
@@ -910,7 +894,6 @@ class BucketsService:
             source_account,
             target_bucket,
             target_account,
-            size_only=size_only,
         )
         keys_by_action: dict[BucketCompareRemediationAction, list[str]] = {
             "sync_source_only": key_sets.only_source_keys,

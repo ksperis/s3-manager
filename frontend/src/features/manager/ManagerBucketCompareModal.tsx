@@ -47,7 +47,6 @@ type CompareRunOptionsSnapshot = {
   includeContent: boolean;
   includeConfig: boolean;
   configFeatures: ManagerBucketCompareConfigFeature[];
-  sizeOnly: boolean;
 };
 
 type RemediationSectionKey = "source_only" | "different" | "target_only";
@@ -260,7 +259,6 @@ export default function ManagerBucketCompareModal({
   const [selectedConfigFeatures, setSelectedConfigFeatures] = useState<ManagerBucketCompareConfigFeature[]>(
     () => [...ALL_CONFIG_FEATURE_KEYS]
   );
-  const [sizeOnly, setSizeOnly] = useState(false);
   const [parallelism, setParallelism] = useState(4);
   const [running, setRunning] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -536,7 +534,6 @@ export default function ManagerBucketCompareModal({
       includeContent,
       includeConfig,
       configFeatures: includeConfig ? [...selectedConfigFeatures] : [],
-      sizeOnly,
     };
     setLastRunOptions(snapshot);
     setRunError(null);
@@ -583,7 +580,6 @@ export default function ManagerBucketCompareModal({
               include_content: snapshot.includeContent,
               include_config: snapshot.includeConfig,
               config_features: snapshot.includeConfig ? snapshot.configFeatures : undefined,
-              size_only: snapshot.sizeOnly,
             },
             { signal: controller.signal }
           );
@@ -728,7 +724,6 @@ export default function ManagerBucketCompareModal({
         include_content: includeContent,
         include_config: includeConfig,
         config_features: includeConfig ? selectedConfigFeatures : [],
-        size_only: sizeOnly,
         parallelism,
       },
       summary: {
@@ -795,7 +790,6 @@ export default function ManagerBucketCompareModal({
           source_bucket: currentItem.sourceBucket,
           target_bucket: currentItem.targetBucket,
           action: pending.action,
-          size_only: pending.action === "sync_different" ? Boolean(lastRunOptions?.sizeOnly ?? sizeOnly) : false,
           parallelism: safeActionParallelism,
         });
       } catch (err) {
@@ -839,7 +833,6 @@ export default function ManagerBucketCompareModal({
         includeContent: true,
         includeConfig: false,
         configFeatures: [],
-        sizeOnly,
       };
       try {
         const refreshedResult = await compareManagerBucketPair(sourceContextId, {
@@ -849,7 +842,6 @@ export default function ManagerBucketCompareModal({
           include_content: refreshOptions.includeContent,
           include_config: refreshOptions.includeConfig,
           config_features: refreshOptions.includeConfig ? refreshOptions.configFeatures : undefined,
-          size_only: refreshOptions.sizeOnly,
         });
         setItems((prev) =>
           prev.map((item, index) =>
@@ -880,7 +872,7 @@ export default function ManagerBucketCompareModal({
         );
       }
     },
-    [items, lastRunOptions, parallelism, sizeOnly, sourceContextId, targetContextId]
+    [items, lastRunOptions, parallelism, sourceContextId, targetContextId]
   );
 
   const openRemediationConfirm = useCallback(
@@ -970,7 +962,7 @@ export default function ManagerBucketCompareModal({
               disabled={running}
               className={uiCheckboxClass}
             />
-            Include object content
+            Compare bucket content
           </label>
           <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
             <input
@@ -980,17 +972,7 @@ export default function ManagerBucketCompareModal({
               disabled={running}
               className={uiCheckboxClass}
             />
-            Include bucket configuration
-          </label>
-          <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
-            <input
-              type="checkbox"
-              checked={sizeOnly}
-              onChange={(event) => setSizeOnly(event.target.checked)}
-              disabled={running || !includeContent}
-              className={uiCheckboxClass}
-            />
-            Quick check (size only)
+            Compare bucket configuration
           </label>
           <label className="space-y-1 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
             <span className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Parallelism</span>
@@ -1366,7 +1348,7 @@ export default function ManagerBucketCompareModal({
                         <summary className="cursor-pointer list-none px-2.5 py-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
-                              Content diff ({content.compare_mode === "size_only" ? "size only" : "md5 or size"})
+                              Content diff (md5 or size)
                             </span>
                             <UiBadge tone={getChangedTone(contentHasDifferences)} className="px-2 text-[10px]">
                               {contentHasDifferences ? "Different" : "Identical"}

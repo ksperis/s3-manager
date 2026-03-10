@@ -2162,7 +2162,6 @@ def compare_bucket_pair(
                 source_account,
                 payload.target_bucket,
                 target_account,
-                size_only=payload.size_only,
                 diff_sample_limit=payload.diff_sample_limit,
             )
         if payload.include_config:
@@ -2192,7 +2191,6 @@ def compare_bucket_pair(
         target_endpoint_id=payload.target_endpoint_id,
         source_bucket=payload.source_bucket,
         target_bucket=payload.target_bucket,
-        compare_mode=content_diff.compare_mode if content_diff else None,
         has_differences=has_differences,
         content_diff=content_diff,
         config_diff=config_diff,

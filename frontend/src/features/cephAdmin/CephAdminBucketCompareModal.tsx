@@ -206,7 +206,6 @@ export default function CephAdminBucketCompareModal({
   const [selectedConfigFeatures, setSelectedConfigFeatures] = useState<CephAdminBucketCompareConfigFeature[]>(
     () => [...ALL_CONFIG_FEATURE_KEYS]
   );
-  const [sizeOnly, setSizeOnly] = useState(false);
   const [parallelism, setParallelism] = useState(4);
   const [running, setRunning] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -520,7 +519,6 @@ export default function CephAdminBucketCompareModal({
               include_content: includeContent,
               include_config: includeConfig,
               config_features: includeConfig ? selectedConfigFeatures : undefined,
-              size_only: sizeOnly,
             },
             { signal: controller.signal }
           );
@@ -661,7 +659,6 @@ export default function CephAdminBucketCompareModal({
         include_content: includeContent,
         include_config: includeConfig,
         config_features: includeConfig ? selectedConfigFeatures : [],
-        size_only: sizeOnly,
         parallelism,
       },
       summary: {
@@ -739,7 +736,7 @@ export default function CephAdminBucketCompareModal({
               disabled={running}
               className={uiCheckboxClass}
             />
-            Include object content
+            Compare bucket content
           </label>
           <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
             <input
@@ -749,17 +746,7 @@ export default function CephAdminBucketCompareModal({
               disabled={running}
               className={uiCheckboxClass}
             />
-            Include bucket configuration
-          </label>
-          <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
-            <input
-              type="checkbox"
-              checked={sizeOnly}
-              onChange={(event) => setSizeOnly(event.target.checked)}
-              disabled={running || !includeContent}
-              className={uiCheckboxClass}
-            />
-            Quick check (size only)
+            Compare bucket configuration
           </label>
           <label className="space-y-1 rounded-md border border-slate-200 px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:text-slate-100">
             <span className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Parallelism</span>
@@ -1104,7 +1091,7 @@ export default function CephAdminBucketCompareModal({
                         <summary className="cursor-pointer list-none px-2.5 py-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
-                              Content diff ({content.compare_mode === "size_only" ? "size only" : "md5 or size"})
+                              Content diff (md5 or size)
                             </span>
                             <UiBadge tone={getChangedTone(contentHasDifferences)} className="px-2 text-[10px]">
                               {contentHasDifferences ? "Different" : "Identical"}
