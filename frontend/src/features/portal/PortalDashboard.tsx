@@ -21,7 +21,6 @@ import {
   PortalUserSummary,
   listPortalUsers,
   updatePortalAccessKeyStatus,
-  rotatePortalAccessKey,
   fetchPortalSettings,
   fetchPortalTraffic,
   fetchPortalBucketStats,
@@ -132,7 +131,6 @@ export default function PortalDashboard() {
   const [bucketFilter, setBucketFilter] = useState("");
   const [creatingKey, setCreatingKey] = useState(false);
   const [togglingKeyId, setTogglingKeyId] = useState<string | null>(null);
-  const [renewingPortalKey, setRenewingPortalKey] = useState(false);
   const [creatingBucket, setCreatingBucket] = useState(false);
   const [showBucketModal, setShowBucketModal] = useState(false);
   const [selectedBucket, setSelectedBucket] = useState<Bucket | null>(null);
@@ -683,48 +681,6 @@ export default function PortalDashboard() {
     }
   };
 
-  const handleRenewPortalKey = async () => {
-    if (!accountIdForApi) return;
-    const previousPortalKey = state?.access_keys.find((k) => k.is_portal);
-    setRenewingPortalKey(true);
-    setKeyActionError(null);
-    setLastCreatedKey(null);
-    try {
-      const key = await rotatePortalAccessKey(accountIdForApi);
-      if (key.secret_access_key) {
-        setLastCreatedKey({
-          accessKey: key.access_key_id,
-          secretKey: key.secret_access_key,
-        });
-      }
-      setState((prev) => {
-        if (!prev) return prev;
-        const updatedKeys = (prev.access_keys || []).map((k) => {
-          if (previousPortalKey && k.access_key_id === previousPortalKey.access_key_id) {
-            return { ...k, is_portal: false, is_active: false, status: "Inactive" as const };
-          }
-          return k;
-        });
-        const deduped = updatedKeys.filter((k) => k.access_key_id !== key.access_key_id);
-        return { ...prev, access_keys: [key, ...deduped] };
-      });
-    } catch (err) {
-      console.error(err);
-      setKeyActionError(
-        extractApiError(
-          err,
-          t({
-            en: "Unable to renew portal key.",
-            fr: "Impossible de renouveler la cle portail.",
-            de: "Portal-Schlussel kann nicht erneuert werden.",
-          })
-        )
-      );
-    } finally {
-      setRenewingPortalKey(false);
-    }
-  };
-
   const handleBootstrapIdentity = async () => {
     if (!accountIdForApi) return;
     setBootstrappingIdentity(true);
@@ -1150,9 +1106,9 @@ export default function PortalDashboard() {
                     className="mt-1 ui-body font-semibold text-slate-700 underline decoration-slate-300 decoration-2 underline-offset-4 transition hover:text-slate-900 dark:text-slate-100 dark:decoration-slate-600 dark:hover:text-white"
                   >
                     {t({
-                      en: `${allAccessKeys.length} key(s)`,
-                      fr: `${allAccessKeys.length} cle(s)`,
-                      de: `${allAccessKeys.length} Schlussel`,
+                      en: `${orderedAccessKeys.length} key(s)`,
+                      fr: `${orderedAccessKeys.length} cle(s)`,
+                      de: `${orderedAccessKeys.length} Schlussel`,
                     })}
                   </button>
                 </div>
@@ -1249,7 +1205,7 @@ export default function PortalDashboard() {
       ) : (
         <div className="space-y-4">
           {showKeysModal && (
-            <Modal title={t({ en: "Portal IAM keys", fr: "Cles IAM portail", de: "Portal-IAM-Schlussel" })} onClose={() => setShowKeysModal(false)}>
+            <Modal title={t({ en: "IAM keys", fr: "Cles IAM", de: "IAM-Schlussel" })} onClose={() => setShowKeysModal(false)}>
               <div className="space-y-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="max-w-xl">
@@ -1262,23 +1218,10 @@ export default function PortalDashboard() {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {isPortalManager && (
-                      <button
-                        type="button"
-                        onClick={handleRenewPortalKey}
-                        disabled={renewingPortalKey || !accountIdForApi || !canManageBuckets || Boolean(togglingKeyId)}
-                        aria-label={t({ en: "Renew portal key", fr: "Renouveler la cle portail", de: "Portal-Schlussel erneuern" })}
-                        title={t({ en: "Renew portal key", fr: "Renouveler la cle portail", de: "Portal-Schlussel erneuern" })}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-200 text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:text-emerald-800 disabled:opacity-50 dark:border-emerald-900/40 dark:text-emerald-200"
-                      >
-                        <span aria-hidden>{renewingPortalKey ? "…" : "🔄"}</span>
-                        <span className="sr-only">{t({ en: "Renew portal key", fr: "Renouveler la cle portail", de: "Portal-Schlussel erneuern" })}</span>
-                      </button>
-                    )}
                     <button
                       type="button"
                       onClick={handleRotateKey}
-                      disabled={creatingKey || !accountIdForApi || !canCreateAccessKeys || Boolean(togglingKeyId) || renewingPortalKey}
+                      disabled={creatingKey || !accountIdForApi || !canCreateAccessKeys || Boolean(togglingKeyId)}
                       aria-label={t({ en: "Create user key", fr: "Creer une cle utilisateur", de: "Benutzerschlussel erstellen" })}
                       title={t({ en: "Create user key", fr: "Creer une cle utilisateur", de: "Benutzerschlussel erstellen" })}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
@@ -1388,8 +1331,7 @@ export default function PortalDashboard() {
                                     k.is_portal ||
                                     k.deletable === false ||
                                     creatingKey ||
-                                    Boolean(togglingKeyId) ||
-                                    renewingPortalKey
+                                    Boolean(togglingKeyId)
                                   }
                                   aria-label={
                                     isActive
@@ -1413,8 +1355,7 @@ export default function PortalDashboard() {
                                     k.is_portal ||
                                     k.deletable === false ||
                                     creatingKey ||
-                                    Boolean(togglingKeyId) ||
-                                    renewingPortalKey
+                                    Boolean(togglingKeyId)
                                   }
                                   aria-label={t({ en: "Delete key", fr: "Supprimer la cle", de: "Schlussel loschen" })}
                                   title={t({ en: "Delete key", fr: "Supprimer la cle", de: "Schlussel loschen" })}
