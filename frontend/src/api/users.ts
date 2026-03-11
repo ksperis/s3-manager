@@ -19,6 +19,7 @@ export type User = {
   picture_url?: string | null;
   role?: string | null;
   can_access_ceph_admin?: boolean;
+  can_access_storage_ops?: boolean;
   ui_language?: "en" | "fr" | "de" | null;
   quota_alerts_enabled?: boolean;
   quota_alerts_global_watch?: boolean;
@@ -56,6 +57,7 @@ export type UpdateUserPayload = {
   password?: string;
   role?: string;
   can_access_ceph_admin?: boolean;
+  can_access_storage_ops?: boolean;
   is_active?: boolean;
   s3_user_ids?: number[] | null;
   s3_connection_ids?: number[] | null;

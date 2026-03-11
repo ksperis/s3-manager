@@ -47,6 +47,7 @@ function buildSettings(): AppSettings {
     general: {
       manager_enabled: true,
       ceph_admin_enabled: false,
+      storage_ops_enabled: false,
       browser_enabled: true,
       browser_root_enabled: true,
       browser_manager_enabled: false,
@@ -143,6 +144,7 @@ function unlockedFeatureLocks(): GeneralFeatureLocks {
   return {
     manager_enabled: { forced: false, value: null, source: null },
     ceph_admin_enabled: { forced: false, value: null, source: null },
+    storage_ops_enabled: { forced: false, value: null, source: null },
     browser_enabled: { forced: false, value: null, source: null },
     portal_enabled: { forced: false, value: null, source: null },
     billing_enabled: { forced: false, value: null, source: null },

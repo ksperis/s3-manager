@@ -36,6 +36,14 @@ export function prefetchWorkspaceBranch(pathname: string): void {
     ]);
     return;
   }
+  if (pathname.startsWith("/storage-ops")) {
+    void Promise.allSettled([
+      import("../features/storageOps/StorageOpsLayout"),
+      import("../features/storageOps/StorageOpsDashboard"),
+      import("../features/storageOps/StorageOpsBucketsPage"),
+    ]);
+    return;
+  }
   if (pathname.startsWith("/browser")) {
     void Promise.allSettled([import("../features/browser/BrowserLayout"), import("../features/browser/BrowserPage")]);
   }

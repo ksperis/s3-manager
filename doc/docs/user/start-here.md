@@ -19,6 +19,7 @@ Use this page when you log in for the first time and need to understand where to
    - `Browser`: object operations.
    - `Portal`: guided workflows.
    - `Ceph Admin`: Ceph cluster-level tasks.
+   - `Storage Ops`: cross-context bucket operations.
 4. If you see context/account selectors, select the right account/endpoint before acting.
 
 ## Expected result
@@ -28,7 +29,7 @@ You know which workspace to use and can start from the correct context.
 ## Limits / feature flags
 
 !!! note
-    Workspace visibility depends on role, account links, and feature flags (`manager_enabled`, `browser_enabled`, `portal_enabled`, `ceph_admin_enabled`).
+    Workspace visibility depends on role, account links, and feature flags (`manager_enabled`, `browser_enabled`, `portal_enabled`, `ceph_admin_enabled`, `storage_ops_enabled`).
 
 ## Related pages
 

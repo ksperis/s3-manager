@@ -275,12 +275,20 @@ export default function AdminDashboard() {
         enabled: generalSettings.ceph_admin_enabled,
         critical: true,
       },
+      {
+        id: "storage_ops",
+        label: "Storage Ops",
+        description: "Cross-context bucket operations workspace",
+        enabled: generalSettings.storage_ops_enabled,
+        critical: true,
+      },
     ],
     [
       generalSettings.browser_enabled,
       generalSettings.ceph_admin_enabled,
       generalSettings.manager_enabled,
       generalSettings.portal_enabled,
+      generalSettings.storage_ops_enabled,
     ]
   );
 

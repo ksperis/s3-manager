@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app.db import Base, User, UserRole
 from app.main import app
 from app.routers import dependencies
+from app.services.bucket_listing_cache import invalidate_bucket_listing_cache
 
 
 @pytest.fixture(scope="session")
@@ -66,3 +67,12 @@ def client(db_session):
     yield TestClient(app)
 
     app.dependency_overrides = {}
+
+
+@pytest.fixture(autouse=True)
+def reset_bucket_listing_cache():
+    invalidate_bucket_listing_cache()
+    try:
+        yield
+    finally:
+        invalidate_bucket_listing_cache()

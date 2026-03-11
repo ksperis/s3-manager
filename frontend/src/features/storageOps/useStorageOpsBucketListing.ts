@@ -1,14 +1,12 @@
 import { useBucketOpsListing } from "../shared/useBucketOpsListing";
-import { listCephAdminBuckets, streamCephAdminBuckets } from "../../api/cephAdmin";
-
-export type { AdvancedSearchProgress } from "../shared/useBucketOpsListing";
+import { listStorageOpsBuckets, streamStorageOpsBuckets } from "../../api/storageOps";
 
 type BucketSort = {
   field: string;
   direction: "asc" | "desc";
 };
 
-type UseCephAdminBucketListingParams = {
+type UseStorageOpsBucketListingParams = {
   selectedEndpointId: number | null | undefined;
   page: number;
   pageSize: number;
@@ -22,7 +20,7 @@ type UseCephAdminBucketListingParams = {
   extractError: (err: unknown) => string;
 };
 
-export function useCephAdminBucketListing({
+export function useStorageOpsBucketListing({
   selectedEndpointId,
   page,
   pageSize,
@@ -34,7 +32,7 @@ export function useCephAdminBucketListing({
   requiresStats,
   baseRequiresStats,
   extractError,
-}: UseCephAdminBucketListingParams) {
+}: UseStorageOpsBucketListingParams) {
   return useBucketOpsListing({
     selectedScopeId: selectedEndpointId,
     page,
@@ -47,7 +45,7 @@ export function useCephAdminBucketListing({
     requiresStats,
     baseRequiresStats,
     extractError,
-    listBuckets: listCephAdminBuckets,
-    streamBuckets: streamCephAdminBuckets,
+    listBuckets: listStorageOpsBuckets,
+    streamBuckets: streamStorageOpsBuckets,
   });
 }

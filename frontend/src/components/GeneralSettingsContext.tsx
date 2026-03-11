@@ -8,6 +8,7 @@ import { fetchGeneralSettings, GeneralSettings } from "../api/appSettings";
 const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   manager_enabled: true,
   ceph_admin_enabled: false,
+  storage_ops_enabled: false,
   browser_enabled: true,
   browser_root_enabled: true,
   browser_manager_enabled: false,

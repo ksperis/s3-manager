@@ -10,7 +10,7 @@ const SUPERADMIN_ROLE = "ui_superadmin";
 const ADMIN_ROLE = "ui_admin";
 const USER_ROLE = "ui_user";
 
-export type WorkspaceId = "admin" | "ceph-admin" | "manager" | "browser" | "portal";
+export type WorkspaceId = "admin" | "ceph-admin" | "storage-ops" | "manager" | "browser" | "portal";
 
 export type WorkspaceOption = {
   id: WorkspaceId;
@@ -24,6 +24,7 @@ export type SessionUser = {
   role?: string | null;
   ui_language?: "en" | "fr" | "de" | null;
   can_access_ceph_admin?: boolean | null;
+  can_access_storage_ops?: boolean | null;
   authType?: "password" | "s3_session" | "oidc" | null;
   account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
   s3_users?: number[] | null;
@@ -45,6 +46,7 @@ export type SessionUser = {
 const ALL_WORKSPACES: WorkspaceOption[] = [
   { id: "admin", label: "Admin (plateforme)", path: "/admin" },
   { id: "ceph-admin", label: "Ceph Admin (RGW)", path: "/ceph-admin" },
+  { id: "storage-ops", label: "Storage Ops", path: "/storage-ops" },
   { id: "manager", label: "Manager (admin tenant)", path: "/manager" },
   { id: "browser", label: "Browser (objets)", path: "/browser" },
   { id: "portal", label: "Portail (self-service)", path: "/portal" },
@@ -74,7 +76,14 @@ export function readStoredUser(): SessionUser | null {
 export function readStoredWorkspaceId(): WorkspaceId | null {
   if (typeof window === "undefined") return null;
   const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY);
-  if (stored === "admin" || stored === "ceph-admin" || stored === "manager" || stored === "browser" || stored === "portal") {
+  if (
+    stored === "admin" ||
+    stored === "ceph-admin" ||
+    stored === "storage-ops" ||
+    stored === "manager" ||
+    stored === "browser" ||
+    stored === "portal"
+  ) {
     return stored;
   }
   return null;
@@ -83,7 +92,11 @@ export function readStoredWorkspaceId(): WorkspaceId | null {
 function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[] {
   if (!user || !user.role) return [];
   if (isAdminLikeRole(user.role)) {
-    return ALL_WORKSPACES.filter((workspace) => workspace.id !== "ceph-admin" || Boolean(user.can_access_ceph_admin));
+    return ALL_WORKSPACES.filter((workspace) => {
+      if (workspace.id === "ceph-admin") return Boolean(user.can_access_ceph_admin);
+      if (workspace.id === "storage-ops") return Boolean(user.can_access_storage_ops);
+      return true;
+    });
   }
   if (user.role !== USER_ROLE) return [];
   if (user.authType === "s3_session") {
@@ -122,6 +135,7 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
   const hasBrowserAccess = hasBrowserConnectionAccess || hasS3UserAccess;
 
   return ALL_WORKSPACES.filter((workspace) => {
+    if (workspace.id === "storage-ops") return Boolean(user.can_access_storage_ops);
     if (workspace.id === "portal") return hasPortalAccess;
     if (workspace.id === "manager") return hasManagerAccess;
     if (workspace.id === "browser") return hasBrowserAccess;
@@ -135,6 +149,7 @@ export function resolveAvailableWorkspacesWithFlags(
 ): WorkspaceOption[] {
   const filtered = resolveAvailableWorkspaces(user).filter((workspace) => {
     if (workspace.id === "ceph-admin") return generalSettings.ceph_admin_enabled;
+    if (workspace.id === "storage-ops") return generalSettings.storage_ops_enabled;
     if (workspace.id === "manager") {
       if (!generalSettings.manager_enabled) return false;
       if (user?.role !== USER_ROLE || user?.authType === "s3_session") return true;
@@ -208,6 +223,7 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
     (generalSettings.allow_portal_manager_workspace && hasPortalManager);
 
   if (generalSettings.manager_enabled && hasManagerAccess) return "/manager";
+  if (generalSettings.storage_ops_enabled && Boolean(user.can_access_storage_ops)) return "/storage-ops";
   if (hasPortalAccess && generalSettings.portal_enabled) return "/portal";
   if (generalSettings.browser_enabled && generalSettings.browser_root_enabled && hasBrowserAccess) return "/browser";
   return "/unauthorized";

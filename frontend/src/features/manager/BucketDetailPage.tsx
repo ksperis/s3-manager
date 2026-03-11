@@ -315,6 +315,7 @@ type BucketDetailMode = "manager" | "ceph-admin";
 type BucketDetailPageProps = {
   mode?: BucketDetailMode;
   bucketNameOverride?: string;
+  accountIdOverride?: string | null;
   embedded?: boolean;
   hideObjectsTab?: boolean;
 };
@@ -322,6 +323,7 @@ type BucketDetailPageProps = {
 export default function BucketDetailPage({
   mode = "manager",
   bucketNameOverride,
+  accountIdOverride = null,
   embedded = false,
   hideObjectsTab = false,
 }: BucketDetailPageProps) {
@@ -470,6 +472,9 @@ export default function BucketDetailPage({
 
   const selectedS3Account = useMemo(() => {
     if (isCephAdmin) return null;
+    if (accountIdOverride) {
+      return accounts.find((account) => account.id === accountIdOverride) ?? null;
+    }
     if (selectedS3AccountId) {
       return accounts.find((account) => account.id === selectedS3AccountId) ?? null;
     }
@@ -477,7 +482,7 @@ export default function BucketDetailPage({
       return accounts[0];
     }
     return null;
-  }, [accounts, isCephAdmin, requiresS3AccountSelection, selectedS3AccountId]);
+  }, [accountIdOverride, accounts, isCephAdmin, requiresS3AccountSelection, selectedS3AccountId]);
   const isCephEndpoint = isCephAdmin || selectedS3Account?.endpoint_provider === "ceph";
   const showObjectsTab = !isCephAdmin && !hideObjectsTab;
   const availableTabs = useMemo(() => {
@@ -514,7 +519,7 @@ export default function BucketDetailPage({
     }
     return selectedS3Account?.storage_endpoint_capabilities?.metrics ?? true;
   }, [isCephAdmin, selectedEndpoint, selectedS3Account]);
-  const accountId = accountIdForApi ?? null;
+  const accountId = accountIdOverride ?? accountIdForApi ?? null;
   const hasAccountContext = !requiresS3AccountSelection || accountId !== null;
   const endpointId = selectedEndpointId ?? null;
   const hasCephContext = Boolean(endpointId);

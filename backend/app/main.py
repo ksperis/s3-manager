@@ -33,6 +33,7 @@ from app.routers.ceph_admin import accounts as ceph_admin_accounts
 from app.routers.ceph_admin import users as ceph_admin_users
 from app.routers.ceph_admin import buckets as ceph_admin_buckets
 from app.routers.ceph_admin import metrics as ceph_admin_metrics
+from app.routers.storage_ops import buckets as storage_ops_buckets
 from app.routers.internal import billing_collect as internal_billing
 from app.routers.internal import healthchecks as internal_healthchecks
 from app.routers.internal import quota_monitor as internal_quota_monitor
@@ -54,6 +55,7 @@ from app.routers.dependencies import (
     require_ceph_admin_enabled,
     require_manager_context_enabled,
     require_manager_enabled,
+    require_storage_ops_enabled,
     require_portal_enabled,
 )
 
@@ -135,6 +137,7 @@ app.include_router(ceph_admin_accounts.router, prefix=settings.api_v1_prefix, de
 app.include_router(ceph_admin_users.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
 app.include_router(ceph_admin_metrics.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_ceph_admin_enabled)])
+app.include_router(storage_ops_buckets.router, prefix=settings.api_v1_prefix, dependencies=[Depends(require_storage_ops_enabled)])
 app.include_router(internal_billing.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_healthchecks.router, prefix=settings.api_v1_prefix)
 app.include_router(internal_quota_monitor.router, prefix=settings.api_v1_prefix)

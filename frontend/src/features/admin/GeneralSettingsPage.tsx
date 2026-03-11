@@ -45,6 +45,7 @@ const BRANDING_PRESET_COLORS = [
 const FEATURE_FIELDS = [
   "manager_enabled",
   "ceph_admin_enabled",
+  "storage_ops_enabled",
   "browser_enabled",
   "portal_enabled",
   "billing_enabled",
@@ -378,6 +379,24 @@ export default function GeneralSettingsPage() {
                   {getFeatureLockHint("ceph_admin_enabled") && (
                     <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
                       {getFeatureLockHint("ceph_admin_enabled")}
+                    </p>
+                  )}
+                </PortalSettingsItem>
+                <PortalSettingsItem
+                  title="Storage Ops feature"
+                  description="Cross-account and cross-connection bucket operations workspace."
+                  action={
+                    <PortalSettingsSwitch
+                      checked={Boolean(settings.general.storage_ops_enabled)}
+                      disabled={isFeatureLocked("storage_ops_enabled")}
+                      onChange={(value) => handleToggle("storage_ops_enabled", value)}
+                      ariaLabel="Storage Ops feature"
+                    />
+                  }
+                >
+                  {getFeatureLockHint("storage_ops_enabled") && (
+                    <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">
+                      {getFeatureLockHint("storage_ops_enabled")}
                     </p>
                   )}
                 </PortalSettingsItem>

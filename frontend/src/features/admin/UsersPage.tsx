@@ -28,7 +28,7 @@ import { useGeneralSettings } from "../../components/GeneralSettingsContext";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import { extractApiError } from "../../utils/apiError";
-import { isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
+import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
 
@@ -679,6 +679,7 @@ export default function UsersPage() {
   const { generalSettings } = useGeneralSettings();
   const currentUser = useMemo(() => readStoredUser(), []);
   const currentUserId = currentUser?.id != null ? Number(currentUser.id) : null;
+  const currentIsAdminLike = isAdminLikeRole(currentUser?.role);
   const currentIsSuperAdmin = isSuperAdminRole(currentUser?.role);
   const portalEnabled = generalSettings.portal_enabled;
   const cephAdminFeatureEnabled = generalSettings.ceph_admin_enabled;
@@ -922,8 +923,11 @@ export default function UsersPage() {
   const createRoleValue = normalizeUiRoleValue(form.role);
   const createTargetSupportsCephAdmin = createRoleValue === "ui_admin" || createRoleValue === "ui_superadmin";
   const editTargetSupportsCephAdmin = editRoleValue === "ui_admin" || editRoleValue === "ui_superadmin";
+  const editTargetSupportsStorageOps =
+    editRoleValue === "ui_user" || editRoleValue === "ui_admin" || editRoleValue === "ui_superadmin";
   const createCanGrantCephAdmin = currentIsSuperAdmin && createTargetSupportsCephAdmin;
   const editCanGrantCephAdmin = currentIsSuperAdmin && editTargetSupportsCephAdmin;
+  const editCanGrantStorageOps = currentIsAdminLike && editTargetSupportsStorageOps;
 
   const formatLastLogin = (value?: string | null) => {
     if (!value) return "-";
@@ -1288,6 +1292,10 @@ export default function UsersPage() {
         normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin"
           ? Boolean(user.can_access_ceph_admin)
           : false,
+      can_access_storage_ops:
+        normalizedRole === "ui_user" || normalizedRole === "ui_admin" || normalizedRole === "ui_superadmin"
+          ? Boolean(user.can_access_storage_ops)
+          : false,
     });
     const accountRoles = new Map<number, string | null>(
       (user.account_links ?? []).map((link) => [Number(link.account_id), link.account_role ?? null])
@@ -1351,6 +1359,10 @@ export default function UsersPage() {
       payload.can_access_ceph_admin =
         currentIsSuperAdmin && (nextRole === "ui_admin" || nextRole === "ui_superadmin")
           ? Boolean(editForm.can_access_ceph_admin ?? editingUser.can_access_ceph_admin)
+          : false;
+      payload.can_access_storage_ops =
+        currentIsAdminLike && (nextRole === "ui_user" || nextRole === "ui_admin" || nextRole === "ui_superadmin")
+          ? Boolean(editForm.can_access_storage_ops ?? editingUser.can_access_storage_ops)
           : false;
       payload.s3_user_ids = editSelectedS3Users;
       payload.s3_connection_ids = editSelectedS3Connections;
@@ -1859,11 +1871,14 @@ export default function UsersPage() {
                 onChange={(e) => {
                   const value = normalizeUiRoleValue(e.target.value);
                   const supportsCephAdmin = value === "ui_admin" || value === "ui_superadmin";
+                  const supportsStorageOps = value === "ui_user" || supportsCephAdmin;
                   setEditForm((f) => ({
                     ...f,
                     role: value,
                     can_access_ceph_admin:
                       currentIsSuperAdmin && supportsCephAdmin ? Boolean(f.can_access_ceph_admin) : false,
+                    can_access_storage_ops:
+                      currentIsAdminLike && supportsStorageOps ? Boolean(f.can_access_storage_ops) : false,
                   }));
                 }}
               >
@@ -1894,6 +1909,27 @@ export default function UsersPage() {
               </label>
               <p className="ui-caption text-slate-500 dark:text-slate-400">
                 Grantable only by Superadmin for roles "Admin" and "Superadmin".
+              </p>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="ui-body font-medium text-slate-700">Storage Ops access</label>
+              <label className="inline-flex items-center gap-2 ui-body text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={editCanGrantStorageOps && Boolean(editForm.can_access_storage_ops)}
+                  disabled={!editCanGrantStorageOps}
+                  onChange={(e) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      can_access_storage_ops: e.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                />
+                <span>Allow access to /storage-ops</span>
+              </label>
+              <p className="ui-caption text-slate-500 dark:text-slate-400">
+                Grantable by Admin or Superadmin for roles "User", "Admin" and "Superadmin".
               </p>
             </div>
             <div className="md:col-span-2">

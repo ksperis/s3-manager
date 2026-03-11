@@ -19,6 +19,7 @@ def _runtime_settings(**overrides):
         "feature_browser_enabled": None,
         "feature_portal_enabled": None,
         "feature_ceph_admin_enabled": None,
+        "feature_storage_ops_enabled": None,
         "feature_billing_enabled": None,
         "feature_endpoint_status_enabled": None,
         "billing_enabled": True,

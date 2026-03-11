@@ -20,7 +20,11 @@ Use this page when you are responsible for platform setup, tenant operations, or
    - Use tools such as Bucket Compare and Bucket Migration when enabled.
 3. For Ceph cluster-level actions, use **Ceph Admin** (if enabled):
    - RGW accounts, RGW users, buckets, endpoint metrics.
-4. Use **Browser** only when object-level actions are needed.
+4. For cross-account and cross-connection bucket campaigns, use **Storage Ops** (if enabled):
+   - Unified bucket listing and advanced filters.
+   - Bulk configuration actions with preview/apply.
+   - UI tags for operational grouping.
+5. Use **Browser** only when object-level actions are needed.
 
 ## Expected result
 
@@ -36,6 +40,7 @@ You can map each operational task to the right workspace and avoid cross-scope m
 - [Workspace: Admin](workspace-admin.md)
 - [Workspace: Manager](workspace-manager.md)
 - [Workspace: Ceph Admin](workspace-ceph-admin.md)
+- [Workspace: Storage Ops](workspace-storage-ops.md)
 
 ## Visual example
 

@@ -131,6 +131,16 @@ def get_current_ceph_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def get_current_storage_ops_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role not in {
+        UserRole.UI_SUPERADMIN.value,
+        UserRole.UI_ADMIN.value,
+        UserRole.UI_USER.value,
+    } or not bool(user.can_access_storage_ops):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    return user
+
+
 def get_current_account_admin(actor: ManagerActor = Depends(get_current_actor)) -> ManagerActor:
     if isinstance(actor, User):
         if actor.role not in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:
@@ -323,7 +333,14 @@ def _build_ceph_admin_browser_account(endpoint: StorageEndpoint) -> S3Account:
     return account
 
 
-def _resolve_connection_context(db: Session, user: User, connection_id: int, *, surface: str) -> S3Account:
+def _resolve_connection_context(
+    db: Session,
+    user: User,
+    connection_id: int,
+    *,
+    surface: str,
+    touch_usage: bool = True,
+) -> S3Account:
     """Resolve an S3Connection context.
 
     Access is granted if:
@@ -353,13 +370,14 @@ def _resolve_connection_context(db: Session, user: User, connection_id: int, *, 
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this connection")
 
     # Keep a minimal usage signal for UX (recently used sorting / hints).
-    try:
-        now = utcnow()
-        conn.last_used_at = now
-        conn.updated_at = now
-        db.commit()
-    except Exception:
-        db.rollback()
+    if touch_usage:
+        try:
+            now = utcnow()
+            conn.last_used_at = now
+            conn.updated_at = now
+            db.commit()
+        except Exception:
+            db.rollback()
     account = _build_s3_connection_account(conn)
     account.set_session_credentials(conn.access_key_id, conn.secret_access_key)
     can_manage_iam = _connection_iam_capable(conn)
@@ -577,11 +595,18 @@ def get_account_context(
     else:
         # UI users are bound to the endpoint configured on the selected account.
         requested_endpoint = None
+    is_storage_ops_surface = bool(request and str(request.url.path).startswith(f"{settings.api_v1_prefix}/storage-ops"))
     if isinstance(actor, User):
         if ceph_admin_endpoint_id is not None:
             return _resolve_ceph_admin_browser_context(db, actor, ceph_admin_endpoint_id, surface=surface)
         if connection_id is not None:
-            return _resolve_connection_context(db, actor, connection_id, surface=surface)
+            return _resolve_connection_context(
+                db,
+                actor,
+                connection_id,
+                surface=surface,
+                touch_usage=not is_storage_ops_surface,
+            )
         if s3_user_id is not None:
             return _resolve_s3_user_context(db, actor, s3_user_id)
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
@@ -922,6 +947,12 @@ def require_ceph_admin_enabled() -> None:
     settings = load_app_settings()
     if not settings.general.ceph_admin_enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ceph admin feature is disabled")
+
+
+def require_storage_ops_enabled() -> None:
+    settings = load_app_settings()
+    if not settings.general.storage_ops_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage Ops feature is disabled")
 
 
 def require_browser_enabled() -> None:

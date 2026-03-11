@@ -62,6 +62,7 @@ class UsersService:
             is_active=True,
             role=UserRole.UI_SUPERADMIN.value,
             can_access_ceph_admin=False,
+            can_access_storage_ops=False,
         )
         self.db.add(user)
         self.db.commit()
@@ -88,6 +89,7 @@ class UsersService:
             role=role,
             is_root=is_root,
             can_access_ceph_admin=can_access_ceph_admin,
+            can_access_storage_ops=False,
         )
         self.db.add(user)
         self.db.commit()
@@ -120,6 +122,14 @@ class UsersService:
             user.can_access_ceph_admin = bool(payload.can_access_ceph_admin) if is_admin_ui_role(next_role) else False
         elif not is_admin_ui_role(next_role):
             user.can_access_ceph_admin = False
+        if payload.can_access_storage_ops is not None:
+            user.can_access_storage_ops = (
+                bool(payload.can_access_storage_ops)
+                if next_role in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}
+                else False
+            )
+        elif next_role not in {UserRole.UI_SUPERADMIN.value, UserRole.UI_ADMIN.value, UserRole.UI_USER.value}:
+            user.can_access_storage_ops = False
         if not is_admin_ui_role(next_role):
             user.quota_alerts_global_watch = False
         if payload.s3_user_ids is not None:
@@ -531,6 +541,7 @@ class UsersService:
             role=user.role,
             is_root=user.is_root,
             can_access_ceph_admin=bool(user.can_access_ceph_admin),
+            can_access_storage_ops=bool(user.can_access_storage_ops),
             ui_language=user.ui_language,
             quota_alerts_enabled=bool(user.quota_alerts_enabled),
             quota_alerts_global_watch=bool(user.quota_alerts_global_watch),

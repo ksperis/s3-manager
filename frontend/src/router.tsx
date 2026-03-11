@@ -75,6 +75,9 @@ const loadCephAdminBucketsPage = () => import("./features/cephAdmin/CephAdminBuc
 const loadCephAdminBucketDetailPage = () => import("./features/cephAdmin/CephAdminBucketDetailPage");
 const loadCephAdminMetricsPage = () => import("./features/cephAdmin/CephAdminMetricsPage");
 const loadCephAdminBrowserPage = () => import("./features/cephAdmin/CephAdminBrowserPage");
+const loadStorageOpsLayout = () => import("./features/storageOps/StorageOpsLayout");
+const loadStorageOpsDashboard = () => import("./features/storageOps/StorageOpsDashboard");
+const loadStorageOpsBucketsPage = () => import("./features/storageOps/StorageOpsBucketsPage");
 const loadProfilePage = () => import("./features/shared/ProfilePage");
 
 const LoginPage = lazy(loadLoginPage);
@@ -136,6 +139,9 @@ const CephAdminBucketsPage = lazy(loadCephAdminBucketsPage);
 const CephAdminBucketDetailPage = lazy(loadCephAdminBucketDetailPage);
 const CephAdminMetricsPage = lazy(loadCephAdminMetricsPage);
 const CephAdminBrowserPage = lazy(loadCephAdminBrowserPage);
+const StorageOpsLayout = lazy(loadStorageOpsLayout);
+const StorageOpsDashboard = lazy(loadStorageOpsDashboard);
+const StorageOpsBucketsPage = lazy(loadStorageOpsBucketsPage);
 const ProfilePage = lazy(loadProfilePage);
 
 const SUPERADMIN_ROLE = "ui_superadmin";
@@ -320,6 +326,19 @@ function RequireCephAdminFeature() {
   return <Outlet />;
 }
 
+function RequireStorageOpsFeature() {
+  const { generalSettings } = useGeneralSettings();
+  const user = getStoredUser();
+  const canUseStorageOpsRole = Boolean(user && (isAdminLikeRole(user.role) || user.role === USER_ROLE));
+  if (!user || !canUseStorageOpsRole || !user.can_access_storage_ops) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  if (!generalSettings.storage_ops_enabled) {
+    return <FeatureDisabledPage feature="Storage Ops" />;
+  }
+  return <Outlet />;
+}
+
 function isBrowserSurfaceEnabled(
   generalSettings: ReturnType<typeof useGeneralSettings>["generalSettings"],
   surface: "root" | "manager" | "portal" | "ceph_admin"
@@ -446,6 +465,15 @@ export default function AppRouter() {
                 <Route element={<RequireBrowserSurface surface="ceph_admin" />}>
                   <Route path="browser" element={<CephAdminBrowserPage />} />
                 </Route>
+              </Route>
+            </Route>
+          </Route>
+
+          <Route element={<RequireRole roles={[SUPERADMIN_ROLE, ADMIN_ROLE, USER_ROLE]} />}>
+            <Route element={<RequireStorageOpsFeature />}>
+              <Route path="/storage-ops" element={<StorageOpsLayout />}>
+                <Route index element={<StorageOpsDashboard />} />
+                <Route path="buckets" element={<StorageOpsBucketsPage />} />
               </Route>
             </Route>
           </Route>

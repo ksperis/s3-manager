@@ -16,6 +16,7 @@ DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parents[1] / "data" / "app_sett
 _GENERAL_FEATURE_FIELDS = (
     "manager_enabled",
     "ceph_admin_enabled",
+    "storage_ops_enabled",
     "browser_enabled",
     "portal_enabled",
     "billing_enabled",
@@ -84,6 +85,7 @@ def get_general_feature_locks() -> GeneralFeatureLocks:
     dedicated_sources = {
         "manager_enabled": ("feature_manager_enabled", "FEATURE_MANAGER_ENABLED"),
         "ceph_admin_enabled": ("feature_ceph_admin_enabled", "FEATURE_CEPH_ADMIN_ENABLED"),
+        "storage_ops_enabled": ("feature_storage_ops_enabled", "FEATURE_STORAGE_OPS_ENABLED"),
         "browser_enabled": ("feature_browser_enabled", "FEATURE_BROWSER_ENABLED"),
         "portal_enabled": ("feature_portal_enabled", "FEATURE_PORTAL_ENABLED"),
         "billing_enabled": ("feature_billing_enabled", "FEATURE_BILLING_ENABLED"),

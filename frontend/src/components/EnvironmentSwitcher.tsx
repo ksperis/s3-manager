@@ -161,6 +161,7 @@ function WorkspaceIcon(props: React.SVGProps<SVGSVGElement>) {
 export function workspaceIconById(id: WorkspaceId): React.ReactNode {
   if (id === "admin") return <AdminIcon className="h-4 w-4" />;
   if (id === "ceph-admin") return <CephIcon className="h-4 w-4" />;
+  if (id === "storage-ops") return <OpsIcon className="h-4 w-4" />;
   if (id === "manager") return <ManagerIcon className="h-4 w-4" />;
   if (id === "browser") return <BrowserIcon className="h-4 w-4" />;
   return <PortalIcon className="h-4 w-4" />;
@@ -192,6 +193,16 @@ function ManagerIcon(props: React.SVGProps<SVGSVGElement>) {
       <rect x="13" y="4" width="8" height="7" rx="1.5" strokeWidth={1.6} />
       <rect x="3" y="13" width="8" height="7" rx="1.5" strokeWidth={1.6} />
       <rect x="13" y="13" width="8" height="7" rx="1.5" strokeWidth={1.6} />
+    </svg>
+  );
+}
+
+function OpsIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M5 6h14v12H5z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M9 10h6M9 14h6" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M3 9h2M19 9h2M3 15h2M19 15h2" />
     </svg>
   );
 }

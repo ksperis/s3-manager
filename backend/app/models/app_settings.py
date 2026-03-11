@@ -124,6 +124,7 @@ class PortalBucketDefaults(BaseModel):
 class GeneralSettings(BaseModel):
     manager_enabled: bool = True
     ceph_admin_enabled: bool = False
+    storage_ops_enabled: bool = False
     browser_enabled: bool = True
     browser_root_enabled: bool = True
     browser_manager_enabled: bool = False
@@ -153,6 +154,7 @@ class GeneralFeatureLock(BaseModel):
 class GeneralFeatureLocks(BaseModel):
     manager_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
     ceph_admin_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
+    storage_ops_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
     browser_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
     portal_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)
     billing_enabled: GeneralFeatureLock = Field(default_factory=GeneralFeatureLock)

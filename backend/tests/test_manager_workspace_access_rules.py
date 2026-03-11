@@ -84,6 +84,72 @@ def test_manager_workspace_accepts_non_iam_connection_when_access_manager_enable
     assert caps.can_manage_iam is False
 
 
+def test_manager_workspace_touch_connection_last_used_timestamp(db_session):
+    user = User(
+        email="manager-connection-touch@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    connection = S3Connection(
+        owner_user_id=None,
+        is_public=True,
+        name="touch-connection",
+        access_manager=True,
+        access_browser=True,
+        capabilities_json=json.dumps({"can_manage_iam": False}),
+        access_key_id="AK-TOUCH",
+        secret_access_key="SK-TOUCH",
+    )
+    db_session.add_all([user, connection])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(connection)
+    assert connection.last_used_at is None
+
+    dependencies.get_account_context(
+        request=_request("/api/manager/buckets"),
+        account_ref=f"conn-{connection.id}",
+        actor=user,
+        db=db_session,
+    )
+    db_session.refresh(connection)
+    assert connection.last_used_at is not None
+
+
+def test_storage_ops_workspace_does_not_touch_connection_last_used_timestamp(db_session):
+    user = User(
+        email="storage-ops-connection-no-touch@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    connection = S3Connection(
+        owner_user_id=None,
+        is_public=True,
+        name="no-touch-connection",
+        access_manager=True,
+        access_browser=True,
+        capabilities_json=json.dumps({"can_manage_iam": False}),
+        access_key_id="AK-NO-TOUCH",
+        secret_access_key="SK-NO-TOUCH",
+    )
+    db_session.add_all([user, connection])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(connection)
+    assert connection.last_used_at is None
+
+    dependencies.get_account_context(
+        request=_request("/api/storage-ops/buckets"),
+        account_ref=f"conn-{connection.id}",
+        actor=user,
+        db=db_session,
+    )
+    db_session.refresh(connection)
+    assert connection.last_used_at is None
+
+
 def test_manager_workspace_rejects_connection_without_manager_access(db_session):
     user = User(
         email="manager-connection-no-access@example.com",

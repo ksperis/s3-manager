@@ -52,6 +52,7 @@ class User(BaseModel):
     is_admin: bool = False
     is_root: bool = False
     can_access_ceph_admin: bool = False
+    can_access_storage_ops: bool = False
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False
@@ -75,6 +76,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_root: Optional[bool] = None
     can_access_ceph_admin: Optional[bool] = None
+    can_access_storage_ops: Optional[bool] = None
     s3_user_ids: Optional[list[int]] = None
     s3_connection_ids: Optional[list[int]] = None
 
@@ -106,6 +108,7 @@ class UserOut(BaseModel):
     role: Optional[str] = None
     is_root: bool = False
     can_access_ceph_admin: bool = False
+    can_access_storage_ops: bool = False
     ui_language: Optional[UiLanguage] = None
     quota_alerts_enabled: bool = True
     quota_alerts_global_watch: bool = False

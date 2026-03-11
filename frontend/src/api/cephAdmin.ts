@@ -464,9 +464,13 @@ export async function deleteCephAdminUserKey(
 
 export type CephAdminBucket = {
   name: string;
+  bucket_name?: string | null;
   tenant?: string | null;
   owner?: string | null;
   owner_name?: string | null;
+  context_id?: string | null;
+  context_name?: string | null;
+  context_kind?: "account" | "connection" | null;
   used_bytes?: number | null;
   object_count?: number | null;
   quota_max_size_bytes?: number | null;

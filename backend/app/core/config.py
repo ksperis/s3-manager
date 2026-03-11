@@ -217,6 +217,10 @@ class Settings(BaseSettings):
         None,
         description="Force Ceph Admin feature on/off (FEATURE_CEPH_ADMIN_ENABLED)",
     )
+    feature_storage_ops_enabled: Optional[bool] = Field(
+        None,
+        description="Force Storage Ops feature on/off (FEATURE_STORAGE_OPS_ENABLED)",
+    )
     feature_billing_enabled: Optional[bool] = Field(
         None,
         description="Force Billing feature on/off (FEATURE_BILLING_ENABLED)",

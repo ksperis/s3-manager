@@ -85,6 +85,7 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     )
     assert admin.role == UserRole.UI_SUPERADMIN.value
     assert admin.can_access_ceph_admin is False
+    assert admin.can_access_storage_ops is False
 
     with pytest.raises(ValueError, match="User already exists"):
         service.create_super_admin(
@@ -110,6 +111,7 @@ def test_create_super_admin_create_user_and_authenticate(db_session):
     )
     assert created.role == UserRole.UI_ADMIN.value
     assert created.can_access_ceph_admin is True
+    assert created.can_access_storage_ops is False
 
     assert service.authenticate("ui-admin@example.com", "wrong-password") is None
     authenticated = service.authenticate("ui-admin@example.com", "verylongpass123")
@@ -146,6 +148,7 @@ def test_update_user_and_link_validations(db_session):
             is_active=False,
             is_root=True,
             can_access_ceph_admin=True,
+            can_access_storage_ops=True,
             s3_user_ids=[s3_user.id],
             s3_connection_ids=[shared_conn.id],
         ),
@@ -154,9 +157,26 @@ def test_update_user_and_link_validations(db_session):
     assert updated.role == UserRole.UI_USER.value
     # Non-admin roles cannot keep ceph-admin access.
     assert updated.can_access_ceph_admin is False
+    assert updated.can_access_storage_ops is True
     assert updated.quota_alerts_global_watch is False
     assert updated.is_active is False
     assert updated.is_root is True
+
+
+def test_update_user_allows_storage_ops_for_admin_like_role(db_session):
+    service = UsersService(db_session)
+    user = _seed_user(db_session, "storage-ops-admin@example.com", role=UserRole.UI_USER.value)
+
+    updated = service.update_user(
+        user.id,
+        UserUpdate(
+            role=UserRole.UI_ADMIN.value,
+            can_access_storage_ops=True,
+        ),
+    )
+
+    assert updated.role == UserRole.UI_ADMIN.value
+    assert updated.can_access_storage_ops is True
 
 
 def test_update_current_user_password_paths(db_session):

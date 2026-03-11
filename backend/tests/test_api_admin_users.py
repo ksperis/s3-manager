@@ -178,6 +178,42 @@ def test_superadmin_can_promote_and_grant_ceph_admin_on_update(client: TestClien
     assert payload["can_access_ceph_admin"] is True
 
 
+def test_admin_can_grant_and_revoke_storage_ops_on_update(client: TestClient, db_session):
+    target = User(
+        email="target-storage-ops@example.com",
+        full_name="Target Storage Ops",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    db_session.add(target)
+    db_session.commit()
+
+    admin_user = User(
+        id=1006,
+        email="admin@example.com",
+        full_name="Admin",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_ADMIN.value,
+    )
+    app.dependency_overrides[dependencies.get_current_super_admin] = lambda: admin_user
+
+    grant_resp = client.put(
+        f"/api/admin/users/{target.id}",
+        json={"can_access_storage_ops": True},
+    )
+    assert grant_resp.status_code == 200, grant_resp.text
+    assert grant_resp.json()["can_access_storage_ops"] is True
+
+    revoke_resp = client.put(
+        f"/api/admin/users/{target.id}",
+        json={"can_access_storage_ops": False},
+    )
+    assert revoke_resp.status_code == 200, revoke_resp.text
+    assert revoke_resp.json()["can_access_storage_ops"] is False
+
+
 def test_admin_create_user_rejects_short_password(client: TestClient):
     response = client.post(
         "/api/admin/users",

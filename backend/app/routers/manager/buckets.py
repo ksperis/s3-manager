@@ -35,6 +35,10 @@ from app.models.manager_bucket_compare import (
 )
 from app.services.audit_service import AuditService
 from app.services.buckets_service import BucketsService, get_buckets_service
+from app.services.bucket_listing_cache import (
+    get_cached_bucket_listing_for_account,
+    invalidate_bucket_listing_cache_for_account,
+)
 from app.services.s3_client import BucketNotEmptyError
 from app.utils.storage_endpoint_features import resolve_feature_flags
 from app.routers.dependencies import (
@@ -79,6 +83,10 @@ def _context_id_from_account(account: S3Account) -> str:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported account context")
 
 
+def _invalidate_bucket_listing_for_account(account: S3Account) -> None:
+    invalidate_bucket_listing_cache_for_account(account)
+
+
 @router.get("", response_model=list[Bucket])
 def list_buckets(
     include: list[str] = Query(default=[], description="Optional extra fields to include (e.g. tags, versioning, cors)"),
@@ -96,7 +104,12 @@ def list_buckets(
                 normalized = part.strip()
                 if normalized:
                     include_set.add(normalized)
-        return service.list_buckets(account, include=include_set, with_stats=with_stats)
+        return get_cached_bucket_listing_for_account(
+            account=account,
+            include=include_set,
+            with_stats=with_stats,
+            builder=lambda: service.list_buckets(account, include=include_set, with_stats=with_stats),
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -223,6 +236,9 @@ def run_compare_bucket_action(
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
+    _invalidate_bucket_listing_for_account(source_account)
+    _invalidate_bucket_listing_for_account(target_account)
+
     if action_result.planned_count == 0:
         message = "No object matched this remediation action."
     elif action_result.failed_count <= 0:
@@ -276,6 +292,7 @@ def update_versioning(
 ):
     try:
         service.set_versioning(bucket_name, account, enabled=payload.enabled)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -314,6 +331,7 @@ def put_object_lock(
 ) -> BucketObjectLock:
     try:
         result = service.set_object_lock(bucket_name, account, payload)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -356,6 +374,7 @@ def put_bucket_encryption(
     _require_sse_feature(account)
     try:
         result = service.set_bucket_encryption(bucket_name, account, payload.rules)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -381,6 +400,7 @@ def delete_bucket_encryption(
     _require_sse_feature(account)
     try:
         service.delete_bucket_encryption(bucket_name, account)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -431,6 +451,7 @@ def put_acl(
 ) -> BucketAcl:
     try:
         result = service.set_bucket_acl(bucket_name, account, payload)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -469,6 +490,7 @@ def put_public_access_block(
 ) -> BucketPublicAccessBlock:
     try:
         result = service.set_public_access_block(bucket_name, account, payload)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -494,6 +516,7 @@ def put_policy(
 ) -> BucketPolicyOut:
     try:
         service.put_policy(bucket_name, account, policy=payload.policy)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -518,6 +541,7 @@ def delete_policy(
 ) -> None:
     try:
         service.delete_policy(bucket_name, account)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -554,6 +578,7 @@ def put_lifecycle(
 ) -> BucketLifecycleConfig:
     try:
         result = service.set_lifecycle(bucket_name, account, rules=payload.rules)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -578,6 +603,7 @@ def delete_lifecycle(
 ) -> None:
     try:
         service.delete_lifecycle(bucket_name, account)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -615,6 +641,7 @@ def put_cors(
 ):
     try:
         service.set_cors(bucket_name, account, rules=payload.rules)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -639,6 +666,7 @@ def delete_cors(
 ):
     try:
         service.delete_cors(bucket_name, account)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -676,6 +704,7 @@ def put_notifications(
     try:
         configuration = payload.configuration or {}
         result = service.set_bucket_notifications(bucket_name, account, configuration)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -700,6 +729,7 @@ def delete_notifications(
 ) -> None:
     try:
         service.delete_bucket_notifications(bucket_name, account)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -736,6 +766,7 @@ def put_replication(
 ) -> BucketReplicationConfiguration:
     try:
         result = service.set_bucket_replication(bucket_name, account, payload)
+        _invalidate_bucket_listing_for_account(account)
         configuration = payload.configuration or {}
         rules = configuration.get("Rules")
         rules_count = len(rules) if isinstance(rules, list) else 0
@@ -765,6 +796,7 @@ def delete_replication(
 ) -> None:
     try:
         service.delete_bucket_replication(bucket_name, account)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -801,6 +833,7 @@ def put_logging(
 ) -> BucketLoggingConfiguration:
     try:
         result = service.set_bucket_logging(bucket_name, account, payload)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -827,6 +860,7 @@ def delete_logging(
 ) -> None:
     try:
         service.delete_bucket_logging(bucket_name, account)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -863,6 +897,7 @@ def put_website(
 ) -> BucketWebsiteConfiguration:
     try:
         result = service.set_bucket_website(bucket_name, account, payload)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -889,6 +924,7 @@ def delete_website(
 ) -> None:
     try:
         service.delete_bucket_website(bucket_name, account)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -926,6 +962,7 @@ def put_tags(
 ):
     try:
         service.set_bucket_tags(bucket_name, account, tags=[{"key": tag.key, "value": tag.value} for tag in payload.tags])
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -953,6 +990,7 @@ def delete_tags(
 ):
     try:
         service.delete_bucket_tags(bucket_name, account)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -982,6 +1020,7 @@ def create_bucket(
             versioning=versioning,
             location_constraint=location_constraint,
         )
+        _invalidate_bucket_listing_for_account(account)
         audit_metadata = {"versioning": versioning}
         if location_constraint:
             audit_metadata["location_constraint"] = location_constraint
@@ -1015,6 +1054,7 @@ def delete_bucket(
 ):
     try:
         service.delete_bucket(bucket_name, account, force=force)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",
@@ -1042,6 +1082,7 @@ def update_quota(
 ):
     try:
         service.set_bucket_quota(bucket_name, account, payload)
+        _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
             scope="manager",

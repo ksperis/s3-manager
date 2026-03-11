@@ -17,6 +17,7 @@ export type LoginResponse = {
     is_admin?: boolean;
     is_root?: boolean;
     can_access_ceph_admin?: boolean;
+    can_access_storage_ops?: boolean;
     ui_language?: "en" | "fr" | "de" | null;
     accounts?: number[];
     account_links?: { account_id: number; account_role?: string | null; account_admin?: boolean | null }[] | null;
