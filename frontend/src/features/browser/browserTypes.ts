@@ -15,6 +15,7 @@ export type BrowserItem = {
   modifiedAt?: number | null;
   owner: string;
   storageClass?: string;
+  etag?: string | null;
 };
 
 export type TreeNode = {
@@ -120,7 +121,7 @@ export type BulkMetadataDraft = {
 
 export type PreviewKind = "image" | "video" | "audio" | "pdf" | "text" | "generic";
 
-export type ContextMenuKind = "item" | "selection" | "path";
+export type ContextMenuKind = "item" | "selection" | "path" | "headerConfig";
 
 export type ContextMenuState = {
   kind: ContextMenuKind;

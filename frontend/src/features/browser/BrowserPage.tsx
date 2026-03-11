@@ -91,7 +91,6 @@ import { resolveBrowserPanelVisibility } from "./browserResponsivePanels";
 import {
   BucketIcon,
   ChevronDownIcon,
-  CompactIcon,
   CopyIcon,
   CutIcon,
   DownloadIcon,
@@ -138,7 +137,6 @@ import {
   bulkDangerClasses,
   breadcrumbIconButtonClasses,
   countBadgeClasses,
-  filterChipActiveClasses,
   filterChipClasses,
   iconButtonClasses,
   iconButtonDangerClasses,
@@ -149,8 +147,6 @@ import {
   treeItemBaseClasses,
   treeItemInactiveClasses,
   treeToggleButtonClasses,
-  viewToggleActiveClasses,
-  viewToggleBaseClasses,
 } from "./browserConstants";
 import {
   buildTreeNodes,
@@ -258,6 +254,33 @@ type BrowserCopyDialogState = {
   value: string;
   successMessage?: string;
 };
+type BrowserColumnId =
+  | "type"
+  | "size"
+  | "modified"
+  | "storageClass"
+  | "etag"
+  | "contentType"
+  | "tagsCount"
+  | "metadataCount";
+type ColumnLazySource = "metadata" | "tags";
+type ColumnDefinition = {
+  id: BrowserColumnId;
+  label: string;
+  defaultVisible: boolean;
+  sortable?: "size" | "modified";
+  lazySource?: ColumnLazySource;
+  widthClassName: string;
+  align?: "left" | "right";
+};
+type LazyFieldStatus = "idle" | "loading" | "ready" | "error";
+type LazyColumnCacheEntry = {
+  contentType: string | null;
+  tagsCount: number | null;
+  metadataCount: number | null;
+  metadataStatus: LazyFieldStatus;
+  tagsStatus: LazyFieldStatus;
+};
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 const DEFAULT_STREAMING_ZIP_THRESHOLD_MB = 200;
@@ -278,6 +301,37 @@ const PATH_SUGGESTION_SOURCE_WEIGHT: Record<PathSuggestionSource, number> = {
   local: 200,
   remote: 100,
 };
+const LAZY_COLUMN_CONCURRENCY = 4;
+const LAZY_COLUMN_ROOT_MARGIN = "200px";
+const COLUMN_DEFINITIONS: ColumnDefinition[] = [
+  { id: "type", label: "Type", defaultVisible: false, widthClassName: "w-28" },
+  { id: "size", label: "Size", defaultVisible: true, sortable: "size", widthClassName: "w-20", align: "right" },
+  { id: "modified", label: "Modified", defaultVisible: true, sortable: "modified", widthClassName: "w-40" },
+  { id: "storageClass", label: "Storage class", defaultVisible: false, widthClassName: "w-40" },
+  { id: "etag", label: "ETag", defaultVisible: false, widthClassName: "w-48" },
+  { id: "contentType", label: "Content-Type", defaultVisible: false, lazySource: "metadata", widthClassName: "w-44" },
+  { id: "tagsCount", label: "Tags", defaultVisible: false, lazySource: "tags", widthClassName: "w-20", align: "right" },
+  {
+    id: "metadataCount",
+    label: "Metadata",
+    defaultVisible: false,
+    lazySource: "metadata",
+    widthClassName: "w-24",
+    align: "right",
+  },
+];
+const COLUMN_IDS_IN_ORDER = COLUMN_DEFINITIONS.map((definition) => definition.id);
+const DEFAULT_VISIBLE_COLUMN_IDS = COLUMN_DEFINITIONS.filter((definition) => definition.defaultVisible).map(
+  (definition) => definition.id
+);
+
+const createLazyColumnCacheEntry = (): LazyColumnCacheEntry => ({
+  contentType: null,
+  tagsCount: null,
+  metadataCount: null,
+  metadataStatus: "idle",
+  tagsStatus: "idle",
+});
 
 const getDeletedObjectEntryId = (value: Pick<BrowserObject, "key" | "version_id">) =>
   `${value.key}::${value.version_id ?? "null"}`;
@@ -334,6 +388,14 @@ const BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES: Record<BucketInspectorTone, string>
   inactive: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-100",
   unknown: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
 };
+const inspectorTabListClasses =
+  "flex flex-wrap gap-1 rounded-xl border border-slate-200/90 bg-slate-100/80 p-1 dark:border-slate-700 dark:bg-slate-900/70";
+const inspectorTabBaseClasses =
+  "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 ui-caption font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+const inspectorTabInactiveClasses =
+  "border-transparent bg-transparent text-slate-600 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800/70 dark:hover:text-slate-100";
+const inspectorTabActiveClasses =
+  "border-slate-300 bg-white text-slate-900 shadow-sm dark:border-slate-500 dark:bg-slate-800 dark:text-slate-100";
 const inspectorTabPanelClasses = "space-y-4 ui-caption text-slate-600 dark:text-slate-300";
 const inspectorSectionCardClasses =
   "rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/40";
@@ -578,6 +640,8 @@ export default function BrowserPage({
   const [corsFixError, setCorsFixError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [showSearchOptionsMenu, setShowSearchOptionsMenu] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<BrowserColumnId[]>(DEFAULT_VISIBLE_COLUMN_IDS);
+  const [lazyColumnCache, setLazyColumnCache] = useState<Record<string, LazyColumnCacheEntry>>({});
   const [searchScope, setSearchScope] = useState<SearchScope>("prefix");
   const [searchRecursive, setSearchRecursive] = useState(false);
   const [searchExactMatch, setSearchExactMatch] = useState(false);
@@ -594,6 +658,8 @@ export default function BrowserPage({
   const [bucketInspectorError, setBucketInspectorError] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<BrowserItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
+  const [activeRowId, setActiveRowId] = useState<string | null>(null);
   const [showDeletedObjects, setShowDeletedObjects] = useState(false);
   const [showFolderItems, setShowFolderItems] = useState(true);
   const [typeFilter, setTypeFilter] = useState<"all" | "file" | "folder">("all");
@@ -711,6 +777,7 @@ export default function BrowserPage({
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const bucketMenuRef = useRef<HTMLDivElement | null>(null);
   const searchOptionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const objectsListViewportRef = useRef<HTMLDivElement | null>(null);
   const bucketFilterRef = useRef<HTMLInputElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
@@ -725,6 +792,12 @@ export default function BrowserPage({
   const objectsRefreshTimeoutRef = useRef<number | null>(null);
   const uploadRefreshTimeoutRef = useRef<number | null>(null);
   const pendingUploadedKeysByBucketRef = useRef<Map<string, Set<string>>>(new Map());
+  const lazyColumnCacheRef = useRef<Record<string, LazyColumnCacheEntry>>({});
+  const lazyListItemsByIdRef = useRef<Map<string, BrowserItem>>(new Map());
+  const lazyQueueRef = useRef<string[]>([]);
+  const lazyQueuedIdsRef = useRef(new Set<string>());
+  const lazyInFlightRef = useRef(0);
+  const accountIdForApiRef = useRef(accountIdForApi);
   const previewObjectUrlRef = useRef<string | null>(null);
   const previousAccountIdRef = useRef<typeof accountIdForApi>(accountIdForApi);
   const contextCountIdRef = useRef(0);
@@ -766,6 +839,7 @@ export default function BrowserPage({
     normalizedPath.endsWith("/manager/browser") ||
     normalizedPath.endsWith("/portal/browser") ||
     normalizedPath.endsWith("/ceph-admin/browser");
+  const isMainBrowserPath = normalizedPath === "/browser";
   const bucketManagementEnabled = normalizedPath.endsWith("/browser") && !isEmbeddedBrowserPath;
   const bucketConfigurationEnabled = bucketManagementEnabled;
   const bucketConfigContextScope = "browser";
@@ -2443,6 +2517,7 @@ export default function BrowserPage({
         modifiedAt,
         owner: "-",
         storageClass: obj.storage_class ?? undefined,
+        etag: normalizeEtag(obj.etag ?? undefined) ?? null,
       } satisfies BrowserItem;
     });
     const deletedItemRows = deletedObjects.map((obj) => {
@@ -2495,6 +2570,17 @@ export default function BrowserPage({
     () => (showFolderItems ? filteredItems : filteredItems.filter((item) => item.type !== "folder")),
     [filteredItems, showFolderItems]
   );
+  const listItemById = useMemo(() => new Map(listItems.map((item) => [item.id, item])), [listItems]);
+  const effectiveVisibleColumns = isMainBrowserPath ? visibleColumns : DEFAULT_VISIBLE_COLUMN_IDS;
+  const visibleColumnSet = useMemo(() => new Set(effectiveVisibleColumns), [effectiveVisibleColumns]);
+  const visibleColumnDefinitions = useMemo(
+    () => COLUMN_DEFINITIONS.filter((definition) => visibleColumnSet.has(definition.id)),
+    [visibleColumnSet]
+  );
+  const lazyMetadataColumnsVisible = visibleColumnSet.has("contentType") || visibleColumnSet.has("metadataCount");
+  const lazyTagsColumnsVisible = visibleColumnSet.has("tagsCount");
+  const hasActiveLazyColumns = isMainBrowserPath && (lazyMetadataColumnsVisible || lazyTagsColumnsVisible);
+  const objectTableColSpan = 3 + visibleColumnDefinitions.length;
   const normalizedSearchQuery = filter.trim();
   const hasSearchQuery = normalizedSearchQuery.length > 0;
   const isSearchingInWholeBucket = hasSearchQuery && searchScope === "bucket";
@@ -2541,6 +2627,17 @@ export default function BrowserPage({
   const sortDirection = sortId.endsWith("asc") ? "asc" : "desc";
   const activePathSuggestion =
     pathSuggestionIndex >= 0 && pathSuggestionIndex < pathSuggestions.length ? pathSuggestions[pathSuggestionIndex] : null;
+
+  useEffect(() => {
+    if (!isMainBrowserPath) return;
+    if (sortKey === "size" && !visibleColumnSet.has("size")) {
+      setSortId("name-asc");
+      return;
+    }
+    if (sortKey === "modified" && !visibleColumnSet.has("modified")) {
+      setSortId("name-asc");
+    }
+  }, [isMainBrowserPath, sortKey, visibleColumnSet]);
 
   const breadcrumbs = useMemo(() => {
     let current = "";
@@ -2659,11 +2756,8 @@ export default function BrowserPage({
     if (activeItem && items.some((entry) => entry.id === activeItem.id)) {
       return activeItem;
     }
-    if (selectedIds.length === 1) {
-      return items.find((entry) => entry.id === selectedIds[0]) ?? null;
-    }
     return null;
-  }, [activeItem, items, selectedIds]);
+  }, [activeItem, items]);
 
   useEffect(() => {
     selectionStatsRequestIdRef.current += 1;
@@ -2672,7 +2766,7 @@ export default function BrowserPage({
     setSelectionStatsLoading(false);
   }, [bucketName, inspectedItem?.id, prefix, selectedIds]);
 
-  const selectionItems = selectedCount > 0 ? selectedItems : inspectedItem ? [inspectedItem] : [];
+  const selectionItems = selectedItems;
   const selectionInfo = getSelectionInfo(selectionItems);
   const selectionFiles = selectionInfo.files;
   const selectionFolders = selectionInfo.folders;
@@ -2729,18 +2823,7 @@ export default function BrowserPage({
   }, [bucketName, prefix]);
   const inspectedPath = inspectedItem ? `${bucketName}/${inspectedItem.key}` : currentPath;
 
-  const openItemDetails = (item: BrowserItem) => {
-    setActiveItem(item);
-    setInspectorTab("details");
-  };
-
-  const isInteractiveTarget = (target: EventTarget | null) => {
-    const element = target as HTMLElement | null;
-    return Boolean(element?.closest("button, a, input, textarea, select, label"));
-  };
-
-  const handleItemDoubleClick = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
-    if (isInteractiveTarget(event.target)) return;
+  const openItemPrimaryAction = (item: BrowserItem) => {
     if (item.type === "folder") {
       handleOpenItem(item);
       return;
@@ -2752,6 +2835,26 @@ export default function BrowserPage({
       return;
     }
     handlePreviewItem(item);
+  };
+
+  const openItemDetails = (item: BrowserItem) => {
+    if (!canUseInspectorPanel) return;
+    setSelectedIds([item.id]);
+    setSelectionAnchorId(item.id);
+    setActiveRowId(item.id);
+    setActiveItem(item);
+    setInspectorTab("details");
+    setShowInspector(true);
+  };
+
+  const isInteractiveTarget = (target: EventTarget | null) => {
+    const element = target as HTMLElement | null;
+    return Boolean(element?.closest("button, a, input, textarea, select, label"));
+  };
+
+  const handleItemDoubleClick = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
+    if (isInteractiveTarget(event.target)) return;
+    openItemPrimaryAction(item);
   };
 
   const openAdvancedForItem = (item: BrowserItem) => {
@@ -2895,7 +2998,13 @@ export default function BrowserPage({
 
   useEffect(() => {
     setSelectedIds([]);
+    setSelectionAnchorId(null);
+    setActiveRowId(null);
     setActiveItem(null);
+    setLazyColumnCache({});
+    lazyQueueRef.current = [];
+    lazyQueuedIdsRef.current.clear();
+    lazyInFlightRef.current = 0;
     setStatusMessage(null);
     setWarningMessage(null);
     setIsEditingPath(false);
@@ -2905,7 +3014,42 @@ export default function BrowserPage({
     setPreviewContentType(null);
     setPreviewLoading(false);
     setPreviewError(null);
-  }, [bucketName, clearPreviewObjectUrl, prefix]);
+  }, [accountIdForApi, bucketName, clearPreviewObjectUrl, prefix]);
+
+  useEffect(() => {
+    lazyColumnCacheRef.current = lazyColumnCache;
+  }, [lazyColumnCache]);
+
+  useEffect(() => {
+    accountIdForApiRef.current = accountIdForApi;
+  }, [accountIdForApi]);
+
+  useEffect(() => {
+    lazyListItemsByIdRef.current = listItemById;
+  }, [listItemById]);
+
+  useEffect(() => {
+    const listItemIds = new Set(listItems.map((item) => item.id));
+    setLazyColumnCache((prev) => {
+      let changed = false;
+      const next: Record<string, LazyColumnCacheEntry> = {};
+      Object.entries(prev).forEach(([itemId, entry]) => {
+        if (listItemIds.has(itemId)) {
+          next[itemId] = entry;
+          return;
+        }
+        changed = true;
+      });
+      return changed ? next : prev;
+    });
+    if (lazyQueueRef.current.length > 0) {
+      const filteredQueue = lazyQueueRef.current.filter((itemId) => listItemIds.has(itemId));
+      if (filteredQueue.length !== lazyQueueRef.current.length) {
+        lazyQueueRef.current = filteredQueue;
+        lazyQueuedIdsRef.current = new Set(filteredQueue);
+      }
+    }
+  }, [listItems]);
 
   useEffect(() => {
     if (!isEditingPath) {
@@ -3008,6 +3152,41 @@ export default function BrowserPage({
       setActiveItem(null);
     }
   }, [activeItem, items]);
+
+  useEffect(() => {
+    if (!isInspectorPanelVisible || inspectorTab !== "details") {
+      return;
+    }
+    if (selectedIds.length !== 1) {
+      setActiveItem((prev) => (prev ? null : prev));
+      return;
+    }
+    const [selectedId] = selectedIds;
+    const nextItem = items.find((item) => item.id === selectedId) ?? null;
+    setActiveItem((prev) => {
+      if (!nextItem) {
+        return prev ? null : prev;
+      }
+      if (prev?.id === nextItem.id) {
+        return prev;
+      }
+      return nextItem;
+    });
+  }, [inspectorTab, isInspectorPanelVisible, items, selectedIds]);
+
+  useEffect(() => {
+    setSelectionAnchorId((prev) => {
+      if (!prev) return null;
+      return listItems.some((item) => item.id === prev) ? prev : null;
+    });
+    setActiveRowId((prev) => {
+      if (prev && listItems.some((item) => item.id === prev)) {
+        return prev;
+      }
+      const firstVisibleSelected = listItems.find((item) => selectedIds.includes(item.id));
+      return firstVisibleSelected?.id ?? null;
+    });
+  }, [listItems, selectedIds]);
 
   useEffect(() => {
     if (storageFilter !== "all" && !searchableStorageClasses.includes(storageFilter)) {
@@ -3346,29 +3525,62 @@ export default function BrowserPage({
     void loadBucketInspectorData();
   }, [bucketInspectorByName, bucketInspectorLoading, bucketName, hasS3AccountContext, loadBucketInspectorData]);
 
+  const syncInspectorTabWithSelection = useCallback((nextSelectedCount: number) => {
+    setInspectorTab((currentTab) => {
+      if (isInspectorPanelVisible && currentTab === "details") {
+        return "details";
+      }
+      return nextSelectedCount > 0 ? "selection" : "context";
+    });
+  }, [isInspectorPanelVisible]);
+
+  const selectRangeBetweenRows = (anchorId: string, targetId: string) => {
+    const anchorIndex = listItems.findIndex((item) => item.id === anchorId);
+    const targetIndex = listItems.findIndex((item) => item.id === targetId);
+    if (anchorIndex < 0 || targetIndex < 0) {
+      setSelectedIds([targetId]);
+      setSelectionAnchorId(targetId);
+      setActiveRowId(targetId);
+      syncInspectorTabWithSelection(1);
+      return;
+    }
+    const [start, end] = anchorIndex <= targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+    const rangeIds = listItems.slice(start, end + 1).map((item) => item.id);
+    setSelectedIds(rangeIds);
+    setSelectionAnchorId(anchorId);
+    setActiveRowId(targetId);
+    syncInspectorTabWithSelection(rangeIds.length);
+  };
+
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => {
       const isSelected = prev.includes(id);
       const next = isSelected ? prev.filter((itemId) => itemId !== id) : [...prev, id];
-      if (!isSelected) {
-        setInspectorTab("selection");
-      }
+      syncInspectorTabWithSelection(next.length);
       return next;
     });
+    setSelectionAnchorId(id);
+    setActiveRowId(id);
   };
 
   const selectSingleRow = (id: string) => {
-    setSelectedIds((prev) => {
-      if (prev.length === 1 && prev[0] === id) {
-        return [];
-      }
-      setInspectorTab("selection");
-      return [id];
-    });
+    setSelectedIds([id]);
+    setSelectionAnchorId(id);
+    setActiveRowId(id);
+    syncInspectorTabWithSelection(1);
   };
 
   const handleItemSelectionClick = (event: ReactMouseEvent<HTMLElement>, itemId: string) => {
     if (event.detail > 1) return;
+    if (event.shiftKey) {
+      const anchorId =
+        (selectionAnchorId && listItems.some((item) => item.id === selectionAnchorId) ? selectionAnchorId : null) ??
+        (activeRowId && listItems.some((item) => item.id === activeRowId) ? activeRowId : null) ??
+        listItems.find((item) => selectedSet.has(item.id))?.id ??
+        itemId;
+      selectRangeBetweenRows(anchorId, itemId);
+      return;
+    }
     if (event.metaKey || event.ctrlKey) {
       toggleSelection(itemId);
       return;
@@ -3378,26 +3590,25 @@ export default function BrowserPage({
 
   const handleItemNameClick = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
     handleItemSelectionClick(event, item.id);
-    if (event.detail > 1) return;
-    if (event.metaKey || event.ctrlKey) return;
-    openItemDetails(item);
   };
 
   const toggleAllSelection = () => {
     if (allSelected) {
       setSelectedIds([]);
+      setSelectionAnchorId(null);
+      setActiveRowId(null);
+      syncInspectorTabWithSelection(0);
       return;
     }
-    setSelectedIds(listItems.map((item) => item.id));
-    if (listItems.length > 0) {
-      setInspectorTab("selection");
-    }
+    const nextIds = listItems.map((item) => item.id);
+    setSelectedIds(nextIds);
+    setSelectionAnchorId(nextIds[0] ?? null);
+    setActiveRowId(nextIds[0] ?? null);
+    syncInspectorTabWithSelection(nextIds.length);
   };
 
   const toggleInspectorForItem = (item: BrowserItem) => {
-    if (!canUseInspectorPanel) return;
-    setActiveItem(item);
-    setInspectorTab("details");
+    openItemDetails(item);
   };
 
   const handleItemContextMenu = (event: ReactMouseEvent<HTMLElement>, item: BrowserItem) => {
@@ -3407,6 +3618,8 @@ export default function BrowserPage({
     const itemsForMenu = isSelected ? selectedItems : [item];
     if (!isSelected) {
       setSelectedIds([item.id]);
+      setSelectionAnchorId(item.id);
+      setActiveRowId(item.id);
     }
     const { x, y } = getContextMenuPosition(event);
     setContextMenu({
@@ -3429,6 +3642,95 @@ export default function BrowserPage({
     setContextMenu({ kind: "path", x, y });
   };
 
+  const handleHeaderContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
+    if (!isMainBrowserPath) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const { x, y } = getContextMenuPosition(event);
+    setContextMenu({ kind: "headerConfig", x, y });
+  };
+
+  const handleListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (isInteractiveTarget(event.target)) {
+      return;
+    }
+    if (listItems.length === 0) {
+      return;
+    }
+    const getCurrentIndex = () => {
+      if (activeRowId) {
+        const activeIndex = listItems.findIndex((item) => item.id === activeRowId);
+        if (activeIndex >= 0) {
+          return activeIndex;
+        }
+      }
+      const selectedIndex = listItems.findIndex((item) => selectedSet.has(item.id));
+      return selectedIndex;
+    };
+    const currentIndex = getCurrentIndex();
+    const applyRowSelection = (nextIndex: number, extendRange: boolean) => {
+      const clampedIndex = Math.max(0, Math.min(listItems.length - 1, nextIndex));
+      const targetId = listItems[clampedIndex]?.id;
+      if (!targetId) return;
+      if (extendRange) {
+        const anchorId =
+          (selectionAnchorId && listItems.some((item) => item.id === selectionAnchorId) ? selectionAnchorId : null) ??
+          listItems[Math.max(0, currentIndex)]?.id ??
+          targetId;
+        selectRangeBetweenRows(anchorId, targetId);
+        return;
+      }
+      selectSingleRow(targetId);
+    };
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      const nextIndex = currentIndex < 0 ? 0 : Math.min(listItems.length - 1, currentIndex + 1);
+      applyRowSelection(nextIndex, event.shiftKey);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      const nextIndex = currentIndex < 0 ? listItems.length - 1 : Math.max(0, currentIndex - 1);
+      applyRowSelection(nextIndex, event.shiftKey);
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      applyRowSelection(0, event.shiftKey);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      applyRowSelection(listItems.length - 1, event.shiftKey);
+      return;
+    }
+    if (event.key === " " || event.key === "Spacebar") {
+      event.preventDefault();
+      const targetIndex = currentIndex < 0 ? 0 : currentIndex;
+      const targetId = listItems[targetIndex]?.id;
+      if (!targetId) return;
+      toggleSelection(targetId);
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const targetIndex = currentIndex < 0 ? 0 : currentIndex;
+      const targetItem = listItems[targetIndex];
+      if (!targetItem) return;
+      openItemPrimaryAction(targetItem);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setSelectedIds([]);
+      setSelectionAnchorId(null);
+      setActiveRowId(null);
+      setActiveItem(null);
+      syncInspectorTabWithSelection(0);
+    }
+  };
+
   const handleListBackgroundClick = (event: ReactMouseEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest("button, a, input, textarea, select, label")) {
@@ -3438,8 +3740,10 @@ export default function BrowserPage({
       return;
     }
     setSelectedIds([]);
+    setSelectionAnchorId(null);
+    setActiveRowId(null);
     setActiveItem(null);
-    setInspectorTab("context");
+    syncInspectorTabWithSelection(0);
   };
 
   const handleBucketMenuLoadMore = () => {
@@ -3665,6 +3969,234 @@ export default function BrowserPage({
       setCreateBucketLoading(false);
     }
   };
+
+  const normalizeVisibleColumns = useCallback((columnIds: BrowserColumnId[]) => {
+    const selected = new Set(columnIds);
+    return COLUMN_IDS_IN_ORDER.filter((columnId) => selected.has(columnId));
+  }, []);
+
+  const handleToggleVisibleColumn = useCallback(
+    (columnId: BrowserColumnId) => {
+      setVisibleColumns((prev) => {
+        const selected = new Set(prev);
+        if (selected.has(columnId)) {
+          selected.delete(columnId);
+        } else {
+          selected.add(columnId);
+        }
+        return normalizeVisibleColumns(Array.from(selected));
+      });
+    },
+    [normalizeVisibleColumns]
+  );
+
+  const handleResetVisibleColumns = useCallback(() => {
+    setVisibleColumns(DEFAULT_VISIBLE_COLUMN_IDS);
+  }, []);
+
+  const loadLazyColumnDataForItem = useCallback(
+    async (itemId: string) => {
+      const currentEntry = lazyColumnCacheRef.current[itemId] ?? createLazyColumnCacheEntry();
+      const shouldLoadMetadata =
+        lazyMetadataColumnsVisible &&
+        (currentEntry.metadataStatus === "loading" || currentEntry.metadataStatus === "idle");
+      const shouldLoadTags =
+        lazyTagsColumnsVisible &&
+        (currentEntry.tagsStatus === "loading" || currentEntry.tagsStatus === "idle");
+      if (!shouldLoadMetadata && !shouldLoadTags) {
+        return;
+      }
+      const item = lazyListItemsByIdRef.current.get(itemId);
+      if (!item || item.type !== "file" || item.isDeleted || !bucketName || !hasS3AccountContext) {
+        setLazyColumnCache((prev) => {
+          const entry = prev[itemId];
+          if (!entry) return prev;
+          let nextEntry = entry;
+          let changed = false;
+          if (shouldLoadMetadata && entry.metadataStatus === "loading") {
+            nextEntry = { ...nextEntry, metadataStatus: "error" };
+            changed = true;
+          }
+          if (shouldLoadTags && entry.tagsStatus === "loading") {
+            nextEntry = { ...nextEntry, tagsStatus: "error" };
+            changed = true;
+          }
+          return changed ? { ...prev, [itemId]: nextEntry } : prev;
+        });
+        return;
+      }
+
+      try {
+        const metadataPromise = shouldLoadMetadata
+          ? fetchObjectMetadata(accountIdForApi, bucketName, item.key, null, sseCustomerKeyBase64)
+          : Promise.resolve(null);
+        const tagsPromise = shouldLoadTags ? getObjectTags(accountIdForApi, bucketName, item.key) : Promise.resolve(null);
+        const [metadataResult, tagsResult] = await Promise.allSettled([metadataPromise, tagsPromise]);
+        if (
+          accountIdForApiRef.current !== accountIdForApi ||
+          bucketNameRef.current !== bucketName ||
+          prefixRef.current !== prefix
+        ) {
+          return;
+        }
+
+        setLazyColumnCache((prev) => {
+          const entry = prev[itemId] ?? createLazyColumnCacheEntry();
+          let nextEntry = entry;
+
+          if (shouldLoadMetadata) {
+            if (metadataResult.status === "fulfilled") {
+              const metadata = metadataResult.value;
+              nextEntry = {
+                ...nextEntry,
+                contentType: metadata?.content_type ?? null,
+                metadataCount: metadata ? Object.keys(metadata.metadata ?? {}).length : 0,
+                metadataStatus: "ready",
+              };
+            } else {
+              nextEntry = { ...nextEntry, metadataStatus: "error" };
+            }
+          }
+
+          if (shouldLoadTags) {
+            if (tagsResult.status === "fulfilled") {
+              const tags = tagsResult.value;
+              nextEntry = {
+                ...nextEntry,
+                tagsCount: tags?.tags?.length ?? 0,
+                tagsStatus: "ready",
+              };
+            } else {
+              nextEntry = { ...nextEntry, tagsStatus: "error" };
+            }
+          }
+
+          return { ...prev, [itemId]: nextEntry };
+        });
+      } catch {
+        setLazyColumnCache((prev) => {
+          const entry = prev[itemId];
+          if (!entry) return prev;
+          let nextEntry = entry;
+          let changed = false;
+          if (shouldLoadMetadata && entry.metadataStatus === "loading") {
+            nextEntry = { ...nextEntry, metadataStatus: "error" };
+            changed = true;
+          }
+          if (shouldLoadTags && entry.tagsStatus === "loading") {
+            nextEntry = { ...nextEntry, tagsStatus: "error" };
+            changed = true;
+          }
+          return changed ? { ...prev, [itemId]: nextEntry } : prev;
+        });
+      }
+    },
+    [accountIdForApi, bucketName, hasS3AccountContext, lazyMetadataColumnsVisible, lazyTagsColumnsVisible, prefix, sseCustomerKeyBase64]
+  );
+
+  const drainLazyColumnQueue = useCallback(() => {
+    while (lazyInFlightRef.current < LAZY_COLUMN_CONCURRENCY) {
+      const nextItemId = lazyQueueRef.current.shift();
+      if (!nextItemId) {
+        return;
+      }
+      lazyQueuedIdsRef.current.delete(nextItemId);
+      lazyInFlightRef.current += 1;
+      void loadLazyColumnDataForItem(nextItemId)
+        .catch(() => undefined)
+        .finally(() => {
+          lazyInFlightRef.current -= 1;
+          drainLazyColumnQueue();
+        });
+    }
+  }, [loadLazyColumnDataForItem]);
+
+  const scheduleLazyColumnLoad = useCallback(
+    (itemId: string) => {
+      if (!hasActiveLazyColumns) return;
+      const item = lazyListItemsByIdRef.current.get(itemId);
+      if (!item || item.type !== "file" || item.isDeleted) return;
+
+      const currentEntry = lazyColumnCacheRef.current[itemId] ?? createLazyColumnCacheEntry();
+      const shouldLoadMetadata = lazyMetadataColumnsVisible && currentEntry.metadataStatus === "idle";
+      const shouldLoadTags = lazyTagsColumnsVisible && currentEntry.tagsStatus === "idle";
+      if (!shouldLoadMetadata && !shouldLoadTags) return;
+
+      setLazyColumnCache((prev) => {
+        const entry = prev[itemId] ?? createLazyColumnCacheEntry();
+        let nextEntry = entry;
+        if (shouldLoadMetadata && entry.metadataStatus === "idle") {
+          nextEntry = { ...nextEntry, metadataStatus: "loading" };
+        }
+        if (shouldLoadTags && entry.tagsStatus === "idle") {
+          nextEntry = { ...nextEntry, tagsStatus: "loading" };
+        }
+        return { ...prev, [itemId]: nextEntry };
+      });
+
+      if (!lazyQueuedIdsRef.current.has(itemId)) {
+        lazyQueuedIdsRef.current.add(itemId);
+        lazyQueueRef.current.push(itemId);
+      }
+      drainLazyColumnQueue();
+    },
+    [drainLazyColumnQueue, hasActiveLazyColumns, lazyMetadataColumnsVisible, lazyTagsColumnsVisible]
+  );
+
+  useEffect(() => {
+    if (!hasActiveLazyColumns) return;
+    const root = objectsListViewportRef.current;
+    if (!root) return;
+
+    const rowNodes = Array.from(root.querySelectorAll<HTMLElement>("[data-lazy-item-id]"));
+    if (rowNodes.length === 0) return;
+
+    const rootRect = root.getBoundingClientRect();
+    const rootMarginPx = Number.parseInt(LAZY_COLUMN_ROOT_MARGIN, 10) || 0;
+    const viewportTop = rootRect.top - rootMarginPx;
+    const viewportBottom = rootRect.bottom + rootMarginPx;
+    rowNodes.forEach((node) => {
+      const itemId = node.dataset.lazyItemId;
+      if (!itemId) return;
+      if (rootRect.height <= 0 || rootRect.width <= 0) {
+        scheduleLazyColumnLoad(itemId);
+        return;
+      }
+      const rowRect = node.getBoundingClientRect();
+      const intersectsViewport = rowRect.bottom >= viewportTop && rowRect.top <= viewportBottom;
+      if (intersectsViewport) {
+        scheduleLazyColumnLoad(itemId);
+      }
+    });
+
+    if (typeof window === "undefined" || !("IntersectionObserver" in window)) {
+      rowNodes.forEach((node) => {
+        const itemId = node.dataset.lazyItemId;
+        if (itemId) {
+          scheduleLazyColumnLoad(itemId);
+        }
+      });
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const itemId = (entry.target as HTMLElement).dataset.lazyItemId;
+          if (itemId) {
+            scheduleLazyColumnLoad(itemId);
+          }
+          observer.unobserve(entry.target);
+        });
+      },
+      { root, rootMargin: LAZY_COLUMN_ROOT_MARGIN }
+    );
+    rowNodes.forEach((node) => observer.observe(node));
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasActiveLazyColumns, listItems, scheduleLazyColumnLoad]);
 
   const listVersionStats = async (opts: { prefix?: string; key?: string | null }) => {
     if (!isVersioningEnabled) {
@@ -3901,6 +4433,7 @@ export default function BrowserPage({
                 onClick={() => handleToggleTreeNode(node)}
                 disabled={!canToggle}
                 aria-label={node.isExpanded ? "Collapse" : "Expand"}
+                title={node.isExpanded ? "Collapse" : "Expand"}
               >
                 {canToggle ? (node.isExpanded ? "-" : "+") : ""}
               </button>
@@ -6313,8 +6846,11 @@ export default function BrowserPage({
       if (key === "a") {
         if (listItems.length === 0) return;
         event.preventDefault();
-        setSelectedIds(listItems.map((item) => item.id));
-        setInspectorTab("selection");
+        const nextIds = listItems.map((item) => item.id);
+        setSelectedIds(nextIds);
+        setSelectionAnchorId(nextIds[0] ?? null);
+        setActiveRowId(nextIds[0] ?? null);
+        syncInspectorTabWithSelection(nextIds.length);
         return;
       }
 
@@ -6325,7 +6861,7 @@ export default function BrowserPage({
       }
 
       if (key === "c") {
-        const targets = selectedItems.length > 0 ? selectedItems : inspectedItem ? [inspectedItem] : [];
+        const targets = selectedItems;
         if (targets.length === 0) return;
         event.preventDefault();
         handleCopyItems(targets);
@@ -6333,7 +6869,7 @@ export default function BrowserPage({
       }
 
       if (key === "x") {
-        const targets = selectedItems.length > 0 ? selectedItems : inspectedItem ? [inspectedItem] : [];
+        const targets = selectedItems;
         if (targets.length === 0) return;
         event.preventDefault();
         handleCutItems(targets);
@@ -6355,10 +6891,11 @@ export default function BrowserPage({
     handleCutItems,
     handlePasteItems,
     hasS3AccountContext,
-    inspectedItem,
     listItems,
     previewItem,
     selectedItems,
+    setActiveRowId,
+    setSelectionAnchorId,
     startEditingPath,
     showAdvancedModal,
     showNewFolderModal,
@@ -6372,6 +6909,7 @@ export default function BrowserPage({
     showObjectVersionsModal,
     showOperationsModal,
     showPrefixVersions,
+    syncInspectorTabWithSelection,
   ]);
 
   const refreshInspectedObject = async (targetKey?: string) => {
@@ -7219,6 +7757,84 @@ export default function BrowserPage({
   const operationsCountBadgeClasses = `${countBadgeClasses} ui-caption ${
     hasFailedOperations ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100" : ""
   }`;
+  const renderLazyCellValue = (status: LazyFieldStatus, value: string | number | null) => {
+    if (status === "idle") {
+      return "—";
+    }
+    if (status === "error") {
+      return "Unavailable";
+    }
+    if (status === "ready") {
+      if (typeof value === "number") {
+        return value.toLocaleString();
+      }
+      return value || "—";
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-500">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-slate-300 dark:bg-slate-600" />
+        Loading...
+      </span>
+    );
+  };
+
+  const renderColumnCellValue = (item: BrowserItem, columnId: BrowserColumnId) => {
+    if (columnId === "type") {
+      if (item.type === "folder") {
+        return item.isDeleted ? "Deleted folder" : "Folder";
+      }
+      return item.isDeleted ? "Deleted object" : "Object";
+    }
+    if (columnId === "size") {
+      return item.size;
+    }
+    if (columnId === "modified") {
+      return item.modified;
+    }
+    if (columnId === "storageClass") {
+      return item.storageClass ?? "—";
+    }
+    if (columnId === "etag") {
+      return item.etag ?? "—";
+    }
+
+    if (item.type !== "file" || item.isDeleted) {
+      return "—";
+    }
+    const lazyEntry = lazyColumnCache[item.id] ?? createLazyColumnCacheEntry();
+    if (columnId === "contentType") {
+      return renderLazyCellValue(lazyEntry.metadataStatus, lazyEntry.contentType);
+    }
+    if (columnId === "tagsCount") {
+      return renderLazyCellValue(lazyEntry.tagsStatus, lazyEntry.tagsCount);
+    }
+    if (columnId === "metadataCount") {
+      return renderLazyCellValue(lazyEntry.metadataStatus, lazyEntry.metadataCount);
+    }
+    return "—";
+  };
+
+  const renderColumnHeaderContent = (column: ColumnDefinition) => {
+    if (column.sortable === "size" || column.sortable === "modified") {
+      const active = sortKey === column.sortable;
+      return (
+        <button
+          type="button"
+          onClick={() => handleSortToggle(column.sortable)}
+          className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
+        >
+          <span>{column.label}</span>
+          <ChevronDownIcon
+            className={`h-3 w-3 transition ${active ? "opacity-100" : "opacity-30"} ${
+              active && sortDirection === "asc" ? "-rotate-180" : ""
+            }`}
+          />
+        </button>
+      );
+    }
+    return <span className="inline-flex h-6 items-center">{column.label}</span>;
+  };
+
   const isCreateBucketNameValid = !createBucketNameValue || isValidS3BucketName(createBucketNameValue);
   const showFolderToggle = showPanelToggles && canUseFoldersPanel;
   const showInspectorToggle = showPanelToggles && canUseInspectorPanel;
@@ -7280,6 +7896,7 @@ export default function BrowserPage({
                   aria-haspopup="listbox"
                   aria-expanded={showBucketMenu}
                   aria-label="Select bucket"
+                  title="Select bucket"
                 >
                   <BucketIcon className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
                   <span className="max-w-[160px] truncate">{bucketButtonLabel}</span>
@@ -7540,26 +8157,6 @@ export default function BrowserPage({
             </div>
           </div>
           <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:ml-auto xl:w-auto xl:flex-nowrap">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setCompactMode(true)}
-                className={`${viewToggleBaseClasses} ${compactMode ? viewToggleActiveClasses : ""}`}
-                aria-label="Compact list view"
-                aria-pressed={compactMode}
-              >
-                <CompactIcon className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setCompactMode(false)}
-                className={`${viewToggleBaseClasses} ${!compactMode ? viewToggleActiveClasses : ""}`}
-                aria-label="List view"
-                aria-pressed={!compactMode}
-              >
-                <ListIcon className="h-3.5 w-3.5" />
-              </button>
-            </div>
             <button
               type="button"
               className={iconButtonClasses}
@@ -7709,14 +8306,21 @@ export default function BrowserPage({
                             }`}
                       </div>
                     )}
-                    <div className="relative min-h-0 flex-1 overflow-x-auto overflow-y-auto" onClick={handleListBackgroundClick}>
+                    <div
+                      ref={objectsListViewportRef}
+                      className="relative min-h-0 flex-1 overflow-x-auto overflow-y-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      onClick={handleListBackgroundClick}
+                      onKeyDown={handleListKeyDown}
+                      tabIndex={0}
+                      aria-label="Objects list"
+                    >
                         {objectsLoading && listItems.length > 0 && (
                           <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-white/45 pt-4 ui-caption font-semibold text-slate-600 backdrop-blur-[1px] dark:bg-slate-900/40 dark:text-slate-200">
                             Refreshing objects...
                           </div>
                         )}
                         <table className="manager-table min-w-[720px] w-full divide-y divide-slate-200 dark:divide-slate-800">
-                          <thead className="bg-slate-50 dark:bg-slate-900/50">
+                          <thead className="bg-slate-50 dark:bg-slate-900/50" onContextMenu={handleHeaderContextMenu}>
                             <tr>
                               <th className={`w-9 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 <input
@@ -7766,6 +8370,7 @@ export default function BrowserPage({
                                         aria-haspopup="menu"
                                         aria-expanded={showSearchOptionsMenu}
                                         aria-label="Search options"
+                                        title="Search options"
                                       >
                                         <SlidersIcon className="h-3 w-3" />
                                       </button>
@@ -7884,34 +8489,16 @@ export default function BrowserPage({
                                   </div>
                                 </div>
                               </th>
-                              <th className={`w-20 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSortToggle("size")}
-                                  className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
+                              {visibleColumnDefinitions.map((column) => (
+                                <th
+                                  key={column.id}
+                                  className={`${column.widthClassName} px-2 ${headerPadding} !align-middle ${
+                                    column.align === "right" ? "text-right" : "text-left"
+                                  } ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}
                                 >
-                                  <span>Size</span>
-                                  <ChevronDownIcon
-                                    className={`h-3 w-3 transition ${
-                                      sortKey === "size" ? "opacity-100" : "opacity-30"
-                                    } ${sortKey === "size" && sortDirection === "asc" ? "-rotate-180" : ""}`}
-                                  />
-                                </button>
-                              </th>
-                              <th className={`w-32 px-2 ${headerPadding} !align-middle text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSortToggle("modified")}
-                                  className="group inline-flex h-6 items-center gap-1 text-left text-slate-500 transition hover:text-primary-700 dark:text-slate-400 dark:hover:text-primary-100"
-                                >
-                                  <span>Modified</span>
-                                  <ChevronDownIcon
-                                    className={`h-3 w-3 transition ${
-                                      sortKey === "modified" ? "opacity-100" : "opacity-30"
-                                    } ${sortKey === "modified" && sortDirection === "asc" ? "-rotate-180" : ""}`}
-                                  />
-                                </button>
-                              </th>
+                                  {renderColumnHeaderContent(column)}
+                                </th>
+                              ))}
                               <th className={`w-44 px-2 ${headerPadding} !align-middle text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}>
                                 <span className="inline-flex h-6 items-center">Actions</span>
                               </th>
@@ -7935,21 +8522,29 @@ export default function BrowserPage({
                                     <span className="truncate">Parent folder</span>
                                   </button>
                                 </td>
-                                <td className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-400 whitespace-nowrap`}>-</td>
-                                <td className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-400 whitespace-nowrap`}>-</td>
+                                {visibleColumnDefinitions.map((column) => (
+                                  <td
+                                    key={column.id}
+                                    className={`${column.widthClassName} px-2 ${rowCellClasses} !align-middle ui-body text-slate-400 whitespace-nowrap overflow-hidden text-ellipsis ${
+                                      column.align === "right" ? "text-right" : ""
+                                    }`}
+                                  >
+                                    -
+                                  </td>
+                                ))}
                                 <td className={`w-44 px-2 ${rowCellClasses} !align-middle text-right ui-caption text-slate-400`} />
                               </tr>
                             )}
-                            {objectsLoading && listItems.length === 0 && <TableEmptyState colSpan={5} message="Loading objects..." />}
+                            {objectsLoading && listItems.length === 0 && <TableEmptyState colSpan={objectTableColSpan} message="Loading objects..." />}
                             {!objectsLoading && !bucketName && (
-                              <TableEmptyState colSpan={5} message="Select a bucket to browse objects." />
+                              <TableEmptyState colSpan={objectTableColSpan} message="Select a bucket to browse objects." />
                             )}
                             {!objectsLoading && bucketName && objectsError && listItems.length === 0 && (
-                              <TableEmptyState colSpan={5} message={objectsError} />
+                              <TableEmptyState colSpan={objectTableColSpan} message={objectsError} />
                             )}
                             {!objectsLoading && bucketName && !objectsError && listItems.length === 0 && (
                               <TableEmptyState
-                                colSpan={5}
+                                colSpan={objectTableColSpan}
                                 message={
                                   hasActiveSearchFilters
                                     ? "No objects matched this search."
@@ -7960,11 +8555,13 @@ export default function BrowserPage({
                             {listItems.map((item) => {
                               const isFocused = inspectedItem?.id === item.id;
                               const isSelected = selectedSet.has(item.id);
+                              const isActiveRow = activeRowId === item.id;
                               const isDeleted = Boolean(item.isDeleted);
                               return (
                               <tr
                                 key={item.id}
                                 data-browser-item
+                                data-lazy-item-id={item.type === "file" && !item.isDeleted ? item.id : undefined}
                                 onClick={(event) => {
                                   if (isInteractiveTarget(event.target)) {
                                     return;
@@ -7976,6 +8573,8 @@ export default function BrowserPage({
                                 className={`${rowHeightClasses} transition-colors ${
                                   isSelected
                                     ? "bg-primary-100/80 hover:bg-primary-100 dark:bg-primary-500/30 dark:hover:bg-primary-500/40"
+                                    : isActiveRow
+                                      ? "bg-sky-50/80 hover:bg-sky-100/80 dark:bg-sky-900/20 dark:hover:bg-sky-900/30"
                                     : isDeleted
                                       ? "bg-rose-50/60 hover:bg-rose-100/70 dark:bg-rose-900/10 dark:hover:bg-rose-900/20"
                                     : isFocused
@@ -8013,19 +8612,7 @@ export default function BrowserPage({
                                       <button
                                         type="button"
                                         onClick={(event) => handleItemNameClick(event, item)}
-                                        onDoubleClick={() => {
-                                          if (item.type === "folder") {
-                                            handleOpenItem(item);
-                                            return;
-                                          }
-                                          if (item.isDeleted) {
-                                            if (isVersioningEnabled) {
-                                              openObjectVersionsModal(item);
-                                            }
-                                            return;
-                                          }
-                                          handlePreviewItem(item);
-                                        }}
+                                        onDoubleClick={() => openItemPrimaryAction(item)}
                                         className={`flex w-full min-w-0 items-baseline gap-1 text-left font-semibold ${
                                           isDeleted
                                             ? "text-rose-700 hover:text-rose-800 dark:text-rose-200 dark:hover:text-rose-100"
@@ -8071,12 +8658,16 @@ export default function BrowserPage({
                                     </div>
                                   </div>
                                 </td>
-                                <td className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
-                                  {item.size}
-                                </td>
-                                <td className={`px-2 ${rowCellClasses} !align-middle ui-body text-slate-600 dark:text-slate-300 whitespace-nowrap`}>
-                                  {item.modified}
-                                </td>
+                                {visibleColumnDefinitions.map((column) => (
+                                  <td
+                                    key={column.id}
+                                    className={`${column.widthClassName} px-2 ${rowCellClasses} !align-middle ui-body text-slate-600 dark:text-slate-300 whitespace-nowrap overflow-hidden text-ellipsis ${
+                                      column.align === "right" ? "text-right" : ""
+                                    }`}
+                                  >
+                                    {renderColumnCellValue(item, column.id)}
+                                  </td>
+                                ))}
                                 <td className={`w-44 px-2 ${rowCellClasses} !align-middle text-right`}>
                                   <div className="flex flex-nowrap justify-end gap-1.5">
                                     {item.type === "folder" && (
@@ -8169,7 +8760,7 @@ export default function BrowserPage({
                 {isInspectorPanelVisible && (
                   <div className="flex min-h-0 h-full flex-col gap-3">
                     <div className="flex min-h-0 h-full flex-1 flex-col rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-                      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Inspector tabs">
+                      <div className={inspectorTabListClasses} role="tablist" aria-label="Inspector tabs">
                         <button
                           type="button"
                           role="tab"
@@ -8177,7 +8768,9 @@ export default function BrowserPage({
                           aria-selected={inspectorTab === "details"}
                           aria-controls="inspector-panel-details"
                           onClick={() => setInspectorTab("details")}
-                          className={`${filterChipClasses} ${inspectorTab === "details" ? filterChipActiveClasses : ""}`}
+                          className={`${inspectorTabBaseClasses} ${
+                            inspectorTab === "details" ? inspectorTabActiveClasses : inspectorTabInactiveClasses
+                          }`}
                         >
                           Details
                         </button>
@@ -8188,7 +8781,9 @@ export default function BrowserPage({
                           aria-selected={inspectorTab === "context"}
                           aria-controls="inspector-panel-context"
                           onClick={() => setInspectorTab("context")}
-                          className={`${filterChipClasses} ${inspectorTab === "context" ? filterChipActiveClasses : ""}`}
+                          className={`${inspectorTabBaseClasses} ${
+                            inspectorTab === "context" ? inspectorTabActiveClasses : inspectorTabInactiveClasses
+                          }`}
                         >
                           Context
                         </button>
@@ -8199,7 +8794,9 @@ export default function BrowserPage({
                           aria-selected={inspectorTab === "bucket"}
                           aria-controls="inspector-panel-bucket"
                           onClick={handleOpenBucketInspector}
-                          className={`${filterChipClasses} ${inspectorTab === "bucket" ? filterChipActiveClasses : ""}`}
+                          className={`${inspectorTabBaseClasses} ${
+                            inspectorTab === "bucket" ? inspectorTabActiveClasses : inspectorTabInactiveClasses
+                          }`}
                         >
                           Bucket
                         </button>
@@ -8210,7 +8807,9 @@ export default function BrowserPage({
                           aria-selected={inspectorTab === "selection"}
                           aria-controls="inspector-panel-selection"
                           onClick={() => setInspectorTab("selection")}
-                          className={`${filterChipClasses} ${inspectorTab === "selection" ? filterChipActiveClasses : ""}`}
+                          className={`${inspectorTabBaseClasses} ${
+                            inspectorTab === "selection" ? inspectorTabActiveClasses : inspectorTabInactiveClasses
+                          }`}
                         >
                           Selection
                           {selectedCount > 0 && <span className={countBadgeClasses}>{selectedCount}</span>}
@@ -8418,147 +9017,154 @@ export default function BrowserPage({
                             aria-labelledby="inspector-tab-bucket"
                             className={inspectorTabPanelClasses}
                           >
-                            <div className={`${inspectorSectionCardClasses} flex items-start justify-between gap-2`}>
-                              <div className="space-y-1">
+                            <div className="space-y-3">
+                              <div className={inspectorSectionCardClasses}>
                                 <p className={inspectorSectionTitleClasses}>Bucket overview</p>
-                                <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
                                   {bucketName || "Select a bucket to inspect."}
                                 </p>
                               </div>
-                              <div className="flex items-center gap-3">
-                                {bucketConfigurationEnabled && (
+
+                              <div className={inspectorSectionCardClasses}>
+                                <p className={inspectorSectionTitleClasses}>Actions</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {bucketConfigurationEnabled && (
+                                    <button
+                                      type="button"
+                                      className={bulkActionClasses}
+                                      onClick={() => openBucketConfigurationModal(bucketName)}
+                                      disabled={!bucketName || !hasS3AccountContext}
+                                    >
+                                      <SettingsIcon className="h-3.5 w-3.5" />
+                                      Configure
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
-                                    className={inspectorInlineActionClasses}
-                                    onClick={() => openBucketConfigurationModal(bucketName)}
+                                    className={bulkActionClasses}
+                                    onClick={openMultipartUploadsModal}
                                     disabled={!bucketName || !hasS3AccountContext}
                                   >
-                                    Configure
+                                    <UploadIcon className="h-3.5 w-3.5" />
+                                    Multipart uploads
                                   </button>
-                                )}
-                                <button
-                                  type="button"
-                                  className={inspectorInlineActionClasses}
-                                  onClick={openMultipartUploadsModal}
-                                  disabled={!bucketName || !hasS3AccountContext}
-                                >
-                                  Multipart uploads
-                                </button>
-                                <button
-                                  type="button"
-                                  className={inspectorInlineActionClasses}
-                                  onClick={() => void loadBucketInspectorData(true)}
-                                  disabled={!bucketName || !hasS3AccountContext || bucketInspectorLoading}
-                                >
-                                  {bucketInspectorLoading ? "Loading..." : "Refresh"}
-                                </button>
-                              </div>
-                            </div>
-
-                            {!bucketName || !hasS3AccountContext ? (
-                              <div className={inspectorEmptyStateClasses}>
-                                Select a bucket to load bucket stats and features.
-                              </div>
-                            ) : (
-                              <div className="space-y-3">
-                                {bucketInspectorLoading && !bucketInspectorData && (
-                                  <p className="ui-caption text-slate-500 dark:text-slate-400">Loading bucket overview...</p>
-                                )}
-                                {bucketInspectorError && (
-                                  <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
-                                    {bucketInspectorError}
-                                  </p>
-                                )}
-                                <div className={inspectorSectionCardClasses}>
-                                  <p className={inspectorSectionTitleClasses}>Stats</p>
-                                  <div className="mt-2 grid gap-2">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-slate-500">Created</span>
-                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                        {bucketInspectorData?.creation_date
-                                          ? formatDateTime(bucketInspectorData.creation_date)
-                                          : "-"}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-slate-500">Used bytes</span>
-                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                        {formatBytes(bucketInspectorData?.used_bytes ?? null)}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-slate-500">Object count</span>
-                                      <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                        {bucketInspectorData?.object_count != null
-                                          ? bucketInspectorData.object_count.toLocaleString()
-                                          : "-"}
-                                      </span>
-                                    </div>
-                                  </div>
+                                  <button
+                                    type="button"
+                                    className={bulkActionClasses}
+                                    onClick={() => void loadBucketInspectorData(true)}
+                                    disabled={!bucketName || !hasS3AccountContext || bucketInspectorLoading}
+                                  >
+                                    <RefreshIcon className="h-3.5 w-3.5" />
+                                    {bucketInspectorLoading ? "Loading..." : "Refresh"}
+                                  </button>
                                 </div>
+                              </div>
 
-                                {isCephContext && (
+                              {!bucketName || !hasS3AccountContext ? (
+                                <div className={inspectorEmptyStateClasses}>
+                                  Select a bucket to load bucket stats and features.
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  {bucketInspectorLoading && !bucketInspectorData && (
+                                    <p className="ui-caption text-slate-500 dark:text-slate-400">Loading bucket overview...</p>
+                                  )}
+                                  {bucketInspectorError && (
+                                    <p className="ui-caption font-semibold text-rose-600 dark:text-rose-200">
+                                      {bucketInspectorError}
+                                    </p>
+                                  )}
                                   <div className={inspectorSectionCardClasses}>
-                                    <p className={inspectorSectionTitleClasses}>Ceph</p>
+                                    <p className={inspectorSectionTitleClasses}>Stats</p>
                                     <div className="mt-2 grid gap-2">
                                       <div className="flex items-center justify-between gap-2">
-                                        <span className="text-slate-500">{cephQuotaScopeLabel} size</span>
+                                        <span className="text-slate-500">Created</span>
                                         <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                          {cephContextQuotaSizeBytes != null ? formatBytes(cephContextQuotaSizeBytes) : "Not set"}
+                                          {bucketInspectorData?.creation_date
+                                            ? formatDateTime(bucketInspectorData.creation_date)
+                                            : "-"}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between gap-2">
-                                        <span className="text-slate-500">{cephQuotaScopeLabel} objects</span>
+                                        <span className="text-slate-500">Used bytes</span>
                                         <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                          {cephContextQuotaObjects != null ? cephContextQuotaObjects.toLocaleString() : "Not set"}
+                                          {formatBytes(bucketInspectorData?.used_bytes ?? null)}
                                         </span>
                                       </div>
                                       <div className="flex items-center justify-between gap-2">
-                                        <span className="text-slate-500">Bucket quota size</span>
+                                        <span className="text-slate-500">Object count</span>
                                         <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                          {(bucketInspectorData?.quota_max_size_bytes ?? 0) > 0
-                                            ? formatBytes(bucketInspectorData?.quota_max_size_bytes ?? null)
-                                            : "Not set"}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="text-slate-500">Bucket quota objects</span>
-                                        <span className="font-semibold text-slate-700 dark:text-slate-100">
-                                          {(bucketInspectorData?.quota_max_objects ?? 0) > 0
-                                            ? (bucketInspectorData?.quota_max_objects ?? 0).toLocaleString()
-                                            : "Not set"}
+                                          {bucketInspectorData?.object_count != null
+                                            ? bucketInspectorData.object_count.toLocaleString()
+                                            : "-"}
                                         </span>
                                       </div>
                                     </div>
                                   </div>
-                                )}
 
-                                <div className={inspectorSectionCardClasses}>
-                                  <p className={inspectorSectionTitleClasses}>Features</p>
-                                  <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                                    States mirror the Manager bucket overview when available.
-                                  </p>
-                                  <div className="mt-2 space-y-2">
-                                    {bucketInspectorFeatures.length === 0 ? (
-                                      <p className="ui-caption text-slate-500 dark:text-slate-400">
-                                        No feature data available for this context.
-                                      </p>
-                                    ) : (
-                                      bucketInspectorFeatures.map((feature) => (
-                                        <div key={feature.key} className="flex items-center justify-between gap-2">
-                                          <span className="text-slate-500">{feature.label}</span>
-                                          <span
-                                            className={`rounded-full px-2 py-1 ui-caption font-semibold ${BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES[feature.tone]}`}
-                                          >
-                                            {feature.state}
+                                  {isCephContext && (
+                                    <div className={inspectorSectionCardClasses}>
+                                      <p className={inspectorSectionTitleClasses}>Ceph</p>
+                                      <div className="mt-2 grid gap-2">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-slate-500">{cephQuotaScopeLabel} size</span>
+                                          <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                            {cephContextQuotaSizeBytes != null ? formatBytes(cephContextQuotaSizeBytes) : "Not set"}
                                           </span>
                                         </div>
-                                      ))
-                                    )}
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-slate-500">{cephQuotaScopeLabel} objects</span>
+                                          <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                            {cephContextQuotaObjects != null ? cephContextQuotaObjects.toLocaleString() : "Not set"}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-slate-500">Bucket quota size</span>
+                                          <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                            {(bucketInspectorData?.quota_max_size_bytes ?? 0) > 0
+                                              ? formatBytes(bucketInspectorData?.quota_max_size_bytes ?? null)
+                                              : "Not set"}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-slate-500">Bucket quota objects</span>
+                                          <span className="font-semibold text-slate-700 dark:text-slate-100">
+                                            {(bucketInspectorData?.quota_max_objects ?? 0) > 0
+                                              ? (bucketInspectorData?.quota_max_objects ?? 0).toLocaleString()
+                                              : "Not set"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  <div className={inspectorSectionCardClasses}>
+                                    <p className={inspectorSectionTitleClasses}>Features</p>
+                                    <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                                      States mirror the Manager bucket overview when available.
+                                    </p>
+                                    <div className="mt-2 space-y-2">
+                                      {bucketInspectorFeatures.length === 0 ? (
+                                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                                          No feature data available for this context.
+                                        </p>
+                                      ) : (
+                                        bucketInspectorFeatures.map((feature) => (
+                                          <div key={feature.key} className="flex items-center justify-between gap-2">
+                                            <span className="text-slate-500">{feature.label}</span>
+                                            <span
+                                              className={`rounded-full px-2 py-1 ui-caption font-semibold ${BUCKET_INSPECTOR_FEATURE_CHIP_CLASSES[feature.tone]}`}
+                                            >
+                                              {feature.state}
+                                            </span>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -8575,11 +9181,7 @@ export default function BrowserPage({
                               <div>
                                 <p className={inspectorSectionTitleClasses}>Selection</p>
                                 <p className="mt-1 ui-caption text-slate-400">
-                                  {selectedCount > 0
-                                    ? `${selectedCount} selected`
-                                    : selectionPrimary
-                                      ? `Focused: ${selectionPrimary.name}`
-                                      : "No selection"}
+                                  {selectedCount > 0 ? `${selectedCount} selected` : "No selection"}
                                 </p>
                                 {selectedCount > 0 && (
                                   <p className="ui-caption text-slate-400">
@@ -8600,7 +9202,11 @@ export default function BrowserPage({
                               {selectedCount > 0 && (
                                 <button
                                   type="button"
-                                  onClick={() => setSelectedIds([])}
+                                  onClick={() => {
+                                    setSelectedIds([]);
+                                    setSelectionAnchorId(null);
+                                    setActiveRowId(null);
+                                  }}
                                   className={inspectorInlineActionClasses}
                                 >
                                   Clear
@@ -8926,7 +9532,6 @@ export default function BrowserPage({
           copyUrlDisabled={sseActive}
           copyUrlDisabledReason="Copy URL is disabled in SSE-C mode."
           clipboard={clipboard}
-          currentPath={currentPath}
           fileInputRef={fileInputRef}
           folderInputRef={folderInputRef}
           onClose={closeContextMenu}
@@ -8950,6 +9555,22 @@ export default function BrowserPage({
           onOpenDetails={openItemDetails}
           onToggleShowFolders={() => setShowFolderItems((prev) => !prev)}
           onToggleShowDeleted={() => setShowDeletedObjects((prev) => !prev)}
+          isMainBrowserPath={isMainBrowserPath}
+          compactMode={compactMode}
+          onSetCompactMode={(value) => {
+            if (!isMainBrowserPath) return;
+            setCompactMode(value);
+          }}
+          columnOptions={COLUMN_DEFINITIONS.map((column) => ({ id: column.id, label: column.label }))}
+          visibleColumns={visibleColumnSet}
+          onToggleVisibleColumn={(columnId) => {
+            if (!isMainBrowserPath) return;
+            handleToggleVisibleColumn(columnId as BrowserColumnId);
+          }}
+          onResetVisibleColumns={() => {
+            if (!isMainBrowserPath) return;
+            handleResetVisibleColumns();
+          }}
         />
       <BrowserPreviewModal
         previewItem={previewItem}
