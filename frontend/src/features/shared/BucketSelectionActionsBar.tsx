@@ -66,7 +66,7 @@ export default function BucketSelectionActionsBar({
             <summary className="list-none rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600 [&::-webkit-details-marker]:hidden">
               + Tag selection
             </summary>
-            <div className="absolute left-0 z-30 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className="absolute left-0 z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
               {availableUiTags.length === 0 ? (
                 <p className="ui-caption text-slate-500 dark:text-slate-400">No existing UI tags yet.</p>
               ) : (
@@ -126,7 +126,7 @@ export default function BucketSelectionActionsBar({
             <summary className="list-none rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600 [&::-webkit-details-marker]:hidden">
               - Tag selection
             </summary>
-            <div className="absolute left-0 z-30 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className="absolute left-0 z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900">
               {selectedUiTagSuggestions.length === 0 ? (
                 <p className="ui-caption text-slate-500 dark:text-slate-400">No UI tags found on this selection.</p>
               ) : (
@@ -156,7 +156,7 @@ export default function BucketSelectionActionsBar({
             <summary className="list-none rounded-md border border-slate-200 px-2.5 py-1.5 ui-caption font-semibold text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:text-slate-100 dark:hover:border-slate-600 [&::-webkit-details-marker]:hidden">
               {selectionExportLoading ? "Exporting..." : "Export list"}
             </summary>
-            <div className="absolute left-0 z-30 mt-1 w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            <div className="absolute left-0 z-50 mt-1 w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
               <button
                 type="button"
                 className="flex w-full items-center rounded-md px-2.5 py-1.5 text-left ui-caption font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800"
