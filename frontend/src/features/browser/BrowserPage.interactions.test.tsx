@@ -228,6 +228,13 @@ describe("BrowserPage interactions", () => {
     expect(screen.queryByText("Compact view")).not.toBeInTheDocument();
   });
 
+  it("uses list mode by default on /portal/browser", async () => {
+    renderPage({ initialEntry: "/portal/browser" });
+    const rowA = await findRowByLabel("a.txt");
+    expect(rowA).toHaveClass("h-16");
+    expect(within(rowA).getByText("Object")).toBeInTheDocument();
+  });
+
   it("uses minimal visible columns by default", async () => {
     renderPage();
     await findRowByLabel("a.txt");

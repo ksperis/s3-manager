@@ -584,7 +584,9 @@ export default function BrowserPage({
     return window.matchMedia(PANELS_DISABLE_MEDIA_QUERY).matches;
   });
   const [inspectorTab, setInspectorTab] = useState<"context" | "bucket" | "selection" | "details">("context");
-  const [compactMode, setCompactMode] = useState(true);
+  const [compactMode, setCompactMode] = useState(
+    () => !location.pathname.replace(/\/+$/, "").endsWith("/portal/browser")
+  );
   const [prefixVersions, setPrefixVersions] = useState<BrowserObjectVersion[]>([]);
   const [prefixDeleteMarkers, setPrefixDeleteMarkers] = useState<BrowserObjectVersion[]>([]);
   const [prefixVersionsLoading, setPrefixVersionsLoading] = useState(false);
@@ -843,6 +845,20 @@ export default function BrowserPage({
   const bucketManagementEnabled = normalizedPath.endsWith("/browser") && !isEmbeddedBrowserPath;
   const bucketConfigurationEnabled = bucketManagementEnabled;
   const bucketConfigContextScope = "browser";
+
+  useEffect(() => {
+    if (normalizedPath.endsWith("/portal/browser")) {
+      setCompactMode(false);
+      return;
+    }
+    if (
+      normalizedPath === "/browser" ||
+      normalizedPath.endsWith("/manager/browser") ||
+      normalizedPath.endsWith("/ceph-admin/browser")
+    ) {
+      setCompactMode(true);
+    }
+  }, [normalizedPath]);
   const contextId = typeof accountIdForApi === "string" ? accountIdForApi : null;
   const isCephAdminContext = Boolean(contextId && contextId.startsWith("ceph-admin-"));
   const isLegacyS3UserContext = Boolean(contextId && contextId.startsWith("s3u-"));
