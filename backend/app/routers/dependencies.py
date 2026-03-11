@@ -495,8 +495,8 @@ def _manager_membership_capabilities(
     portal_manager_enabled = bool(
         account_role == AccountRole.PORTAL_MANAGER.value and allow_portal_manager_workspace
     )
-    can_portal_role = account_role != AccountRole.PORTAL_NONE.value
-    if can_portal_role:
+    can_use_portal_mode = bool(account_role != AccountRole.PORTAL_NONE.value and allow_portal_manager_workspace)
+    if can_use_portal_mode:
         using_root = bool(is_account_admin and requested_mode == "admin")
     else:
         using_root = bool(is_account_admin)

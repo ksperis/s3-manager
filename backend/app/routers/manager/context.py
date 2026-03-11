@@ -102,7 +102,10 @@ def get_manager_context(
             )
             if membership:
                 role = membership.account_role or AccountRole.PORTAL_USER.value
-                can_switch_access = bool(membership.account_admin and role != AccountRole.PORTAL_NONE.value)
+                allow_portal_manager_workspace = bool(load_app_settings().general.allow_portal_manager_workspace)
+                can_switch_access = bool(
+                    allow_portal_manager_workspace and membership.account_admin and role != AccountRole.PORTAL_NONE.value
+                )
 
     return ManagerContext(
         access_mode=access_mode,

@@ -8,16 +8,16 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from app.db import AccountRole, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
+from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint, User, UserRole, UserS3Account, UserS3User
 from app.models.app_settings import AppSettings
 from app.routers import dependencies
 from app.routers.manager import context as manager_context_router
 
 
-def _request(path: str):
+def _request(path: str, headers: dict | None = None):
     return SimpleNamespace(
         url=SimpleNamespace(path=path),
-        headers={},
+        headers=headers or {},
     )
 
 
@@ -49,6 +49,69 @@ def test_manager_membership_portal_manager_enabled_with_setting(monkeypatch):
     _, caps = dependencies._manager_membership_capabilities(link, requested_mode=None)
     assert caps.can_manage_buckets is True
     assert caps.can_manage_iam is True
+
+
+def test_manager_membership_account_admin_forces_admin_mode_when_portal_workspace_disabled(monkeypatch):
+    link = UserS3Account(
+        user_id=1,
+        account_id=1,
+        account_role=AccountRole.PORTAL_MANAGER.value,
+        account_admin=True,
+        is_root=False,
+    )
+    settings = AppSettings()
+    settings.general.allow_portal_manager_workspace = False
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+
+    _, caps = dependencies._manager_membership_capabilities(link, requested_mode="portal")
+    assert caps.using_root_key is True
+    assert caps.can_manage_buckets is True
+    assert caps.can_manage_iam is True
+
+
+def test_manager_context_disables_access_toggle_when_portal_workspace_disabled(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.allow_portal_manager_workspace = False
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
+
+    user = User(
+        email="manager-access-toggle-disabled@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    account = S3Account(
+        name="manager-toggle-account",
+        rgw_account_id="RGWTOGGLE0001",
+        rgw_access_key="AK-TOGGLE",
+        rgw_secret_key="SK-TOGGLE",
+    )
+    db_session.add_all([user, account])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(account)
+
+    db_session.add(
+        UserS3Account(
+            user_id=user.id,
+            account_id=account.id,
+            account_role=AccountRole.PORTAL_MANAGER.value,
+            account_admin=True,
+            is_root=False,
+        )
+    )
+    db_session.commit()
+
+    account_ctx = dependencies.get_account_context(
+        request=_request("/api/manager/context", headers={"X-Manager-Access-Mode": "portal"}),
+        account_ref=str(account.id),
+        actor=user,
+        db=db_session,
+    )
+    payload = manager_context_router.get_manager_context(account=account_ctx, actor=user, db=db_session)
+    assert payload.access_mode == "admin"
+    assert payload.can_switch_access is False
 
 
 def test_manager_workspace_accepts_non_iam_connection_when_access_manager_enabled(db_session):
