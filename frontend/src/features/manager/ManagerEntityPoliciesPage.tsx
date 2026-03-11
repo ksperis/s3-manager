@@ -275,18 +275,16 @@ export default function ManagerEntityPoliciesPage({
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="ui-surface-card">
-          <InlinePolicyEditor
-            entityLabel={config.singularLabel}
-            entityName={decodedEntity}
-            loadPolicies={loadInlinePolicies}
-            savePolicy={saveInlinePolicy}
-            deletePolicy={removeInlinePolicy}
-            disabled={needsS3AccountSelection}
-            disabledReason={`Select an account before editing ${config.singularLabel} inline policies.`}
-            key={`${config.singularLabel}-inline-${accountIdForApi ?? "none"}-${rawEntityName ?? ""}`}
-          />
-        </div>
+        <InlinePolicyEditor
+          entityLabel={config.singularLabel}
+          entityName={decodedEntity}
+          loadPolicies={loadInlinePolicies}
+          savePolicy={saveInlinePolicy}
+          deletePolicy={removeInlinePolicy}
+          disabled={needsS3AccountSelection}
+          disabledReason={`Select an account before editing ${config.singularLabel} inline policies.`}
+          key={`${config.singularLabel}-inline-${accountIdForApi ?? "none"}-${rawEntityName ?? ""}`}
+        />
 
         <div className="ui-surface-card">
           <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
