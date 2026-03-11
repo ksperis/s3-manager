@@ -3952,10 +3952,32 @@ export default function BrowserPage({
     }
     setCreateBucketLoading(true);
     setCreateBucketError(null);
+    setCorsFixError(null);
     try {
       await createBrowserBucket(accountIdForApi, bucketNameInput, { versioning: createBucketVersioning });
+      let corsApplied = false;
+      if (uiOrigin) {
+        try {
+          const status = await ensureBucketCors(accountIdForApi, bucketNameInput, uiOrigin);
+          corsApplied = status.enabled;
+          if (bucketName === bucketNameInput) {
+            setCorsStatus(status);
+          }
+          if (!status.enabled && status.error) {
+            setCorsFixError(status.error);
+          }
+        } catch {
+          setCorsFixError("Bucket created, but unable to auto-apply CORS.");
+        }
+      }
       setShowCreateBucketModal(false);
-      setStatusMessage(`Bucket ${bucketNameInput} created.`);
+      setStatusMessage(
+        uiOrigin
+          ? corsApplied
+            ? `Bucket ${bucketNameInput} created with CORS enabled.`
+            : `Bucket ${bucketNameInput} created. CORS could not be auto-enabled.`
+          : `Bucket ${bucketNameInput} created.`
+      );
       await refreshBucketList({ preferredBucket: bucketNameInput });
       void loadBucketInspectorData(true);
     } catch (err) {
