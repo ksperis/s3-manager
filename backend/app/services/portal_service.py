@@ -1378,7 +1378,6 @@ class PortalService:
 
     def get_state(self, user: User, access: "AccountAccess") -> PortalState:
         account = access.account
-        portal_settings = self._effective_portal_settings(account)
         used_bytes = None
         used_objects = None
         buckets: list[Bucket] = []
@@ -1391,9 +1390,7 @@ class PortalService:
             iam_user = iam_service.get_user(link.iam_username)
             if iam_user:
                 keys_with_portal = self._list_access_keys(link, iam_service, include_portal=True)
-                access_keys = keys_with_portal
-                if not portal_settings.allow_portal_key:
-                    access_keys = [key for key in keys_with_portal if not key.is_portal]
+                access_keys = [key for key in keys_with_portal if not key.is_portal]
 
                 portal_meta = next(
                     (key for key in keys_with_portal if key.is_portal and key.access_key_id == link.active_access_key),

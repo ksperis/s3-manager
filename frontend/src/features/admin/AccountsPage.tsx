@@ -119,7 +119,6 @@ export default function S3AccountsPage() {
   const [portalSettingsError, setPortalSettingsError] = useState<string | null>(null);
   const [portalSettingsSaving, setPortalSettingsSaving] = useState(false);
   const [portalSettingsMessage, setPortalSettingsMessage] = useState<string | null>(null);
-  const [adminPortalKeyOverride, setAdminPortalKeyOverride] = useState<TriState>("inherit");
   const [adminPortalBucketCreateOverride, setAdminPortalBucketCreateOverride] = useState<TriState>("inherit");
   const [adminPortalAccessKeyCreateOverride, setAdminPortalAccessKeyCreateOverride] = useState<TriState>("inherit");
   const [adminBucketVersioningOverride, setAdminBucketVersioningOverride] = useState<TriState>("inherit");
@@ -177,7 +176,6 @@ export default function S3AccountsPage() {
   const hasPortalManagerOverrides = useMemo(() => {
     if (!portalManagerOverride) return false;
     if (
-      portalManagerOverride.allow_portal_key != null ||
       portalManagerOverride.allow_portal_user_bucket_create != null ||
       portalManagerOverride.allow_portal_user_access_key_create != null
     ) {
@@ -387,7 +385,6 @@ export default function S3AccountsPage() {
 
   useEffect(() => {
     if (!portalAccountSettings) {
-      setAdminPortalKeyOverride("inherit");
       setAdminPortalBucketCreateOverride("inherit");
       setAdminPortalAccessKeyCreateOverride("inherit");
       setAdminBucketVersioningOverride("inherit");
@@ -405,7 +402,6 @@ export default function S3AccountsPage() {
     }
     const override = portalAccountSettings.admin_override;
     const effective = portalAccountSettings.effective;
-    setAdminPortalKeyOverride(resolveTriState(override.allow_portal_key));
     setAdminPortalBucketCreateOverride(resolveTriState(override.allow_portal_user_bucket_create));
     setAdminPortalAccessKeyCreateOverride(resolveTriState(override.allow_portal_user_access_key_create));
 
@@ -766,10 +762,6 @@ export default function S3AccountsPage() {
     setPortalSettingsMessage(null);
 
     const payload: PortalSettingsOverride = {};
-    const allowPortalKeyValue = toOverrideValue(adminPortalKeyOverride);
-    if (allowPortalKeyValue !== undefined) {
-      payload.allow_portal_key = allowPortalKeyValue;
-    }
     const allowBucketCreateValue = toOverrideValue(adminPortalBucketCreateOverride);
     if (allowBucketCreateValue !== undefined) {
       payload.allow_portal_user_bucket_create = allowBucketCreateValue;
@@ -1651,22 +1643,6 @@ export default function S3AccountsPage() {
                       <div className="space-y-4">
                         <PortalSettingsSection title="UI" layout="grid">
                           <PortalSettingsItem
-                            title="Portal key"
-                            description={`Effective for portal users: ${effectivePortalSettings.allow_portal_key ? "enabled" : "disabled"}`}
-                            action={
-                              <select
-                                value={adminPortalKeyOverride}
-                                onChange={(e) => setAdminPortalKeyOverride(e.target.value as TriState)}
-                                className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                disabled={portalSettingsLoading || portalSettingsSaving}
-                              >
-                                <option value="inherit">Inherit</option>
-                                <option value="enabled">Enable</option>
-                                <option value="disabled">Disable</option>
-                              </select>
-                            }
-                          />
-                          <PortalSettingsItem
                             title="Bucket creation"
                             description={`Effective for portal users: ${
                               effectivePortalSettings.allow_portal_user_bucket_create ? "enabled" : "disabled"
@@ -1685,7 +1661,7 @@ export default function S3AccountsPage() {
                             }
                           />
                           <PortalSettingsItem
-                            title="Access key creation"
+                            title="Access key management"
                             description={`Effective for portal users: ${
                               effectivePortalSettings.allow_portal_user_access_key_create ? "enabled" : "disabled"
                             }`}

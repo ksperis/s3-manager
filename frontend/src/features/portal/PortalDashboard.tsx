@@ -22,7 +22,6 @@ import {
   listPortalUsers,
   updatePortalAccessKeyStatus,
   rotatePortalAccessKey,
-  fetchPortalActiveKey,
   fetchPortalSettings,
   fetchPortalTraffic,
   fetchPortalBucketStats,
@@ -134,10 +133,6 @@ export default function PortalDashboard() {
   const [creatingKey, setCreatingKey] = useState(false);
   const [togglingKeyId, setTogglingKeyId] = useState<string | null>(null);
   const [renewingPortalKey, setRenewingPortalKey] = useState(false);
-  const [showPortalKeyDetails, setShowPortalKeyDetails] = useState(false);
-  const [portalKeyData, setPortalKeyData] = useState<PortalAccessKey | null>(null);
-  const [portalKeyLoading, setPortalKeyLoading] = useState(false);
-  const [portalKeyError, setPortalKeyError] = useState<string | null>(null);
   const [creatingBucket, setCreatingBucket] = useState(false);
   const [showBucketModal, setShowBucketModal] = useState(false);
   const [selectedBucket, setSelectedBucket] = useState<Bucket | null>(null);
@@ -184,17 +179,10 @@ export default function PortalDashboard() {
   const isPortalManager = state?.account_role === "portal_manager";
   const isPortalUser = state?.account_role === "portal_user";
   const needsIamBootstrap = Boolean(state && !state.iam_provisioned);
-  const canViewPortalKey = Boolean(portalSettings?.allow_portal_key);
-  const allAccessKeys = useMemo(() => {
-    const keys = state?.access_keys ?? [];
-    if (canViewPortalKey) return keys;
-    return keys.filter((key) => !key.is_portal);
-  }, [state?.access_keys, canViewPortalKey]);
   const orderedAccessKeys = useMemo(() => {
-    const portalKeys = allAccessKeys.filter((key) => key.is_portal);
-    const userKeys = allAccessKeys.filter((key) => !key.is_portal);
-    return [...portalKeys, ...userKeys];
-  }, [allAccessKeys]);
+    const keys = state?.access_keys ?? [];
+    return keys.filter((key) => !key.is_portal);
+  }, [state?.access_keys]);
   const filteredBuckets = useMemo(() => {
     const list = state?.buckets ?? [];
     const query = bucketFilter.trim().toLowerCase();
@@ -681,11 +669,14 @@ export default function PortalDashboard() {
     } catch (err) {
       console.error(err);
       setKeyActionError(
-        t({
-          en: "Unable to create a new key. Check your IAM permissions.",
-          fr: "Impossible de creer une nouvelle cle. Verifiez vos droits IAM.",
-          de: "Neuer Schlussel kann nicht erstellt werden. Prufen Sie Ihre IAM-Berechtigungen.",
-        })
+        extractApiError(
+          err,
+          t({
+            en: "Unable to create a new key. Check your IAM permissions.",
+            fr: "Impossible de creer une nouvelle cle. Verifiez vos droits IAM.",
+            de: "Neuer Schlussel kann nicht erstellt werden. Prufen Sie Ihre IAM-Berechtigungen.",
+          })
+        )
       );
     } finally {
       setCreatingKey(false);
@@ -720,11 +711,14 @@ export default function PortalDashboard() {
     } catch (err) {
       console.error(err);
       setKeyActionError(
-        t({
-          en: "Unable to renew portal key.",
-          fr: "Impossible de renouveler la cle portail.",
-          de: "Portal-Schlussel kann nicht erneuert werden.",
-        })
+        extractApiError(
+          err,
+          t({
+            en: "Unable to renew portal key.",
+            fr: "Impossible de renouveler la cle portail.",
+            de: "Portal-Schlussel kann nicht erneuert werden.",
+          })
+        )
       );
     } finally {
       setRenewingPortalKey(false);
@@ -758,28 +752,6 @@ export default function PortalDashboard() {
     }
   };
 
-  const handleFetchPortalKey = async () => {
-    if (!accountIdForApi) return;
-    setPortalKeyLoading(true);
-    setPortalKeyError(null);
-    try {
-      const key = await fetchPortalActiveKey(accountIdForApi);
-      setPortalKeyData(key);
-      setShowPortalKeyDetails(true);
-    } catch (err) {
-      console.error(err);
-      setPortalKeyError(
-        t({
-          en: "Unable to fetch portal key.",
-          fr: "Impossible de recuperer la cle portail.",
-          de: "Portal-Schlussel kann nicht abgerufen werden.",
-        })
-      );
-    } finally {
-      setPortalKeyLoading(false);
-    }
-  };
-
   const handleDeleteKey = async (key: PortalAccessKey) => {
     if (!accountIdForApi || key.is_portal || key.deletable === false) return;
     setKeyActionError(null);
@@ -794,11 +766,14 @@ export default function PortalDashboard() {
     } catch (err) {
       console.error(err);
       setKeyActionError(
-        t({
-          en: "Delete failed. Check your permissions.",
-          fr: "Suppression impossible. Verifiez vos droits.",
-          de: "Loschen fehlgeschlagen. Prufen Sie Ihre Berechtigungen.",
-        })
+        extractApiError(
+          err,
+          t({
+            en: "Delete failed. Check your permissions.",
+            fr: "Suppression impossible. Verifiez vos droits.",
+            de: "Loschen fehlgeschlagen. Prufen Sie Ihre Berechtigungen.",
+          })
+        )
       );
     }
   };
@@ -822,11 +797,14 @@ export default function PortalDashboard() {
     } catch (err) {
       console.error(err);
       setKeyActionError(
-        t({
-          en: "Unable to update key status.",
-          fr: "Impossible de mettre a jour le statut de la cle.",
-          de: "Schlusselstatus kann nicht aktualisiert werden.",
-        })
+        extractApiError(
+          err,
+          t({
+            en: "Unable to update key status.",
+            fr: "Impossible de mettre a jour le statut de la cle.",
+            de: "Schlusselstatus kann nicht aktualisiert werden.",
+          })
+        )
       );
     } finally {
       setTogglingKeyId(null);
@@ -1276,7 +1254,11 @@ export default function PortalDashboard() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="max-w-xl">
                     <p className="ui-body text-slate-700 dark:text-slate-200">
-                      {t({ en: "Portal key and IAM user keys for this account.", fr: "Cle portail et cles utilisateur IAM pour ce compte.", de: "Portal-Schlussel und IAM-Benutzerschlussel fur dieses Konto." })}
+                      {t({
+                        en: "IAM user keys for this account.",
+                        fr: "Cles utilisateur IAM pour ce compte.",
+                        de: "IAM-Benutzerschlussel fur dieses Konto.",
+                      })}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1362,14 +1344,10 @@ export default function PortalDashboard() {
                       })}
                     </span>
                   </div>
-                  {portalKeyError && (
-                    <div className="ui-caption text-rose-600 dark:text-rose-300">{portalKeyError}</div>
-                  )}
                   {orderedAccessKeys.length ? (
                     <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                       {orderedAccessKeys.map((k) => {
                         const isActive = isPortalKeyActive(k);
-                        const showPortalDetails = Boolean(k.is_portal && showPortalKeyDetails && portalKeyData);
                         return (
                           <div key={k.access_key_id} className="px-3 py-2">
                             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1388,15 +1366,6 @@ export default function PortalDashboard() {
                                         : t({ en: "Inactive", fr: "Inactive", de: "Inaktiv" })
                                     }
                                   />
-                                  {k.is_portal && (
-                                    <span
-                                      className="ui-caption"
-                                      aria-label={t({ en: "Portal key", fr: "Cle portail", de: "Portal-Schlussel" })}
-                                      title={t({ en: "Portal key", fr: "Cle portail", de: "Portal-Schlussel" })}
-                                    >
-                                      🛡️
-                                    </span>
-                                  )}
                                   <span className="font-mono ui-caption text-slate-700 dark:text-slate-200">{k.access_key_id}</span>
                                 </div>
                                 <div className="ui-caption text-slate-500 dark:text-slate-400">
@@ -1408,60 +1377,8 @@ export default function PortalDashboard() {
                                       })
                                     : t({ en: "Created -", fr: "Creee -", de: "Erstellt -" })}
                                 </div>
-                                {showPortalDetails && portalKeyData && (
-                                  <div className="mt-2 space-y-1 ui-caption text-slate-600 dark:text-slate-300">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span aria-hidden title="Access key">🔑</span>
-                                      <span className="font-mono text-slate-800 dark:text-slate-100">
-                                        {portalKeyData.access_key_id}
-                                      </span>
-                                      <CopyButton
-                                        value={portalKeyData.access_key_id}
-                                        label={t({ en: "Copy portal access key", fr: "Copier l'access key portail", de: "Portal Access Key kopieren" })}
-                                        iconOnly
-                                      />
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span aria-hidden title="Secret key">🔒</span>
-                                      {portalKeyData.secret_access_key ? (
-                                        <>
-                                          <span className="font-mono text-slate-800 dark:text-slate-100">
-                                            {portalKeyData.secret_access_key}
-                                          </span>
-                                          <CopyButton
-                                            value={portalKeyData.secret_access_key}
-                                            label={t({ en: "Copy portal secret key", fr: "Copier le secret key portail", de: "Portal Secret Key kopieren" })}
-                                            iconOnly
-                                          />
-                                        </>
-                                      ) : (
-                                        <span className="text-slate-500 dark:text-slate-400">
-                                          {t({ en: "secret hidden", fr: "secret masque", de: "Secret ausgeblendet" })}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
                               </div>
                               <div className="flex items-center gap-2">
-                                {k.is_portal && canViewPortalKey && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (portalKeyData) {
-                                        setShowPortalKeyDetails((prev) => !prev);
-                                      } else {
-                                        void handleFetchPortalKey();
-                                      }
-                                    }}
-                                    disabled={portalKeyLoading || !accountIdForApi}
-                                    aria-label={t({ en: "Show portal key", fr: "Afficher la cle portail", de: "Portal-Schlussel anzeigen" })}
-                                    title={t({ en: "Show portal key", fr: "Afficher la cle portail", de: "Portal-Schlussel anzeigen" })}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
-                                  >
-                                    <span aria-hidden>{portalKeyLoading ? "…" : showPortalKeyDetails ? "🙈" : "👁️"}</span>
-                                  </button>
-                                )}
                                 <button
                                   type="button"
                                   className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
@@ -1492,7 +1409,7 @@ export default function PortalDashboard() {
                                   className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-rose-200 text-rose-600 transition hover:border-rose-300 hover:text-rose-700 disabled:opacity-40 dark:border-rose-900/40 dark:text-rose-300 dark:hover:border-rose-800"
                                   onClick={() => handleDeleteKey(k)}
                                   disabled={
-                                    !isPortalManager ||
+                                    !canCreateAccessKeys ||
                                     k.is_portal ||
                                     k.deletable === false ||
                                     creatingKey ||

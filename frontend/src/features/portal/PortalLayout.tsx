@@ -13,7 +13,7 @@ import { useI18n } from "../../i18n";
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 
 type StoredUser = {
-  account_links?: { account_id: number; account_role?: string | null }[] | null;
+  account_links?: { account_id: number | string; account_role?: string | null }[] | null;
 };
 
 function getStoredUser(): StoredUser | null {
@@ -27,12 +27,26 @@ function getStoredUser(): StoredUser | null {
   }
 }
 
+function normalizePortalRole(value?: string | null): string | null {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (normalized === "portal_user" || normalized === "portal_manager" || normalized === "portal_none") {
+    return normalized;
+  }
+  return null;
+}
+
 function resolvePortalRole(user: StoredUser | null, accountId: string | null): string | null {
   if (!user || !accountId) return null;
-  const numericId = Number(accountId);
-  if (!Number.isFinite(numericId)) return null;
-  const link = (user.account_links ?? []).find((entry) => Number(entry.account_id) === numericId);
-  return link?.account_role ?? null;
+  const normalizedTargetId = String(accountId).trim();
+  if (!normalizedTargetId) return null;
+  const links = user.account_links ?? [];
+  const direct = links.find((entry) => String(entry.account_id).trim() === normalizedTargetId);
+  if (direct) return normalizePortalRole(direct.account_role);
+
+  const numericTargetId = Number(normalizedTargetId);
+  if (!Number.isFinite(numericTargetId)) return null;
+  const numeric = links.find((entry) => Number(entry.account_id) === numericTargetId);
+  return normalizePortalRole(numeric?.account_role);
 }
 
 type AccountSelectorProps = {
@@ -148,10 +162,16 @@ function PortalShell() {
   const { selectedAccountId, selectedAccount, loading } = usePortalAccountContext();
   const { generalSettings } = useGeneralSettings();
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
-  const accountRole = resolvePortalRole(getStoredUser(), selectedAccountId);
-  const hideSidebar = accountRole === "portal_user";
-  const hideTopbar = accountRole === "portal_user";
-  const isPortalManager = accountRole === "portal_manager";
+  const storedUser = getStoredUser();
+  const accountRole = resolvePortalRole(storedUser, selectedAccountId);
+  const storedRoles = (storedUser?.account_links ?? [])
+    .map((entry) => normalizePortalRole(entry.account_role))
+    .filter((role): role is string => Boolean(role));
+  const hasPortalManagerRole = storedRoles.includes("portal_manager");
+  const hasPortalUserRole = storedRoles.includes("portal_user");
+  const effectiveAccountRole = accountRole ?? (hasPortalUserRole && !hasPortalManagerRole ? "portal_user" : null);
+  const hideSidebar = effectiveAccountRole === "portal_user";
+  const isPortalManager = effectiveAccountRole === "portal_manager";
   const selectedPortalLabel = selectedAccount
     ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
     : loading
@@ -195,7 +215,6 @@ function PortalShell() {
       navSections={navSections}
       sidebarTitle="PORTAL"
       hideSidebar={hideSidebar}
-      hideTopbar={hideTopbar}
       hideHeader
       topbarControlDescriptors={topbarControlDescriptors}
     >

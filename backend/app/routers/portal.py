@@ -431,7 +431,7 @@ def create_portal_access_key(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     portal_settings = service.get_effective_portal_settings(access.account)
     if access.role == AccountRole.PORTAL_USER.value and not portal_settings.allow_portal_user_access_key_create:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access key creation not allowed for this role.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access key management not allowed for this role.")
     try:
         key = service.create_access_key(actor, access)
         audit_service.record_action(
@@ -473,23 +473,6 @@ def rotate_portal_access_key(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.get("/access-keys/portal", response_model=PortalAccessKey)
-def get_active_portal_access_key(
-    access: AccountAccess = Depends(get_portal_account_access),
-    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
-) -> PortalAccessKey:
-    actor = access.actor
-    if not isinstance(actor, User):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
-    portal_settings = service.get_effective_portal_settings(access.account)
-    if not portal_settings.allow_portal_key:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal key visibility is disabled.")
-    try:
-        return service.get_portal_access_key(actor, access)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
-
 @router.put("/access-keys/{access_key_id}/status", response_model=PortalAccessKey)
 def update_portal_access_key_status(
     access_key_id: str,
@@ -520,13 +503,16 @@ def update_portal_access_key_status(
 @router.delete("/access-keys/{access_key_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_portal_access_key(
     access_key_id: str,
-    access: AccountAccess = Depends(require_portal_manager),
+    access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_logger),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ) -> None:
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    portal_settings = service.get_effective_portal_settings(access.account)
+    if access.role == AccountRole.PORTAL_USER.value and not portal_settings.allow_portal_user_access_key_create:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access key management not allowed for this role.")
     try:
         service.delete_access_key(actor, access, access_key_id)
         audit_service.record_action(

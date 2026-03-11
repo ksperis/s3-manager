@@ -285,12 +285,6 @@ export async function fetchPortalTraffic(
   return data;
 }
 
-export async function fetchPortalActiveKey(accountId: S3AccountSelector): Promise<PortalAccessKey> {
-  const params = withS3AccountParam(undefined, accountId);
-  const { data } = await client.get<PortalAccessKey>("/portal/access-keys/portal", { params });
-  return data;
-}
-
 export async function fetchPortalSettings(accountId: S3AccountSelector): Promise<PortalSettings> {
   const { data } = await client.get<PortalSettings>("/portal/settings", {
     params: withS3AccountParam(undefined, accountId),

@@ -321,9 +321,9 @@ def test_bootstrap_portal_identity_sets_just_created(monkeypatch, db_session):
     assert state.just_created is True
 
 
-def test_get_state_hides_portal_key_for_manager_when_visibility_disabled(monkeypatch, db_session):
-    account = S3Account(name="portal-account-manager-visibility", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-manager-visibility@example.com", hashed_password="x", role="ui_user")
+def test_get_state_hides_portal_key_for_portal_user_even_when_setting_enabled(monkeypatch, db_session):
+    account = S3Account(name="portal-account-user-visibility", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-visibility@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
     db_session.commit()
 
@@ -331,7 +331,7 @@ def test_get_state_hides_portal_key_for_manager_when_visibility_disabled(monkeyp
         user_id=user.id,
         account_id=account.id,
         iam_user_id="iam-uid",
-        iam_username="portal-manager-iam",
+        iam_username="portal-user-iam",
         active_access_key="AK-PORTAL",
         active_secret_key="SK-PORTAL",
     )
@@ -342,10 +342,10 @@ def test_get_state_hides_portal_key_for_manager_when_visibility_disabled(monkeyp
         account=account,
         actor=user,
         membership=None,
-        role=AccountRole.PORTAL_MANAGER.value,
+        role=AccountRole.PORTAL_USER.value,
         capabilities=AccountCapabilities(
             can_manage_buckets=True,
-            can_manage_portal_users=True,
+            can_manage_portal_users=False,
             can_manage_iam=False,
             can_view_root_key=False,
             using_root_key=False,
@@ -363,7 +363,7 @@ def test_get_state_hides_portal_key_for_manager_when_visibility_disabled(monkeyp
                 PortalAccessKey(access_key_id="AK-USER", status="Active", created_at="2026-01-02T00:00:00Z"),
             ]
 
-    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(allow_portal_key=False))
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(allow_portal_key=True))
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
     monkeypatch.setattr(service, "_account_quota", lambda acc: (None, None))
     monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: [])
@@ -373,46 +373,6 @@ def test_get_state_hides_portal_key_for_manager_when_visibility_disabled(monkeyp
     assert state.iam_provisioned is True
     assert [key.access_key_id for key in state.access_keys] == ["AK-USER"]
     assert all(not key.is_portal for key in state.access_keys)
-
-
-def test_get_active_portal_access_key_rejects_manager_when_portal_key_visibility_disabled(db_session):
-    account = S3Account(name="portal-account-key-hidden", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
-    user = User(email="portal-manager-hidden@example.com", hashed_password="x", role="ui_user")
-    db_session.add_all([account, user])
-    db_session.commit()
-
-    access = AccountAccess(
-        account=account,
-        actor=user,
-        membership=None,
-        role=AccountRole.PORTAL_MANAGER.value,
-        capabilities=AccountCapabilities(
-            can_manage_buckets=True,
-            can_manage_portal_users=True,
-            can_manage_iam=False,
-            can_view_root_key=False,
-            using_root_key=False,
-        ),
-    )
-
-    class _FakeService:
-        def __init__(self):
-            self.called_get_portal_access_key = False
-
-        def get_effective_portal_settings(self, account):  # noqa: ARG002
-            return PortalSettings(allow_portal_key=False)
-
-        def get_portal_access_key(self, user_obj, access_obj):  # noqa: ARG002
-            self.called_get_portal_access_key = True
-            return PortalAccessKey(access_key_id="AK-PORTAL", is_portal=True, is_active=True, deletable=False)
-
-    service = _FakeService()
-
-    with pytest.raises(HTTPException) as exc:
-        portal_router.get_active_portal_access_key(access=access, service=service)
-
-    assert exc.value.status_code == 403
-    assert service.called_get_portal_access_key is False
 
 
 def test_create_portal_access_key_allows_portal_user_when_option_enabled(db_session):
@@ -471,3 +431,97 @@ def test_create_portal_access_key_allows_portal_user_when_option_enabled(db_sess
     assert len(audit_service.actions) == 1
     assert audit_service.actions[0]["action"] == "create_access_key"
     assert audit_service.actions[0]["metadata"]["access_key_id"] == "AK-NEW"
+
+
+def test_delete_portal_access_key_allows_portal_user_when_option_enabled(db_session):
+    account = S3Account(name="portal-account-user-delete-key", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-delete-key@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    class _FakeService:
+        def __init__(self):
+            self.delete_access_key_calls = 0
+
+        def get_effective_portal_settings(self, account):  # noqa: ARG002
+            return PortalSettings(allow_portal_user_access_key_create=True)
+
+        def delete_access_key(self, user_obj, access_obj, access_key_id):  # noqa: ARG002
+            if access_key_id != "AK-DEL":
+                raise AssertionError("Unexpected key id")
+            self.delete_access_key_calls += 1
+
+    class _FakeAuditService:
+        def __init__(self):
+            self.actions = []
+
+        def record_action(self, **kwargs):
+            self.actions.append(kwargs)
+
+    service = _FakeService()
+    audit_service = _FakeAuditService()
+
+    portal_router.delete_portal_access_key(access_key_id="AK-DEL", access=access, audit_service=audit_service, service=service)
+
+    assert service.delete_access_key_calls == 1
+    assert len(audit_service.actions) == 1
+    assert audit_service.actions[0]["action"] == "delete_access_key"
+    assert audit_service.actions[0]["metadata"]["access_key_id"] == "AK-DEL"
+
+
+def test_delete_portal_access_key_rejects_portal_user_when_option_disabled(db_session):
+    account = S3Account(name="portal-account-user-delete-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-delete-denied@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    class _FakeService:
+        def __init__(self):
+            self.delete_access_key_calls = 0
+
+        def get_effective_portal_settings(self, account):  # noqa: ARG002
+            return PortalSettings(allow_portal_user_access_key_create=False)
+
+        def delete_access_key(self, user_obj, access_obj, access_key_id):  # noqa: ARG002
+            self.delete_access_key_calls += 1
+
+    class _FakeAuditService:
+        def record_action(self, **kwargs):  # noqa: ARG002
+            raise AssertionError("Audit should not be called when deletion is forbidden")
+
+    service = _FakeService()
+    audit_service = _FakeAuditService()
+
+    with pytest.raises(HTTPException) as exc:
+        portal_router.delete_portal_access_key(access_key_id="AK-DEL", access=access, audit_service=audit_service, service=service)
+
+    assert exc.value.status_code == 403
+    assert service.delete_access_key_calls == 0

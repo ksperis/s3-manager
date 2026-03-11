@@ -16,7 +16,6 @@ import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettin
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
 
-const PORTAL_KEY_ROTATION_WARNING = "When enabled, key rotations can immediately impact portal users relying on the displayed key.";
 const allowOverrideLabelClass = "inline-flex items-center gap-2 ui-caption font-semibold text-slate-700 dark:text-slate-200";
 const corsOriginsTextareaClass = cx("mt-2 ui-caption", uiInputClass);
 
@@ -47,10 +46,6 @@ export default function PortalSettingsPage() {
     setCorsOriginsText((settings.portal.bucket_defaults.cors_allowed_origins || []).join("\n"));
     initRef.current = true;
   }, [settings]);
-
-  const handleToggleAllowPortalKey = (value: boolean) => {
-    setSettings((prev) => (prev ? { ...prev, portal: { ...prev.portal, allow_portal_key: value } } : prev));
-  };
 
   const handleToggleAllowPortalBucketCreate = (value: boolean) => {
     setSettings((prev) => (prev ? { ...prev, portal: { ...prev.portal, allow_portal_user_bucket_create: value } } : prev));
@@ -96,10 +91,7 @@ export default function PortalSettingsPage() {
     );
   };
 
-  const handleOverrideToggle = (
-    field: "allow_portal_key" | "allow_portal_user_bucket_create" | "allow_portal_user_access_key_create",
-    value: boolean
-  ) => {
+  const handleOverrideToggle = (field: "allow_portal_user_bucket_create" | "allow_portal_user_access_key_create", value: boolean) => {
     updateOverridePolicy((policy) => ({ ...policy, [field]: value }));
   };
 
@@ -238,7 +230,6 @@ export default function PortalSettingsPage() {
     }
   };
 
-  const portalKeyEnabled = Boolean(settings?.portal.allow_portal_key);
   const portalBucketCreateEnabled = Boolean(settings?.portal.allow_portal_user_bucket_create);
   const portalAccessKeyCreateEnabled = Boolean(settings?.portal.allow_portal_user_access_key_create);
   const bucketVersioningEnabled = Boolean(settings?.portal.bucket_defaults.versioning);
@@ -281,34 +272,6 @@ export default function PortalSettingsPage() {
         <div className="ui-surface-card p-5">
           <PortalSettingsSection title="UI" description="Portal UI switches and per-account override permissions." layout="grid">
             <PortalSettingsItem
-              title="Portal key"
-              description="Show the active portal key to portal users."
-              action={
-                <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsSwitch
-                    checked={portalKeyEnabled}
-                    onChange={(value) => handleToggleAllowPortalKey(value)}
-                    disabled={!settings}
-                    ariaLabel="Portal key visibility"
-                  />
-                  <label className={allowOverrideLabelClass}>
-                    <span>Allow override</span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(settings?.portal.override_policy.allow_portal_key)}
-                      onChange={(e) => handleOverrideToggle("allow_portal_key", e.target.checked)}
-                      className={uiCheckboxClass}
-                      disabled={!settings}
-                    />
-                  </label>
-                </div>
-              }
-            >
-              {portalKeyEnabled && (
-                <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">{PORTAL_KEY_ROTATION_WARNING}</p>
-              )}
-            </PortalSettingsItem>
-            <PortalSettingsItem
               title="Bucket creation"
               description="Allow portal users to create buckets from the portal."
               action={
@@ -333,15 +296,15 @@ export default function PortalSettingsPage() {
               }
             />
             <PortalSettingsItem
-              title="Access key creation"
-              description="Allow portal users to create access keys from the portal."
+              title="Access key management"
+              description="Allow portal users to create and delete their own IAM user keys from the portal."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
                   <PortalSettingsSwitch
                     checked={portalAccessKeyCreateEnabled}
                     onChange={(value) => handleToggleAllowPortalAccessKeyCreate(value)}
                     disabled={!settings}
-                    ariaLabel="Portal user access key creation"
+                    ariaLabel="Portal user access key management"
                   />
                   <label className={allowOverrideLabelClass}>
                     <span>Allow override</span>

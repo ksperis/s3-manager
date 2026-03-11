@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { useEffect, useMemo, useState } from "react";
-import { fetchAppSettings } from "../../api/appSettings";
 import { KeyRotationResponse, KeyRotationType, rotateS3Keys } from "../../api/keyRotation";
 import { StorageEndpoint, listStorageEndpoints } from "../../api/storageEndpoints";
 import PageBanner from "../../components/PageBanner";
@@ -71,7 +70,6 @@ export default function KeyRotationPage() {
   const [running, setRunning] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [result, setResult] = useState<KeyRotationResponse | null>(null);
-  const [portalKeyWarning, setPortalKeyWarning] = useState(false);
   const [endpoints, setEndpoints] = useState<StorageEndpoint[]>([]);
   const [selectedEndpointIds, setSelectedEndpointIds] = useState<number[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<KeyRotationType[]>([
@@ -89,12 +87,11 @@ export default function KeyRotationPage() {
       setLoading(true);
       setError(null);
       try {
-        const [loadedEndpoints, settings] = await Promise.all([listStorageEndpoints(), fetchAppSettings()]);
+        const loadedEndpoints = await listStorageEndpoints();
         if (!mounted) return;
         setEndpoints(loadedEndpoints);
         const eligibleIds = loadedEndpoints.filter((endpoint) => isEndpointEligible(endpoint)).map((endpoint) => endpoint.id);
         setSelectedEndpointIds(eligibleIds);
-        setPortalKeyWarning(Boolean(settings.portal.allow_portal_key));
       } catch (err) {
         if (!mounted) return;
         setError(extractError(err));
@@ -192,16 +189,9 @@ export default function KeyRotationPage() {
         }
       />
 
-      {loading && <PageBanner tone="info">Loading endpoints and settings...</PageBanner>}
+      {loading && <PageBanner tone="info">Loading endpoints...</PageBanner>}
       {error && <PageBanner tone="error">{error}</PageBanner>}
       {actionMessage && <PageBanner tone={result?.summary.failed ? "warning" : "success"}>{actionMessage}</PageBanner>}
-
-      {portalKeyWarning && (
-        <PageBanner tone="warning">
-          Portal key display is enabled. End users may continue to use keys that will no longer be authorized after this
-          rotation.
-        </PageBanner>
-      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="ui-surface-card p-5">

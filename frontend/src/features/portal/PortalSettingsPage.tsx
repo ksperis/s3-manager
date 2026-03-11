@@ -61,7 +61,6 @@ export default function PortalSettingsPage() {
   const [portalSettingsError, setPortalSettingsError] = useState<string | null>(null);
   const [portalSettingsSaving, setPortalSettingsSaving] = useState(false);
   const [portalSettingsMessage, setPortalSettingsMessage] = useState<string | null>(null);
-  const [overridePortalKey, setOverridePortalKey] = useState<TriState>("inherit");
   const [overridePortalBucketCreate, setOverridePortalBucketCreate] = useState<TriState>("inherit");
   const [overridePortalAccessKeyCreate, setOverridePortalAccessKeyCreate] = useState<TriState>("inherit");
   const [bucketVersioningOverride, setBucketVersioningOverride] = useState<TriState>("inherit");
@@ -84,7 +83,6 @@ export default function PortalSettingsPage() {
   const effectivePortalSettings = portalAccountSettings?.effective ?? null;
   const overridePolicy = portalAccountSettings?.override_policy ?? null;
   const adminOverride = portalAccountSettings?.admin_override ?? null;
-  const portalKeyEnabled = Boolean(effectivePortalSettings?.allow_portal_key);
   const portalBucketCreateEnabled = Boolean(effectivePortalSettings?.allow_portal_user_bucket_create);
   const portalAccessKeyCreateEnabled = Boolean(effectivePortalSettings?.allow_portal_user_access_key_create);
   const bucketVersioningEnabled = Boolean(effectivePortalSettings?.bucket_defaults.versioning);
@@ -93,7 +91,6 @@ export default function PortalSettingsPage() {
   const hasAdminOverrides = useMemo(() => {
     if (!adminOverride) return false;
     if (
-      adminOverride.allow_portal_key != null ||
       adminOverride.allow_portal_user_bucket_create != null ||
       adminOverride.allow_portal_user_access_key_create != null
     ) {
@@ -172,7 +169,6 @@ export default function PortalSettingsPage() {
 
   useEffect(() => {
     if (!portalAccountSettings) {
-      setOverridePortalKey("inherit");
       setOverridePortalBucketCreate("inherit");
       setOverridePortalAccessKeyCreate("inherit");
       setBucketVersioningOverride("inherit");
@@ -190,7 +186,6 @@ export default function PortalSettingsPage() {
     }
     const override = portalAccountSettings.portal_manager_override;
     const effective = portalAccountSettings.effective;
-    setOverridePortalKey(resolveTriState(override.allow_portal_key));
     setOverridePortalBucketCreate(resolveTriState(override.allow_portal_user_bucket_create));
     setOverridePortalAccessKeyCreate(resolveTriState(override.allow_portal_user_access_key_create));
 
@@ -229,10 +224,6 @@ export default function PortalSettingsPage() {
     setPortalSettingsMessage(null);
 
     const payload: PortalAccountSettings["portal_manager_override"] = {};
-    const allowPortalKeyValue = toOverrideValue(overridePortalKey);
-    if (allowPortalKeyValue !== undefined) {
-      payload.allow_portal_key = allowPortalKeyValue;
-    }
     const allowBucketCreateValue = toOverrideValue(overridePortalBucketCreate);
     if (allowBucketCreateValue !== undefined) {
       payload.allow_portal_user_bucket_create = allowBucketCreateValue;
@@ -410,52 +401,6 @@ export default function PortalSettingsPage() {
               <div className="space-y-4">
                 <PortalSettingsSection title={t({ en: "UI", fr: "UI", de: "UI" })} layout="grid">
                   <PortalSettingsItem
-                    title={t({ en: "Portal key", fr: "Cle portail", de: "Portal-Schlussel" })}
-                    description={t({ en: "Show the active portal key to portal users.", fr: "Afficher la cle portail active aux utilisateurs portail.", de: "Aktiven Portal-Schlussel fur Portal-Benutzer anzeigen." })}
-                    action={
-                      <div className="flex flex-col items-end gap-2">
-                        <PortalSettingsSwitch
-                          checked={portalKeyEnabled}
-                          disabled={
-                            portalSettingsLoading ||
-                            portalSettingsSaving ||
-                            overridePortalKey === "inherit" ||
-                            !overridePolicy.allow_portal_key ||
-                            adminOverride?.allow_portal_key != null
-                          }
-                          ariaLabel={t({ en: "Toggle portal key", fr: "Basculer la cle portail", de: "Portal-Schlussel umschalten" })}
-                          onChange={(value) => setOverridePortalKey(value ? "enabled" : "disabled")}
-                        />
-                        <label className={inheritToggleLabelClass}>
-                          <span>{inheritLabel}</span>
-                          <input
-                            type="checkbox"
-                            checked={overridePortalKey === "inherit"}
-                            onChange={(e) =>
-                              setOverridePortalKey(
-                                e.target.checked ? "inherit" : portalKeyEnabled ? "enabled" : "disabled"
-                              )
-                            }
-                            className={uiCheckboxClass}
-                            disabled={
-                              portalSettingsLoading ||
-                              portalSettingsSaving ||
-                              !overridePolicy.allow_portal_key ||
-                              adminOverride?.allow_portal_key != null
-                            }
-                          />
-                        </label>
-                      </div>
-                    }
-                  >
-                    {!overridePolicy.allow_portal_key && (
-                      <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">{overrideDisabledLabel}</p>
-                    )}
-                    {adminOverride?.allow_portal_key != null && (
-                      <p className="mt-2 ui-caption text-amber-600 dark:text-amber-300">{lockedByAdminLabel}</p>
-                    )}
-                  </PortalSettingsItem>
-                  <PortalSettingsItem
                     title={t({ en: "Bucket creation", fr: "Creation de bucket", de: "Bucket-Erstellung" })}
                     description={t({ en: "Allow portal users to create buckets from the portal.", fr: "Autoriser les utilisateurs portail a creer des buckets.", de: "Portal-Benutzern das Erstellen von Buckets erlauben." })}
                     action={
@@ -502,8 +447,8 @@ export default function PortalSettingsPage() {
                     )}
                   </PortalSettingsItem>
                   <PortalSettingsItem
-                    title={t({ en: "Access key creation", fr: "Creation de cles d'acces", de: "Zugriffsschlussel-Erstellung" })}
-                    description={t({ en: "Allow portal users to create access keys from the portal.", fr: "Autoriser les utilisateurs portail a creer des cles d'acces.", de: "Portal-Benutzern das Erstellen von Zugriffsschlusseln erlauben." })}
+                    title={t({ en: "Access key management", fr: "Gestion des cles d'acces", de: "Zugriffsschlussel-Verwaltung" })}
+                    description={t({ en: "Allow portal users to create and delete their own IAM user keys from the portal.", fr: "Autoriser les utilisateurs portail a creer et supprimer leurs cles IAM utilisateur depuis le portail.", de: "Portal-Benutzern erlauben, ihre eigenen IAM-Benutzerschlussel im Portal zu erstellen und zu loschen." })}
                     action={
                       <div className="flex flex-col items-end gap-2">
                         <PortalSettingsSwitch
@@ -515,7 +460,7 @@ export default function PortalSettingsPage() {
                             !overridePolicy.allow_portal_user_access_key_create ||
                             adminOverride?.allow_portal_user_access_key_create != null
                           }
-                          ariaLabel={t({ en: "Toggle access key creation for portal users", fr: "Basculer la creation de cles d'acces pour les utilisateurs portail", de: "Erstellung von Zugriffsschlusseln fur Portal-Benutzer umschalten" })}
+                          ariaLabel={t({ en: "Toggle access key management for portal users", fr: "Basculer la gestion des cles d'acces pour les utilisateurs portail", de: "Verwaltung von Zugriffsschlusseln fur Portal-Benutzer umschalten" })}
                           onChange={(value) => setOverridePortalAccessKeyCreate(value ? "enabled" : "disabled")}
                         />
                         <label className={inheritToggleLabelClass}>
