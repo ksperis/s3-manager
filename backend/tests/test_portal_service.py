@@ -132,7 +132,7 @@ def test_ensure_user_bucket_policy_appends_resources(db_session):
     assert policy.get("Version") == "2012-10-17"
 
 
-def test_portal_user_bucket_creation_does_not_apply_defaults(monkeypatch, db_session):
+def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(monkeypatch, db_session):
     account = S3Account(name="portal-account-user", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-user@example.com", hashed_password="x", role="ui_user")
     db_session.add_all([account, user])
@@ -198,9 +198,15 @@ def test_portal_user_bucket_creation_does_not_apply_defaults(monkeypatch, db_ses
 
     assert bucket.name == "user-bucket"
     assert created_buckets == [("user-bucket", "AK-PORTAL", "SK-PORTAL")]
-    assert versioning_calls == []
-    assert lifecycle_calls == []
-    assert cors_calls == []
+    assert len(versioning_calls) == 1
+    assert versioning_calls[0][1]["access_key"] == "ROOT-AK"
+    assert versioning_calls[0][1]["secret_key"] == "ROOT-SK"
+    assert len(lifecycle_calls) == 1
+    assert lifecycle_calls[0][1]["access_key"] == "ROOT-AK"
+    assert lifecycle_calls[0][1]["secret_key"] == "ROOT-SK"
+    assert len(cors_calls) == 1
+    assert cors_calls[0][1]["access_key"] == "ROOT-AK"
+    assert cors_calls[0][1]["secret_key"] == "ROOT-SK"
 
 
 def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):

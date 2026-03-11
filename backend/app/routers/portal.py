@@ -350,7 +350,7 @@ def create_portal_bucket(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket creation not allowed for this role.")
     try:
         versioning = payload.versioning if payload.versioning is not None else portal_settings.bucket_defaults.versioning
-        defaults_applied = bool(is_manager)
+        defaults_applied = bool(is_manager or (allow_portal_user_create and is_portal_user))
         bucket = service.create_bucket(
             actor,
             access,

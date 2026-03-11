@@ -1669,21 +1669,28 @@ class PortalService:
         s3_client.create_bucket(
             bucket_name, access_key=active_key_id, secret_key=active_secret, **self._s3_client_kwargs(account)
         )
-        apply_bucket_defaults = bool(access.capabilities.can_manage_buckets)
+        is_portal_user_creation = bool(
+            access.role == AccountRole.PORTAL_USER.value and portal_defaults.allow_portal_user_bucket_create
+        )
+        apply_bucket_defaults = bool(access.capabilities.can_manage_buckets or is_portal_user_creation)
+        defaults_access_key = active_key_id
+        defaults_secret = active_secret
+        if apply_bucket_defaults and not access.capabilities.can_manage_buckets:
+            defaults_access_key, defaults_secret = self._account_credentials(account)
         if versioning_flag and apply_bucket_defaults:
             s3_client.set_bucket_versioning(
                 bucket_name,
                 enabled=True,
-                access_key=active_key_id,
-                secret_key=active_secret,
+                access_key=defaults_access_key,
+                secret_key=defaults_secret,
                 **self._s3_client_kwargs(account),
             )
         if portal_defaults.bucket_defaults.enable_lifecycle and apply_bucket_defaults:
             s3_client.put_bucket_lifecycle(
                 bucket_name,
                 rules=self._portal_bucket_lifecycle_rules(),
-                access_key=active_key_id,
-                secret_key=active_secret,
+                access_key=defaults_access_key,
+                secret_key=defaults_secret,
                 **self._s3_client_kwargs(account),
             )
         if portal_defaults.bucket_defaults.enable_cors and apply_bucket_defaults:
@@ -1692,8 +1699,8 @@ class PortalService:
                 s3_client.put_bucket_cors(
                     bucket_name,
                     rules=self._portal_bucket_cors_rules(origins),
-                    access_key=active_key_id,
-                    secret_key=active_secret,
+                    access_key=defaults_access_key,
+                    secret_key=defaults_secret,
                     **self._s3_client_kwargs(account),
                 )
         self._ensure_user_bucket_policy(iam_service, link.iam_username, bucket_name, portal_settings=portal_defaults)
