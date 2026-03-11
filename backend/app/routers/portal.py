@@ -133,6 +133,38 @@ def portal_eligibility(
     return PortalEligibility(eligible=eligible, reasons=reasons)
 
 
+@router.post("/bootstrap", response_model=PortalState)
+def portal_bootstrap(
+    access: AccountAccess = Depends(get_portal_account_access),
+    audit_service: AuditService = Depends(get_audit_logger),
+    service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
+) -> PortalState:
+    actor = access.actor
+    if not isinstance(actor, User):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    eligible, reasons = service.check_eligibility(actor, access)
+    if not eligible:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="; ".join(reasons) or "Portal not available")
+    try:
+        state = service.bootstrap_portal_identity(actor, access)
+        audit_service.record_action(
+            user=actor,
+            scope="portal",
+            action="bootstrap_portal_identity",
+            entity_type="iam_user",
+            entity_id=str(access.account.id),
+            account=access.account,
+            metadata={
+                "iam_username": state.iam_user.iam_username,
+                "just_created": bool(state.just_created),
+                "iam_provisioned": bool(state.iam_provisioned),
+            },
+        )
+        return state
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+
 @router.get("/state", response_model=PortalState)
 def portal_state(
     access: AccountAccess = Depends(get_portal_account_access),
@@ -450,8 +482,8 @@ def get_active_portal_access_key(
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
     portal_settings = service.get_effective_portal_settings(access.account)
-    if access.role == AccountRole.PORTAL_USER.value and not portal_settings.allow_portal_key:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal key visibility not allowed for this role.")
+    if not portal_settings.allow_portal_key:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal key visibility is disabled.")
     try:
         return service.get_portal_access_key(actor, access)
     except RuntimeError as exc:

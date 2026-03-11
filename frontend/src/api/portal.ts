@@ -33,6 +33,7 @@ export type PortalState = {
   account_id: number;
   iam_user: PortalIAMUser;
   access_keys: PortalAccessKey[];
+  iam_provisioned?: boolean;
   buckets: Bucket[];
   total_buckets?: number | null;
   s3_endpoint?: string | null;
@@ -94,6 +95,13 @@ export async function listPortalAccounts(): Promise<S3Account[]> {
 
 export async function fetchPortalState(accountId: S3AccountSelector): Promise<PortalState> {
   const { data } = await client.get<PortalState>("/portal/state", { params: withS3AccountParam(undefined, accountId) });
+  return data;
+}
+
+export async function bootstrapPortalIdentity(accountId: S3AccountSelector): Promise<PortalState> {
+  const { data } = await client.post<PortalState>("/portal/bootstrap", undefined, {
+    params: withS3AccountParam(undefined, accountId),
+  });
   return data;
 }
 

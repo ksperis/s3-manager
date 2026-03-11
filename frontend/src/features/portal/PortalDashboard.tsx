@@ -11,6 +11,7 @@ import {
   WorkspaceEndpointHealthOverviewResponse,
 } from "../../api/healthchecks";
 import {
+  bootstrapPortalIdentity,
   createPortalAccessKey,
   createPortalBucket,
   deletePortalAccessKey,
@@ -148,6 +149,8 @@ export default function PortalDashboard() {
   const [trafficSparkline, setTrafficSparkline] = useState<{ timestamp: number; total: number; ops: number }[]>([]);
   const [trafficOps24h, setTrafficOps24h] = useState(0);
   const [trafficLoading, setTrafficLoading] = useState(false);
+  const [bootstrappingIdentity, setBootstrappingIdentity] = useState(false);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const accountUsedBytes = accountUsage?.used_bytes ?? state?.used_bytes ?? null;
@@ -180,7 +183,8 @@ export default function PortalDashboard() {
   const totalBucketCount = state?.total_buckets ?? visibleBucketCount;
   const isPortalManager = state?.account_role === "portal_manager";
   const isPortalUser = state?.account_role === "portal_user";
-  const canViewPortalKey = Boolean(isPortalManager || portalSettings?.allow_portal_key);
+  const needsIamBootstrap = Boolean(state && !state.iam_provisioned);
+  const canViewPortalKey = Boolean(portalSettings?.allow_portal_key);
   const allAccessKeys = useMemo(() => {
     const keys = state?.access_keys ?? [];
     if (canViewPortalKey) return keys;
@@ -317,6 +321,7 @@ export default function PortalDashboard() {
     formatter,
     unitHint,
     percentOverride,
+    hoverHint,
     bare = false,
     compact = false,
     hidePercent = false,
@@ -328,6 +333,7 @@ export default function PortalDashboard() {
     formatter: (value?: number | null) => string;
     unitHint?: string;
     percentOverride?: number | null;
+    hoverHint?: string;
     bare?: boolean;
     compact?: boolean;
     hidePercent?: boolean;
@@ -368,6 +374,7 @@ export default function PortalDashboard() {
           className={`relative ${sizeClasses} rounded-full bg-slate-100 dark:bg-slate-800`}
           style={gradient ? { backgroundImage: gradient } : undefined}
           aria-label={`${label} ${percentLabel}`}
+          title={hoverHint ?? `${label}: ${percentLabel}`}
         >
           <div className="absolute inset-1 rounded-full bg-white dark:bg-slate-900" />
           <div className="absolute inset-2 flex flex-col items-center justify-center text-center font-semibold text-slate-700 dark:text-slate-100">
@@ -442,6 +449,7 @@ export default function PortalDashboard() {
       try {
         setLoading(true);
         setError(null);
+        setBootstrapError(null);
         const data = await fetchPortalState(accountIdForApi);
         if (!cancelled) {
           setState(data);
@@ -723,6 +731,33 @@ export default function PortalDashboard() {
     }
   };
 
+  const handleBootstrapIdentity = async () => {
+    if (!accountIdForApi) return;
+    setBootstrappingIdentity(true);
+    setBootstrapError(null);
+    try {
+      const data = await bootstrapPortalIdentity(accountIdForApi);
+      setState(data);
+      setKeyActionError(null);
+      setBucketActionError(null);
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setBootstrapError(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to initialize IAM identity for this portal account.",
+            fr: "Impossible d'initialiser l'identite IAM pour ce compte portail.",
+            de: "Die IAM-Identitat fur dieses Portal-Konto kann nicht initialisiert werden.",
+          })
+        )
+      );
+    } finally {
+      setBootstrappingIdentity(false);
+    }
+  };
+
   const handleFetchPortalKey = async () => {
     if (!accountIdForApi) return;
     setPortalKeyLoading(true);
@@ -902,6 +937,35 @@ export default function PortalDashboard() {
 
   return (
     <div className="space-y-8">
+      {needsIamBootstrap && (
+        <section className="ui-surface-card p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
+                {t({ en: "IAM identity required", fr: "Identite IAM requise", de: "IAM-Identitat erforderlich" })}
+              </p>
+              <p className="ui-caption text-slate-600 dark:text-slate-300">
+                {t({
+                  en: "Initialize the portal IAM identity before using bucket and key workflows.",
+                  fr: "Initialisez l'identite IAM du portail avant d'utiliser les workflows buckets et cles.",
+                  de: "Initialisieren Sie die Portal-IAM-Identitat, bevor Sie Bucket- und Schlussel-Workflows verwenden.",
+                })}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleBootstrapIdentity}
+              disabled={bootstrappingIdentity || !accountIdForApi}
+              className="rounded-md bg-primary px-4 py-2 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+            >
+              {bootstrappingIdentity
+                ? t({ en: "Initializing...", fr: "Initialisation...", de: "Initialisierung..." })
+                : t({ en: "Initialize IAM", fr: "Initialiser IAM", de: "IAM initialisieren" })}
+            </button>
+          </div>
+          {bootstrapError && <p className="mt-3 ui-caption text-rose-600 dark:text-rose-300">{bootstrapError}</p>}
+        </section>
+      )}
       <div className="overflow-hidden rounded-3xl bg-gradient-to-r from-sky-600 via-blue-500 to-emerald-500 p-[1px] shadow-lg">
         <div className="grid gap-6 rounded-[22px] bg-white/95 px-6 py-6 shadow-sm dark:bg-slate-900/90 lg:grid-cols-[1fr_1.4fr_1fr]">
           <div className="flex flex-col space-y-4">
@@ -1575,6 +1639,11 @@ export default function PortalDashboard() {
                             formatter: formatBytes,
                             unitHint: undefined,
                             percentOverride: dataShare,
+                            hoverHint: t({
+                              en: "Data percentage relative to total account usage",
+                              fr: "Pourcentage Data relatif a l'utilisation totale du compte",
+                              de: "Daten-Prozentsatz relativ zur gesamten Kontonutzung",
+                            }),
                             bare: true,
                             compact: true,
                             hidePercent: true,
@@ -1586,6 +1655,11 @@ export default function PortalDashboard() {
                             formatter: (v) => (v == null ? "—" : v.toLocaleString()),
                             unitHint: undefined,
                             percentOverride: objectsShare,
+                            hoverHint: t({
+                              en: "Objects percentage relative to total account usage",
+                              fr: "Pourcentage Objets relatif a l'utilisation totale du compte",
+                              de: "Objekt-Prozentsatz relativ zur gesamten Kontonutzung",
+                            }),
                             bare: true,
                             compact: true,
                             hidePercent: true,

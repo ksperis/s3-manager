@@ -150,6 +150,7 @@ function PortalShell() {
   const { defaultEndpointId, defaultEndpointName } = useDefaultStorageEndpoint();
   const accountRole = resolvePortalRole(getStoredUser(), selectedAccountId);
   const hideSidebar = accountRole === "portal_user";
+  const hideTopbar = accountRole === "portal_user";
   const isPortalManager = accountRole === "portal_manager";
   const selectedPortalLabel = selectedAccount
     ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
@@ -194,6 +195,7 @@ function PortalShell() {
       navSections={navSections}
       sidebarTitle="PORTAL"
       hideSidebar={hideSidebar}
+      hideTopbar={hideTopbar}
       hideHeader
       topbarControlDescriptors={topbarControlDescriptors}
     >

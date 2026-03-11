@@ -1,8 +1,13 @@
 # Copyright (c) 2025 Laurent Barbe
 # Licensed under the Apache License, Version 2.0
+import pytest
+from fastapi import HTTPException
+
 from app.db import AccountIAMUser, AccountRole, S3Account, User
 from app.models.app_settings import PortalSettings
+from app.models.portal import PortalAccessKey, PortalIAMUser, PortalState
 from app.routers.dependencies import AccountAccess, AccountCapabilities
+from app.routers import portal as portal_router
 from app.services import s3_client
 from app.services.portal_service import PortalService
 from app.models.iam import IAMUser
@@ -196,3 +201,273 @@ def test_portal_user_bucket_creation_does_not_apply_defaults(monkeypatch, db_ses
     assert versioning_calls == []
     assert lifecycle_calls == []
     assert cors_calls == []
+
+
+def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
+    account = S3Account(name="portal-account-read-only", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-readonly@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+    service = PortalService(db_session)
+
+    def fail_get_iam_service(*args, **kwargs):
+        raise AssertionError("IAM service should not be initialized when no portal link exists")
+
+    monkeypatch.setattr(service, "_get_iam_service", fail_get_iam_service)
+
+    state = service.get_state(user, access)
+
+    assert state.iam_provisioned is False
+    assert state.iam_user.iam_username is None
+    assert state.access_keys == []
+    assert state.buckets == []
+    assert state.total_buckets == 0
+    assert state.just_created is False
+
+
+def test_list_access_keys_without_bootstrap_returns_empty(monkeypatch, db_session):
+    account = S3Account(name="portal-account-no-keys", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-nokeys@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+    service = PortalService(db_session)
+
+    def fail_get_iam_service(*args, **kwargs):
+        raise AssertionError("IAM service should not be initialized when no portal link exists")
+
+    monkeypatch.setattr(service, "_get_iam_service", fail_get_iam_service)
+
+    keys = service.list_access_keys(user, access)
+
+    assert keys == []
+
+
+def test_bootstrap_portal_identity_sets_just_created(monkeypatch, db_session):
+    account = S3Account(name="portal-account-bootstrap", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-bootstrap@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_MANAGER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=True,
+            can_manage_portal_users=True,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+    service = PortalService(db_session)
+    link = AccountIAMUser(
+        user_id=user.id,
+        account_id=account.id,
+        iam_user_id="iam-uid",
+        iam_username="portal-bootstrap-iam",
+        active_access_key="AK-PORTAL",
+        active_secret_key="SK-PORTAL",
+    )
+    expected_state = PortalState(
+        account_id=account.id,
+        iam_user=PortalIAMUser(iam_user_id="iam-uid", iam_username="portal-bootstrap-iam"),
+        iam_provisioned=True,
+        access_keys=[],
+        buckets=[],
+        account_role=AccountRole.PORTAL_MANAGER.value,
+        can_manage_buckets=True,
+        can_manage_portal_users=True,
+    )
+
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: object())
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *args, **kwargs: (link, None, True))
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings())
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, "_ensure_policy_and_key", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, "get_state", lambda *_args, **_kwargs: expected_state)
+
+    state = service.bootstrap_portal_identity(user, access)
+
+    assert state.just_created is True
+
+
+def test_get_state_hides_portal_key_for_manager_when_visibility_disabled(monkeypatch, db_session):
+    account = S3Account(name="portal-account-manager-visibility", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-manager-visibility@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    link = AccountIAMUser(
+        user_id=user.id,
+        account_id=account.id,
+        iam_user_id="iam-uid",
+        iam_username="portal-manager-iam",
+        active_access_key="AK-PORTAL",
+        active_secret_key="SK-PORTAL",
+    )
+    db_session.add(link)
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_MANAGER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=True,
+            can_manage_portal_users=True,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+    service = PortalService(db_session)
+
+    class _FakeIAMService:
+        def get_user(self, iam_username):
+            return IAMUser(name=iam_username, arn=f"arn:aws:iam:::user/{iam_username}")
+
+        def list_access_keys(self, iam_username):  # noqa: ARG002
+            return [
+                PortalAccessKey(access_key_id="AK-PORTAL", status="Active", created_at="2026-01-01T00:00:00Z"),
+                PortalAccessKey(access_key_id="AK-USER", status="Active", created_at="2026-01-02T00:00:00Z"),
+            ]
+
+    monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(allow_portal_key=False))
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
+    monkeypatch.setattr(service, "_account_quota", lambda acc: (None, None))
+    monkeypatch.setattr(s3_client, "list_buckets", lambda **kwargs: [])
+
+    state = service.get_state(user, access)
+
+    assert state.iam_provisioned is True
+    assert [key.access_key_id for key in state.access_keys] == ["AK-USER"]
+    assert all(not key.is_portal for key in state.access_keys)
+
+
+def test_get_active_portal_access_key_rejects_manager_when_portal_key_visibility_disabled(db_session):
+    account = S3Account(name="portal-account-key-hidden", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-manager-hidden@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_MANAGER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=True,
+            can_manage_portal_users=True,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    class _FakeService:
+        def __init__(self):
+            self.called_get_portal_access_key = False
+
+        def get_effective_portal_settings(self, account):  # noqa: ARG002
+            return PortalSettings(allow_portal_key=False)
+
+        def get_portal_access_key(self, user_obj, access_obj):  # noqa: ARG002
+            self.called_get_portal_access_key = True
+            return PortalAccessKey(access_key_id="AK-PORTAL", is_portal=True, is_active=True, deletable=False)
+
+    service = _FakeService()
+
+    with pytest.raises(HTTPException) as exc:
+        portal_router.get_active_portal_access_key(access=access, service=service)
+
+    assert exc.value.status_code == 403
+    assert service.called_get_portal_access_key is False
+
+
+def test_create_portal_access_key_allows_portal_user_when_option_enabled(db_session):
+    account = S3Account(name="portal-account-user-create-key", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-create-key@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    class _FakeService:
+        def __init__(self):
+            self.create_access_key_calls = 0
+
+        def get_effective_portal_settings(self, account):  # noqa: ARG002
+            return PortalSettings(allow_portal_user_access_key_create=True)
+
+        def create_access_key(self, user_obj, access_obj):  # noqa: ARG002
+            self.create_access_key_calls += 1
+            return PortalAccessKey(
+                access_key_id="AK-NEW",
+                status="Active",
+                created_at="2026-01-03T00:00:00Z",
+                is_active=True,
+                is_portal=False,
+                deletable=True,
+                secret_access_key="SK-NEW",
+            )
+
+    class _FakeAuditService:
+        def __init__(self):
+            self.actions = []
+
+        def record_action(self, **kwargs):
+            self.actions.append(kwargs)
+
+    service = _FakeService()
+    audit_service = _FakeAuditService()
+
+    created = portal_router.create_portal_access_key(access=access, audit_service=audit_service, service=service)
+
+    assert created.access_key_id == "AK-NEW"
+    assert service.create_access_key_calls == 1
+    assert len(audit_service.actions) == 1
+    assert audit_service.actions[0]["action"] == "create_access_key"
+    assert audit_service.actions[0]["metadata"]["access_key_id"] == "AK-NEW"

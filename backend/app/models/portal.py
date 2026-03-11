@@ -37,6 +37,7 @@ class PortalState(BaseModel):
     account_id: int
     iam_user: PortalIAMUser
     access_keys: list[PortalAccessKey]
+    iam_provisioned: bool = False
     buckets: list[Bucket]
     total_buckets: Optional[int] = None
     s3_endpoint: Optional[str] = None

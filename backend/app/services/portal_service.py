@@ -866,6 +866,16 @@ class PortalService:
     def _ensure_policy_and_key(self, link: AccountIAMUser, iam_service: RGWIAMService) -> PortalAccessKey:
         return self._ensure_active_key(link, iam_service)
 
+    def _existing_portal_link(self, user: User, account: S3Account) -> Optional[AccountIAMUser]:
+        return (
+            self.db.query(AccountIAMUser)
+            .filter(
+                AccountIAMUser.user_id == user.id,
+                AccountIAMUser.account_id == account.id,
+            )
+            .first()
+        )
+
     def _active_credentials(self, link: AccountIAMUser, iam_service: RGWIAMService) -> tuple[str, str]:
         active = self._ensure_policy_and_key(link, iam_service)
         if not active.access_key_id or not active.secret_access_key:
@@ -1368,53 +1378,74 @@ class PortalService:
 
     def get_state(self, user: User, access: "AccountAccess") -> PortalState:
         account = access.account
-        iam_service = self._get_iam_service(account)
-        link, iam_user, created = self._ensure_portal_user(user, account, iam_service)
         portal_settings = self._effective_portal_settings(account)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
-        self._ensure_policy_and_key(link, iam_service)
-        portal_key = self._ensure_active_key(link, iam_service)
-        portal_key.secret_access_key = None
-        access_key, secret_key = self._active_credentials(link, iam_service)
-        keys = self._list_access_keys(link, iam_service, include_portal=False)
-        access_keys = [portal_key, *keys]
-        if access.role == AccountRole.PORTAL_USER.value and not portal_settings.allow_portal_key:
-            access_keys = keys
         used_bytes = None
         used_objects = None
-        accessible_names: Optional[set[str]] = None
-        if not access.capabilities.can_manage_buckets:
-            allowed = self.list_user_bucket_access(user, access.account, access.role)
-            accessible_names = set(allowed)
+        buckets: list[Bucket] = []
+        access_keys: list[PortalAccessKey] = []
+        link = self._existing_portal_link(user, account)
+        iam_user = None
+        iam_provisioned = False
+        if link and link.iam_username:
+            iam_service = self._get_iam_service(account)
+            iam_user = iam_service.get_user(link.iam_username)
+            if iam_user:
+                keys_with_portal = self._list_access_keys(link, iam_service, include_portal=True)
+                access_keys = keys_with_portal
+                if not portal_settings.allow_portal_key:
+                    access_keys = [key for key in keys_with_portal if not key.is_portal]
 
-        buckets = []
-        for b in s3_client.list_buckets(
-            access_key=access_key, secret_key=secret_key, **self._s3_client_kwargs(account)
-        ):
-            name = b.get("name")
-            if accessible_names is not None and name not in accessible_names:
-                continue
-            buckets.append(
-                Bucket(
-                    name=name,
-                    creation_date=b.get("creation_date"),
-                    used_bytes=None,
-                    object_count=None,
-                    quota_max_size_bytes=None,
-                    quota_max_objects=None,
+                portal_meta = next(
+                    (key for key in keys_with_portal if key.is_portal and key.access_key_id == link.active_access_key),
+                    None,
                 )
-            )
+                has_active_portal_credentials = bool(
+                    link.active_access_key
+                    and link.active_secret_key
+                    and portal_meta
+                    and self._is_active_status(portal_meta.status, default=True)
+                )
+                iam_provisioned = has_active_portal_credentials
+
+                if has_active_portal_credentials:
+                    accessible_names: Optional[set[str]] = None
+                    if not access.capabilities.can_manage_buckets:
+                        allowed = self.list_existing_user_bucket_access(user, access.account, access.role)
+                        accessible_names = set(allowed)
+                    try:
+                        for b in s3_client.list_buckets(
+                            access_key=link.active_access_key,
+                            secret_key=link.active_secret_key,
+                            **self._s3_client_kwargs(account),
+                        ):
+                            name = b.get("name")
+                            if accessible_names is not None and name not in accessible_names:
+                                continue
+                            buckets.append(
+                                Bucket(
+                                    name=name,
+                                    creation_date=b.get("creation_date"),
+                                    used_bytes=None,
+                                    object_count=None,
+                                    quota_max_size_bytes=None,
+                                    quota_max_objects=None,
+                                )
+                            )
+                    except Exception as exc:  # pragma: no cover - defensive
+                        logger.warning("Unable to list buckets with existing portal credentials for %s: %s", user.email, exc)
+                        buckets = []
         total_buckets = len(buckets)
         quota_max_size_bytes, quota_max_objects = self._account_quota(account)
         return PortalState(
             account_id=account.id,
             iam_user=PortalIAMUser(
-                iam_user_id=link.iam_user_id,
-                iam_username=link.iam_username,
+                iam_user_id=link.iam_user_id if link else None,
+                iam_username=link.iam_username if link else None,
                 arn=iam_user.arn if iam_user else None,
-                created_at=link.created_at,
+                created_at=link.created_at if link else None,
             ),
             access_keys=access_keys,
+            iam_provisioned=iam_provisioned,
             buckets=buckets,
             total_buckets=total_buckets,
             s3_endpoint=resolve_s3_endpoint(account),
@@ -1422,7 +1453,7 @@ class PortalService:
             used_objects=used_objects,
             quota_max_size_bytes=quota_max_size_bytes,
             quota_max_objects=quota_max_objects,
-            just_created=created,
+            just_created=False,
             account_role=access.role,
             can_manage_buckets=access.capabilities.can_manage_buckets,
             can_manage_portal_users=access.capabilities.can_manage_portal_users,
@@ -1507,11 +1538,12 @@ class PortalService:
         )
 
     def list_access_keys(self, user: User, access: "AccountAccess") -> list[PortalAccessKey]:
+        link = self._existing_portal_link(user, access.account)
+        if not link or not link.iam_username:
+            return []
         iam_service = self._get_iam_service(access.account)
-        link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        portal_settings = self._effective_portal_settings(access.account)
-        self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
-        self._ensure_policy_and_key(link, iam_service)
+        if not iam_service.get_user(link.iam_username):
+            return []
         return self._list_access_keys(link, iam_service, include_portal=False)
 
     def create_access_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
@@ -1533,11 +1565,38 @@ class PortalService:
         )
 
     def get_portal_access_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
+        link = self._existing_portal_link(user, access.account)
+        if not link or not link.iam_username:
+            raise RuntimeError("Portal IAM identity is not provisioned for this user.")
         iam_service = self._get_iam_service(access.account)
-        link, _, _ = self._ensure_portal_user(user, access.account, iam_service)
-        portal_settings = self._effective_portal_settings(access.account)
+        if not iam_service.get_user(link.iam_username):
+            raise RuntimeError("Portal IAM user is missing. Re-run portal bootstrap.")
+        if not link.active_access_key or not link.active_secret_key:
+            raise RuntimeError("Portal access key is not provisioned for this user.")
+        metas = iam_service.list_access_keys(link.iam_username)
+        meta = next((item for item in metas if item.access_key_id == link.active_access_key), None)
+        if meta is None:
+            raise RuntimeError("Portal access key is missing in IAM. Re-run portal bootstrap.")
+        return PortalAccessKey(
+            access_key_id=meta.access_key_id,
+            status=meta.status,
+            created_at=meta.created_at,
+            is_active=self._is_active_status(meta.status, default=True),
+            secret_access_key=link.active_secret_key,
+            is_portal=True,
+            deletable=False,
+        )
+
+    def bootstrap_portal_identity(self, user: User, access: "AccountAccess") -> PortalState:
+        account = access.account
+        iam_service = self._get_iam_service(account)
+        link, _, created = self._ensure_portal_user(user, account, iam_service)
+        portal_settings = self._effective_portal_settings(account)
         self._sync_user_group_membership(iam_service, link.iam_username, access.role, portal_settings=portal_settings)
-        return self._ensure_active_key(link, iam_service)
+        self._ensure_policy_and_key(link, iam_service)
+        state = self.get_state(user, access)
+        state.just_created = created
+        return state
 
     def rotate_portal_key(self, user: User, access: "AccountAccess") -> PortalAccessKey:
         iam_service = self._get_iam_service(access.account)
