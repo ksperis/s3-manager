@@ -626,24 +626,21 @@ export default function BucketsPage() {
         const deleteDisabledReason = containsObjects
           ? `Bucket not empty: ${formatObjectCountLabel(objectCount)}. Empty it before deleting.`
           : null;
+        const deleteButton = (
+          <button
+            onClick={() => handleDelete(bucket.name)}
+            className={tableDeleteActionClasses}
+            disabled={deletingBucket === bucket.name || containsObjects}
+          >
+            {deletingBucket === bucket.name ? "Deleting..." : "Delete"}
+          </button>
+        );
         return (
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex flex-wrap justify-end gap-2">
-              <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className={tableActionButtonClasses}>
-                Configure
-              </Link>
-              <button
-                onClick={() => handleDelete(bucket.name)}
-                className={tableDeleteActionClasses}
-                disabled={deletingBucket === bucket.name || containsObjects}
-                title={deleteDisabledReason ?? undefined}
-              >
-                {deletingBucket === bucket.name ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-            {deleteDisabledReason && (
-              <span className="ui-caption text-slate-500 dark:text-slate-400">{deleteDisabledReason}</span>
-            )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className={tableActionButtonClasses}>
+              Configure
+            </Link>
+            {deleteDisabledReason ? <span title={deleteDisabledReason}>{deleteButton}</span> : deleteButton}
           </div>
         );
       },
