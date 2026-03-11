@@ -25,7 +25,7 @@ import TableEmptyState from "../../components/TableEmptyState";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactButtonClasses, toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
-import { confirmAction, confirmDeletion } from "../../utils/confirm";
+import { confirmDeletion } from "../../utils/confirm";
 import PropertySummaryChip from "../../components/PropertySummaryChip";
 import {
   S3_BUCKET_NAME_MAX_LENGTH,
@@ -101,6 +101,11 @@ const formatBytes = (value?: number | null) => {
 const formatNumber = (value?: number | null) => {
   if (value === undefined || value === null) return "-";
   return value.toLocaleString();
+};
+
+const formatObjectCountLabel = (value: number) => {
+  const suffix = value === 1 ? "object" : "objects";
+  return `${value.toLocaleString()} ${suffix}`;
 };
 
 type BucketListRow = Bucket & {
@@ -491,9 +496,9 @@ export default function BucketsPage() {
   const handleDelete = async (name: string) => {
     if (needsS3AccountSelection) return;
     const targetBucket = buckets.find((b) => b.name === name);
-    if ((targetBucket?.object_count ?? 0) > 1000) {
+    if ((targetBucket?.object_count ?? 0) > 0) {
       setActionMessage(null);
-      setActionError("This bucket holds more than 1000 objects. Use an S3 client to empty it before deleting.");
+      setActionError(`Bucket '${name}' is not empty (${formatObjectCountLabel(targetBucket?.object_count ?? 0)}). Empty it before deleting.`);
       return;
     }
     if (!confirmDeletion("bucket", name)) return;
@@ -502,7 +507,7 @@ export default function BucketsPage() {
     setActionError(null);
     setActionMessage(null);
     try {
-      await deleteBucket(name, accountIdForApi, false);
+      await deleteBucket(name, accountIdForApi);
       setActionMessage("Bucket deleted");
       await fetchBuckets(accountIdForApi ?? null);
       return;
@@ -511,24 +516,8 @@ export default function BucketsPage() {
       const notEmpty = msg.toLowerCase().includes("not empty");
       const conflict = axios.isAxiosError(err) && err.response?.status === 409;
       if (notEmpty || conflict) {
-        const confirmForce = confirmAction(
-          `Bucket '${name}' contains objects. Delete all objects before deleting the bucket?`
-        );
-        if (confirmForce) {
-          try {
-            await deleteBucket(name, accountIdForApi, true);
-            setActionMessage("Bucket and objects deleted");
-            await fetchBuckets(accountIdForApi ?? null);
-            return;
-          } catch (forceErr) {
-            setActionError(extractError(forceErr));
-          } finally {
-            setDeletingBucket(null);
-          }
-        } else {
-          setDeletingBucket(null);
-          return;
-        }
+        setActionError(`Bucket '${name}' is not empty. Empty it before deleting.`);
+        return;
       }
       setActionError(msg);
     } finally {
@@ -631,16 +620,33 @@ export default function BucketsPage() {
       label: "Actions",
       field: null,
       align: "right",
-      render: (bucket) => (
-        <div className="flex flex-wrap justify-end gap-2">
-          <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className={tableActionButtonClasses}>
-            Configure
-          </Link>
-          <button onClick={() => handleDelete(bucket.name)} className={tableDeleteActionClasses} disabled={deletingBucket === bucket.name}>
-            {deletingBucket === bucket.name ? "Deleting..." : "Delete"}
-          </button>
-        </div>
-      ),
+      render: (bucket) => {
+        const objectCount = bucket.object_count ?? 0;
+        const containsObjects = objectCount > 0;
+        const deleteDisabledReason = containsObjects
+          ? `Bucket not empty: ${formatObjectCountLabel(objectCount)}. Empty it before deleting.`
+          : null;
+        return (
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Link to={`/manager/buckets/${encodeURIComponent(bucket.name)}`} className={tableActionButtonClasses}>
+                Configure
+              </Link>
+              <button
+                onClick={() => handleDelete(bucket.name)}
+                className={tableDeleteActionClasses}
+                disabled={deletingBucket === bucket.name || containsObjects}
+                title={deleteDisabledReason ?? undefined}
+              >
+                {deletingBucket === bucket.name ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+            {deleteDisabledReason && (
+              <span className="ui-caption text-slate-500 dark:text-slate-400">{deleteDisabledReason}</span>
+            )}
+          </div>
+        );
+      },
     });
 
     return cols;

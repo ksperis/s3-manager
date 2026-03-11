@@ -1046,14 +1046,13 @@ def create_bucket(
 @router.delete("/{bucket_name}")
 def delete_bucket(
     bucket_name: str,
-    force: bool = Query(False, description="Set to true to delete all objects before deleting the bucket"),
     account: S3Account = Depends(get_account_context),
     service: BucketsService = Depends(get_buckets_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ):
     try:
-        service.delete_bucket(bucket_name, account, force=force)
+        service.delete_bucket(bucket_name, account)
         _invalidate_bucket_listing_for_account(account)
         audit_service.record_action(
             user=current_user,
@@ -1062,11 +1061,13 @@ def delete_bucket(
             entity_type="bucket",
             entity_id=bucket_name,
             account=account,
-            metadata={"force": force},
         )
         return {"message": f"Bucket '{bucket_name}' deleted"}
     except BucketNotEmptyError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Bucket '{bucket_name}' is not empty. Empty it before deleting.",
+        ) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

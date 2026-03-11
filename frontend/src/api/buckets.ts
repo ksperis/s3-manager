@@ -80,8 +80,8 @@ export async function createBucket(name: string, accountId: S3AccountSelector, o
   );
 }
 
-export async function deleteBucket(name: string, accountId: S3AccountSelector, force = false): Promise<void> {
-  await client.delete(bucketPath(name), { params: withS3AccountParam({ force }, accountId) });
+export async function deleteBucket(name: string, accountId: S3AccountSelector): Promise<void> {
+  await client.delete(bucketPath(name), { params: withS3AccountParam(undefined, accountId) });
 }
 
 export type BucketLifecycleRule = {
