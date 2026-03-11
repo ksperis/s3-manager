@@ -69,10 +69,10 @@ vi.mock("../../api/buckets", async () => {
   };
 });
 
-function renderPage() {
+function renderPage({ defaultShowInspector = true }: { defaultShowInspector?: boolean } = {}) {
   return render(
     <MemoryRouter initialEntries={["/browser"]}>
-      <BrowserPage defaultShowInspector />
+      <BrowserPage defaultShowInspector={defaultShowInspector} />
     </MemoryRouter>
   );
 }
@@ -178,5 +178,34 @@ describe("BrowserPage multipart uploads modal", () => {
     });
 
     expect(await screen.findByText("Multipart upload aborted for uploads/big-file.bin.")).toBeInTheDocument();
+  });
+
+  it("opens the inspector panel when clicking More actions while the inspector is hidden", async () => {
+    const user = userEvent.setup();
+
+    listBrowserObjectsMock.mockResolvedValue({
+      prefix: "",
+      objects: [
+        {
+          key: "reports/monthly.csv",
+          size: 512,
+          last_modified: "2026-03-10T10:15:00Z",
+          storage_class: "STANDARD",
+        },
+      ],
+      prefixes: [],
+      is_truncated: false,
+      next_continuation_token: null,
+    });
+
+    renderPage({ defaultShowInspector: false });
+
+    expect(screen.queryByRole("tablist", { name: "Inspector tabs" })).not.toBeInTheDocument();
+
+    const moreButton = await screen.findByRole("button", { name: "More actions" });
+    await user.click(moreButton);
+
+    expect(await screen.findByRole("tablist", { name: "Inspector tabs" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
   });
 });

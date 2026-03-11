@@ -1248,8 +1248,10 @@ def put_object_tags(
     actor: BrowserActor = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> ObjectTags:
+    if not payload.key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
     try:
-        result = service.put_object_tags(bucket_name, account, payload)
+        result = service.put_object_tags(bucket_name, account, payload.key, payload.tags, version_id=payload.version_id)
         _common_record_browser_action(audit_service, actor=actor, scope="browser",
             action="put_object_tags",
             entity_type="object",
