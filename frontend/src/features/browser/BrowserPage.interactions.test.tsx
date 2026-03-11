@@ -345,17 +345,41 @@ describe("BrowserPage interactions", () => {
     const user = userEvent.setup();
     renderPage();
 
+    let actionsHeader = screen.getByRole("columnheader", { name: "Actions" });
     let rowA = await findRowByLabel("a.txt");
+    expect(rowA).toHaveClass("h-9");
+    expect(actionsHeader).toHaveClass("!py-1");
+    const compactNameCell = within(rowA).getByRole("button", { name: "a.txt" }).closest("td");
+    expect(compactNameCell).not.toBeNull();
+    expect(compactNameCell).toHaveClass("!py-0.5");
+    expect(compactNameCell).toHaveClass("!align-middle");
+    const compactPreviewButton = within(rowA).getByRole("button", { name: "Preview" });
+    expect(compactPreviewButton).toHaveClass("!h-6", "!w-6");
     expect(within(rowA).queryByText("Object")).not.toBeInTheDocument();
 
     let menu = openHeaderConfigMenu();
     await user.click(within(menu).getByRole("button", { name: "List view" }));
+    actionsHeader = screen.getByRole("columnheader", { name: "Actions" });
     rowA = await findRowByLabel("a.txt");
+    expect(rowA).toHaveClass("h-16");
+    expect(actionsHeader).toHaveClass("py-3");
+    const listNameCell = within(rowA).getByRole("button", { name: "a.txt" }).closest("td");
+    expect(listNameCell).not.toBeNull();
+    expect(listNameCell).toHaveClass("py-2.5");
+    expect(listNameCell).toHaveClass("!align-middle");
+    const listPreviewButton = within(rowA).getByRole("button", { name: "Preview" });
+    expect(listPreviewButton).toHaveClass("h-7", "w-7");
+    expect(listPreviewButton).not.toHaveClass("!h-6", "!w-6");
     expect(within(rowA).getByText("Object")).toBeInTheDocument();
 
     menu = openHeaderConfigMenu();
     await user.click(within(menu).getByRole("button", { name: "Compact view" }));
+    actionsHeader = screen.getByRole("columnheader", { name: "Actions" });
     rowA = await findRowByLabel("a.txt");
+    expect(rowA).toHaveClass("h-9");
+    expect(actionsHeader).toHaveClass("!py-1");
+    const compactPreviewButtonAgain = within(rowA).getByRole("button", { name: "Preview" });
+    expect(compactPreviewButtonAgain).toHaveClass("!h-6", "!w-6");
     expect(within(rowA).queryByText("Object")).not.toBeInTheDocument();
   });
 

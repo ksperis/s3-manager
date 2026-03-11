@@ -2796,12 +2796,14 @@ export default function BrowserPage({
       : isInspectorPanelVisible
         ? "lg:grid-cols-[minmax(0,1fr)_320px]"
         : "lg:grid-cols-[minmax(0,1fr)]";
-  const rowPadding = compactMode ? "py-1" : "py-2.5";
-  const rowHeightClasses = compactMode ? "h-10" : "h-16";
+  const rowPadding = compactMode ? "!py-0.5" : "py-2.5";
+  const rowHeightClasses = compactMode ? "h-9" : "h-16";
   const rowCellClasses = rowPadding;
-  const headerPadding = compactMode ? "py-2" : "py-3";
-  const iconBoxClasses = compactMode ? "h-7 w-7" : "h-9 w-9";
-  const nameGapClasses = compactMode ? "gap-2" : "gap-3";
+  const headerPadding = compactMode ? "!py-1" : "py-3";
+  const iconBoxClasses = compactMode ? "h-6 w-6" : "h-9 w-9";
+  const nameGapClasses = compactMode ? "gap-1.5" : "gap-3";
+  const rowActionButtonClasses = compactMode ? `${iconButtonClasses} !h-6 !w-6` : iconButtonClasses;
+  const rowActionDangerButtonClasses = compactMode ? `${iconButtonDangerClasses} !h-6 !w-6` : iconButtonDangerClasses;
   const prefixVersionRows = useMemo(
     () => buildVersionRows(prefixVersions, prefixDeleteMarkers),
     [prefixDeleteMarkers, prefixVersions]
@@ -8611,7 +8613,7 @@ export default function BrowserPage({
                                   />
                                 </td>
                                 <td
-                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} align-middle ui-body ${
+                                  className={`manager-table-cell min-w-0 px-4 ${rowCellClasses} !align-middle ui-body ${
                                     isDeleted ? "text-rose-700 dark:text-rose-200" : "text-slate-700 dark:text-slate-200"
                                   }`}
                                 >
@@ -8692,7 +8694,7 @@ export default function BrowserPage({
                                     {item.type === "folder" && (
                                       <button
                                         type="button"
-                                        className={iconButtonClasses}
+                                        className={rowActionButtonClasses}
                                         aria-label="Open"
                                         title="Open"
                                         onClick={() => handleOpenItem(item)}
@@ -8703,7 +8705,7 @@ export default function BrowserPage({
                                     {item.type === "file" && !isDeleted && (
                                       <button
                                         type="button"
-                                        className={iconButtonClasses}
+                                        className={rowActionButtonClasses}
                                         aria-label="Preview"
                                         title="Preview"
                                         onClick={() => handlePreviewItem(item)}
@@ -8714,7 +8716,7 @@ export default function BrowserPage({
                                     {item.type === "file" && isDeleted && isVersioningEnabled && (
                                       <button
                                         type="button"
-                                        className={iconButtonClasses}
+                                        className={rowActionButtonClasses}
                                         aria-label="Versions"
                                         title="Versions"
                                         onClick={() => openObjectVersionsModal(item)}
@@ -8724,7 +8726,7 @@ export default function BrowserPage({
                                     )}
                                     <button
                                       type="button"
-                                      className={`${iconButtonClasses} ${isDeleted ? "opacity-50" : ""}`}
+                                      className={`${rowActionButtonClasses} ${isDeleted ? "opacity-50" : ""}`}
                                       aria-label="Download"
                                       title={isDeleted ? "Restore from versions before download" : "Download"}
                                       onClick={() => handleDownloadTarget(item)}
@@ -8734,7 +8736,7 @@ export default function BrowserPage({
                                     </button>
                                     <button
                                       type="button"
-                                      className={`${iconButtonDangerClasses} ${isDeleted ? "opacity-50" : ""}`}
+                                      className={`${rowActionDangerButtonClasses} ${isDeleted ? "opacity-50" : ""}`}
                                       aria-label="Delete"
                                       title={isDeleted ? "Delete marker entries are managed in versions." : "Delete"}
                                       onClick={() => handleDeleteItems([item])}
@@ -8745,7 +8747,7 @@ export default function BrowserPage({
                                     {canUseInspectorPanel && (
                                       <button
                                         type="button"
-                                        className={iconButtonClasses}
+                                        className={rowActionButtonClasses}
                                         aria-label="More actions"
                                         title="More"
                                         onClick={() => toggleInspectorForItem(item)}

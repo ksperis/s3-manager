@@ -235,6 +235,15 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
       <DownloadIcon className="h-3.5 w-3.5" />
     </button>
   );
+  const renderDetailsTextAction = (kind: OperationDetailsKind, operationId: string) => (
+    <button
+      type="button"
+      className={operationSecondaryClasses}
+      onClick={() => confirmAndDownloadOperationDetails(kind, operationId)}
+    >
+      Download details (JSON)
+    </button>
+  );
 
   const buildStatusPill = (options: {
     hasFailed: boolean;
@@ -324,7 +333,6 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     });
     const actions = (
       <>
-        {renderDetailsAction("download", group.op.id)}
         <button
           type="button"
           className={operationSecondaryClasses}
@@ -350,6 +358,9 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
           {group.op.completionStatus === "failed" && group.op.errorMessage && (
             <p className="text-rose-600 dark:text-rose-200">{group.op.errorMessage}</p>
           )}
+          <div className="pt-1">
+            {renderDetailsTextAction("download", group.op.id)}
+          </div>
         </div>
       ) : (
         <>
@@ -378,13 +389,16 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               </div>
             ))}
           {showQueuedSection && hasMoreQueued && (
-            <button
-              type="button"
-              className={operationSecondaryClasses}
-              onClick={() => showMoreSection(group.op.id, "queued")}
-            >
-              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={operationSecondaryClasses}
+                onClick={() => showMoreSection(group.op.id, "queued")}
+              >
+                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+              </button>
+              {renderDetailsTextAction("download", group.op.id)}
+            </div>
           )}
           {showCompletedSection &&
             visibleCompletedItems.map((item) => (
@@ -400,13 +414,16 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               </div>
             ))}
           {showCompletedSection && hasMoreCompleted && (
-            <button
-              type="button"
-              className={operationSecondaryClasses}
-              onClick={() => showMoreSection(group.op.id, "completed")}
-            >
-              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={operationSecondaryClasses}
+                onClick={() => showMoreSection(group.op.id, "completed")}
+              >
+                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+              </button>
+              {renderDetailsTextAction("download", group.op.id)}
+            </div>
           )}
           {showFailedSection &&
             visibleFailedItems.map((item) => (
@@ -424,13 +441,21 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               </div>
             ))}
           {showFailedSection && hasMoreFailed && (
-            <button
-              type="button"
-              className={operationSecondaryClasses}
-              onClick={() => showMoreSection(group.op.id, "failed")}
-            >
-              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={operationSecondaryClasses}
+                onClick={() => showMoreSection(group.op.id, "failed")}
+              >
+                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+              </button>
+              {renderDetailsTextAction("download", group.op.id)}
+            </div>
+          )}
+          {!((showQueuedSection && hasMoreQueued) || (showCompletedSection && hasMoreCompleted) || (showFailedSection && hasMoreFailed)) && (
+            <div className="pt-1">
+              {renderDetailsTextAction("download", group.op.id)}
+            </div>
           )}
         </>
       )
@@ -476,7 +501,6 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     });
     const actions = (
       <>
-        {renderDetailsAction("delete", group.op.id)}
         <button
           type="button"
           className={operationSecondaryClasses}
@@ -493,6 +517,9 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
           {group.op.completionStatus === "failed" && group.op.errorMessage && (
             <p className="text-rose-600 dark:text-rose-200">{group.op.errorMessage}</p>
           )}
+          <div className="pt-1">
+            {renderDetailsTextAction("delete", group.op.id)}
+          </div>
         </div>
       ) : (
         <>
@@ -515,13 +542,16 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               </div>
             ))}
           {showQueuedSection && hasMoreQueued && (
-            <button
-              type="button"
-              className={operationSecondaryClasses}
-              onClick={() => showMoreSection(group.op.id, "queued")}
-            >
-              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={operationSecondaryClasses}
+                onClick={() => showMoreSection(group.op.id, "queued")}
+              >
+                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+              </button>
+              {renderDetailsTextAction("delete", group.op.id)}
+            </div>
           )}
           {showCompletedSection &&
             visibleCompletedItems.map((item) => (
@@ -533,13 +563,16 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               </div>
             ))}
           {showCompletedSection && hasMoreCompleted && (
-            <button
-              type="button"
-              className={operationSecondaryClasses}
-              onClick={() => showMoreSection(group.op.id, "completed")}
-            >
-              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={operationSecondaryClasses}
+                onClick={() => showMoreSection(group.op.id, "completed")}
+              >
+                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+              </button>
+              {renderDetailsTextAction("delete", group.op.id)}
+            </div>
           )}
           {showFailedSection &&
             visibleFailedItems.map((item) => (
@@ -554,13 +587,21 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               </div>
             ))}
           {showFailedSection && hasMoreFailed && (
-            <button
-              type="button"
-              className={operationSecondaryClasses}
-              onClick={() => showMoreSection(group.op.id, "failed")}
-            >
-              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={operationSecondaryClasses}
+                onClick={() => showMoreSection(group.op.id, "failed")}
+              >
+                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+              </button>
+              {renderDetailsTextAction("delete", group.op.id)}
+            </div>
+          )}
+          {!((showQueuedSection && hasMoreQueued) || (showCompletedSection && hasMoreCompleted) || (showFailedSection && hasMoreFailed)) && (
+            <div className="pt-1">
+              {renderDetailsTextAction("delete", group.op.id)}
+            </div>
           )}
         </>
       )
@@ -606,7 +647,6 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     });
     const actions = (
       <>
-        {renderDetailsAction("copy", group.op.id)}
         <button
           type="button"
           className={operationSecondaryClasses}
@@ -623,6 +663,9 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
           {group.op.completionStatus === "failed" && group.op.errorMessage && (
             <p className="text-rose-600 dark:text-rose-200">{group.op.errorMessage}</p>
           )}
+          <div className="pt-1">
+            {renderDetailsTextAction("copy", group.op.id)}
+          </div>
         </div>
       ) : (
         <>
@@ -651,13 +694,16 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               </div>
             ))}
           {showQueuedSection && hasMoreQueued && (
-            <button
-              type="button"
-              className={operationSecondaryClasses}
-              onClick={() => showMoreSection(group.op.id, "queued")}
-            >
-              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={operationSecondaryClasses}
+                onClick={() => showMoreSection(group.op.id, "queued")}
+              >
+                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+              </button>
+              {renderDetailsTextAction("copy", group.op.id)}
+            </div>
           )}
           {showCompletedSection &&
             visibleCompletedItems.map((item) => (
@@ -672,13 +718,16 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               </div>
             ))}
           {showCompletedSection && hasMoreCompleted && (
-            <button
-              type="button"
-              className={operationSecondaryClasses}
-              onClick={() => showMoreSection(group.op.id, "completed")}
-            >
-              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={operationSecondaryClasses}
+                onClick={() => showMoreSection(group.op.id, "completed")}
+              >
+                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+              </button>
+              {renderDetailsTextAction("copy", group.op.id)}
+            </div>
           )}
           {showFailedSection &&
             visibleFailedItems.map((item) => (
@@ -696,13 +745,21 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
               </div>
             ))}
           {showFailedSection && hasMoreFailed && (
-            <button
-              type="button"
-              className={operationSecondaryClasses}
-              onClick={() => showMoreSection(group.op.id, "failed")}
-            >
-              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={operationSecondaryClasses}
+                onClick={() => showMoreSection(group.op.id, "failed")}
+              >
+                Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+              </button>
+              {renderDetailsTextAction("copy", group.op.id)}
+            </div>
+          )}
+          {!((showQueuedSection && hasMoreQueued) || (showCompletedSection && hasMoreCompleted) || (showFailedSection && hasMoreFailed)) && (
+            <div className="pt-1">
+              {renderDetailsTextAction("copy", group.op.id)}
+            </div>
           )}
         </>
       )
@@ -750,7 +807,6 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     const subtitle = group.totalBytes > 0 ? `${formatBytes(group.totalBytes)} total` : undefined;
     const actions = (
       <>
-        {renderDetailsAction("upload", group.id)}
         <button
           type="button"
           className={operationSecondaryClasses}
@@ -799,13 +855,16 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
             </div>
           ))}
         {showQueuedSection && hasMoreQueued && (
-          <button
-            type="button"
-            className={operationSecondaryClasses}
-            onClick={() => showMoreSection(group.id, "queued")}
-          >
-            Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.id, "queued")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+            {renderDetailsTextAction("upload", group.id)}
+          </div>
         )}
         {showCompletedSection &&
           visibleCompletedItems.map((item) => (
@@ -822,13 +881,16 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
             </div>
           ))}
         {showCompletedSection && hasMoreCompleted && (
-          <button
-            type="button"
-            className={operationSecondaryClasses}
-            onClick={() => showMoreSection(group.id, "completed")}
-          >
-            Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.id, "completed")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+            {renderDetailsTextAction("upload", group.id)}
+          </div>
         )}
         {showFailedSection &&
           visibleFailedItems.map((item) => (
@@ -846,13 +908,21 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
             </div>
           ))}
         {showFailedSection && hasMoreFailed && (
-          <button
-            type="button"
-            className={operationSecondaryClasses}
-            onClick={() => showMoreSection(group.id, "failed")}
-          >
-            Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={operationSecondaryClasses}
+              onClick={() => showMoreSection(group.id, "failed")}
+            >
+              Show next {DEFAULT_QUEUED_VISIBLE_COUNT}
+            </button>
+            {renderDetailsTextAction("upload", group.id)}
+          </div>
+        )}
+        {!((showQueuedSection && hasMoreQueued) || (showCompletedSection && hasMoreCompleted) || (showFailedSection && hasMoreFailed)) && (
+          <div className="pt-1">
+            {renderDetailsTextAction("upload", group.id)}
+          </div>
         )}
       </>
     ) : null;
