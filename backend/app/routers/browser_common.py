@@ -25,7 +25,7 @@ class ProxyUploadResponse(BaseModel):
 
 
 class EnsureCorsPayload(BaseModel):
-    origin: str
+    origin: Optional[str] = None
 
 
 def require_sse_feature(account: S3Account) -> None:

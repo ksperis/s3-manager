@@ -4,7 +4,7 @@ from typing import Optional
 
 import os
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 
 from app.db import S3Account, User
@@ -55,6 +55,7 @@ from app.routers.dependencies import (
     get_current_account_admin,
     get_optional_sse_customer_context,
 )
+from app.utils.http_origin import normalize_origin, resolve_request_origin
 
 router = APIRouter(prefix="/manager/browser", tags=["manager-browser"])
 
@@ -137,27 +138,33 @@ def list_objects(
 @router.get("/buckets/{bucket_name}/cors", response_model=BucketCorsStatus)
 def get_bucket_cors(
     bucket_name: str,
+    request: Request,
     origin: Optional[str] = None,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     _: User = Depends(get_current_account_admin),
 ) -> BucketCorsStatus:
-    return service.get_bucket_cors_status(bucket_name, account, origin=origin)
+    resolved_origin = normalize_origin(origin) if origin is not None else resolve_request_origin(request)
+    if origin is not None and not resolved_origin:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid origin")
+    return service.get_bucket_cors_status(bucket_name, account, origin=resolved_origin)
 
 
 @router.post("/buckets/{bucket_name}/cors/ensure", response_model=BucketCorsStatus)
 def ensure_bucket_cors(
     bucket_name: str,
     payload: EnsureCorsPayload,
+    request: Request,
     account: S3Account = Depends(get_account_context),
     service: BrowserService = Depends(get_browser_service),
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketCorsStatus:
-    if not payload.origin:
+    resolved_origin = normalize_origin(payload.origin) if payload.origin else resolve_request_origin(request)
+    if not resolved_origin:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing origin")
     try:
-        status_result = service.ensure_bucket_cors(bucket_name, account, payload.origin)
+        status_result = service.ensure_bucket_cors(bucket_name, account, resolved_origin)
         _common_record_browser_action(audit_service,
             actor=current_user,
             scope="manager",
@@ -165,7 +172,7 @@ def ensure_bucket_cors(
             entity_type="bucket",
             entity_id=bucket_name,
             account=account,
-            metadata={"origin": payload.origin},
+            metadata={"origin": resolved_origin},
         )
         return status_result
     except RuntimeError as exc:

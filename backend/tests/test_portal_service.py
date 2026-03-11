@@ -82,7 +82,16 @@ def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
 
     monkeypatch.setattr(s3_client, "put_bucket_policy", fail_bucket_policy)
 
-    bucket = service.create_bucket(user, access, "user-bucket", versioning=True)
+    portal_settings = PortalSettings()
+    portal_settings.bucket_defaults.cors_allowed_origins = ["https://ui.example.test"]
+
+    bucket = service.create_bucket(
+        user,
+        access,
+        "user-bucket",
+        versioning=True,
+        portal_settings=portal_settings,
+    )
 
     assert bucket.name == "user-bucket"
     assert created_buckets == [("user-bucket", "AK-PORTAL", "SK-PORTAL")]
@@ -191,12 +200,15 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
         lambda *args, **kwargs: cors_calls.append((args, kwargs)),
     )
 
+    portal_settings = PortalSettings()
+    portal_settings.bucket_defaults.cors_allowed_origins = ["https://ui.example.test"]
+
     bucket = service.create_bucket(
         user,
         access,
         "user-bucket",
         versioning=True,
-        portal_settings=PortalSettings(),
+        portal_settings=portal_settings,
     )
 
     assert bucket.name == "user-bucket"
@@ -213,6 +225,66 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
     assert "Authorization" in (cors_rules[0].get("AllowedHeaders") or [])
     assert cors_calls[0][1]["access_key"] == "ROOT-AK"
     assert cors_calls[0][1]["secret_key"] == "ROOT-SK"
+
+
+def test_portal_bucket_creation_uses_ui_origin_when_cors_origins_not_configured(monkeypatch, db_session):
+    account = S3Account(name="portal-account-ui-origin", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-origin@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_MANAGER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=True,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    service = PortalService(db_session)
+    iam_service = object()
+    link = AccountIAMUser(user_id=user.id, account_id=account.id, iam_user_id="iam-uid", iam_username="portal-iam")
+    iam_user = IAMUser(name="portal-iam", arn="arn:aws:iam:::user/portal-iam")
+
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: iam_service)
+    monkeypatch.setattr(service, "_ensure_portal_user", lambda *args, **kwargs: (link, iam_user, False))
+    monkeypatch.setattr(service, "_sync_user_group_membership", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, "_active_credentials", lambda *args, **kwargs: ("AK-PORTAL", "SK-PORTAL"))
+    monkeypatch.setattr(service, "_ensure_user_bucket_policy", lambda *args, **kwargs: None)
+    monkeypatch.setattr(s3_client, "create_bucket", lambda *args, **kwargs: None)
+    monkeypatch.setattr(s3_client, "set_bucket_versioning", lambda *args, **kwargs: None)
+    monkeypatch.setattr(s3_client, "put_bucket_lifecycle", lambda *args, **kwargs: None)
+
+    cors_calls = []
+    monkeypatch.setattr(
+        s3_client,
+        "put_bucket_cors",
+        lambda *args, **kwargs: cors_calls.append((args, kwargs)),
+    )
+
+    portal_settings = PortalSettings()
+    portal_settings.bucket_defaults.cors_allowed_origins = []
+
+    bucket = service.create_bucket(
+        user,
+        access,
+        "origin-bucket",
+        versioning=True,
+        portal_settings=portal_settings,
+        ui_origin="https://ui.example.test",
+    )
+
+    assert bucket.name == "origin-bucket"
+    assert len(cors_calls) == 1
+    cors_rules = cors_calls[0][1]["rules"]
+    assert isinstance(cors_rules, list) and len(cors_rules) == 1
+    assert cors_rules[0]["AllowedOrigins"] == ["https://ui.example.test"]
 
 
 def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):

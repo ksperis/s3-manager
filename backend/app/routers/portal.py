@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -52,6 +52,7 @@ from pydantic import BaseModel
 from app.services.billing_service import BillingService
 from app.services.app_settings_service import load_app_settings
 from app.models.billing import BillingSubjectDetail
+from app.utils.http_origin import resolve_request_origin
 
 router = APIRouter(prefix="/portal", tags=["portal"])
 logger = logging.getLogger(__name__)
@@ -335,6 +336,7 @@ def portal_bucket_stats(
 @router.post("/buckets", response_model=Bucket, status_code=status.HTTP_201_CREATED)
 def create_portal_bucket(
     payload: BucketCreate,
+    request: Request,
     access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_logger),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
@@ -357,6 +359,7 @@ def create_portal_bucket(
             payload.name,
             versioning=versioning,
             portal_settings=portal_settings,
+            ui_origin=resolve_request_origin(request),
         )
         audit_service.record_action(
             user=actor,
