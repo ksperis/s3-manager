@@ -89,6 +89,9 @@ def test_portal_bucket_creation_updates_user_policy(monkeypatch, db_session):
     assert versioning_calls == [("user-bucket", True)]
     assert len(lifecycle_calls) == 1
     assert len(cors_calls) == 1
+    cors_rules = cors_calls[0][1]["rules"]
+    assert isinstance(cors_rules, list) and len(cors_rules) == 1
+    assert "Authorization" in (cors_rules[0].get("AllowedHeaders") or [])
     assert policy_calls == {
         "iam_service": iam_service,
         "iam_username": "portal-iam",
@@ -205,6 +208,9 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
     assert lifecycle_calls[0][1]["access_key"] == "ROOT-AK"
     assert lifecycle_calls[0][1]["secret_key"] == "ROOT-SK"
     assert len(cors_calls) == 1
+    cors_rules = cors_calls[0][1]["rules"]
+    assert isinstance(cors_rules, list) and len(cors_rules) == 1
+    assert "Authorization" in (cors_rules[0].get("AllowedHeaders") or [])
     assert cors_calls[0][1]["access_key"] == "ROOT-AK"
     assert cors_calls[0][1]["secret_key"] == "ROOT-SK"
 

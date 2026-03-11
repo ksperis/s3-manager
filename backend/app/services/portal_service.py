@@ -498,7 +498,7 @@ class PortalService:
             {
                 "AllowedOrigins": origins,
                 "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-                "AllowedHeaders": ["Content-Type", "x-amz-*"],
+                "AllowedHeaders": ["Content-Type", "Authorization", "x-amz-*"],
                 "ExposeHeaders": ["ETag", "x-amz-request-id", "x-amz-id-2"],
                 "MaxAgeSeconds": 3000,
             }
