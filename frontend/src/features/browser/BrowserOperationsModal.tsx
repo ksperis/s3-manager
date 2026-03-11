@@ -13,6 +13,7 @@ import {
   operationSecondaryClasses,
   operationStopClasses,
 } from "./browserConstants";
+import { DownloadIcon } from "./browserIcons";
 import { formatBadgeCount } from "./browserUtils";
 import type {
   CopyDetailItem,
@@ -207,6 +208,33 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
   const failedFilterChipActiveClasses =
     "border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-500/50 dark:bg-rose-900/30 dark:text-rose-100";
   const failedBadgeClasses = `${countBadgeClasses} ${showFailedOperations ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-100" : ""}`;
+  const detailsIconButtonClasses =
+    "inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200/70 text-slate-500 transition hover:border-slate-300 hover:text-slate-700 dark:border-slate-700/80 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200";
+
+  const confirmAndDownloadOperationDetails = (kind: OperationDetailsKind, operationId: string) => {
+    let confirmed = true;
+    try {
+      if (typeof window !== "undefined" && typeof window.confirm === "function") {
+        confirmed = window.confirm("Download operation details as JSON?");
+      }
+    } catch {
+      confirmed = true;
+    }
+    if (!confirmed) return;
+    onDownloadOperationDetails(kind, operationId);
+  };
+
+  const renderDetailsAction = (kind: OperationDetailsKind, operationId: string) => (
+    <button
+      type="button"
+      className={detailsIconButtonClasses}
+      onClick={() => confirmAndDownloadOperationDetails(kind, operationId)}
+      title="Export details (JSON)"
+      aria-label="Export operation details (JSON)"
+    >
+      <DownloadIcon className="h-3.5 w-3.5" />
+    </button>
+  );
 
   const buildStatusPill = (options: {
     hasFailed: boolean;
@@ -296,13 +324,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     });
     const actions = (
       <>
-        <button
-          type="button"
-          className={operationSecondaryClasses}
-          onClick={() => onDownloadOperationDetails("download", group.op.id)}
-        >
-          Details
-        </button>
+        {renderDetailsAction("download", group.op.id)}
         <button
           type="button"
           className={operationSecondaryClasses}
@@ -454,13 +476,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     });
     const actions = (
       <>
-        <button
-          type="button"
-          className={operationSecondaryClasses}
-          onClick={() => onDownloadOperationDetails("delete", group.op.id)}
-        >
-          Details
-        </button>
+        {renderDetailsAction("delete", group.op.id)}
         <button
           type="button"
           className={operationSecondaryClasses}
@@ -590,13 +606,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     });
     const actions = (
       <>
-        <button
-          type="button"
-          className={operationSecondaryClasses}
-          onClick={() => onDownloadOperationDetails("copy", group.op.id)}
-        >
-          Details
-        </button>
+        {renderDetailsAction("copy", group.op.id)}
         <button
           type="button"
           className={operationSecondaryClasses}
@@ -740,13 +750,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
     const subtitle = group.totalBytes > 0 ? `${formatBytes(group.totalBytes)} total` : undefined;
     const actions = (
       <>
-        <button
-          type="button"
-          className={operationSecondaryClasses}
-          onClick={() => onDownloadOperationDetails("upload", group.id)}
-        >
-          Details
-        </button>
+        {renderDetailsAction("upload", group.id)}
         <button
           type="button"
           className={operationSecondaryClasses}
@@ -883,13 +887,7 @@ export default function BrowserOperationsModal(props: BrowserOperationsModalProp
       : `${op.progress > 0 ? `${op.progress}%` : "In progress"}`;
     const actions = (
       <>
-        <button
-          type="button"
-          className={operationSecondaryClasses}
-          onClick={() => onDownloadOperationDetails("other", op.id)}
-        >
-          Details
-        </button>
+        {renderDetailsAction("other", op.id)}
         {!isCompleted && op.cancelable && (
           <button type="button" className={operationStopClasses} onClick={() => cancelOperation(op.id)}>
             Stop
