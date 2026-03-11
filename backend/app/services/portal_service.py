@@ -1658,7 +1658,6 @@ class PortalService:
         bucket_name: str,
         versioning: Optional[bool] = None,
         portal_settings: Optional[PortalSettings] = None,
-        ui_origin: Optional[str] = None,
     ) -> Bucket:
         account = access.account
         portal_defaults = portal_settings or self._effective_portal_settings(account)
@@ -1696,8 +1695,6 @@ class PortalService:
             )
         if portal_defaults.bucket_defaults.enable_cors and apply_bucket_defaults:
             origins = self._normalize_origins(portal_defaults.bucket_defaults.cors_allowed_origins)
-            if not origins and isinstance(ui_origin, str) and ui_origin.strip():
-                origins = [ui_origin.strip()]
             if origins:
                 s3_client.put_bucket_cors(
                     bucket_name,

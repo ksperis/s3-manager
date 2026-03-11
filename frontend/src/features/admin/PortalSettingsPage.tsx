@@ -548,9 +548,6 @@ export default function PortalSettingsPage() {
                 placeholder="https://s3-manager.example.com"
                 disabled={!settings || !bucketCorsEnabled}
               />
-              <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                If empty, the current UI origin is used automatically.
-              </p>
             </PortalSettingsItem>
           </PortalSettingsSection>
         </div>

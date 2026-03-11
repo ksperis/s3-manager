@@ -87,7 +87,7 @@ Environment variables (or `.env` file) supported via `pydantic`:
 - `SEED_S3_REGION` (default: `us-east-1`)
 - `SEED_RGW_ADMIN_ACCESS_KEY` / `SEED_RGW_ADMIN_SECRET_KEY` (optional override for the default endpoint admin credentials)
 - `SEED_SUPERVISION_ACCESS_KEY` / `SEED_SUPERVISION_SECRET_KEY` (optional read-only credentials for usage/metrics)
-- `CORS_ORIGINS` (default: `[]`)
+- `CORS_ORIGINS` (default: `["http://localhost:5173"]`)
 - `SEED_SUPER_ADMIN_EMAIL` / `SEED_SUPER_ADMIN_PASSWORD` / `SEED_SUPER_ADMIN_FULL_NAME`
 - `SEED_SUPER_ADMIN_MODE` (default: `if_empty`, values: `if_empty|if_missing|disabled`)
 - `OIDC_STATE_TTL_SECONDS` (default: `600`, validity of login `state`)

@@ -471,17 +471,11 @@ export async function getBucketCorsStatus(
 export async function ensureBucketCors(
   accountId: S3AccountSelector,
   bucketName: string,
-  origin?: string
+  origin: string
 ): Promise<BucketCorsStatus> {
-  const resolvedOrigin =
-    typeof origin === "string" && origin.trim()
-      ? origin.trim()
-      : typeof window !== "undefined"
-        ? window.location.origin
-        : "";
   const { data } = await client.post<BucketCorsStatus>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/cors/ensure`,
-    resolvedOrigin ? { origin: resolvedOrigin } : {},
+    { origin },
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;

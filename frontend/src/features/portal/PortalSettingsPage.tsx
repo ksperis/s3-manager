@@ -838,13 +838,6 @@ export default function PortalSettingsPage() {
                         adminOverride?.bucket_defaults?.cors_allowed_origins != null
                       }
                     />
-                    <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">
-                      {t({
-                        en: "If empty, the current UI origin is used automatically.",
-                        fr: "Si vide, l'origine UI courante est utilisee automatiquement.",
-                        de: "Wenn leer, wird der aktuelle UI-Ursprung automatisch verwendet.",
-                      })}
-                    </p>
                     {!overridePolicy.bucket_defaults.cors_allowed_origins && (
                       <p className="mt-2 ui-caption text-slate-500 dark:text-slate-400">{overrideDisabledLabel}</p>
                     )}

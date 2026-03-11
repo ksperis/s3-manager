@@ -196,7 +196,7 @@ class Settings(BaseSettings):
         ),
     )
 
-    cors_origins: list[str] = Field(default_factory=list)
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     oidc_providers: dict[str, OIDCProviderSettings] = Field(default_factory=dict)
     oidc_state_ttl_seconds: int = Field(600, description="Validity of OIDC login state (seconds)")
 

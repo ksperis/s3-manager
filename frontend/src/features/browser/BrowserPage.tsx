@@ -3976,7 +3976,7 @@ export default function BrowserPage({
       let corsApplied = false;
       if (uiOrigin) {
         try {
-          const status = await ensureBucketCors(accountIdForApi, bucketNameInput);
+          const status = await ensureBucketCors(accountIdForApi, bucketNameInput, uiOrigin);
           corsApplied = status.enabled;
           if (bucketName === bucketNameInput) {
             setCorsStatus(status);
@@ -4508,7 +4508,7 @@ export default function BrowserPage({
     setCorsFixError(null);
     setStatusMessage(null);
     try {
-      const status = await ensureBucketCors(accountIdForApi, bucketName);
+      const status = await ensureBucketCors(accountIdForApi, bucketName, uiOrigin);
       setCorsStatus(status);
       if (status.enabled) {
         setStatusMessage("CORS rules updated for this bucket.");
