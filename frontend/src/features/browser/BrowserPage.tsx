@@ -7876,16 +7876,6 @@ export default function BrowserPage({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-2 py-1.5 dark:border-slate-800">
           <div className="flex w-full min-w-0 items-center gap-2 xl:w-auto xl:flex-1">
-            <div className="flex shrink-0 items-center gap-1.5">
-              <span className="ui-caption font-semibold uppercase tracking-wide text-slate-400">Browser</span>
-              {accessBadge && (
-                <span
-                  className={`inline-flex h-3 w-3 rounded-full border shadow-sm ${accessBadge.className}`}
-                  title={`${accessBadge.label} — ${accessBadge.title}`}
-                  aria-label={`${accessBadge.label} — ${accessBadge.title}`}
-                />
-              )}
-            </div>
             <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 ui-caption font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
               <div ref={bucketMenuRef} className="relative flex shrink-0 items-center gap-1">
                 <button
@@ -8210,6 +8200,13 @@ export default function BrowserPage({
               Operations
               <span className={operationsCountBadgeClasses}>{formatBadgeCount(totalOperationsCount)}</span>
             </button>
+            {accessBadge && (
+              <span
+                className={`inline-flex h-3 w-3 shrink-0 rounded-full border shadow-sm ${accessBadge.className}`}
+                title={`${accessBadge.label} — ${accessBadge.title}`}
+                aria-label={`${accessBadge.label} — ${accessBadge.title}`}
+              />
+            )}
             <input
               ref={fileInputRef}
               type="file"
