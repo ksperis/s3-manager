@@ -80,7 +80,9 @@ describe("ManagerMigrationWizardPage", () => {
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByText("Strategy")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Strong integrity check before source deletion" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(screen.getByRole("checkbox", { name: "Strong integrity check before source deletion" })).toBeInTheDocument();
     const sameEndpointCopyOption = screen.getByRole("checkbox", { name: "Use x-amz-copy-source (same endpoint only)" });
     const autoGrantOption = screen.getByRole("checkbox", {
       name: "Auto-grant temporary source read for same-endpoint copy",

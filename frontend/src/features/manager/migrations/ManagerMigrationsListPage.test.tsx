@@ -1,5 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -70,26 +69,25 @@ describe("ManagerMigrationsListPage", () => {
     });
   });
 
-  it("counts cancel_requested as active", () => {
+  it("does not render summary filter header", () => {
     render(
       <MemoryRouter>
         <ManagerMigrationsListPage />
       </MemoryRouter>
     );
 
-    const activeCard = screen.getByText("Active").closest("button");
-    expect(activeCard).not.toBeNull();
-    expect(within(activeCard as HTMLButtonElement).getByText("1")).toBeInTheDocument();
+    expect(screen.queryByText("Total")).not.toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.queryByText("Needs attention")).not.toBeInTheDocument();
   });
 
-  it("keeps cancel_requested in active filter and prioritizes it over draft", async () => {
+  it("prioritizes cancel_requested over draft in list ordering", () => {
     mockUseManagerMigrationsList.mockReturnValue({
       migrations: [buildMigration(30, "draft"), buildMigration(31, "cancel_requested"), buildMigration(32, "completed")],
       migrationsLoading: false,
       migrationsError: null,
     });
 
-    const user = userEvent.setup();
     render(
       <MemoryRouter>
         <ManagerMigrationsListPage />
@@ -98,9 +96,7 @@ describe("ManagerMigrationsListPage", () => {
 
     const titles = screen.getAllByText(/Migration #/i).map((node) => node.textContent);
     expect(titles[0]).toBe("Migration #31");
-
-    await user.click(screen.getByRole("button", { name: /Active/i }));
-    expect(screen.getByText("Migration #31")).toBeInTheDocument();
-    expect(screen.queryByText("Migration #32")).not.toBeInTheDocument();
+    expect(screen.getByText("Migration #30")).toBeInTheDocument();
+    expect(screen.getByText("Migration #32")).toBeInTheDocument();
   });
 });

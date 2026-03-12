@@ -201,7 +201,7 @@ export default function ManagerMigrationWizardPage() {
         setLockTargetWrites(detail.lock_target_writes);
         setUseSameEndpointCopy(Boolean(detail.use_same_endpoint_copy));
         setAutoGrantSourceReadForCopy(
-          Boolean(detail.use_same_endpoint_copy) ? Boolean(detail.auto_grant_source_read_for_copy) : false
+          detail.use_same_endpoint_copy ? Boolean(detail.auto_grant_source_read_for_copy) : false
         );
         setWebhookUrl(detail.webhook_url ?? "");
         setShowAdvancedOptions(true);
@@ -600,27 +600,6 @@ export default function ManagerMigrationWizardPage() {
                   </span>
                 </label>
 
-              <label
-                className={`flex w-fit max-w-full items-start gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 ui-caption text-slate-800 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100 ${
-                  !deleteSource ? "opacity-70" : ""
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={strongIntegrityCheck}
-                  onChange={(event) => setStrongIntegrityCheck(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0"
-                  disabled={!deleteSource}
-                />
-                <span className="space-y-0.5">
-                  <span className="block font-semibold">Strong integrity check before source deletion</span>
-                  <span aria-hidden="true" className="block text-[11px] text-slate-500 dark:text-slate-400">
-                    {deleteSource
-                      ? "Optional deep verification (can be expensive on very large datasets). Disabled by default."
-                      : "Enable source deletion first to configure this option."}
-                  </span>
-                </span>
-              </label>
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
@@ -641,6 +620,28 @@ export default function ManagerMigrationWizardPage() {
               {showAdvancedOptions && (
                 <div className="mt-3 space-y-3">
                   <div className="grid gap-2 md:grid-cols-2">
+                    <label
+                      className={`flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200 ${
+                        !deleteSource ? "opacity-70" : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={strongIntegrityCheck}
+                        onChange={(event) => setStrongIntegrityCheck(event.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0"
+                        disabled={!deleteSource}
+                      />
+                      <span className="space-y-0.5">
+                        <span className="block font-semibold">Strong integrity check before source deletion</span>
+                        <span aria-hidden="true" className="block text-[11px] text-slate-500 dark:text-slate-400">
+                          {deleteSource
+                            ? "Optional deep verification (can be expensive on very large datasets). Disabled by default."
+                            : "Enable source deletion first to configure this option."}
+                        </span>
+                      </span>
+                    </label>
+
                     <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 ui-caption text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
                       <input
                         type="checkbox"
@@ -784,7 +785,7 @@ export default function ManagerMigrationWizardPage() {
                   )}
                 </div>
                 <div>
-                  <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Execution flow (once)</p>
+                  <p className="ui-caption font-semibold text-slate-700 dark:text-slate-200">Execution flow</p>
                   <ol className="mt-1 list-decimal space-y-0.5 pl-4">
                     {summaryOperationSteps.map((stepText, stepIndex) => (
                       <li key={`wizard-summary-operation-flow-${stepIndex}`} className="ui-caption text-slate-600 dark:text-slate-300">
