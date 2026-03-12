@@ -1790,7 +1790,7 @@ export default function UsersPage() {
                           disabled={busyId === user.id || isCurrentUser}
                           title={isCurrentUser ? "You cannot delete your own user." : undefined}
                         >
-                          {busyId === user.id ? "Deleting..." : isCurrentUser ? "Delete (self)" : "Delete"}
+                          {busyId === user.id ? "Deleting..." : "Delete"}
                         </button>
                       </div>
                     </td>
