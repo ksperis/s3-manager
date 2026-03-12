@@ -648,7 +648,7 @@ export default function S3UsersPage() {
           <table className="compact-table !table-auto !w-max min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                {["Name", "UID", "Storage", "UI Users", "Actions"].map((label, idx) => (
+                {["Name", "UID", "Endpoint", "UI Users", "Actions"].map((label, idx) => (
                   <th
                     key={label}
                     className={`px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 ${
