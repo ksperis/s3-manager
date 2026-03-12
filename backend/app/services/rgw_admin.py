@@ -221,13 +221,12 @@ class RGWAdminClient:
     ) -> None:
         if not access_key:
             raise RGWAdminError("access_key is required to update status")
-        status_value = "enabled" if enabled else "suspended"
         params: Dict[str, Any] = {
             "uid": uid,
+            "key": "true",
+            "generate-key": "false",
             "access-key": access_key,
-            "key": access_key,
-            "key-status": status_value,
-            "key-op": "modify",
+            "active": self._to_rgw_bool(enabled),
             "format": "json",
         }
         if tenant:
@@ -269,9 +268,21 @@ class RGWAdminClient:
                     "access_key": access_value,
                     "secret_key": secret_value,
                 }
-                status_value = data.get("status") or data.get("key_status") or data.get("state")
-                if status_value:
-                    entry["status"] = status_value
+                for field_name in (
+                    "status",
+                    "key_status",
+                    "state",
+                    "create_time",
+                    "create-time",
+                    "create_date",
+                    "create-date",
+                    "created_at",
+                    "create_timestamp",
+                    "timestamp",
+                ):
+                    field_value = data.get(field_name)
+                    if field_value is not None:
+                        entry[field_name] = field_value
                 entries.insert(0, entry)
         else:
             return []
@@ -289,15 +300,26 @@ class RGWAdminClient:
         )
 
         result: list[dict] = []
-        seen: set[str] = set()
+        seen_by_access: dict[str, dict] = {}
         for entry in prioritized:
             access_value = entry.get("access_key")
             normalized = str(access_value) if access_value is not None else None
-            if normalized and normalized in seen:
+            if not normalized:
+                result.append(entry)
                 continue
-            if normalized:
-                seen.add(normalized)
-            result.append(entry)
+            existing = seen_by_access.get(normalized)
+            if existing is None:
+                copied = dict(entry)
+                seen_by_access[normalized] = copied
+                result.append(copied)
+                continue
+
+            # Merge sparse duplicate entries: RGW may return secret/status/timestamps
+            # in separate rows for the same access key.
+            for field_name, field_value in entry.items():
+                if field_name not in existing or existing.get(field_name) in (None, "", [], {}):
+                    if field_value not in (None, "", [], {}):
+                        existing[field_name] = field_value
 
         return result
 

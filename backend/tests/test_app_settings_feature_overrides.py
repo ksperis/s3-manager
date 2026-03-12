@@ -123,3 +123,28 @@ def test_branding_settings_reject_invalid_hex():
 def test_branding_settings_reject_invalid_logo_url():
     with pytest.raises(ValidationError):
         BrandingSettings(login_logo_url="logo.svg")
+
+
+def test_manager_ceph_s3_user_keys_flag_default_disabled():
+    settings = AppSettings()
+    assert settings.general.manager_ceph_s3_user_keys_enabled is False
+
+
+def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path):
+    settings_path = tmp_path / "app_settings.json"
+    monkeypatch.setattr(app_settings_service, "_settings_path", lambda: settings_path)
+    monkeypatch.setattr(
+        app_settings_service,
+        "get_settings",
+        lambda: _runtime_settings(),
+    )
+
+    payload = AppSettings()
+    payload.general.manager_ceph_s3_user_keys_enabled = True
+    saved = app_settings_service.save_app_settings(payload)
+    loaded = app_settings_service.load_app_settings()
+    raw = json.loads(settings_path.read_text(encoding="utf-8"))
+
+    assert saved.general.manager_ceph_s3_user_keys_enabled is True
+    assert loaded.general.manager_ceph_s3_user_keys_enabled is True
+    assert raw["general"]["manager_ceph_s3_user_keys_enabled"] is True

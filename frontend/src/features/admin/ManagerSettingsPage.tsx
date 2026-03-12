@@ -87,6 +87,20 @@ export default function ManagerSettingsPage() {
     );
   };
 
+  const handleToggleManagerCephS3UserKeysTool = (value: boolean) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            general: {
+              ...prev.general,
+              manager_ceph_s3_user_keys_enabled: value,
+            },
+          }
+        : prev
+    );
+  };
+
   const handleManagerParallelismDefaultChange = (rawValue: string) => {
     setSettings((prev) => {
       if (!prev) return prev;
@@ -172,6 +186,7 @@ export default function ManagerSettingsPage() {
                     allow_portal_manager_workspace: defaults.general.allow_portal_manager_workspace,
                     bucket_migration_enabled: defaults.general.bucket_migration_enabled,
                     bucket_compare_enabled: defaults.general.bucket_compare_enabled,
+                    manager_ceph_s3_user_keys_enabled: defaults.general.manager_ceph_s3_user_keys_enabled,
                     allow_ui_user_bucket_migration: defaults.general.allow_ui_user_bucket_migration,
                   },
                 }
@@ -322,6 +337,28 @@ export default function ManagerSettingsPage() {
                       checked={Boolean(settings.general.bucket_compare_enabled)}
                       onChange={(e) => handleToggleBucketCompareTool(e.target.checked)}
                       aria-label="Bucket compare tool"
+                    />
+                    <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
+                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
+                  </label>
+                </div>
+
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
+                      Ceph S3 User keys manager
+                    </p>
+                    <p className="ui-caption text-slate-500 dark:text-slate-400">
+                      Enables the Manager Ceph section for RGW access key management on eligible S3 User contexts.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={Boolean(settings.general.manager_ceph_s3_user_keys_enabled)}
+                      onChange={(e) => handleToggleManagerCephS3UserKeysTool(e.target.checked)}
+                      aria-label="Ceph S3 User keys manager"
                     />
                     <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
                     <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />

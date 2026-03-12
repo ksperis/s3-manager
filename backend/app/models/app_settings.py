@@ -138,6 +138,7 @@ class GeneralSettings(BaseModel):
     usage_history_enabled: bool = False
     bucket_migration_enabled: bool = False
     bucket_compare_enabled: bool = False
+    manager_ceph_s3_user_keys_enabled: bool = False
     allow_ui_user_bucket_migration: bool = False
     allow_login_access_keys: bool = False
     allow_login_endpoint_list: bool = False

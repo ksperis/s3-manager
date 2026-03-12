@@ -299,12 +299,20 @@ def test_access_key_helpers_validation_and_tenant(monkeypatch):
     captured: dict[str, object] = {}
 
     def fake_request(method: str, path: str, **kwargs):
+        captured["method"] = method
+        captured["path"] = path
         captured["params"] = kwargs.get("params", {})
         return {}
 
     monkeypatch.setattr(client, "_request", fake_request)
     client.set_access_key_status("alice", "AKIA1", enabled=True, tenant="RGW1")
+    assert captured["method"] == "PUT"
+    assert captured["path"] == "/admin/user"
     assert captured["params"]["tenant"] == "RGW1"
+    assert captured["params"]["key"] == "true"
+    assert captured["params"]["generate-key"] == "false"
+    assert captured["params"]["access-key"] == "AKIA1"
+    assert captured["params"]["active"] == "true"
 
 
 def test_extract_keys_nested_and_invalid_payload_types():
@@ -321,6 +329,37 @@ def test_extract_keys_nested_and_invalid_payload_types():
     assert keys[0]["access_key"] == "AK-TOP"
     assert keys[0]["status"] == "active"
     assert any(item.get("access_key") == "AK-NESTED" for item in keys)
+
+
+def test_extract_keys_merges_duplicate_metadata_for_same_access_key():
+    client = _client()
+    payload = {
+        "keys": [
+            {"access_key": "AK-1", "secret_key": "SK-1"},
+            {"access_key": "AK-1", "create_time": "2026-03-12T10:00:00Z", "status": "enabled"},
+        ],
+    }
+    keys = client._extract_keys(payload)
+    assert len(keys) == 1
+    assert keys[0]["access_key"] == "AK-1"
+    assert keys[0]["secret_key"] == "SK-1"
+    assert keys[0]["create_time"] == "2026-03-12T10:00:00Z"
+    assert keys[0]["status"] == "enabled"
+
+
+def test_extract_keys_top_level_key_preserves_timestamp_fields():
+    client = _client()
+    payload = {
+        "access_key": "AK-TOP",
+        "secret_key": "SK-TOP",
+        "create_date": "2026-03-12T11:30:00Z",
+        "status": "enabled",
+    }
+    keys = client._extract_keys(payload)
+    assert len(keys) == 1
+    assert keys[0]["access_key"] == "AK-TOP"
+    assert keys[0]["create_date"] == "2026-03-12T11:30:00Z"
+    assert keys[0]["status"] == "enabled"
 
 
 def test_account_and_user_listing_normalization_paths(monkeypatch):

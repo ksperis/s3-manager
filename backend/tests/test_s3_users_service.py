@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 import pytest
@@ -216,6 +217,102 @@ def test_list_keys_marks_ui_key(db_session, monkeypatch):
 
     assert any(key.is_ui_managed for key in keys)
     assert any(key.access_key_id == extra.access_key_id for key in keys)
+
+
+def test_list_keys_uses_active_flag_when_status_is_missing(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    fake = FakeRGWAdmin()
+    service = _build_service(db_session, monkeypatch, fake)
+
+    created = service.create_user(S3UserCreate(name="ActiveFlag", uid="active-flag", storage_endpoint_id=endpoint.id))
+    record = db_session.query(S3User).filter_by(id=created.id).one()
+    fake.remote_users["active-flag"]["keys"] = [
+        {"access_key": record.rgw_access_key, "secret_key": record.rgw_secret_key, "active": True},
+        {"access_key": "AK-DISABLED", "secret_key": "SK-DISABLED", "active": False},
+    ]
+
+    keys = service.list_keys(created.id)
+    indexed = {entry.access_key_id: entry for entry in keys}
+
+    assert indexed["AK-DISABLED"].is_active is False
+    assert indexed["AK-DISABLED"].status == "disabled"
+
+
+def test_list_keys_preserves_created_at_when_rgw_splits_key_metadata(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    fake = FakeRGWAdmin()
+    service = _build_service(db_session, monkeypatch, fake)
+
+    created = service.create_user(S3UserCreate(name="Dates", uid="dates", storage_endpoint_id=endpoint.id))
+    record = db_session.query(S3User).filter_by(id=created.id).one()
+
+    fake.remote_users["dates"]["keys"] = [
+        {"access_key": record.rgw_access_key, "secret_key": record.rgw_secret_key},
+        {"access_key": record.rgw_access_key, "create_time": "2026-03-12T10:00:00Z", "status": "enabled"},
+        {"access_key": "AK-SECOND", "secret_key": "SK-SECOND"},
+        {"access_key": "AK-SECOND", "created_at": "2026-03-12T11:15:00Z", "status": "disabled"},
+        {"access_key": "AK-THIRD", "secret_key": "SK-THIRD", "timestamp": "1773313200"},
+    ]
+
+    keys = service.list_keys(created.id)
+    indexed = {entry.access_key_id: entry for entry in keys}
+
+    assert indexed[record.rgw_access_key].created_at == datetime(2026, 3, 12, 10, 0, tzinfo=timezone.utc)
+    assert indexed["AK-SECOND"].created_at == datetime(2026, 3, 12, 11, 15, tzinfo=timezone.utc)
+    assert indexed["AK-THIRD"].created_at == datetime.fromtimestamp(1773313200, tz=timezone.utc)
+
+
+def test_create_access_key_entry_propagates_created_at_from_rgw_response(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    fake = FakeRGWAdmin()
+    service = _build_service(db_session, monkeypatch, fake)
+
+    created = service.create_user(S3UserCreate(name="CreateDate", uid="create-date", storage_endpoint_id=endpoint.id))
+
+    def create_with_split_metadata(uid: str, tenant: Optional[str] = None):
+        assert uid == "create-date"
+        assert tenant is None
+        return {
+            "keys": [
+                {"access_key": "AK-NEW", "secret_key": "SK-NEW"},
+                {"access_key": "AK-NEW", "create_date": "2026-03-12T14:30:00Z"},
+            ]
+        }
+
+    monkeypatch.setattr(fake, "create_access_key", create_with_split_metadata)
+
+    generated = service.create_access_key_entry(created.id)
+
+    assert generated.access_key_id == "AK-NEW"
+    assert generated.created_at == datetime(2026, 3, 12, 14, 30, tzinfo=timezone.utc)
+
+
+def test_create_access_key_entry_selects_new_key_when_response_contains_existing_keys(db_session, monkeypatch):
+    endpoint = _seed_ceph_endpoint(db_session)
+    fake = FakeRGWAdmin()
+    service = _build_service(db_session, monkeypatch, fake)
+
+    created = service.create_user(S3UserCreate(name="CreateSelect", uid="create-select", storage_endpoint_id=endpoint.id))
+    record = db_session.query(S3User).filter_by(id=created.id).one()
+
+    def create_with_existing_and_new(uid: str, tenant: Optional[str] = None):
+        assert uid == "create-select"
+        assert tenant is None
+        new_key = {"access_key": "AK-NEW-SELECT", "secret_key": "SK-NEW-SELECT", "active": True}
+        fake.remote_users[uid]["keys"].append(dict(new_key))
+        return {
+            "keys": [
+                {"access_key": record.rgw_access_key, "secret_key": record.rgw_secret_key, "active": True},
+                dict(new_key),
+            ]
+        }
+
+    monkeypatch.setattr(fake, "create_access_key", create_with_existing_and_new)
+
+    generated = service.create_access_key_entry(created.id)
+
+    assert generated.access_key_id == "AK-NEW-SELECT"
+    assert generated.secret_access_key == "SK-NEW-SELECT"
 
 
 def test_delete_key_validations(db_session, monkeypatch):

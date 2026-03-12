@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db import AccountIAMUser, AccountRole, S3Connection, User, UserS3Account
 from app.models.session import ManagerSessionPrincipal
-from app.routers.dependencies import get_account_context, get_current_actor
+from app.routers.dependencies import get_account_context, get_current_actor, is_manager_ceph_s3_user_keys_available
 from app.services.app_settings_service import load_app_settings
 from app.services.connection_identity_service import ConnectionIdentityService
 from app.utils.rgw import has_supervision_credentials, resolve_admin_uid
@@ -25,6 +25,7 @@ class ManagerContext(BaseModel):
     manager_stats_enabled: bool = False
     manager_stats_message: Optional[str] = None
     manager_browser_enabled: bool = True
+    manager_ceph_keys_enabled: bool = False
 
 
 def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[str]]:
@@ -128,6 +129,8 @@ def get_manager_context(
                     allow_portal_manager_workspace and membership.account_admin and role != AccountRole.PORTAL_NONE.value
                 )
 
+    manager_ceph_keys_enabled = is_manager_ceph_s3_user_keys_available(account)
+
     return ManagerContext(
         access_mode=access_mode,
         context_kind=("connection" if access_mode == "connection" else "account"),
@@ -136,4 +139,5 @@ def get_manager_context(
         manager_stats_enabled=manager_stats_enabled,
         manager_stats_message=manager_stats_message,
         manager_browser_enabled=manager_browser_enabled,
+        manager_ceph_keys_enabled=manager_ceph_keys_enabled,
     )

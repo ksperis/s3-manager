@@ -964,6 +964,46 @@ def require_bucket_compare_enabled() -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket compare feature is disabled")
 
 
+def is_manager_ceph_s3_user_keys_available(account: S3Account) -> bool:
+    app_settings = load_app_settings()
+    if not bool(app_settings.general.manager_ceph_s3_user_keys_enabled):
+        return False
+
+    s3_user_id = getattr(account, "s3_user_id", None)
+    if s3_user_id is None:
+        return False
+
+    endpoint = getattr(account, "storage_endpoint", None)
+    if endpoint is None:
+        return False
+    if StorageProvider(str(endpoint.provider)) != StorageProvider.CEPH:
+        return False
+
+    flags = resolve_feature_flags(endpoint)
+    if not flags.admin_enabled:
+        return False
+    if not resolve_admin_endpoint(endpoint):
+        return False
+
+    access_key = (getattr(endpoint, "admin_access_key", None) or "").strip()
+    secret_key = (getattr(endpoint, "admin_secret_key", None) or "").strip()
+    if not access_key or not secret_key:
+        return False
+
+    return True
+
+
+def require_manager_ceph_s3_user_keys(
+    account: S3Account = Depends(get_account_context),
+) -> S3Account:
+    if not is_manager_ceph_s3_user_keys_available(account):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ceph key management is not available for this context",
+        )
+    return account
+
+
 def require_manager_enabled() -> None:
     settings = load_app_settings()
     if not settings.general.manager_enabled:

@@ -42,6 +42,7 @@ from app.routers.manager import s3_accounts as manager_accounts
 from app.routers.manager import browser as manager_browser
 from app.routers.manager import buckets as manager_buckets
 from app.routers.manager import context as manager_context
+from app.routers.manager import ceph_keys as manager_ceph_keys
 from app.routers.manager import iam_groups, iam_roles, iam_users
 from app.routers.manager import iam_overview
 from app.routers.manager import objects as manager_objects
@@ -151,6 +152,11 @@ app.include_router(
     manager_context.router,
     prefix=settings.api_v1_prefix,
     dependencies=[Depends(require_manager_context_enabled)],
+)
+app.include_router(
+    manager_ceph_keys.router,
+    prefix=settings.api_v1_prefix,
+    dependencies=[Depends(require_manager_enabled)],
 )
 app.include_router(
     manager_buckets.router,

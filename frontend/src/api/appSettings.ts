@@ -32,6 +32,7 @@ export type GeneralSettings = {
   usage_history_enabled: boolean;
   bucket_migration_enabled: boolean;
   bucket_compare_enabled: boolean;
+  manager_ceph_s3_user_keys_enabled: boolean;
   allow_ui_user_bucket_migration: boolean;
   allow_login_access_keys: boolean;
   allow_login_endpoint_list: boolean;

@@ -44,6 +44,66 @@ def _ceph_metrics_endpoint(*, name: str, provider: str = "ceph") -> StorageEndpo
     )
 
 
+def _ceph_s3_user_management_endpoint(
+    *,
+    name: str,
+    provider: str = "ceph",
+    endpoint_url: str | None = None,
+    admin_enabled: bool = True,
+    admin_access_key: str | None = "AK-ADMIN",
+    admin_secret_key: str | None = "SK-ADMIN",
+) -> StorageEndpoint:
+    normalized_endpoint_url = endpoint_url if endpoint_url is not None else f"https://{name}.example.com"
+    return StorageEndpoint(
+        name=name,
+        endpoint_url=normalized_endpoint_url,
+        provider=provider,
+        admin_endpoint=f"https://{name}.example.com/admin",
+        admin_access_key=admin_access_key,
+        admin_secret_key=admin_secret_key,
+        features_config=(
+            "features:\n"
+            "  admin:\n"
+            f"    enabled: {'true' if admin_enabled else 'false'}\n"
+        ),
+    )
+
+
+def _build_linked_s3_user_context(
+    db_session,
+    *,
+    endpoint: StorageEndpoint,
+    email: str = "manager-ceph-keys-s3u@example.com",
+):
+    user = User(
+        email=email,
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    s3_user = S3User(
+        name="managed-s3-user",
+        rgw_user_uid=f"uid-{endpoint.name}",
+        rgw_access_key="AK-S3U",
+        rgw_secret_key="SK-S3U",
+        storage_endpoint=endpoint,
+    )
+    db_session.add_all([user, endpoint, s3_user])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(s3_user)
+    db_session.add(UserS3User(user_id=user.id, s3_user_id=s3_user.id))
+    db_session.commit()
+
+    account = dependencies.get_account_context(
+        request=_request("/api/manager/context"),
+        account_ref=f"s3u-{s3_user.id}",
+        actor=user,
+        db=db_session,
+    )
+    return user, account
+
+
 def test_manager_membership_portal_manager_disabled_by_default():
     link = UserS3Account(
         user_id=1,
@@ -359,6 +419,7 @@ def test_manager_context_exposes_browser_access_flag_for_connection(db_session):
     payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
     assert payload.access_mode == "connection"
     assert payload.manager_browser_enabled is False
+    assert payload.manager_ceph_keys_enabled is False
 
 
 def test_manager_context_connection_exposes_detected_identity_and_stats_enabled(db_session):
@@ -398,6 +459,7 @@ def test_manager_context_connection_exposes_detected_identity_and_stats_enabled(
     assert payload.iam_identity == "rgw-account$analytics-user"
     assert payload.manager_stats_enabled is True
     assert payload.manager_stats_message is None
+    assert payload.manager_ceph_keys_enabled is False
 
 
 def test_manager_context_connection_reports_reason_when_identity_cannot_be_resolved(db_session, monkeypatch):
@@ -524,6 +586,56 @@ def test_manager_and_browser_workspace_accept_s3_user_context(db_session, path):
     assert caps is not None
     assert caps.can_manage_buckets is True
     assert caps.can_manage_iam is False
+
+
+def test_manager_context_s3_user_enables_ceph_keys_when_management_possible(db_session, monkeypatch):
+    settings = AppSettings()
+    settings.general.manager_ceph_s3_user_keys_enabled = True
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
+
+    endpoint = _ceph_s3_user_management_endpoint(name="ceph-s3u-keys-ok")
+    user, account = _build_linked_s3_user_context(
+        db_session,
+        endpoint=endpoint,
+        email="manager-ceph-keys-ok@example.com",
+    )
+
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.access_mode == "s3_user"
+    assert payload.manager_ceph_keys_enabled is True
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "feature_enabled"),
+    [
+        (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-missing-admin-keys", admin_access_key=None, admin_secret_key=None), True),
+        (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-non-ceph", provider="other"), True),
+        (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-admin-feature-off", admin_enabled=False), True),
+        (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-admin-endpoint-missing", endpoint_url=""), True),
+        (_ceph_s3_user_management_endpoint(name="ceph-s3u-keys-flag-off"), False),
+    ],
+)
+def test_manager_context_s3_user_disables_ceph_keys_when_management_not_possible(
+    db_session,
+    monkeypatch,
+    endpoint: StorageEndpoint,
+    feature_enabled: bool,
+):
+    settings = AppSettings()
+    settings.general.manager_ceph_s3_user_keys_enabled = feature_enabled
+    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
+    monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
+
+    user, account = _build_linked_s3_user_context(
+        db_session,
+        endpoint=endpoint,
+        email=f"manager-ceph-keys-ko-{endpoint.name}@example.com",
+    )
+
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.access_mode == "s3_user"
+    assert payload.manager_ceph_keys_enabled is False
 
 
 def test_workspace_rejects_unlinked_s3_user_context(db_session):

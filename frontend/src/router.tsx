@@ -59,6 +59,7 @@ const loadManagerMigrationsPage = () => import("./features/manager/ManagerMigrat
 const loadManagerMigrationDetailPage = () => import("./features/manager/ManagerMigrationDetailPage");
 const loadManagerMigrationWizardPage = () => import("./features/manager/ManagerMigrationWizardPage");
 const loadManagerBucketComparePage = () => import("./features/manager/ManagerBucketComparePage");
+const loadManagerCephKeysPage = () => import("./features/manager/ManagerCephKeysPage");
 const loadPortalLayout = () => import("./features/portal/PortalLayout");
 const loadPortalDashboard = () => import("./features/portal/PortalDashboard");
 const loadPortalBucketsPage = () => import("./features/portal/PortalBucketsPage");
@@ -123,6 +124,7 @@ const ManagerMigrationsPage = lazy(loadManagerMigrationsPage);
 const ManagerMigrationDetailPage = lazy(loadManagerMigrationDetailPage);
 const ManagerMigrationWizardPage = lazy(loadManagerMigrationWizardPage);
 const ManagerBucketComparePage = lazy(loadManagerBucketComparePage);
+const ManagerCephKeysPage = lazy(loadManagerCephKeysPage);
 const PortalLayout = lazy(loadPortalLayout);
 const PortalDashboard = lazy(loadPortalDashboard);
 const PortalBucketsPage = lazy(loadPortalBucketsPage);
@@ -500,6 +502,7 @@ export default function AppRouter() {
                   <Route path="iam/policies" element={<PoliciesPage />} />
                 </Route>
                 <Route path="topics" element={<TopicsPage />} />
+                <Route path="ceph/keys" element={<ManagerCephKeysPage />} />
                 <Route element={<RequireManagerBucketCompareFeature />}>
                   <Route path="bucket-compare" element={<ManagerBucketComparePage />} />
                 </Route>

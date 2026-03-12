@@ -63,6 +63,7 @@ function ManagerShell() {
     canSwitchAccess,
     managerStatsEnabled,
     managerBrowserEnabled,
+    managerCephKeysEnabled,
   } = useS3AccountContext();
   const { generalSettings } = useGeneralSettings();
   const navigate = useNavigate();
@@ -218,6 +219,13 @@ function ManagerShell() {
         { to: "/manager/roles", label: "Roles" },
         { to: "/manager/iam/policies", label: "Policies" },
       ],
+    });
+  }
+
+  if (managerCephKeysEnabled) {
+    navSections.push({
+      label: "Ceph",
+      links: [{ to: "/manager/ceph/keys", label: "Access keys" }],
     });
   }
 

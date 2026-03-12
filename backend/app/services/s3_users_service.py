@@ -214,6 +214,8 @@ class S3UsersService:
     def _parse_key_created_at(self, raw_value: Any) -> Optional[datetime]:
         if raw_value is None:
             return None
+        if isinstance(raw_value, datetime):
+            return raw_value
         if isinstance(raw_value, (int, float)):
             try:
                 return datetime.fromtimestamp(float(raw_value), tz=timezone.utc)
@@ -223,6 +225,10 @@ class S3UsersService:
             value = raw_value.strip()
             if not value:
                 return None
+            try:
+                return datetime.fromtimestamp(float(value), tz=timezone.utc)
+            except (OverflowError, ValueError):
+                pass
             # Support "2023-01-01 12:00:00" and ISO8601 strings
             candidates = [value]
             if " " in value and "T" not in value:
@@ -232,6 +238,34 @@ class S3UsersService:
                     return datetime.fromisoformat(candidate)
                 except ValueError:
                     continue
+        return None
+
+    def _extract_key_created_source(self, entry: Optional[dict[str, Any]]) -> Any:
+        if not isinstance(entry, dict):
+            return None
+        return (
+            entry.get("create_time")
+            or entry.get("create-time")
+            or entry.get("create_date")
+            or entry.get("create-date")
+            or entry.get("created_at")
+            or entry.get("create_timestamp")
+            or entry.get("timestamp")
+        )
+
+    def _parse_key_active(self, raw_value: Any) -> Optional[bool]:
+        if raw_value is None:
+            return None
+        if isinstance(raw_value, bool):
+            return raw_value
+        if isinstance(raw_value, (int, float)):
+            return bool(raw_value)
+        if isinstance(raw_value, str):
+            normalized = raw_value.strip().lower()
+            if normalized in {"1", "true", "enabled", "active"}:
+                return True
+            if normalized in {"0", "false", "disabled", "inactive", "suspended"}:
+                return False
         return None
 
     def _is_active_status(self, status: Optional[str]) -> Optional[bool]:
@@ -676,21 +710,18 @@ class S3UsersService:
             if not access_key:
                 continue
             status_value = entry.get("status") or entry.get("key_status") or entry.get("state")
-            created_source = (
-                entry.get("create_time")
-                or entry.get("create-time")
-                or entry.get("create_date")
-                or entry.get("create-date")
-                or entry.get("create_timestamp")
-                or entry.get("timestamp")
-            )
+            active_value = self._parse_key_active(entry.get("active"))
+            is_active = active_value if active_value is not None else self._is_active_status(status_value)
+            if status_value is None and is_active is not None:
+                status_value = "enabled" if is_active else "disabled"
+            created_source = self._extract_key_created_source(entry)
             result.append(
                 S3UserAccessKey(
                     access_key_id=access_key,
                     status=status_value,
                     created_at=self._parse_key_created_at(created_source),
                     is_ui_managed=access_key == s3_user.rgw_access_key,
-                    is_active=self._is_active_status(status_value),
+                    is_active=is_active,
                 )
             )
         return result
@@ -698,6 +729,24 @@ class S3UsersService:
     def create_access_key_entry(self, user_id: int) -> S3UserGeneratedKey:
         s3_user = self._get_s3_user(user_id)
         admin = self._admin_for_user(s3_user)
+        existing_access_keys: set[str] = set()
+        try:
+            before_payload = admin.get_user(
+                s3_user.rgw_user_uid,
+                allow_not_found=True,
+            )
+            if before_payload and not before_payload.get("not_found"):
+                for existing_entry in admin._extract_keys(before_payload):
+                    if not isinstance(existing_entry, dict):
+                        continue
+                    existing_access = str(
+                        existing_entry.get("access_key") or existing_entry.get("access-key") or ""
+                    ).strip()
+                    if existing_access:
+                        existing_access_keys.add(existing_access)
+        except RGWAdminError:
+            # Creation can still succeed even if pre-read fails.
+            pass
         try:
             response = admin.create_access_key(s3_user.rgw_user_uid, tenant=None)
         except RGWAdminError as exc:
@@ -705,21 +754,42 @@ class S3UsersService:
         entries = admin._extract_keys(response)
         if not entries:
             raise ValueError("RGW did not return access credentials")
-        entry = entries[0]
+
+        def _entry_access(entry: dict[str, Any]) -> Optional[str]:
+            access_value = entry.get("access_key") or entry.get("access-key")
+            normalized = str(access_value or "").strip()
+            return normalized or None
+
+        def _entry_secret(entry: dict[str, Any]) -> Optional[str]:
+            secret_value = entry.get("secret_key") or entry.get("secret-key")
+            normalized = str(secret_value or "").strip()
+            return normalized or None
+
+        entry: Optional[dict[str, Any]] = None
+        for candidate in entries:
+            if not isinstance(candidate, dict):
+                continue
+            access_value = _entry_access(candidate)
+            secret_value = _entry_secret(candidate)
+            if not access_value or not secret_value:
+                continue
+            if access_value not in existing_access_keys:
+                entry = candidate
+                break
+        if entry is None:
+            for candidate in entries:
+                if isinstance(candidate, dict) and _entry_secret(candidate):
+                    entry = candidate
+                    break
+        if entry is None and isinstance(entries[0], dict):
+            entry = entries[0]
         if not isinstance(entry, dict):
             raise ValueError("RGW did not return structured key data")
-        access_key = entry.get("access_key") or entry.get("access-key")
-        secret_key = entry.get("secret_key") or entry.get("secret-key")
+        access_key = _entry_access(entry)
+        secret_key = _entry_secret(entry)
         if not access_key or not secret_key:
             raise ValueError("RGW did not return full access credentials")
-        created_source = (
-            entry.get("create_time")
-            or entry.get("create-time")
-            or entry.get("create_date")
-            or entry.get("create-date")
-            or entry.get("create_timestamp")
-            or entry.get("timestamp")
-        )
+        created_source = self._extract_key_created_source(entry)
         return S3UserGeneratedKey(
             access_key_id=access_key,
             secret_access_key=secret_key,
