@@ -57,6 +57,20 @@ export default function PortalSettingsPage() {
     );
   };
 
+  const handleToggleAllowPortalManagerWorkspace = (value: boolean) => {
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            general: {
+              ...prev.general,
+              allow_portal_manager_workspace: value,
+            },
+          }
+        : prev
+    );
+  };
+
   const handleBucketDefaultVersioning = (value: boolean) => {
     setSettings((prev) =>
       prev ? { ...prev, portal: { ...prev.portal, bucket_defaults: { ...prev.portal.bucket_defaults, versioning: value } } } : prev
@@ -194,7 +208,18 @@ export default function PortalSettingsPage() {
     try {
       const defaults = await fetchDefaultAppSettings();
       initRef.current = false;
-      setSettings((prev) => (prev ? { ...prev, portal: defaults.portal } : defaults));
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              portal: defaults.portal,
+              general: {
+                ...prev.general,
+                allow_portal_manager_workspace: defaults.general.allow_portal_manager_workspace,
+              },
+            }
+          : defaults
+      );
     } catch (err) {
       console.error(err);
       setError(extractApiError(err, "Unable to load default settings."));
@@ -317,6 +342,19 @@ export default function PortalSettingsPage() {
                     />
                   </label>
                 </div>
+              }
+            />
+            <PortalSettingsItem
+              title="Allow portal managers in Manager workspace"
+              description="When enabled, users with role portal_manager can use /manager for their linked accounts."
+              action={
+                <PortalSettingsToggleAction
+                  checked={Boolean(settings?.general.allow_portal_manager_workspace)}
+                  onChange={(value) => handleToggleAllowPortalManagerWorkspace(value)}
+                  disabled={!settings}
+                  ariaLabel="Allow portal manager workspace"
+                  badge={{ visible: true, label: "Deprecated", tone: "warning" }}
+                />
               }
             />
           </PortalSettingsSection>

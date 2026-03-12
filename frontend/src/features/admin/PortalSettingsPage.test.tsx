@@ -1,9 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppSettings } from "../../api/appSettings";
-import ManagerSettingsPage from "./ManagerSettingsPage";
+import PortalSettingsPage from "./PortalSettingsPage";
 
 const fetchAppSettingsMock = vi.fn<() => Promise<AppSettings>>();
 const fetchDefaultAppSettingsMock = vi.fn<() => Promise<AppSettings>>();
@@ -38,7 +37,7 @@ function buildSettings(): AppSettings {
       usage_history_enabled: false,
       bucket_migration_enabled: true,
       bucket_compare_enabled: true,
-      manager_ceph_s3_user_keys_enabled: false,
+      manager_ceph_s3_user_keys_enabled: true,
       allow_ui_user_bucket_migration: false,
       allow_login_access_keys: false,
       allow_login_endpoint_list: false,
@@ -118,7 +117,7 @@ function buildSettings(): AppSettings {
   };
 }
 
-describe("ManagerSettingsPage", () => {
+describe("PortalSettingsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchAppSettingsMock.mockResolvedValue(buildSettings());
@@ -126,55 +125,10 @@ describe("ManagerSettingsPage", () => {
     updateAppSettingsMock.mockImplementation(async (payload: AppSettings) => payload);
   });
 
-  it("renders Ceph S3 User keys toggle and sends it in save payload", async () => {
-    const user = userEvent.setup();
-    render(<ManagerSettingsPage />);
+  it("renders allow portal manager workspace toggle with Deprecated badge", async () => {
+    render(<PortalSettingsPage />);
 
-    const toggle = (await screen.findByLabelText("Ceph S3 User keys manager")) as HTMLInputElement;
-    expect(toggle.checked).toBe(false);
-
-    await user.click(toggle);
-    expect(toggle.checked).toBe(true);
-
-    await user.click(screen.getByRole("button", { name: /save changes/i }));
-
-    await waitFor(() => {
-      expect(updateAppSettingsMock).toHaveBeenCalledTimes(1);
-    });
-    const payload = updateAppSettingsMock.mock.calls[0][0] as AppSettings;
-    expect(payload.general.manager_ceph_s3_user_keys_enabled).toBe(true);
-  });
-
-  it("resets Ceph S3 User keys toggle from defaults", async () => {
-    const user = userEvent.setup();
-    const defaults = buildSettings();
-    defaults.general.manager_ceph_s3_user_keys_enabled = true;
-    fetchDefaultAppSettingsMock.mockResolvedValue(defaults);
-
-    render(<ManagerSettingsPage />);
-
-    const toggle = (await screen.findByLabelText("Ceph S3 User keys manager")) as HTMLInputElement;
-    expect(toggle.checked).toBe(false);
-
-    await user.click(screen.getByRole("button", { name: /reset to defaults/i }));
-
-    await waitFor(() => {
-      expect(toggle.checked).toBe(true);
-    });
-  });
-
-  it("shows Experimental badge on bucket migration tool toggle", async () => {
-    render(<ManagerSettingsPage />);
-
-    await screen.findByLabelText("Bucket migration tool");
-    expect(screen.getByText("Experimental")).toBeInTheDocument();
-  });
-
-  it("does not render allow portal manager workspace toggle", async () => {
-    render(<ManagerSettingsPage />);
-
-    await screen.findByLabelText("Allow manager user stats");
-    expect(screen.queryByLabelText("Allow portal manager workspace")).not.toBeInTheDocument();
-    expect(screen.queryByText("Deprecated")).not.toBeInTheDocument();
+    await screen.findByLabelText("Allow portal manager workspace");
+    expect(screen.getByText("Deprecated")).toBeInTheDocument();
   });
 });

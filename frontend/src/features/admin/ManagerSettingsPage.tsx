@@ -36,20 +36,6 @@ export default function ManagerSettingsPage() {
     setSettings((prev) => (prev ? { ...prev, manager: { ...prev.manager, allow_manager_user_usage_stats: value } } : prev));
   };
 
-  const handleToggleAllowPortalManagerWorkspace = (value: boolean) => {
-    setSettings((prev) =>
-      prev
-        ? {
-            ...prev,
-            general: {
-              ...prev.general,
-              allow_portal_manager_workspace: value,
-            },
-          }
-        : prev
-    );
-  };
-
   const handleToggleAllowUiUserBucketMigration = (value: boolean) => {
     setSettings((prev) =>
       prev
@@ -188,7 +174,6 @@ export default function ManagerSettingsPage() {
                   manager: defaults.manager,
                   general: {
                     ...prev.general,
-                    allow_portal_manager_workspace: defaults.general.allow_portal_manager_workspace,
                     bucket_migration_enabled: defaults.general.bucket_migration_enabled,
                     bucket_compare_enabled: defaults.general.bucket_compare_enabled,
                     manager_ceph_s3_user_keys_enabled: defaults.general.manager_ceph_s3_user_keys_enabled,
@@ -256,17 +241,6 @@ export default function ManagerSettingsPage() {
                       checked={Boolean(settings.manager.allow_manager_user_usage_stats)}
                       onChange={(value) => handleToggleAllowManagerUserStats(value)}
                       ariaLabel="Allow manager user stats"
-                    />
-                  }
-                />
-                <PortalSettingsItem
-                  title="Allow portal managers in Manager workspace"
-                  description="When enabled, users with role portal_manager can use /manager for their linked accounts."
-                  action={
-                    <PortalSettingsToggleAction
-                      checked={Boolean(settings.general.allow_portal_manager_workspace)}
-                      onChange={(value) => handleToggleAllowPortalManagerWorkspace(value)}
-                      ariaLabel="Allow portal manager workspace"
                     />
                   }
                 />
