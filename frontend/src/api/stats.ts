@@ -167,15 +167,6 @@ export async function fetchAdminSummary(): Promise<AdminSummary> {
   return data;
 }
 
-export async function fetchAdminStats(window: TrafficWindow = "week", endpointId?: number | null): Promise<AdminStats> {
-  const params: Record<string, string | number> = { window };
-  if (endpointId != null) {
-    params.endpoint_id = endpointId;
-  }
-  const { data } = await client.get<AdminStats>("/admin/stats/overview", { params });
-  return data;
-}
-
 export async function fetchAdminStorage(endpointId?: number | null): Promise<AdminStorageStats> {
   const params: Record<string, number> = {};
   if (endpointId != null) {

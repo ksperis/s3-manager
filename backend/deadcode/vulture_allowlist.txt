@@ -1,0 +1,2 @@
+# One substring pattern per line.
+# Any vulture finding containing one of these patterns is ignored.

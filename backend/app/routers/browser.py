@@ -1382,7 +1382,6 @@ def put_object_retention(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/buckets/{bucket_name}/objects/delete", response_model=dict)
 @router.post("/buckets/{bucket_name}/delete", response_model=dict)
 def delete_objects(
     bucket_name: str,
@@ -1408,7 +1407,6 @@ def delete_objects(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/buckets/{bucket_name}/objects/copy", response_model=dict)
 @router.post("/buckets/{bucket_name}/copy", response_model=dict)
 def copy_object(
     bucket_name: str,
@@ -1441,7 +1439,6 @@ def copy_object(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/buckets/{bucket_name}/folder", response_model=dict)
 @router.post("/buckets/{bucket_name}/folders", response_model=dict)
 def create_folder(
     bucket_name: str,
@@ -1467,7 +1464,6 @@ def create_folder(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/buckets/{bucket_name}/upload/proxy", response_model=ProxyUploadResponse)
 @router.post("/buckets/{bucket_name}/proxy-upload", response_model=ProxyUploadResponse)
 def upload_via_proxy(
     bucket_name: str,
@@ -1505,7 +1501,6 @@ def upload_via_proxy(
 
 
 @router.get("/buckets/{bucket_name}/download")
-@router.get("/buckets/{bucket_name}/proxy-download")
 def download_object(
     bucket_name: str,
     key: str,
@@ -1552,7 +1547,6 @@ def presign(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/buckets/{bucket_name}/multipart/init", response_model=MultipartUploadInitResponse)
 @router.post("/buckets/{bucket_name}/multipart/initiate", response_model=MultipartUploadInitResponse)
 def multipart_init(
     bucket_name: str,
@@ -1581,7 +1575,6 @@ def multipart_init(
 
 
 @router.get("/buckets/{bucket_name}/multipart", response_model=ListMultipartUploadsResponse)
-@router.get("/buckets/{bucket_name}/multipart/uploads", response_model=ListMultipartUploadsResponse)
 def list_multipart_uploads(
     bucket_name: str,
     prefix: Optional[str] = None,
@@ -1629,30 +1622,6 @@ def list_parts_for_upload(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.get("/buckets/{bucket_name}/multipart/parts", response_model=ListPartsResponse)
-def list_parts(
-    bucket_name: str,
-    key: str,
-    upload_id: str,
-    part_number_marker: Optional[int] = None,
-    max_parts: int = Query(default=1000, ge=1, le=1000),
-    account: S3Account = Depends(get_account_context),
-    service: BrowserService = Depends(get_browser_service),
-    _: BrowserActor = Depends(get_current_account_admin),
-) -> ListPartsResponse:
-    try:
-        return service.list_parts(
-            bucket_name,
-            account,
-            key=key,
-            upload_id=upload_id,
-            part_number_marker=part_number_marker,
-            max_parts=max_parts,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
-
 @router.post("/buckets/{bucket_name}/multipart/{upload_id}/presign", response_model=PresignPartResponse)
 def presign_part_for_upload(
     bucket_name: str,
@@ -1674,23 +1643,6 @@ def presign_part_for_upload(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/buckets/{bucket_name}/multipart/presign", response_model=PresignPartResponse)
-def presign_part(
-    bucket_name: str,
-    payload: PresignPartRequest,
-    account: S3Account = Depends(get_account_context),
-    service: BrowserService = Depends(get_browser_service),
-    sse_customer: Optional[SseCustomerContext] = Depends(get_optional_sse_customer_context),
-    _: BrowserActor = Depends(get_current_account_admin),
-) -> PresignPartResponse:
-    if sse_customer:
-        _common_require_sse_feature(account)
-    try:
-        return service.presign_part(bucket_name, account, payload, sse_customer=sse_customer)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
-
 @router.post("/buckets/{bucket_name}/multipart/{upload_id}/complete", response_model=dict)
 def complete_multipart_upload(
     bucket_name: str,
@@ -1704,32 +1656,6 @@ def complete_multipart_upload(
 ) -> dict:
     if not key:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key")
-    try:
-        service.complete_multipart_upload(bucket_name, account, key, upload_id, payload)
-        _common_record_browser_action(audit_service, actor=actor, scope="browser",
-            action="multipart_complete",
-            entity_type="object",
-            entity_id=f"{bucket_name}/{key}",
-            account=account,
-        )
-        return {"message": "completed"}
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-
-
-@router.post("/buckets/{bucket_name}/multipart/complete", response_model=dict)
-def multipart_complete(
-    bucket_name: str,
-    key: str,
-    upload_id: str,
-    payload: CompleteMultipartUploadRequest,
-    account: S3Account = Depends(get_account_context),
-    service: BrowserService = Depends(get_browser_service),
-    actor: BrowserActor = Depends(get_current_account_admin),
-    audit_service: AuditService = Depends(get_audit_logger),
-) -> dict:
-    if not key or not upload_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing key or upload_id")
     try:
         service.complete_multipart_upload(bucket_name, account, key, upload_id, payload)
         _common_record_browser_action(audit_service, actor=actor, scope="browser",
@@ -1791,7 +1717,6 @@ def restore_object(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
-@router.post("/buckets/{bucket_name}/cleanup", response_model=CleanupObjectVersionsResponse)
 @router.post("/buckets/{bucket_name}/versions/cleanup", response_model=CleanupObjectVersionsResponse)
 def cleanup_object_versions(
     bucket_name: str,

@@ -365,13 +365,6 @@ export type StsCredentials = {
   region: string;
 };
 
-export async function listBrowserBuckets(accountId: S3AccountSelector): Promise<BrowserBucket[]> {
-  const { data } = await client.get<BrowserBucket[]>("/browser/buckets", {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
 export async function searchBrowserBuckets(
   accountId: S3AccountSelector,
   options?: {
@@ -750,7 +743,7 @@ export async function proxyDownload(
   signal?: AbortSignal,
   sseCustomerKeyBase64?: string | null
 ): Promise<Blob> {
-  const { data } = await client.get(`/browser/buckets/${encodeURIComponent(bucketName)}/proxy-download`, {
+  const { data } = await client.get(`/browser/buckets/${encodeURIComponent(bucketName)}/download`, {
     params: withS3AccountParam({ key }, accountId),
     headers: buildSseCustomerBackendHeaders(sseCustomerKeyBase64),
     responseType: "blob",
@@ -792,28 +785,6 @@ export async function listMultipartUploads(
   );
   const { data } = await client.get<ListMultipartUploadsResponse>(
     `/browser/buckets/${encodeURIComponent(bucketName)}/multipart`,
-    { params }
-  );
-  return data;
-}
-
-export async function listParts(
-  accountId: S3AccountSelector,
-  bucketName: string,
-  uploadId: string,
-  key: string,
-  options?: { partNumberMarker?: number | null; maxParts?: number }
-): Promise<ListPartsResponse> {
-  const params = withS3AccountParam(
-    {
-      key,
-      part_number_marker: options?.partNumberMarker ?? undefined,
-      max_parts: options?.maxParts ?? undefined,
-    },
-    accountId
-  );
-  const { data } = await client.get<ListPartsResponse>(
-    `/browser/buckets/${encodeURIComponent(bucketName)}/multipart/${encodeURIComponent(uploadId)}/parts`,
     { params }
   );
   return data;

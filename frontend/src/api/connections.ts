@@ -66,11 +66,6 @@ export type UpdateConnectionPayload = {
   verify_tls?: boolean | null;
 };
 
-export type RotateConnectionCredentialsPayload = {
-  access_key_id: string;
-  secret_access_key: string;
-};
-
 export type ValidateConnectionCredentialsPayload = {
   storage_endpoint_id?: number | null;
   endpoint_url?: string | null;
@@ -100,14 +95,6 @@ export async function createConnection(payload: CreateConnectionPayload): Promis
 
 export async function updateConnection(connectionId: number, payload: UpdateConnectionPayload): Promise<S3Connection> {
   const { data } = await client.put<S3Connection>(`/connections/${connectionId}`, payload);
-  return data;
-}
-
-export async function rotateConnectionCredentials(
-  connectionId: number,
-  payload: RotateConnectionCredentialsPayload
-): Promise<S3Connection> {
-  const { data } = await client.put<S3Connection>(`/connections/${connectionId}/credentials`, payload);
   return data;
 }
 

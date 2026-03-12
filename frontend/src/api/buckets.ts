@@ -594,17 +594,6 @@ export type BucketObjectLockUpdatePayload = {
   years?: number | null;
 };
 
-export async function getBucketObjectLock(
-  accountId: S3AccountSelector,
-  bucketName: string
-): Promise<BucketObjectLockConfiguration> {
-  const { data } = await client.get<BucketObjectLockConfiguration>(
-    `${bucketPath(bucketName)}/object-lock`,
-    { params: withS3AccountParam(undefined, accountId) }
-  );
-  return data;
-}
-
 export async function updateBucketObjectLock(
   accountId: S3AccountSelector,
   bucketName: string,

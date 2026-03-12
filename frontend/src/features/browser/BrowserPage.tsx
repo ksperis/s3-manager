@@ -5400,7 +5400,7 @@ export default function BrowserPage({
     if (useProxyTransfers) {
       const params = withS3AccountParam({ key }, accountIdForApi);
       const url = buildApiUrl(
-        `/browser/buckets/${encodeURIComponent(bucketName)}/proxy-download`,
+        `/browser/buckets/${encodeURIComponent(bucketName)}/download`,
         params ?? undefined
       );
       const response = await fetch(url, {

@@ -166,22 +166,8 @@ export async function deletePortalBucket(
   });
 }
 
-export async function listPortalAccessKeys(accountId: S3AccountSelector): Promise<PortalAccessKey[]> {
-  const { data } = await client.get<PortalAccessKey[]>("/portal/access-keys", {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
 export async function createPortalAccessKey(accountId: S3AccountSelector): Promise<PortalAccessKey> {
   const { data } = await client.post<PortalAccessKey>("/portal/access-keys", undefined, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
-export async function rotatePortalAccessKey(accountId: S3AccountSelector): Promise<PortalAccessKey> {
-  const { data } = await client.post<PortalAccessKey>("/portal/access-keys/portal/rotate", undefined, {
     params: withS3AccountParam(undefined, accountId),
   });
   return data;

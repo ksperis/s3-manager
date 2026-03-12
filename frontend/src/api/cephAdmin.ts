@@ -172,11 +172,6 @@ export async function listCephAdminEndpoints(): Promise<CephAdminEndpoint[]> {
   return data;
 }
 
-export async function getCephAdminEndpointInfo(endpointId: number): Promise<CephAdminEndpointInfo> {
-  const { data } = await client.get<CephAdminEndpointInfo>(`/ceph-admin/endpoints/${endpointId}/info`);
-  return data;
-}
-
 export async function getCephAdminEndpointAccess(endpointId: number): Promise<CephAdminEndpointAccess> {
   const { data } = await client.get<CephAdminEndpointAccess>(`/ceph-admin/endpoints/${endpointId}/access`);
   return data;
@@ -1053,13 +1048,6 @@ export async function updateCephAdminBucketPublicAccessBlock(
   const { data } = await client.put<BucketPublicAccessBlock>(
     `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/public-access-block`,
     payload
-  );
-  return data;
-}
-
-export async function getCephAdminBucketObjectLock(endpointId: number, bucketName: string): Promise<BucketObjectLockConfiguration> {
-  const { data } = await client.get<BucketObjectLockConfiguration>(
-    `/ceph-admin/endpoints/${endpointId}/buckets/${encodeURIComponent(bucketName)}/object-lock`
   );
   return data;
 }

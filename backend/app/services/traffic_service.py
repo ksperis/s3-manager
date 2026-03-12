@@ -324,6 +324,7 @@ class TrafficService:
         admin_client: Optional[RGWAdminClient] = None,
     ) -> None:
         self.account = account
+        _ = rgw_client
         self.admin_client = admin_client or self._admin_for_account(account)
 
     def _admin_for_account(self, account: S3Account) -> RGWAdminClient:

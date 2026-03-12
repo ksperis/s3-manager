@@ -25,13 +25,6 @@ export async function listIamPolicies(accountId?: S3AccountSelector): Promise<Ia
   return data;
 }
 
-export async function getIamPolicy(accountId: S3AccountSelector, policyArn: string): Promise<IamPolicy> {
-  const { data } = await client.get<IamPolicy>(`/manager/iam/policies/${encodeURIComponent(policyArn)}`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
-  return data;
-}
-
 export async function createIamPolicy(
   accountId: S3AccountSelector,
   name: string,
@@ -43,10 +36,4 @@ export async function createIamPolicy(
     { params: withS3AccountParam(undefined, accountId) }
   );
   return data;
-}
-
-export async function deleteIamPolicy(accountId: S3AccountSelector, policyArn: string): Promise<void> {
-  await client.delete(`/manager/iam/policies/${encodeURIComponent(policyArn)}`, {
-    params: withS3AccountParam(undefined, accountId),
-  });
 }

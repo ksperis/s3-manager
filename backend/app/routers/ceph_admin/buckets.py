@@ -1233,20 +1233,6 @@ def _load_feature_param_snapshots(
     return snapshots, available_keys
 
 
-def _match_rules(bucket: CephAdminBucketSummary, rules: list[CephAdminBucketFilterRule], match: str) -> bool:
-    if not rules:
-        return True
-    results: list[bool] = []
-    for rule in rules:
-        if rule.field:
-            results.append(_match_field_rule(bucket, rule))
-        elif rule.param:
-            results.append(False)
-        else:
-            results.append(_match_feature_rule(bucket, rule))
-    return all(results) if match == "all" else any(results)
-
-
 def _filter_requires_stats(query: CephAdminBucketFilterQuery | None) -> bool:
     if not query:
         return False

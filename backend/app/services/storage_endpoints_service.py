@@ -66,7 +66,7 @@ class EnvStorageEndpoint(BaseModel):
 
     @field_validator("name", "endpoint_url", "region", mode="before")
     @classmethod
-    def trim_strings(cls, value: Optional[str]) -> Optional[str]:
+    def trim_strings(_cls, value: Optional[str]) -> Optional[str]:
         if isinstance(value, str):
             value = value.strip()
         return value or None

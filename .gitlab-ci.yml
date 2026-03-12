@@ -21,6 +21,17 @@ backend-tests:
     - cd backend
     - PYTHONPATH=. python -m pytest tests -q
 
+backend-deadcode:
+  stage: test
+  image: python:3.12-slim
+  needs: []
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install -r backend/requirements-test.txt
+  script:
+    - cd backend
+    - python scripts/check_vulture.py
+
 ceph-functional-tests:
   stage: test
   image: python:3.12-slim

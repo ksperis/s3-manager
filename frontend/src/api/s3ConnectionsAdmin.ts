@@ -169,15 +169,6 @@ export async function upsertS3ConnectionUser(
   return data;
 }
 
-export async function updateS3ConnectionUser(
-  connectionId: number,
-  userId: number,
-  payload: UpsertS3ConnectionUserLinkPayload
-): Promise<S3ConnectionUserLink> {
-  const { data } = await client.put<S3ConnectionUserLink>(`/admin/s3-connections/${connectionId}/users/${userId}`, payload);
-  return data;
-}
-
 export async function removeS3ConnectionUser(connectionId: number, userId: number): Promise<void> {
   await client.delete(`/admin/s3-connections/${connectionId}/users/${userId}`);
 }
