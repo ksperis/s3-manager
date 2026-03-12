@@ -9,6 +9,7 @@ from app.db import (
     S3Account,
     S3Connection,
     S3User,
+    StorageEndpoint,
     User,
     UserRole,
     UserS3Account,
@@ -53,6 +54,7 @@ def _create_connection(
     access_manager: bool = False,
     access_browser: bool = True,
     is_active: bool = True,
+    storage_endpoint: StorageEndpoint | None = None,
 ) -> S3Connection:
     connection = S3Connection(
         owner_user_id=owner_user_id,
@@ -60,6 +62,8 @@ def _create_connection(
         is_active=is_active,
         access_manager=access_manager,
         access_browser=access_browser,
+        storage_endpoint=storage_endpoint,
+        storage_endpoint_id=storage_endpoint.id if storage_endpoint else None,
         capabilities_json=json.dumps({"can_manage_iam": bool(can_manage_iam)}),
         access_key_id=f"CONN-AK-{name}",
         secret_access_key=f"CONN-SK-{name}",
@@ -81,6 +85,27 @@ def _create_legacy_user(db_session, *, name: str, uid: str) -> S3User:
     db_session.commit()
     db_session.refresh(s3_user)
     return s3_user
+
+
+def _create_endpoint(db_session, *, name: str) -> StorageEndpoint:
+    endpoint = StorageEndpoint(
+        name=name,
+        endpoint_url=f"https://{name}.example.test",
+        provider="ceph",
+        features_config=(
+            "features:\n"
+            "  admin:\n"
+            "    enabled: true\n"
+            "  metrics:\n"
+            "    enabled: true\n"
+            "  usage:\n"
+            "    enabled: true\n"
+        ),
+    )
+    db_session.add(endpoint)
+    db_session.commit()
+    db_session.refresh(endpoint)
+    return endpoint
 
 
 def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_session):
@@ -184,6 +209,29 @@ def test_browser_workspace_returns_connections_and_s3_users(db_session):
 
     assert context_ids == {f"s3u-{legacy_user.id}", f"conn-{connection_a.id}", f"conn-{connection_b.id}"}
     assert {context.kind for context in contexts} == {"legacy_user", "connection"}
+
+
+def test_connection_context_includes_endpoint_capabilities_when_bound_to_endpoint(db_session):
+    user = _create_user(db_session)
+    endpoint = _create_endpoint(db_session, name="ceph-conn-caps")
+    connection = _create_connection(
+        db_session,
+        owner_user_id=user.id,
+        name="endpoint-backed-conn",
+        can_manage_iam=True,
+        access_manager=True,
+        storage_endpoint=endpoint,
+    )
+
+    contexts = execution_contexts.list_execution_contexts(workspace="manager", user=user, db=db_session)
+    connection_context = next((context for context in contexts if context.id == f"conn-{connection.id}"), None)
+
+    assert connection_context is not None
+    assert connection_context.endpoint_id == endpoint.id
+    assert connection_context.storage_endpoint_capabilities is not None
+    assert connection_context.storage_endpoint_capabilities.get("metrics") is True
+    assert connection_context.storage_endpoint_capabilities.get("usage") is True
+    assert connection_context.storage_endpoint_capabilities.get("iam") is True
 
 
 def test_execution_contexts_exclude_inactive_connections(db_session):

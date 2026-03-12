@@ -43,6 +43,7 @@ export default function ManagerDashboard() {
     accountIdForApi,
     accessMode,
     managerStatsEnabled,
+    managerStatsMessage,
   } = useS3AccountContext();
   const capabilities = getCapabilities();
   const isS3User = selectedS3AccountType === "s3_user";
@@ -70,6 +71,10 @@ export default function ManagerDashboard() {
   );
   const accountLabel = selected?.display_name ?? sessionS3AccountName ?? "S3 session";
   const iamDisabled = isS3User || isConnection || !iamFeatureEnabled;
+  const metricsStatusMessage =
+    hasContext && !managerStatsEnabled
+      ? managerStatsMessage || "Metrics are unavailable for this context."
+      : null;
   const [workspaceHealth, setWorkspaceHealth] = useState<WorkspaceEndpointHealthOverviewResponse | null>(null);
   const [workspaceHealthLoading, setWorkspaceHealthLoading] = useState(false);
   const [workspaceHealthError, setWorkspaceHealthError] = useState<string | null>(null);
@@ -117,6 +122,7 @@ export default function ManagerDashboard() {
       {requiresS3AccountSelection && !selected && (
         <PageBanner tone="warning">Select an account to view metrics.</PageBanner>
       )}
+      {metricsStatusMessage && <PageBanner tone="warning">{metricsStatusMessage}</PageBanner>}
 
       {hasContext && (
         <>

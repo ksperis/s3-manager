@@ -12,12 +12,35 @@ from app.db import AccountRole, S3Account, S3Connection, S3User, StorageEndpoint
 from app.models.app_settings import AppSettings
 from app.routers import dependencies
 from app.routers.manager import context as manager_context_router
+from app.services.connection_identity_service import ConnectionIdentityResolution
 
 
 def _request(path: str, headers: dict | None = None):
     return SimpleNamespace(
         url=SimpleNamespace(path=path),
         headers=headers or {},
+    )
+
+
+def _ceph_metrics_endpoint(*, name: str, provider: str = "ceph") -> StorageEndpoint:
+    metrics_enabled = provider == "ceph"
+    usage_enabled = provider == "ceph"
+    return StorageEndpoint(
+        name=name,
+        endpoint_url=f"https://{name}.example.com",
+        admin_endpoint=f"https://{name}.example.com/admin",
+        provider=provider,
+        supervision_access_key="SUP-AK",
+        supervision_secret_key="SUP-SK",
+        features_config=(
+            "features:\n"
+            "  admin:\n"
+            f"    enabled: {'true' if provider == 'ceph' else 'false'}\n"
+            "  metrics:\n"
+            f"    enabled: {'true' if metrics_enabled else 'false'}\n"
+            "  usage:\n"
+            f"    enabled: {'true' if usage_enabled else 'false'}\n"
+        ),
     )
 
 
@@ -336,6 +359,134 @@ def test_manager_context_exposes_browser_access_flag_for_connection(db_session):
     payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
     assert payload.access_mode == "connection"
     assert payload.manager_browser_enabled is False
+
+
+def test_manager_context_connection_exposes_detected_identity_and_stats_enabled(db_session):
+    user = User(
+        email="manager-context-connection-identity@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    endpoint = _ceph_metrics_endpoint(name="ceph-conn-identity")
+    connection = S3Connection(
+        owner_user_id=None,
+        is_public=True,
+        name="manager-connection-identity",
+        access_manager=True,
+        access_browser=True,
+        storage_endpoint=endpoint,
+        credential_owner_type="s3_user",
+        credential_owner_identifier="rgw-account$analytics-user",
+        capabilities_json=json.dumps({"can_manage_iam": False}),
+        access_key_id="AK-CONN-IDENTITY",
+        secret_access_key="SK-CONN-IDENTITY",
+    )
+    db_session.add_all([user, endpoint, connection])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(connection)
+
+    account = dependencies.get_account_context(
+        request=_request("/api/manager/context"),
+        account_ref=f"conn-{connection.id}",
+        actor=user,
+        db=db_session,
+    )
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.access_mode == "connection"
+    assert payload.iam_identity == "rgw-account$analytics-user"
+    assert payload.manager_stats_enabled is True
+    assert payload.manager_stats_message is None
+
+
+def test_manager_context_connection_reports_reason_when_identity_cannot_be_resolved(db_session, monkeypatch):
+    user = User(
+        email="manager-context-connection-identity-ko@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    endpoint = _ceph_metrics_endpoint(name="ceph-conn-identity-ko")
+    connection = S3Connection(
+        owner_user_id=None,
+        is_public=True,
+        name="manager-connection-identity-ko",
+        access_manager=True,
+        access_browser=True,
+        storage_endpoint=endpoint,
+        capabilities_json=json.dumps({"can_manage_iam": False}),
+        access_key_id="AK-CONN-IDENTITY-KO",
+        secret_access_key="SK-CONN-IDENTITY-KO",
+    )
+    db_session.add_all([user, endpoint, connection])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(connection)
+
+    monkeypatch.setattr(
+        manager_context_router.ConnectionIdentityService,
+        "resolve_metrics_identity",
+        lambda self, conn: ConnectionIdentityResolution(
+            rgw_user_uid=None,
+            rgw_account_id=None,
+            metrics_enabled=True,
+            usage_enabled=True,
+            reason="Metrics are unavailable: unable to resolve RGW identity for this connection.",
+        ),
+    )
+
+    account = dependencies.get_account_context(
+        request=_request("/api/manager/context"),
+        account_ref=f"conn-{connection.id}",
+        actor=user,
+        db=db_session,
+    )
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.access_mode == "connection"
+    assert payload.iam_identity is None
+    assert payload.manager_stats_enabled is False
+    assert payload.manager_stats_message is not None
+    assert "unable to resolve rgw identity" in payload.manager_stats_message.lower()
+
+
+def test_manager_context_connection_reports_reason_for_non_ceph_endpoint(db_session):
+    user = User(
+        email="manager-context-connection-non-ceph@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    endpoint = _ceph_metrics_endpoint(name="other-conn-endpoint", provider="other")
+    connection = S3Connection(
+        owner_user_id=None,
+        is_public=True,
+        name="manager-connection-non-ceph",
+        access_manager=True,
+        access_browser=True,
+        storage_endpoint=endpoint,
+        credential_owner_type="s3_user",
+        credential_owner_identifier="rgw-account$reporter",
+        capabilities_json=json.dumps({"can_manage_iam": False}),
+        access_key_id="AK-CONN-NON-CEPH",
+        secret_access_key="SK-CONN-NON-CEPH",
+    )
+    db_session.add_all([user, endpoint, connection])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(connection)
+
+    account = dependencies.get_account_context(
+        request=_request("/api/manager/context"),
+        account_ref=f"conn-{connection.id}",
+        actor=user,
+        db=db_session,
+    )
+    payload = manager_context_router.get_manager_context(account=account, actor=user, db=db_session)
+    assert payload.access_mode == "connection"
+    assert payload.manager_stats_enabled is False
+    assert payload.manager_stats_message is not None
+    assert "not a ceph provider" in payload.manager_stats_message.lower()
 
 
 @pytest.mark.parametrize("path", ["/api/manager/buckets", "/api/browser/buckets"])

@@ -11,6 +11,7 @@ from app.db import AccountIAMUser, AccountRole, S3Connection, User, UserS3Accoun
 from app.models.session import ManagerSessionPrincipal
 from app.routers.dependencies import get_account_context, get_current_actor
 from app.services.app_settings_service import load_app_settings
+from app.services.connection_identity_service import ConnectionIdentityService
 from app.utils.rgw import has_supervision_credentials, resolve_admin_uid
 
 router = APIRouter(prefix="/manager", tags=["manager-context"])
@@ -22,25 +23,46 @@ class ManagerContext(BaseModel):
     iam_identity: Optional[str] = None
     can_switch_access: bool = False
     manager_stats_enabled: bool = False
+    manager_stats_message: Optional[str] = None
     manager_browser_enabled: bool = True
 
 
-def _manager_stats_enabled(account, actor) -> bool:
+def _manager_stats_state(account, actor) -> tuple[bool, Optional[str], Optional[str]]:
+    connection_id = getattr(account, "s3_connection_id", None)
+    if connection_id is not None:
+        caps = getattr(account, "_manager_capabilities", None)
+        if not caps or not caps.can_manage_buckets:
+            return False, "Metrics are not available for this connection.", None
+        source_connection = getattr(account, "_source_connection", None)
+        if source_connection is None:
+            return False, "Metrics are unavailable: connection context is incomplete.", None
+        resolution = ConnectionIdentityService().resolve_metrics_identity(source_connection)
+        if not resolution.eligible:
+            return False, (resolution.reason or "Metrics are unavailable for this connection."), None
+        if not has_supervision_credentials(account):
+            return False, "Supervision credentials are not configured for this endpoint.", resolution.iam_identity
+        if isinstance(actor, ManagerSessionPrincipal) and not actor.capabilities.can_view_traffic:
+            return False, "Metrics are not available for this profile.", resolution.iam_identity
+        settings = load_app_settings()
+        if isinstance(actor, User) and not settings.manager.allow_manager_user_usage_stats:
+            return False, "Metrics are not available for this profile.", resolution.iam_identity
+        return True, None, resolution.iam_identity
+
     if not has_supervision_credentials(account):
-        return False
+        return False, None, None
     if getattr(account, "s3_user_id", None) is not None and not getattr(account, "rgw_user_uid", None):
-        return False
+        return False, None, None
     caps = getattr(account, "_manager_capabilities", None)
     if not caps or not caps.can_manage_buckets:
-        return False
+        return False, None, None
     if isinstance(actor, ManagerSessionPrincipal):
-        return bool(actor.capabilities.can_view_traffic)
+        return bool(actor.capabilities.can_view_traffic), None, None
     if isinstance(actor, User):
         if getattr(caps, "using_root_key", False):
-            return True
+            return True, None, None
         settings = load_app_settings()
-        return bool(settings.manager.allow_manager_user_usage_stats)
-    return False
+        return bool(settings.manager.allow_manager_user_usage_stats), None, None
+    return False, None, None
 
 
 @router.get("/context", response_model=ManagerContext)
@@ -52,6 +74,7 @@ def get_manager_context(
     s3_user_id = getattr(account, "s3_user_id", None)
     s3_connection_id = getattr(account, "s3_connection_id", None)
     caps = getattr(account, "_manager_capabilities", None)
+    manager_stats_enabled, manager_stats_message, connection_iam_identity = _manager_stats_state(account, actor)
     access_mode = "portal"
     if isinstance(actor, ManagerSessionPrincipal):
         access_mode = "session"
@@ -88,9 +111,7 @@ def get_manager_context(
     elif access_mode == "s3_user":
         iam_identity = getattr(account, "rgw_user_uid", None)
     elif access_mode == "connection":
-        # For external platforms we generally do not have an IAM identity to show,
-        # so we expose the access key id as a stable identifier.
-        iam_identity = getattr(account, "rgw_access_key", None)
+        iam_identity = connection_iam_identity
 
     if isinstance(actor, User) and access_mode in {"admin", "portal"}:
         account_id = getattr(account, "id", None)
@@ -112,6 +133,7 @@ def get_manager_context(
         context_kind=("connection" if access_mode == "connection" else "account"),
         iam_identity=iam_identity,
         can_switch_access=can_switch_access,
-        manager_stats_enabled=_manager_stats_enabled(account, actor),
+        manager_stats_enabled=manager_stats_enabled,
+        manager_stats_message=manager_stats_message,
         manager_browser_enabled=manager_browser_enabled,
     )

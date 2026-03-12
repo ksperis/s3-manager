@@ -91,31 +91,35 @@ def _build_legacy_user_context(
 def _build_connection_context(connection: S3Connection, *, hidden: bool = False) -> ExecutionContext:
     details = resolve_connection_details(connection)
     can_manage_iam = _connection_can_manage_iam(connection)
-    sns_enabled = False
-    if connection.storage_endpoint:
-        sns_enabled = bool(
-            normalize_features_config(connection.storage_endpoint.provider, connection.storage_endpoint.features_config)
-            .get("sns", {})
-            .get("enabled")
+    endpoint = connection.storage_endpoint
+    endpoint_caps = None
+    if endpoint:
+        endpoint_caps = features_to_capabilities(
+            normalize_features_config(endpoint.provider, endpoint.features_config)
         )
-    return ExecutionContext(
-        kind="connection",
-        id=f"conn-{connection.id}",
-        display_name=connection.name,
-        hidden=hidden,
-        endpoint_id=None,
-        endpoint_name=(details.endpoint_name or details.provider or "Custom endpoint"),
-        endpoint_url=details.endpoint_url,
-        storage_endpoint_capabilities={
+        endpoint_caps["iam"] = can_manage_iam
+    else:
+        endpoint_caps = {
             "admin": False,
             "sts": False,
             "usage": False,
             "metrics": False,
             "static_website": False,
             "iam": can_manage_iam,
-            "sns": sns_enabled,
+            "sns": False,
             "sse": False,
-        },
+        }
+
+    return ExecutionContext(
+        kind="connection",
+        id=f"conn-{connection.id}",
+        display_name=connection.name,
+        hidden=hidden,
+        endpoint_id=endpoint.id if endpoint else None,
+        endpoint_name=(endpoint.name if endpoint else (details.endpoint_name or details.provider or "Custom endpoint")),
+        endpoint_provider=_provider_value(endpoint.provider if endpoint else None),
+        endpoint_url=details.endpoint_url,
+        storage_endpoint_capabilities=endpoint_caps,
         capabilities=ExecutionContextCapabilities(
             can_manage_iam=can_manage_iam,
             sts_capable=False,

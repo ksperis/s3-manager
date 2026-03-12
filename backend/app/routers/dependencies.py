@@ -39,6 +39,7 @@ from app.services.api_token_service import ApiTokenService
 from app.services.session_service import SessionService
 from app.models.browser import SseCustomerContext
 from app.services.storage_endpoints_service import get_storage_endpoints_service
+from app.services.connection_identity_service import ConnectionIdentityService
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.rgw import has_supervision_credentials
 from app.utils.storage_endpoint_features import resolve_admin_endpoint, resolve_feature_flags
@@ -249,6 +250,7 @@ def _build_s3_connection_account(conn: S3Connection) -> S3Account:
     account.rgw_access_key = conn.access_key_id
     account.rgw_secret_key = conn.secret_access_key
     account.storage_endpoint_id = conn.storage_endpoint_id
+    account.storage_endpoint = conn.storage_endpoint
     # Let resolve_s3_endpoint() pick it up.
     endpoint_url, region, force_path_style, verify_tls = resolve_connection_endpoint(conn)
     account.storage_endpoint_url = endpoint_url  # type: ignore[attr-defined]
@@ -257,6 +259,7 @@ def _build_s3_connection_account(conn: S3Connection) -> S3Account:
     account._session_verify_tls = verify_tls  # type: ignore[attr-defined]
     account.s3_connection_id = conn.id  # type: ignore[attr-defined]
     account._session_token = conn.session_token  # type: ignore[attr-defined]
+    account._source_connection = conn  # type: ignore[attr-defined]
     return account
 
 
@@ -771,15 +774,36 @@ def _require_supervision_access(
     account: S3Account,
     actor: ManagerActor,
     disabled_detail: str,
-    enabled_flag: str,
+    required_feature: str,
 ) -> ManagerActor:
     caps: Optional[AccountCapabilities] = getattr(account, "_manager_capabilities", None)  # type: ignore[attr-defined]
     endpoint = getattr(account, "storage_endpoint", None)
+
+    connection_id = getattr(account, "s3_connection_id", None)
+    if connection_id is not None:
+        source_connection = getattr(account, "_source_connection", None)
+        if source_connection is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Metrics are unavailable: connection context is incomplete.",
+            )
+        resolution = ConnectionIdentityService().resolve_metrics_identity(source_connection)
+        if not resolution.eligible:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=resolution.reason or disabled_detail)
+        if required_feature == "metrics" and not resolution.metrics_enabled:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Storage metrics are disabled for this endpoint")
+        if required_feature == "usage" and not resolution.usage_enabled:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usage logs are disabled for this endpoint")
+        if resolution.rgw_account_id:
+            account.rgw_account_id = resolution.rgw_account_id
+        if resolution.rgw_user_uid:
+            account.rgw_user_uid = resolution.rgw_user_uid
+
     if endpoint:
         flags = resolve_feature_flags(endpoint)
-        if enabled_flag == "usage" and not flags.metrics_enabled:
+        if required_feature == "metrics" and not flags.metrics_enabled:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=disabled_detail)
-        if enabled_flag == "metrics" and not flags.usage_enabled:
+        if required_feature == "usage" and not flags.usage_enabled:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=disabled_detail)
     if not has_supervision_credentials(account):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Supervision credentials are not configured for this account")
@@ -810,7 +834,7 @@ def require_usage_capable_manager(
         account,
         actor,
         disabled_detail="Storage metrics are disabled for this endpoint",
-        enabled_flag="usage",
+        required_feature="metrics",
     )
 
 
@@ -835,7 +859,7 @@ def require_metrics_capable_manager(
         account,
         actor,
         disabled_detail="Usage logs are disabled for this endpoint",
-        enabled_flag="metrics",
+        required_feature="usage",
     )
 
 

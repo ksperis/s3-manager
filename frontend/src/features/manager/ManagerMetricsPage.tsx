@@ -14,15 +14,13 @@ export default function ManagerMetricsPage() {
   const {
     accounts,
     selectedS3AccountId,
-    selectedS3AccountType,
     requiresS3AccountSelection,
     hasS3AccountContext,
     accountIdForApi,
     accessMode,
     managerStatsEnabled,
+    managerStatsMessage,
   } = useS3AccountContext();
-  const isS3User = selectedS3AccountType === "s3_user";
-  const isConnection = selectedS3AccountType === "connection";
 
   const selected = useMemo(
     () => accounts.find((a) => a.id === selectedS3AccountId),
@@ -34,7 +32,11 @@ export default function ManagerMetricsPage() {
   const metricsFeatureEnabled = Boolean(managerStatsEnabled) && (endpointCaps ? endpointCaps.usage !== false : true);
   const showUsageBreakdowns = usageFeatureEnabled && hasContext;
   const showTrafficAnalytics = metricsFeatureEnabled && hasContext;
-  const showMetricsDisabledBanner = !usageFeatureEnabled && !metricsFeatureEnabled;
+  const showMetricsDisabledBanner = hasContext && !usageFeatureEnabled && !metricsFeatureEnabled;
+  const managerMetricsMessage =
+    hasContext && !managerStatsEnabled
+      ? managerStatsMessage || "Metrics are unavailable for this context."
+      : null;
 
   const { stats, loading, error } = useManagerStats(
     accountIdForApi,
@@ -57,13 +59,9 @@ export default function ManagerMetricsPage() {
         </div>
       )}
 
-      {isConnection && (
-        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 ui-body text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-          Connection context: platform metrics are disabled. Use a platform account with supervision enabled to access usage and traffic analytics.
-        </div>
-      )}
+      {managerMetricsMessage && <PageBanner tone="warning">{managerMetricsMessage}</PageBanner>}
 
-      {showMetricsDisabledBanner && (
+      {showMetricsDisabledBanner && !managerMetricsMessage && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 ui-body text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
           Usage and traffic metrics are disabled for this storage endpoint.
         </div>

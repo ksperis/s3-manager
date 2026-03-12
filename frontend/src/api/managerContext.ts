@@ -12,6 +12,7 @@ export type ManagerContext = {
   iam_identity?: string | null;
   can_switch_access?: boolean;
   manager_stats_enabled: boolean;
+  manager_stats_message?: string | null;
   manager_browser_enabled?: boolean;
 };
 
