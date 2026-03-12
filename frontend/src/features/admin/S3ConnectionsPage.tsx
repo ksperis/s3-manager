@@ -17,7 +17,10 @@ import {
   createAdminS3Connection,
   deleteAdminS3Connection,
   listAdminS3Connections,
+  listS3ConnectionUsers,
+  removeS3ConnectionUser,
   rotateAdminS3ConnectionCredentials,
+  upsertS3ConnectionUser,
   updateAdminS3Connection,
   validateAdminS3ConnectionCredentials,
 } from "../../api/s3ConnectionsAdmin";
@@ -34,6 +37,13 @@ const providerHintOptions = [
   { value: "minio", label: "MinIO" },
   { value: "other", label: "Other" },
 ];
+const credentialOwnerTypeOptions = [
+  { value: "", label: "(none)" },
+  { value: "iam_user", label: "IAM user" },
+  { value: "account_user", label: "Account user" },
+  { value: "s3_user", label: "S3 user" },
+];
+type EditTab = "general" | "users";
 
 export default function S3ConnectionsPage() {
   const [items, setItems] = useState<S3ConnectionAdminItem[]>([]);
@@ -98,6 +108,12 @@ export default function S3ConnectionsPage() {
     access_key_id: "",
     secret_access_key: "",
   });
+  const [editTab, setEditTab] = useState<EditTab>("general");
+  const [editLinkedUserIds, setEditLinkedUserIds] = useState<number[]>([]);
+  const [editUserSearch, setEditUserSearch] = useState("");
+  const [showEditUserPanel, setShowEditUserPanel] = useState(false);
+  const [editUserSelections, setEditUserSelections] = useState<number[]>([]);
+  const maxLinkOptions = 10;
 
   const [deleteTarget, setDeleteTarget] = useState<S3ConnectionAdminItem | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -117,6 +133,25 @@ export default function S3ConnectionsPage() {
     const visibility = resolveVisibility(conn);
     return visibility === "public" || visibility === "shared" || (currentUserId != null && conn.owner_user_id === currentUserId);
   };
+  const normalizeLinkedUserIds = useCallback((ids: number[] | undefined, ownerUserId?: number | null): number[] => {
+    const ownerId = ownerUserId ?? null;
+    return Array.from(new Set((ids ?? []).map((id) => Number(id))))
+      .filter((id) => Number.isFinite(id) && id > 0)
+      .filter((id) => ownerId == null || id !== ownerId);
+  }, []);
+  const resetEditUsersState = useCallback(() => {
+    setEditTab("general");
+    setEditLinkedUserIds([]);
+    setEditUserSearch("");
+    setShowEditUserPanel(false);
+    setEditUserSelections([]);
+  }, []);
+  const closeEditModal = useCallback(() => {
+    setEditing(null);
+    setEditError(null);
+    setEditCredentials({ access_key_id: "", secret_access_key: "" });
+    resetEditUsersState();
+  }, [resetEditUsersState]);
 
   const resetCreateForm = () => {
     setCreateEndpointPresetId("");
@@ -255,6 +290,32 @@ export default function S3ConnectionsPage() {
     portalUsers.forEach((user) => map.set(user.id, user.email));
     return map;
   }, [portalUsers]);
+  const editOwnerUserId = editing?.owner_user_id ?? null;
+  const editLinksEnabled = editForm.visibility === "shared";
+  const linkedEditUsers = useMemo(
+    () =>
+      editLinkedUserIds.map((id) => ({
+        id,
+        label: portalUserLabelById.get(id) ?? `User #${id}`,
+      })),
+    [editLinkedUserIds, portalUserLabelById]
+  );
+  const availableEditUsers = useMemo(() => {
+    const query = editUserSearch.trim().toLowerCase();
+    const selectedIds = new Set(editLinkedUserIds);
+    return portalUsers
+      .filter((user) => !selectedIds.has(user.id))
+      .filter((user) => (editOwnerUserId == null ? true : user.id !== editOwnerUserId))
+      .filter((user) => !query || user.email.toLowerCase().includes(query))
+      .map((user) => ({ id: user.id, label: user.email }));
+  }, [editLinkedUserIds, editOwnerUserId, editUserSearch, portalUsers]);
+  const visibleAvailableEditUsers = useMemo(() => availableEditUsers.slice(0, maxLinkOptions), [availableEditUsers, maxLinkOptions]);
+  const editCredentialOwnerTypeOptions = useMemo(() => {
+    const currentValue = editForm.credential_owner_type.trim();
+    if (!currentValue) return credentialOwnerTypeOptions;
+    if (credentialOwnerTypeOptions.some((opt) => opt.value === currentValue)) return credentialOwnerTypeOptions;
+    return [...credentialOwnerTypeOptions, { value: currentValue, label: `${currentValue} (legacy)` }];
+  }, [editForm.credential_owner_type]);
   const tableStatus = resolveListTableStatus({
     loading,
     error,
@@ -299,6 +360,13 @@ export default function S3ConnectionsPage() {
     }));
   }, [createEndpointPresetId, createForm.endpoint_url, createPresetTouched, defaultEndpoint, showCreateModal]);
 
+  useEffect(() => {
+    if (editForm.visibility === "shared") return;
+    setShowEditUserPanel(false);
+    setEditUserSelections([]);
+    setEditUserSearch("");
+  }, [editForm.visibility]);
+
   const handleFilterChange = (value: string) => {
     setFilter(value);
     setPage(1);
@@ -313,6 +381,9 @@ export default function S3ConnectionsPage() {
   };
   const toggleRowSelection = (connectionId: number) => {
     setSelectedIds((prev) => (prev.includes(connectionId) ? prev.filter((id) => id !== connectionId) : [...prev, connectionId]));
+  };
+  const toggleEditUserSelection = (userId: number) => {
+    setEditUserSelections((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
   };
   const toggleSelectAllOnPage = () => {
     if (allSelectedOnPage) {
@@ -346,6 +417,11 @@ export default function S3ConnectionsPage() {
       force_path_style: Boolean(conn.force_path_style),
       verify_tls: conn.verify_tls !== false,
     });
+    setEditTab("general");
+    setEditLinkedUserIds(normalizeLinkedUserIds(conn.user_ids, conn.owner_user_id));
+    setEditUserSearch("");
+    setShowEditUserPanel(false);
+    setEditUserSelections([]);
     setEditCredentials({ access_key_id: "", secret_access_key: "" });
     setEditError(null);
   };
@@ -425,8 +501,9 @@ export default function S3ConnectionsPage() {
     setEditBusy(true);
     setEditError(null);
     try {
+      const connectionId = editing.id;
       if (accessKeyId && secretAccessKey) {
-        await rotateAdminS3ConnectionCredentials(editing.id, {
+        await rotateAdminS3ConnectionCredentials(connectionId, {
           access_key_id: accessKeyId,
           secret_access_key: secretAccessKey,
         });
@@ -443,7 +520,7 @@ export default function S3ConnectionsPage() {
             verify_tls: editForm.verify_tls,
             provider_hint: editForm.provider_hint || null,
           };
-      await updateAdminS3Connection(editing.id, {
+      await updateAdminS3Connection(connectionId, {
         name: editForm.name || undefined,
         visibility: editForm.visibility,
         access_manager: editForm.access_manager,
@@ -452,10 +529,33 @@ export default function S3ConnectionsPage() {
         credential_owner_identifier: editForm.credential_owner_identifier || null,
         ...endpointPayload,
       });
+      if (editForm.visibility === "shared") {
+        const targetIds = normalizeLinkedUserIds(editLinkedUserIds, editing.owner_user_id);
+        try {
+          const currentLinks = await listS3ConnectionUsers(connectionId);
+          const currentIds = normalizeLinkedUserIds(
+            currentLinks.map((link) => link.user_id),
+            editing.owner_user_id
+          );
+          const currentIdSet = new Set(currentIds);
+          const targetIdSet = new Set(targetIds);
+          const addIds = targetIds.filter((id) => !currentIdSet.has(id));
+          const removeIds = currentIds.filter((id) => !targetIdSet.has(id));
+          if (addIds.length > 0) {
+            await Promise.all(addIds.map((userId) => upsertS3ConnectionUser(connectionId, { user_id: userId })));
+          }
+          if (removeIds.length > 0) {
+            await Promise.all(removeIds.map((userId) => removeS3ConnectionUser(connectionId, userId)));
+          }
+        } catch (err) {
+          setEditError(`Connection updated, but linked UI users could not be synced: ${extractError(err)}`);
+          return;
+        }
+      }
       setEditCredentials({ access_key_id: "", secret_access_key: "" });
       setActionMessage("Connection updated.");
       await fetchItems();
-      setEditing(null);
+      closeEditModal();
     } catch (err) {
       setEditError(extractError(err));
     } finally {
@@ -971,250 +1071,432 @@ export default function S3ConnectionsPage() {
 
       {/* Edit modal */}
       {editing && (
-        <Modal title={`Edit: ${editing.name}`} onClose={() => (!editBusy ? setEditing(null) : null)}>
+        <Modal title={`Edit: ${editing.name}`} onClose={() => (!editBusy ? closeEditModal() : null)}>
           {editError && (
             <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 ui-body text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/50 dark:text-rose-200">
               {editError}
             </div>
           )}
           <form className="space-y-4" onSubmit={submitEdit}>
-
-            <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-              <div className="ui-body text-slate-700 dark:text-slate-200">
-                Visibility:{" "}
-                <span className="font-semibold">
-                  {editForm.visibility === "public" ? "Public" : editForm.visibility === "shared" ? "Shared" : "Private"}
-                </span>
-              </div>
-              <div className="ui-caption text-slate-500 dark:text-slate-300">
-                {editForm.visibility === "public"
-                  ? "Visible to all UI users. Public connections have no owner."
-                  : editForm.visibility === "shared"
-                    ? `Owner: ${editing.owner_email || editing.owner_user_id} (owner + linked users)`
-                  : `Owner: ${editing.owner_email || editing.owner_user_id}`}
-              </div>
+            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
+              <button
+                type="button"
+                onClick={() => setEditTab("general")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editTab === "general"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                General
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditTab("users")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editTab === "users"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Linked UI users
+              </button>
             </div>
 
-            <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
-              <div>
-                <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Connection details</div>
-                <div className="ui-caption text-slate-500 dark:text-slate-300">
-                  Update the endpoint and transport options.
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Name *</label>
-                  <input
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
-                    required
-                  />
-                </div>
-                {!editHasPreset && (
-                  <div className="flex flex-col gap-1">
-                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Provider</label>
-                    <select
-                      className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                      value={editForm.provider_hint}
-                      onChange={(e) => setEditForm((p) => ({ ...p, provider_hint: e.target.value }))}
-                    >
-                      {providerHintOptions.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
+            {editTab === "general" && (
+              <>
+                <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className="ui-body text-slate-700 dark:text-slate-200">
+                    Visibility:{" "}
+                    <span className="font-semibold">
+                      {editForm.visibility === "public" ? "Public" : editForm.visibility === "shared" ? "Shared" : "Private"}
+                    </span>
                   </div>
-                )}
-                <div className="flex flex-col gap-1 sm:col-span-2">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Existing endpoint</label>
-                  <select
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={editEndpointPresetId}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setEditEndpointPresetId(next);
-                      if (next) {
-                        applyEndpointPreset(next, setEditForm);
-                      }
-                    }}
-                    disabled={loadingEndpoints}
-                  >
-                    <option value="">{loadingEndpoints ? "Loading endpoints..." : "Custom endpoint"}</option>
-                    {storageEndpoints.map((ep) => (
-                      <option key={ep.id} value={ep.id}>
-                        {ep.name} {ep.is_default ? "(default)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="ui-caption text-slate-500 dark:text-slate-300">
+                    {editForm.visibility === "public"
+                      ? "Visible to all UI users. Public connections have no owner."
+                      : editForm.visibility === "shared"
+                        ? `Owner: ${editing.owner_email || editing.owner_user_id} (owner + linked users)`
+                        : `Owner: ${editing.owner_email || editing.owner_user_id}`}
+                  </div>
                 </div>
-                {!editHasPreset && (
-                  <>
-                    <div className="flex flex-col gap-1 sm:col-span-2">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Endpoint URL *</label>
+
+                <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div>
+                    <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Connection details</div>
+                    <div className="ui-caption text-slate-500 dark:text-slate-300">
+                      Update the endpoint and transport options.
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Name *</label>
                       <input
                         className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        value={editForm.endpoint_url}
-                        onChange={(e) => setEditForm((p) => ({ ...p, endpoint_url: e.target.value }))}
+                        value={editForm.name}
+                        onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
                         required
                       />
                     </div>
+                    {!editHasPreset && (
+                      <div className="flex flex-col gap-1">
+                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Provider</label>
+                        <select
+                          className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          value={editForm.provider_hint}
+                          onChange={(e) => setEditForm((p) => ({ ...p, provider_hint: e.target.value }))}
+                        >
+                          {providerHintOptions.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-1 sm:col-span-2">
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Existing endpoint</label>
+                      <select
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        value={editEndpointPresetId}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setEditEndpointPresetId(next);
+                          if (next) {
+                            applyEndpointPreset(next, setEditForm);
+                          }
+                        }}
+                        disabled={loadingEndpoints}
+                      >
+                        <option value="">{loadingEndpoints ? "Loading endpoints..." : "Custom endpoint"}</option>
+                        {storageEndpoints.map((ep) => (
+                          <option key={ep.id} value={ep.id}>
+                            {ep.name} {ep.is_default ? "(default)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {!editHasPreset && (
+                      <>
+                        <div className="flex flex-col gap-1 sm:col-span-2">
+                          <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Endpoint URL *</label>
+                          <input
+                            className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            value={editForm.endpoint_url}
+                            onChange={(e) => setEditForm((p) => ({ ...p, endpoint_url: e.target.value }))}
+                            required
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Region (optional)</label>
+                          <input
+                            className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                            value={editForm.region}
+                            onChange={(e) => setEditForm((p) => ({ ...p, region: e.target.value }))}
+                          />
+                        </div>
+                        <div className="flex items-center gap-4 pt-6">
+                          <label className="ui-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={editForm.force_path_style}
+                              onChange={(e) => setEditForm((p) => ({ ...p, force_path_style: e.target.checked }))}
+                            />
+                            <span>Force path-style</span>
+                          </label>
+                          <label className="ui-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={editForm.verify_tls}
+                              onChange={(e) => setEditForm((p) => ({ ...p, verify_tls: e.target.checked }))}
+                            />
+                            <span>Verify TLS</span>
+                          </label>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div>
+                    <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Credentials</div>
+                    <div className="ui-caption text-slate-500 dark:text-slate-300">Leave blank to keep the current keys.</div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="flex flex-col gap-1">
-                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Region (optional)</label>
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Access key ID</label>
                       <input
                         className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        value={editForm.region}
-                        onChange={(e) => setEditForm((p) => ({ ...p, region: e.target.value }))}
+                        value={editCredentials.access_key_id}
+                        onChange={(e) => setEditCredentials((p) => ({ ...p, access_key_id: e.target.value }))}
+                        placeholder="AKIA..."
                       />
                     </div>
-                    <div className="flex items-center gap-4 pt-6">
-                      <label className="ui-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={editForm.force_path_style}
-                          onChange={(e) => setEditForm((p) => ({ ...p, force_path_style: e.target.checked }))}
-                        />
-                        <span>Force path-style</span>
-                      </label>
-                      <label className="ui-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={editForm.verify_tls}
-                          onChange={(e) => setEditForm((p) => ({ ...p, verify_tls: e.target.checked }))}
-                        />
-                        <span>Verify TLS</span>
-                      </label>
+                    <div className="flex flex-col gap-1">
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Secret access key</label>
+                      <input
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        value={editCredentials.secret_access_key}
+                        onChange={(e) => setEditCredentials((p) => ({ ...p, secret_access_key: e.target.value }))}
+                        placeholder="••••••••"
+                      />
                     </div>
-                  </>
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Visibility</div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                      <input
+                        type="radio"
+                        name="visibility"
+                        value="private"
+                        checked={editForm.visibility === "private"}
+                        onChange={() => setEditForm((p) => ({ ...p, visibility: "private" }))}
+                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                      />
+                      Private (owner only)
+                    </label>
+                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                      <input
+                        type="radio"
+                        name="visibility"
+                        value="shared"
+                        checked={editForm.visibility === "shared"}
+                        onChange={() => setEditForm((p) => ({ ...p, visibility: "shared" }))}
+                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                      />
+                      Shared (owner + linked users)
+                    </label>
+                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                      <input
+                        type="radio"
+                        name="visibility"
+                        value="public"
+                        checked={editForm.visibility === "public"}
+                        onChange={() => setEditForm((p) => ({ ...p, visibility: "public" }))}
+                        className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                      />
+                      Public (visible to all)
+                    </label>
+                  </div>
+                  <div className="ui-caption text-slate-500 dark:text-slate-300">
+                    Private is strictly owner-only. Shared can be linked to multiple UI users.
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+                  <div>
+                    <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access and credential metadata</div>
+                    <div className="ui-caption text-slate-500 dark:text-slate-300">
+                      Store owner context for keys imported from manager/ceph-admin flows.
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={editForm.access_manager}
+                        onChange={(e) => setEditForm((p) => ({ ...p, access_manager: e.target.checked }))}
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      />
+                      Access manager
+                    </label>
+                    <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={editForm.access_browser}
+                        onChange={(e) => setEditForm((p) => ({ ...p, access_browser: e.target.checked }))}
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      />
+                      Access browser
+                    </label>
+                  </div>
+                  <div className="ui-caption text-slate-500 dark:text-slate-300">At least one access must be enabled.</div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Owner type</label>
+                      <select
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        value={editForm.credential_owner_type}
+                        onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_type: e.target.value }))}
+                      >
+                        {editCredentialOwnerTypeOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Owner identifier</label>
+                      <input
+                        className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        value={editForm.credential_owner_identifier}
+                        onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_identifier: e.target.value }))}
+                        placeholder="account-id / user-id"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {editTab === "users" && (
+              <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
+                    <span className="ui-caption text-slate-500 dark:text-slate-400">
+                      {linkedEditUsers.length} linked
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditUserPanel((prev) => !prev)}
+                    className={tableActionButtonClasses}
+                    disabled={!editLinksEnabled}
+                  >
+                    {showEditUserPanel ? "Close" : "Add UI users"}
+                  </button>
+                </div>
+                {!editLinksEnabled && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 ui-caption text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/60 dark:text-amber-100">
+                    Linked UI users are available only for shared visibility.
+                  </div>
+                )}
+                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                  <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                      <tr>
+                        <th className="px-3 py-2 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          User
+                        </th>
+                        <th className="px-3 py-2 text-right ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {linkedEditUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={2} className="px-3 py-3 ui-body text-slate-500 dark:text-slate-400">
+                            No linked users yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        linkedEditUsers.map((user) => (
+                          <tr key={user.id}>
+                            <td className="px-3 py-2 ui-body text-slate-700 dark:text-slate-200">{user.label}</td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setEditLinkedUserIds((prev) => prev.filter((id) => id !== user.id))}
+                                className={tableDeleteActionClasses}
+                                disabled={!editLinksEnabled}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {showEditUserPanel && (
+                  <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/30">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Add UI users</label>
+                        <span className="ui-caption text-slate-500 dark:text-slate-400">(filter by email)</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={editUserSearch}
+                        onChange={(e) => setEditUserSearch(e.target.value)}
+                        placeholder="Search..."
+                        className="w-44 rounded-md border border-slate-200 px-2 py-1 ui-caption focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        disabled={!editLinksEnabled}
+                      />
+                    </div>
+                    <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                      {availableEditUsers.length === 0 && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">No results.</p>
+                      )}
+                      {visibleAvailableEditUsers.map((option) => {
+                        const isSelected = editUserSelections.includes(option.id);
+                        return (
+                          <div
+                            key={option.id}
+                            className={`flex items-center justify-between rounded-md px-2 py-1 ${
+                              isSelected
+                                ? "bg-slate-50 dark:bg-slate-800/60"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                            }`}
+                          >
+                            <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleEditUserSelection(option.id)}
+                                className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
+                                disabled={!editLinksEnabled}
+                              />
+                              <span>{option.label}</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                      {availableEditUsers.length > maxLinkOptions && (
+                        <p className="ui-caption text-slate-500 dark:text-slate-400">
+                          Showing first {maxLinkOptions} matches. Refine your search to see more.
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="ui-caption text-slate-500 dark:text-slate-400">{editUserSelections.length} selected</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowEditUserPanel(false);
+                            setEditUserSelections([]);
+                            setEditUserSearch("");
+                          }}
+                          className="rounded-md border border-slate-200 px-3 py-1.5 ui-caption font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={editUserSelections.length === 0 || !editLinksEnabled}
+                          onClick={() => {
+                            if (editUserSelections.length === 0) return;
+                            setEditLinkedUserIds((prev) =>
+                              normalizeLinkedUserIds([...prev, ...editUserSelections], editOwnerUserId)
+                            );
+                            setEditUserSelections([]);
+                            setEditUserSearch("");
+                            setShowEditUserPanel(false);
+                          }}
+                          className="rounded-md bg-primary px-3 py-1.5 ui-caption font-semibold text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-60"
+                        >
+                          Add selected
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
-              <div>
-                <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Credentials</div>
-                <div className="ui-caption text-slate-500 dark:text-slate-300">Leave blank to keep the current keys.</div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Access key ID</label>
-                  <input
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={editCredentials.access_key_id}
-                    onChange={(e) => setEditCredentials((p) => ({ ...p, access_key_id: e.target.value }))}
-                    placeholder="AKIA..."
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Secret access key</label>
-                  <input
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={editCredentials.secret_access_key}
-                    onChange={(e) => setEditCredentials((p) => ({ ...p, secret_access_key: e.target.value }))}
-                    placeholder="••••••••"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
-              <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Visibility</div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                  <input
-                    type="radio"
-                    name="visibility"
-                    value="private"
-                    checked={editForm.visibility === "private"}
-                    onChange={() => setEditForm((p) => ({ ...p, visibility: "private" }))}
-                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                  />
-                  Private (owner only)
-                </label>
-                <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                  <input
-                    type="radio"
-                    name="visibility"
-                    value="shared"
-                    checked={editForm.visibility === "shared"}
-                    onChange={() => setEditForm((p) => ({ ...p, visibility: "shared" }))}
-                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                  />
-                  Shared (owner + linked users)
-                </label>
-                <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                  <input
-                    type="radio"
-                    name="visibility"
-                    value="public"
-                    checked={editForm.visibility === "public"}
-                    onChange={() => setEditForm((p) => ({ ...p, visibility: "public" }))}
-                    className="h-3 w-3 rounded border-slate-300 text-primary focus:ring-primary"
-                  />
-                  Public (visible to all)
-                </label>
-              </div>
-              <div className="ui-caption text-slate-500 dark:text-slate-300">
-                Private is strictly owner-only. Shared can be linked to multiple UI users.
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
-              <div>
-                <div className="ui-body font-semibold text-slate-900 dark:text-slate-100">Access and credential metadata</div>
-                <div className="ui-caption text-slate-500 dark:text-slate-300">
-                  Store owner context for keys imported from manager/ceph-admin flows.
-                </div>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={editForm.access_manager}
-                    onChange={(e) => setEditForm((p) => ({ ...p, access_manager: e.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                  />
-                  Access manager
-                </label>
-                <label className="flex items-center gap-2 ui-body text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={editForm.access_browser}
-                    onChange={(e) => setEditForm((p) => ({ ...p, access_browser: e.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                  />
-                  Access browser
-                </label>
-              </div>
-              <div className="ui-caption text-slate-500 dark:text-slate-300">At least one access must be enabled.</div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Owner type</label>
-                  <input
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={editForm.credential_owner_type}
-                    onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_type: e.target.value }))}
-                    placeholder="iam_user | account_user | s3_user"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Owner identifier</label>
-                  <input
-                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    value={editForm.credential_owner_identifier}
-                    onChange={(e) => setEditForm((p) => ({ ...p, credential_owner_identifier: e.target.value }))}
-                    placeholder="account-id / user-id"
-                  />
-                </div>
-              </div>
-            </div>
+            )}
 
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setEditing(null)}
+                onClick={closeEditModal}
                 className="rounded-md border border-slate-200 px-4 py-2 ui-body font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                 disabled={editBusy}
               >
