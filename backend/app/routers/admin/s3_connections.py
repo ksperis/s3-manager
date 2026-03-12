@@ -113,6 +113,7 @@ def _to_admin_item(
         endpoint_url=details.endpoint_url or "",
         is_public=bool(conn.is_public),
         is_shared=bool(conn.is_shared),
+        is_active=bool(conn.is_active),
         visibility=visibility_from_flags(is_public=bool(conn.is_public), is_shared=bool(conn.is_shared)),
         access_manager=bool(conn.access_manager),
         access_browser=bool(conn.access_browser),
@@ -224,6 +225,7 @@ def list_s3_connections_minimal(
             S3Connection.owner_user_id,
             S3Connection.is_public,
             S3Connection.is_shared,
+            S3Connection.is_active,
         )
         .outerjoin(access_link, access_link.s3_connection_id == S3Connection.id)
         .filter(
@@ -243,6 +245,7 @@ def list_s3_connections_minimal(
             owner_user_id=row[2],
             is_public=bool(row[3]),
             is_shared=bool(row[4]),
+            is_active=bool(row[5]),
             visibility=visibility_from_flags(is_public=bool(row[3]), is_shared=bool(row[4])),
         )
         for row in rows
@@ -313,6 +316,7 @@ def create_s3_connection(
         custom_endpoint_config=custom_endpoint_config,
         is_public=is_public,
         is_shared=is_shared,
+        is_active=True,
         access_manager=access_manager,
         access_browser=access_browser,
         credential_owner_type=payload.credential_owner_type,
@@ -393,6 +397,8 @@ def update_s3_connection(
                 .filter(UserS3Connection.s3_connection_id == conn.id)
                 .delete(synchronize_session=False)
             )
+    if "is_active" in payload_data:
+        conn.is_active = bool(payload.is_active)
     if payload.storage_endpoint_id is not None:
         storage_endpoint = db.query(StorageEndpoint).filter(StorageEndpoint.id == payload.storage_endpoint_id).first()
         if not storage_endpoint:

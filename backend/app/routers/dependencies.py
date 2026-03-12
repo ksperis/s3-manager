@@ -351,6 +351,8 @@ def _resolve_connection_context(
     conn = db.query(S3Connection).filter(S3Connection.id == connection_id).first()
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="S3Connection not found")
+    if not bool(conn.is_active):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Connection is disabled")
     if conn.is_temporary and conn.expires_at and conn.expires_at <= utcnow():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="S3Connection expired")
     if surface == "manager" and not bool(conn.access_manager):
@@ -889,6 +891,7 @@ def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[
             | (S3Connection.owner_user_id == user.id)
             | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(user_connection_ids)))
         )
+        .filter(S3Connection.is_active.is_(True))
         .filter(S3Connection.access_manager.is_(True))
         .filter(
             (S3Connection.is_temporary.is_(False))

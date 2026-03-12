@@ -52,10 +52,12 @@ def _create_connection(
     can_manage_iam: bool,
     access_manager: bool = False,
     access_browser: bool = True,
+    is_active: bool = True,
 ) -> S3Connection:
     connection = S3Connection(
         owner_user_id=owner_user_id,
         name=name,
+        is_active=is_active,
         access_manager=access_manager,
         access_browser=access_browser,
         capabilities_json=json.dumps({"can_manage_iam": bool(can_manage_iam)}),
@@ -182,3 +184,35 @@ def test_browser_workspace_returns_connections_and_s3_users(db_session):
 
     assert context_ids == {f"s3u-{legacy_user.id}", f"conn-{connection_a.id}", f"conn-{connection_b.id}"}
     assert {context.kind for context in contexts} == {"legacy_user", "connection"}
+
+
+def test_execution_contexts_exclude_inactive_connections(db_session):
+    user = _create_user(db_session)
+    active_connection = _create_connection(
+        db_session,
+        owner_user_id=user.id,
+        name="active-conn",
+        can_manage_iam=False,
+        access_manager=True,
+        access_browser=True,
+        is_active=True,
+    )
+    inactive_connection = _create_connection(
+        db_session,
+        owner_user_id=user.id,
+        name="inactive-conn",
+        can_manage_iam=False,
+        access_manager=True,
+        access_browser=True,
+        is_active=False,
+    )
+
+    browser_contexts = execution_contexts.list_execution_contexts(workspace="browser", user=user, db=db_session)
+    browser_ids = {context.id for context in browser_contexts}
+    assert f"conn-{active_connection.id}" in browser_ids
+    assert f"conn-{inactive_connection.id}" not in browser_ids
+
+    manager_contexts = execution_contexts.list_execution_contexts(workspace="manager", user=user, db=db_session)
+    manager_ids = {context.id for context in manager_contexts}
+    assert f"conn-{active_connection.id}" in manager_ids
+    assert f"conn-{inactive_connection.id}" not in manager_ids

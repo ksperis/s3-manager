@@ -166,6 +166,10 @@ export default function ProfilePage({
   const [creatingConnection, setCreatingConnection] = useState(false);
   const [savingConnectionBusyId, setSavingConnectionBusyId] = useState<number | null>(null);
   const [deletingConnectionBusyId, setDeletingConnectionBusyId] = useState<number | null>(null);
+  const [togglingConnectionBusyId, setTogglingConnectionBusyId] = useState<number | null>(null);
+  const [selectedConnectionIds, setSelectedConnectionIds] = useState<number[]>([]);
+  const [bulkDisablingConnections, setBulkDisablingConnections] = useState(false);
+  const [bulkDeletingConnections, setBulkDeletingConnections] = useState(false);
   const [editingConnectionId, setEditingConnectionId] = useState<number | null>(null);
   const [createConnectionForm, setCreateConnectionForm] = useState(defaultCreateConnectionForm);
   const [createConnectionEndpointMode, setCreateConnectionEndpointMode] = useState<CreateConnectionEndpointMode>("custom");
@@ -267,6 +271,12 @@ export default function ProfilePage({
     const start = (connectionsPage - 1) * connectionsPageSize;
     return filteredConnections.slice(start, start + connectionsPageSize);
   }, [connectionsPage, connectionsPageSize, filteredConnections]);
+  const pagedConnectionIds = useMemo(() => pagedConnections.map((connection) => connection.id), [pagedConnections]);
+  const selectedPagedConnectionIds = useMemo(
+    () => pagedConnectionIds.filter((connectionId) => selectedConnectionIds.includes(connectionId)),
+    [pagedConnectionIds, selectedConnectionIds]
+  );
+  const allPagedConnectionsSelected = pagedConnectionIds.length > 0 && selectedPagedConnectionIds.length === pagedConnectionIds.length;
   const storageEndpointLabelById = useMemo(() => {
     const labels = new Map<number, string>();
     availableStorageEndpoints.forEach((endpoint) => {
@@ -420,6 +430,12 @@ export default function ProfilePage({
       setEditingConnectionId(null);
     }
   }, [connections, editingConnectionId, showConnectionsSection]);
+
+  useEffect(() => {
+    if (!showConnectionsSection) return;
+    const pageIds = new Set(pagedConnectionIds);
+    setSelectedConnectionIds((prev) => prev.filter((connectionId) => pageIds.has(connectionId)));
+  }, [pagedConnectionIds, showConnectionsSection]);
 
   useEffect(() => {
     if (!showCreateConnectionModal) return;
@@ -818,6 +834,7 @@ export default function ProfilePage({
     setDeletingConnectionBusyId(connectionId);
     try {
       await deleteConnection(connectionId);
+      setSelectedConnectionIds((prev) => prev.filter((id) => id !== connectionId));
       setConnectionsMessage("Private S3 connection deleted.");
       await refreshConnections();
       notifyExecutionContextsRefresh();
@@ -827,6 +844,90 @@ export default function ProfilePage({
     } finally {
       setDeletingConnectionBusyId(null);
     }
+  };
+  const togglePrivateConnectionSelection = (connectionId: number) => {
+    setSelectedConnectionIds((prev) =>
+      prev.includes(connectionId) ? prev.filter((id) => id !== connectionId) : [...prev, connectionId]
+    );
+  };
+
+  const toggleSelectAllPagedConnections = () => {
+    if (allPagedConnectionsSelected) {
+      setSelectedConnectionIds([]);
+      return;
+    }
+    setSelectedConnectionIds(pagedConnectionIds);
+  };
+
+  const handleTogglePrivateConnectionStatus = async (connection: S3Connection) => {
+    if (!canManagePrivateConnections) return;
+    const nextIsActive = connection.is_active !== false ? false : true;
+    setConnectionsError(null);
+    setConnectionsMessage(null);
+    setTogglingConnectionBusyId(connection.id);
+    try {
+      await updateConnection(connection.id, { is_active: nextIsActive });
+      setConnectionsMessage(nextIsActive ? "Private S3 connection activated." : "Private S3 connection disabled.");
+      await refreshConnections();
+      notifyExecutionContextsRefresh();
+    } catch (error) {
+      console.error(error);
+      setConnectionsError(getErrorMessage(error, "Unable to update private S3 connection."));
+    } finally {
+      setTogglingConnectionBusyId(null);
+    }
+  };
+
+  const handleBulkDisablePrivateConnections = async () => {
+    if (!canManagePrivateConnections || selectedPagedConnectionIds.length === 0) return;
+    setConnectionsError(null);
+    setConnectionsMessage(null);
+    setBulkDisablingConnections(true);
+    const results = await Promise.allSettled(
+      selectedPagedConnectionIds.map((connectionId) => updateConnection(connectionId, { is_active: false }))
+    );
+    const failedIds = selectedPagedConnectionIds.filter((_, index) => results[index].status === "rejected");
+    const successCount = selectedPagedConnectionIds.length - failedIds.length;
+    setSelectedConnectionIds(failedIds);
+    if (successCount > 0) {
+      await refreshConnections();
+      notifyExecutionContextsRefresh();
+    }
+    if (failedIds.length > 0) {
+      setConnectionsError(`${failedIds.length} private connection${failedIds.length > 1 ? "s" : ""} failed to disable.`);
+    }
+    setConnectionsMessage(
+      `${successCount} private connection${successCount > 1 ? "s" : ""} disabled.` +
+        (failedIds.length > 0 ? ` ${failedIds.length} failed.` : "")
+    );
+    setBulkDisablingConnections(false);
+  };
+
+  const handleBulkDeletePrivateConnections = async () => {
+    if (!canManagePrivateConnections || selectedPagedConnectionIds.length === 0) return;
+    const count = selectedPagedConnectionIds.length;
+    if (!window.confirm(`Delete ${count} selected private S3 connection${count > 1 ? "s" : ""}?`)) return;
+    setConnectionsError(null);
+    setConnectionsMessage(null);
+    setBulkDeletingConnections(true);
+    const results = await Promise.allSettled(
+      selectedPagedConnectionIds.map((connectionId) => deleteConnection(connectionId))
+    );
+    const failedIds = selectedPagedConnectionIds.filter((_, index) => results[index].status === "rejected");
+    const successCount = selectedPagedConnectionIds.length - failedIds.length;
+    setSelectedConnectionIds(failedIds);
+    if (successCount > 0) {
+      await refreshConnections();
+      notifyExecutionContextsRefresh();
+    }
+    if (failedIds.length > 0) {
+      setConnectionsError(`${failedIds.length} private connection${failedIds.length > 1 ? "s" : ""} failed to delete.`);
+    }
+    setConnectionsMessage(
+      `${successCount} private connection${successCount > 1 ? "s" : ""} deleted.` +
+        (failedIds.length > 0 ? ` ${failedIds.length} failed.` : "")
+    );
+    setBulkDeletingConnections(false);
   };
 
   const handleConnectionsFilterChange = (value: string) => {
@@ -1101,11 +1202,46 @@ export default function ProfilePage({
                     />
                   </div>
                 </div>
+                {selectedPagedConnectionIds.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 dark:border-slate-800 dark:bg-slate-900/50">
+                    <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
+                      {selectedPagedConnectionIds.length} selected on this page
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className={tableActionButtonClasses}
+                        onClick={() => void handleBulkDisablePrivateConnections()}
+                        disabled={bulkDisablingConnections || bulkDeletingConnections}
+                      >
+                        {bulkDisablingConnections ? "Disabling..." : "Disable selected"}
+                      </button>
+                      <button
+                        type="button"
+                        className={tableDeleteActionClasses}
+                        onClick={() => void handleBulkDeletePrivateConnections()}
+                        disabled={bulkDisablingConnections || bulkDeletingConnections}
+                      >
+                        {bulkDeletingConnections ? "Deleting..." : "Delete selected"}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                       <tr>
-                        {["Connection", "Endpoint", "Provider", "Last update", "Last used", "Actions"].map(
+                        <th className="px-4 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          <input
+                            type="checkbox"
+                            aria-label="Select all private connections on page"
+                            checked={allPagedConnectionsSelected}
+                            onChange={toggleSelectAllPagedConnections}
+                            disabled={pagedConnectionIds.length === 0 || bulkDisablingConnections || bulkDeletingConnections}
+                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                          />
+                        </th>
+                        {["Connection", "Endpoint", "Provider", "Status", "Last update", "Last used", "Actions"].map(
                           (label) => (
                             <th
                               key={label}
@@ -1120,26 +1256,37 @@ export default function ProfilePage({
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {connectionsLoading && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-4 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={8} className="px-4 py-4 ui-body text-slate-500 dark:text-slate-400">
                             Loading connections...
                           </td>
                         </tr>
                       )}
                       {!connectionsLoading && pagedConnections.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-4 ui-body text-slate-500 dark:text-slate-400">
+                          <td colSpan={8} className="px-4 py-4 ui-body text-slate-500 dark:text-slate-400">
                             No private S3 connection configured.
                           </td>
                         </tr>
                       )}
                       {!connectionsLoading &&
                         pagedConnections.map((connection) => {
+                          const isActive = connection.is_active !== false;
                           const endpointLabel = connection.storage_endpoint_id
                             ? storageEndpointLabelById.get(connection.storage_endpoint_id) ||
                               `Managed endpoint #${connection.storage_endpoint_id}`
                             : connection.endpoint_url || "-";
                           return (
                             <tr key={connection.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                              <td className="px-4 py-4">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Select private connection ${connection.name || connection.id}`}
+                                  checked={selectedConnectionIds.includes(connection.id)}
+                                  onChange={() => togglePrivateConnectionSelection(connection.id)}
+                                  disabled={bulkDisablingConnections || bulkDeletingConnections}
+                                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                              </td>
                               <td className="px-4 py-4">
                                 <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
                                   {connection.name || "-"}
@@ -1159,6 +1306,17 @@ export default function ProfilePage({
                                 {connection.provider_hint || "-"}
                               </td>
                               <td className="px-4 py-4 ui-caption text-slate-600 dark:text-slate-300">
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-1 font-semibold ${
+                                    isActive
+                                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+                                      : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                                  }`}
+                                >
+                                  {isActive ? "Active" : "Inactive"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 ui-caption text-slate-600 dark:text-slate-300">
                                 {formatDateTime(connection.updated_at ?? connection.created_at)}
                               </td>
                               <td className="px-4 py-4 ui-caption text-slate-600 dark:text-slate-300">
@@ -1169,14 +1327,31 @@ export default function ProfilePage({
                                   <button
                                     type="button"
                                     className={tableActionButtonClasses}
+                                    disabled={
+                                      togglingConnectionBusyId === connection.id ||
+                                      bulkDisablingConnections ||
+                                      bulkDeletingConnections
+                                    }
+                                    onClick={() => void handleTogglePrivateConnectionStatus(connection)}
+                                  >
+                                    {togglingConnectionBusyId === connection.id ? "Saving..." : isActive ? "Deactivate" : "Activate"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={tableActionButtonClasses}
                                     onClick={() => openEditConnectionModal(connection)}
+                                    disabled={bulkDisablingConnections || bulkDeletingConnections}
                                   >
                                     Edit
                                   </button>
                                   <button
                                     type="button"
                                     className={tableDeleteActionClasses}
-                                    disabled={deletingConnectionBusyId === connection.id}
+                                    disabled={
+                                      deletingConnectionBusyId === connection.id ||
+                                      bulkDisablingConnections ||
+                                      bulkDeletingConnections
+                                    }
                                     onClick={() => void handleDeletePrivateConnection(connection.id)}
                                   >
                                     {deletingConnectionBusyId === connection.id ? "Deleting..." : "Delete"}

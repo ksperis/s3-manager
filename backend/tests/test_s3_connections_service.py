@@ -41,6 +41,7 @@ def _create_row(db_session, **kwargs) -> S3Connection:
         name=kwargs.get("name", "conn"),
         is_public=kwargs.get("is_public", False),
         is_shared=kwargs.get("is_shared", False),
+        is_active=kwargs.get("is_active", True),
         access_manager=kwargs.get("access_manager", False),
         access_browser=kwargs.get("access_browser", True),
         storage_endpoint_id=kwargs.get("storage_endpoint_id"),
@@ -216,6 +217,21 @@ def test_update_connection_rejects_invalid_access_flags(db_session):
 
     with pytest.raises(ValueError, match="At least one access flag"):
         service.update(owner.id, row.id, S3ConnectionUpdate(access_manager=False, access_browser=False))
+
+
+def test_update_connection_supports_active_flag_and_keeps_inactive_visible_in_management_lists(db_session):
+    owner = _user(db_session, "owner-active-flag@example.test")
+    row = _create_row(db_session, owner_user_id=owner.id, name="active-flag-conn", is_active=True)
+    service = S3ConnectionsService(db_session)
+
+    updated = service.update(owner.id, row.id, S3ConnectionUpdate(is_active=False))
+    assert updated.is_active is False
+
+    db_session.refresh(row)
+    assert row.is_active is False
+
+    owned_private_names = [item.name for item in service.list_owned_private(owner.id)]
+    assert "active-flag-conn" in owned_private_names
 
 
 def test_touch_last_used_set_get_capabilities_and_delete(db_session):

@@ -176,6 +176,7 @@ def list_execution_contexts(
             | (S3Connection.owner_user_id == user.id)
             | ((S3Connection.is_shared.is_(True)) & (S3Connection.id.in_(user_connection_ids)))
         )
+        .filter(S3Connection.is_active.is_(True))
         .filter(
             (S3Connection.is_temporary.is_(False))
             | (S3Connection.expires_at.is_(None))

@@ -191,6 +191,7 @@ class S3ConnectionsService:
             custom_endpoint_config=custom_endpoint_config,
             is_public=is_public,
             is_shared=is_shared,
+            is_active=True,
             access_manager=access_manager,
             access_browser=access_browser,
             credential_owner_type=payload.credential_owner_type,
@@ -233,6 +234,8 @@ class S3ConnectionsService:
                     .filter(UserS3Connection.s3_connection_id == row.id)
                     .delete(synchronize_session=False)
                 )
+        if "is_active" in payload_data:
+            row.is_active = bool(payload.is_active)
         if "storage_endpoint_id" in payload_data:
             row.storage_endpoint_id = payload.storage_endpoint_id
             if payload.storage_endpoint_id is not None:
@@ -335,6 +338,7 @@ class S3ConnectionsService:
             storage_endpoint_id=row.storage_endpoint_id,
             is_public=bool(row.is_public),
             is_shared=bool(row.is_shared),
+            is_active=bool(row.is_active),
             visibility=visibility_from_flags(is_public=bool(row.is_public), is_shared=bool(row.is_shared)),
             access_manager=bool(row.access_manager),
             access_browser=bool(row.access_browser),

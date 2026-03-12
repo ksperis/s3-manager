@@ -18,6 +18,7 @@ class S3ConnectionAdminItem(BaseModel):
     endpoint_url: str
     is_public: bool = False
     is_shared: bool = False
+    is_active: bool = True
     visibility: Literal["private", "shared", "public"] = "private"
     access_manager: bool = False
     access_browser: bool = True
@@ -43,6 +44,7 @@ class S3ConnectionSummary(BaseModel):
     owner_user_id: Optional[int] = None
     is_public: bool = False
     is_shared: bool = False
+    is_active: bool = True
     visibility: Literal["private", "shared", "public"] = "private"
 
 

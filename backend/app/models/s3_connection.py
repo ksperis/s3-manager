@@ -16,6 +16,7 @@ class S3Connection(BaseModel):
     storage_endpoint_id: Optional[int] = None
     is_public: bool = False
     is_shared: bool = False
+    is_active: bool = True
     visibility: Literal["private", "shared", "public"] = "private"
     access_manager: bool = False
     access_browser: bool = True
@@ -58,6 +59,7 @@ class S3ConnectionUpdate(BaseModel):
     storage_endpoint_id: Optional[int] = None
     is_public: Optional[bool] = None
     is_shared: Optional[bool] = None
+    is_active: Optional[bool] = None
     access_manager: Optional[bool] = None
     access_browser: Optional[bool] = None
     credential_owner_type: Optional[str] = None

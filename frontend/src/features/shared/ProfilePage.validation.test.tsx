@@ -73,6 +73,7 @@ describe("ProfilePage live validation", () => {
     visibility: "private",
     access_manager: false,
     access_browser: true,
+    is_active: true,
     endpoint_url: "https://managed-a.example.test",
     region: "us-east-1",
     provider_hint: "ceph",
@@ -98,6 +99,8 @@ describe("ProfilePage live validation", () => {
       code: "InvalidAccessKeyId",
       message: "Invalid S3 credentials.",
     });
+    updateConnectionMock.mockResolvedValue(makeConnection());
+    deleteConnectionMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -230,5 +233,48 @@ describe("ProfilePage live validation", () => {
       ).toBeInTheDocument();
     });
     expect(updateConnectionMock).not.toHaveBeenCalled();
+  });
+
+  it("bulk disables selected private connections", async () => {
+    listConnectionsMock.mockResolvedValue([
+      makeConnection({ id: 41, name: "connection-a" }),
+      makeConnection({ id: 42, name: "connection-b" }),
+    ]);
+
+    render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+    await screen.findByText("connection-a");
+
+    fireEvent.click(screen.getByLabelText("Select all private connections on page"));
+    fireEvent.click(screen.getByRole("button", { name: "Disable selected" }));
+
+    await waitFor(() => {
+      expect(updateConnectionMock).toHaveBeenCalledTimes(2);
+    });
+    expect(updateConnectionMock).toHaveBeenCalledWith(41, { is_active: false });
+    expect(updateConnectionMock).toHaveBeenCalledWith(42, { is_active: false });
+  });
+
+  it("bulk deletes selected private connections after confirmation", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      listConnectionsMock.mockResolvedValue([
+        makeConnection({ id: 41, name: "connection-a" }),
+        makeConnection({ id: 42, name: "connection-b" }),
+      ]);
+
+      render(<ProfilePage showPageHeader={false} showSettingsCards={false} showConnectionsSection />);
+      await screen.findByText("connection-a");
+
+      fireEvent.click(screen.getByLabelText("Select all private connections on page"));
+      fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+
+      await waitFor(() => {
+        expect(deleteConnectionMock).toHaveBeenCalledTimes(2);
+      });
+      expect(deleteConnectionMock).toHaveBeenCalledWith(41);
+      expect(deleteConnectionMock).toHaveBeenCalledWith(42);
+    } finally {
+      confirmSpy.mockRestore();
+    }
   });
 });

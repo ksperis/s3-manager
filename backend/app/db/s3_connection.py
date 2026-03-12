@@ -30,6 +30,7 @@ class S3Connection(Base):
     # Visibility
     is_public = Column(Boolean, nullable=False, default=False, server_default="0")
     is_shared = Column(Boolean, nullable=False, default=False, server_default="0")
+    is_active = Column(Boolean, nullable=False, default=True, server_default="1")
     access_manager = Column(Boolean, nullable=False, default=False, server_default="0")
     access_browser = Column(Boolean, nullable=False, default=True, server_default="1")
     credential_owner_type = Column(String, nullable=True)

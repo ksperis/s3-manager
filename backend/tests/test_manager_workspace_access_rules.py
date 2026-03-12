@@ -246,6 +246,41 @@ def test_manager_workspace_rejects_connection_without_manager_access(db_session)
     assert "cannot be used in manager workspace" in str(exc.value.detail)
 
 
+@pytest.mark.parametrize("path", ["/api/manager/buckets", "/api/browser/buckets"])
+def test_manager_and_browser_workspace_reject_inactive_connection(db_session, path: str):
+    user = User(
+        email="connection-inactive-rejected@example.com",
+        hashed_password="x",
+        is_active=True,
+        role=UserRole.UI_USER.value,
+    )
+    connection = S3Connection(
+        owner_user_id=None,
+        is_public=True,
+        is_active=False,
+        name="inactive-connection",
+        access_manager=True,
+        access_browser=True,
+        capabilities_json=json.dumps({"can_manage_iam": False}),
+        access_key_id="AK-INACTIVE",
+        secret_access_key="SK-INACTIVE",
+    )
+    db_session.add_all([user, connection])
+    db_session.commit()
+    db_session.refresh(user)
+    db_session.refresh(connection)
+
+    with pytest.raises(HTTPException) as exc:
+        dependencies.get_account_context(
+            request=_request(path),
+            account_ref=f"conn-{connection.id}",
+            actor=user,
+            db=db_session,
+        )
+    assert exc.value.status_code == 403
+    assert "disabled" in str(exc.value.detail).lower()
+
+
 @pytest.mark.parametrize("account_ref", ["-1", "null", "-42", "0"])
 def test_workspace_rejects_legacy_account_selectors(db_session, account_ref: str):
     user = User(

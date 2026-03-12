@@ -62,6 +62,7 @@ def test_private_connections_api_does_not_expose_iam_capable(monkeypatch, contra
     assert response.status_code == 201
     payload = response.json()
     assert "iam_capable" not in payload
+    assert payload["is_active"] is True
     assert payload["capabilities"]["can_manage_iam"] is True
 
 
@@ -88,7 +89,38 @@ def test_admin_connections_api_does_not_expose_iam_capable(monkeypatch, contract
     assert response.status_code == 201
     payload = response.json()
     assert "iam_capable" not in payload
+    assert payload["is_active"] is True
     assert payload["capabilities"]["can_manage_iam"] is True
+
+
+def test_admin_connections_api_supports_is_active_update(monkeypatch, contract_client):
+    client, _, _ = contract_client
+    monkeypatch.setattr(
+        "app.services.s3_connection_capabilities_service.probe_connection_can_manage_iam",
+        lambda connection: True,
+    )
+
+    create_response = client.post(
+        "/api/admin/s3-connections",
+        json={
+            "name": "contract-admin-connection-active-update",
+            "endpoint_url": "https://contract-admin-active.example.test",
+            "access_key_id": "AKIAADMINACTIVECONTRACT",
+            "secret_access_key": "SECRETADMINACTIVECONTRACT",
+            "access_manager": True,
+            "access_browser": True,
+            "visibility": "public",
+        },
+    )
+    assert create_response.status_code == 201
+    connection_id = create_response.json()["id"]
+
+    update_response = client.put(
+        f"/api/admin/s3-connections/{connection_id}",
+        json={"is_active": False},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["is_active"] is False
 
 
 def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
@@ -132,4 +164,3 @@ def test_execution_contexts_api_exposes_can_manage_iam_key(contract_client):
         capabilities = item.get("capabilities", {})
         assert "can_manage_iam" in capabilities
         assert "iam_capable" not in capabilities
-

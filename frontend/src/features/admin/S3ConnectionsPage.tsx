@@ -102,10 +102,21 @@ export default function S3ConnectionsPage() {
   const [deleteTarget, setDeleteTarget] = useState<S3ConnectionAdminItem | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [statusBusyId, setStatusBusyId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkDisableBusy, setBulkDisableBusy] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false);
 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const extractError = (err: unknown) => extractApiError(err, "Unexpected error");
+  const resolveVisibility = (conn: S3ConnectionAdminItem): "private" | "shared" | "public" =>
+    (conn.visibility as "private" | "shared" | "public") || (conn.is_public ? "public" : conn.is_shared ? "shared" : "private");
+  const canManageConnection = (conn: S3ConnectionAdminItem): boolean => {
+    const visibility = resolveVisibility(conn);
+    return visibility === "public" || visibility === "shared" || (currentUserId != null && conn.owner_user_id === currentUserId);
+  };
 
   const resetCreateForm = () => {
     setCreateEndpointPresetId("");
@@ -249,6 +260,28 @@ export default function S3ConnectionsPage() {
     error,
     rowCount: items.length,
   });
+  const selectableIds = useMemo(
+    () =>
+      items
+        .filter((item) => {
+          const visibility =
+            (item.visibility as "private" | "shared" | "public") ||
+            (item.is_public ? "public" : item.is_shared ? "shared" : "private");
+          return visibility === "public" || visibility === "shared" || (currentUserId != null && item.owner_user_id === currentUserId);
+        })
+        .map((item) => item.id),
+    [items, currentUserId]
+  );
+  const selectedOnPageIds = useMemo(
+    () => selectableIds.filter((connectionId) => selectedIds.includes(connectionId)),
+    [selectableIds, selectedIds]
+  );
+  const allSelectedOnPage = selectableIds.length > 0 && selectedOnPageIds.length === selectableIds.length;
+
+  useEffect(() => {
+    const idsOnPage = new Set(selectableIds);
+    setSelectedIds((prev) => prev.filter((connectionId) => idsOnPage.has(connectionId)));
+  }, [selectableIds]);
 
   useEffect(() => {
     if (!showCreateModal) return;
@@ -277,6 +310,16 @@ export default function S3ConnectionsPage() {
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
     setPage(1);
+  };
+  const toggleRowSelection = (connectionId: number) => {
+    setSelectedIds((prev) => (prev.includes(connectionId) ? prev.filter((id) => id !== connectionId) : [...prev, connectionId]));
+  };
+  const toggleSelectAllOnPage = () => {
+    if (allSelectedOnPage) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(selectableIds);
   };
 
   const openEdit = (conn: S3ConnectionAdminItem) => {
@@ -427,6 +470,7 @@ export default function S3ConnectionsPage() {
     try {
       await deleteAdminS3Connection(deleteTarget.id);
       setDeleteTarget(null);
+      setSelectedIds((prev) => prev.filter((connectionId) => connectionId !== deleteTarget.id));
       setActionMessage("Connection deleted.");
       await fetchItems();
     } catch (err) {
@@ -434,6 +478,76 @@ export default function S3ConnectionsPage() {
     } finally {
       setDeleteBusy(false);
     }
+  };
+
+  const submitToggleConnectionStatus = async (conn: S3ConnectionAdminItem) => {
+    const canManage = canManageConnection(conn);
+    if (!canManage) return;
+    const nextIsActive = conn.is_active !== false ? false : true;
+    setStatusBusyId(conn.id);
+    setError(null);
+    setActionMessage(null);
+    try {
+      await updateAdminS3Connection(conn.id, { is_active: nextIsActive });
+      setActionMessage(nextIsActive ? "Connection activated." : "Connection disabled.");
+      await fetchItems();
+    } catch (err) {
+      setError(extractError(err));
+    } finally {
+      setStatusBusyId(null);
+    }
+  };
+
+  const submitBulkDisable = async () => {
+    if (selectedOnPageIds.length === 0) return;
+    setBulkDisableBusy(true);
+    setError(null);
+    setActionMessage(null);
+    const results = await Promise.allSettled(
+      selectedOnPageIds.map((connectionId) => updateAdminS3Connection(connectionId, { is_active: false }))
+    );
+    const failedIds = selectedOnPageIds.filter((_, index) => results[index].status === "rejected");
+    const successCount = selectedOnPageIds.length - failedIds.length;
+    setSelectedIds(failedIds);
+    if (successCount > 0) {
+      await fetchItems();
+    }
+    if (failedIds.length > 0) {
+      setError(`${failedIds.length} connection${failedIds.length > 1 ? "s" : ""} could not be disabled.`);
+    }
+    setActionMessage(
+      `${successCount} connection${successCount > 1 ? "s" : ""} disabled.` +
+        (failedIds.length > 0 ? ` ${failedIds.length} failed.` : "")
+    );
+    setBulkDisableBusy(false);
+  };
+
+  const submitBulkDelete = async () => {
+    if (selectedOnPageIds.length === 0) {
+      setBulkDeleteOpen(false);
+      return;
+    }
+    setBulkDeleteBusy(true);
+    setError(null);
+    setActionMessage(null);
+    const results = await Promise.allSettled(
+      selectedOnPageIds.map((connectionId) => deleteAdminS3Connection(connectionId))
+    );
+    const failedIds = selectedOnPageIds.filter((_, index) => results[index].status === "rejected");
+    const successCount = selectedOnPageIds.length - failedIds.length;
+    setSelectedIds(failedIds);
+    setBulkDeleteOpen(false);
+    if (successCount > 0) {
+      await fetchItems();
+    }
+    if (failedIds.length > 0) {
+      setError(`${failedIds.length} connection${failedIds.length > 1 ? "s" : ""} could not be deleted.`);
+    }
+    setActionMessage(
+      `${successCount} connection${successCount > 1 ? "s" : ""} deleted.` +
+        (failedIds.length > 0 ? ` ${failedIds.length} failed.` : "")
+    );
+    setBulkDeleteBusy(false);
   };
 
   return (
@@ -466,11 +580,46 @@ export default function S3ConnectionsPage() {
           </div>
         )}
       >
+        {selectedOnPageIds.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+            <span className="ui-caption font-semibold text-slate-700 dark:text-slate-200">
+              {selectedOnPageIds.length} selected on this page
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={tableActionButtonClasses}
+                onClick={() => void submitBulkDisable()}
+                disabled={bulkDisableBusy || bulkDeleteBusy}
+              >
+                {bulkDisableBusy ? "Disabling..." : "Disable selected"}
+              </button>
+              <button
+                type="button"
+                className={tableDeleteActionClasses}
+                onClick={() => setBulkDeleteOpen(true)}
+                disabled={bulkDisableBusy || bulkDeleteBusy}
+              >
+                Delete selected
+              </button>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="compact-table min-w-full divide-y divide-slate-200 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                {["Name", "Endpoint", "Visibility", "Owner", "UI Users", "Actions"].map((label) => (
+                <th className="px-3 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all connections on page"
+                    checked={allSelectedOnPage}
+                    onChange={toggleSelectAllOnPage}
+                    disabled={selectableIds.length === 0 || bulkDisableBusy || bulkDeleteBusy}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  />
+                </th>
+                {["Name", "Endpoint", "Visibility", "Status", "Owner", "UI Users", "Actions"].map((label) => (
                   <th key={label} className="px-6 py-3 text-left ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     {label}
                   </th>
@@ -478,17 +627,28 @@ export default function S3ConnectionsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {tableStatus === "loading" && <TableEmptyState colSpan={6} message="Loading connections..." />}
-              {tableStatus === "error" && <TableEmptyState colSpan={6} message="Unable to load connections." tone="error" />}
+              {tableStatus === "loading" && <TableEmptyState colSpan={8} message="Loading connections..." />}
+              {tableStatus === "error" && <TableEmptyState colSpan={8} message="Unable to load connections." tone="error" />}
               {tableStatus === "empty" && (
-                <TableEmptyState colSpan={6} title="No connections" description="Create a private, shared, or public connection." />
+                <TableEmptyState colSpan={8} title="No connections" description="Create a private, shared, or public connection." />
               )}
               {items.map((c) => {
-                const visibility = c.visibility || (c.is_public ? "public" : c.is_shared ? "shared" : "private");
-                const canManage =
-                  visibility === "public" || visibility === "shared" || (currentUserId != null && c.owner_user_id === currentUserId);
+                const visibility = resolveVisibility(c);
+                const canManage = canManageConnection(c);
+                const isActive = c.is_active !== false;
                 return (
                   <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <td className="px-3 py-4">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select connection ${c.name}`}
+                        checked={selectedIds.includes(c.id)}
+                        onChange={() => toggleRowSelection(c.id)}
+                        disabled={!canManage || bulkDisableBusy || bulkDeleteBusy}
+                        title={canManage ? undefined : "Only the owner can manage private connections."}
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      />
+                    </td>
                     <td className="px-6 py-4 ui-body font-semibold text-slate-900 dark:text-slate-100">{c.name}</td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {c.storage_endpoint_id != null ? (
@@ -499,6 +659,17 @@ export default function S3ConnectionsPage() {
                     </td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {visibility === "public" ? "Public" : visibility === "shared" ? "Shared" : "Private"}
+                    </td>
+                    <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
+                      <span
+                        className={`rounded-full px-2 py-1 ui-caption font-semibold ${
+                          isActive
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+                            : "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200"
+                        }`}
+                      >
+                        {isActive ? "Active" : "Inactive"}
+                      </span>
                     </td>
                     <td className="px-6 py-4 ui-body text-slate-600 dark:text-slate-300">
                       {visibility === "public" ? (
@@ -527,6 +698,15 @@ export default function S3ConnectionsPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          className={tableActionButtonClasses}
+                          onClick={() => void submitToggleConnectionStatus(c)}
+                          disabled={!canManage || statusBusyId === c.id || bulkDisableBusy || bulkDeleteBusy}
+                          title={canManage ? undefined : "Only the owner can manage private connections."}
+                        >
+                          {statusBusyId === c.id ? "Saving..." : isActive ? "Deactivate" : "Activate"}
+                        </button>
                         <button
                           className={tableActionButtonClasses}
                           onClick={() => openEdit(c)}
@@ -1049,6 +1229,25 @@ export default function S3ConnectionsPage() {
             </div>
           </form>
 
+        </Modal>
+      )}
+
+      {/* Bulk delete modal */}
+      {bulkDeleteOpen && (
+        <Modal title={`Delete selected (${selectedOnPageIds.length})`} onClose={() => (!bulkDeleteBusy ? setBulkDeleteOpen(false) : null)}>
+          <div className="space-y-4">
+            <p className="ui-body">
+              This will permanently delete {selectedOnPageIds.length} selected connection{selectedOnPageIds.length > 1 ? "s" : ""}.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button className="ui-btn" onClick={() => setBulkDeleteOpen(false)} disabled={bulkDeleteBusy}>
+                Cancel
+              </button>
+              <button className="ui-btn ui-btn-danger" onClick={() => void submitBulkDelete()} disabled={bulkDeleteBusy}>
+                {bulkDeleteBusy ? "Deleting..." : "Delete selected connections"}
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
 

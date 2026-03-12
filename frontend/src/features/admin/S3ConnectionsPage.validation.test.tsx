@@ -28,6 +28,23 @@ vi.mock("../../api/storageEndpoints", () => ({
   listStorageEndpoints: () => listStorageEndpointsMock(),
 }));
 
+const makeConnection = (id: number, overrides?: Partial<Record<string, unknown>>) => ({
+  id,
+  name: `connection-${id}`,
+  endpoint_url: `https://endpoint-${id}.example.test`,
+  visibility: "public",
+  is_public: true,
+  is_shared: false,
+  is_active: true,
+  access_manager: true,
+  access_browser: true,
+  owner_user_id: null,
+  owner_email: null,
+  user_count: 0,
+  user_ids: [],
+  ...overrides,
+});
+
 describe("S3ConnectionsPage live validation", () => {
   beforeEach(() => {
     listAdminS3ConnectionsMock.mockResolvedValue({
@@ -45,10 +62,14 @@ describe("S3ConnectionsPage live validation", () => {
       code: "InvalidAccessKeyId",
       message: "Invalid S3 credentials.",
     });
+    updateAdminS3ConnectionMock.mockResolvedValue(makeConnection(1));
+    deleteAdminS3ConnectionMock.mockResolvedValue(undefined);
+    localStorage.setItem("user", JSON.stringify({ id: 1 }));
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it("shows validation error without disabling Create", async () => {
@@ -84,5 +105,51 @@ describe("S3ConnectionsPage live validation", () => {
     }, { timeout: 3000 });
     expect(await screen.findByText("Invalid S3 credentials.")).toBeInTheDocument();
     expect(createButton).toBeEnabled();
+  });
+
+  it("deactivates selected connections in bulk", async () => {
+    listAdminS3ConnectionsMock.mockResolvedValue({
+      items: [makeConnection(1), makeConnection(2)],
+      total: 2,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<S3ConnectionsPage />);
+    await screen.findByText("connection-1");
+
+    fireEvent.click(screen.getByLabelText("Select all connections on page"));
+    fireEvent.click(screen.getByRole("button", { name: "Disable selected" }));
+
+    await waitFor(() => {
+      expect(updateAdminS3ConnectionMock).toHaveBeenCalledTimes(2);
+    });
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(1, { is_active: false });
+    expect(updateAdminS3ConnectionMock).toHaveBeenCalledWith(2, { is_active: false });
+  });
+
+  it("deletes selected connections in bulk with confirmation modal", async () => {
+    listAdminS3ConnectionsMock.mockResolvedValue({
+      items: [makeConnection(1), makeConnection(2)],
+      total: 2,
+      page: 1,
+      page_size: 25,
+      has_next: false,
+    });
+
+    render(<S3ConnectionsPage />);
+    await screen.findByText("connection-1");
+
+    fireEvent.click(screen.getByLabelText("Select all connections on page"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+    await screen.findByText("Delete selected (2)");
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected connections" }));
+
+    await waitFor(() => {
+      expect(deleteAdminS3ConnectionMock).toHaveBeenCalledTimes(2);
+    });
+    expect(deleteAdminS3ConnectionMock).toHaveBeenCalledWith(1);
+    expect(deleteAdminS3ConnectionMock).toHaveBeenCalledWith(2);
   });
 });
