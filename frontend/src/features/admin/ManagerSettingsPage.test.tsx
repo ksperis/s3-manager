@@ -162,4 +162,11 @@ describe("ManagerSettingsPage", () => {
       expect(toggle.checked).toBe(true);
     });
   });
+
+  it("shows Experimental badge on bucket migration tool toggle", async () => {
+    render(<ManagerSettingsPage />);
+
+    await screen.findByLabelText("Bucket migration tool");
+    expect(screen.getByText("Experimental")).toBeInTheDocument();
+  });
 });

@@ -22,7 +22,7 @@ const DEFAULT_GENERAL_SETTINGS: GeneralSettings = {
   usage_history_enabled: false,
   bucket_migration_enabled: true,
   bucket_compare_enabled: true,
-  manager_ceph_s3_user_keys_enabled: false,
+  manager_ceph_s3_user_keys_enabled: true,
   allow_ui_user_bucket_migration: false,
   allow_login_access_keys: false,
   allow_login_endpoint_list: false,

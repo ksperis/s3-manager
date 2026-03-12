@@ -8,7 +8,7 @@ import PageBanner from "../../components/PageBanner";
 import {
   PortalSettingsItem,
   PortalSettingsSection,
-  PortalSettingsSwitch,
+  PortalSettingsToggleAction,
 } from "../../components/PortalSettingsLayout";
 import UiButton from "../../components/ui/UiButton";
 import { cx, uiCheckboxClass, uiInputClass } from "../../components/ui/styles";
@@ -276,7 +276,7 @@ export default function PortalSettingsPage() {
               description="Allow portal users to create buckets from the portal."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsSwitch
+                  <PortalSettingsToggleAction
                     checked={portalBucketCreateEnabled}
                     onChange={(value) => handleToggleAllowPortalBucketCreate(value)}
                     disabled={!settings}
@@ -300,7 +300,7 @@ export default function PortalSettingsPage() {
               description="Allow portal users to create and delete their own IAM user keys from the portal."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsSwitch
+                  <PortalSettingsToggleAction
                     checked={portalAccessKeyCreateEnabled}
                     onChange={(value) => handleToggleAllowPortalAccessKeyCreate(value)}
                     disabled={!settings}
@@ -456,7 +456,7 @@ export default function PortalSettingsPage() {
               description="Enable bucket versioning by default."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsSwitch
+                  <PortalSettingsToggleAction
                     checked={bucketVersioningEnabled}
                     onChange={(value) => handleBucketDefaultVersioning(value)}
                     disabled={!settings}
@@ -480,7 +480,7 @@ export default function PortalSettingsPage() {
               description="Remove obsolete delete markers and non-current versions after 90 days."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsSwitch
+                  <PortalSettingsToggleAction
                     checked={bucketLifecycleEnabled}
                     onChange={(value) => handleBucketDefaultLifecycle(value)}
                     disabled={!settings}
@@ -504,7 +504,7 @@ export default function PortalSettingsPage() {
               description="Apply a CORS rule to allow the portal UI to access the bucket."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
-                  <PortalSettingsSwitch
+                  <PortalSettingsToggleAction
                     checked={bucketCorsEnabled}
                     onChange={(value) => handleBucketDefaultCors(value)}
                     disabled={!settings}

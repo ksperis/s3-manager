@@ -8,7 +8,7 @@ import PageBanner from "../../components/PageBanner";
 import {
   PortalSettingsItem,
   PortalSettingsSection,
-  PortalSettingsSwitch,
+  PortalSettingsToggleAction,
 } from "../../components/PortalSettingsLayout";
 import {
   AppSettings,
@@ -308,7 +308,7 @@ export default function GeneralSettingsPage() {
                   title="Manager feature"
                   description="Tenant administration workspace."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.manager_enabled)}
                       disabled={isFeatureLocked("manager_enabled")}
                       onChange={(value) => handleToggle("manager_enabled", value)}
@@ -326,7 +326,7 @@ export default function GeneralSettingsPage() {
                   title="Browser feature"
                   description="Object and bucket navigation workspace."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.browser_enabled)}
                       disabled={isFeatureLocked("browser_enabled")}
                       onChange={(value) => handleToggle("browser_enabled", value)}
@@ -344,11 +344,12 @@ export default function GeneralSettingsPage() {
                   title="Portal feature"
                   description="End-user self-service workspace."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.portal_enabled)}
                       disabled={isFeatureLocked("portal_enabled")}
                       onChange={(value) => handleToggle("portal_enabled", value)}
                       ariaLabel="Portal feature"
+                      badge={{ visible: true, label: "Experimental", tone: "warning" }}
                     />
                   }
                 >
@@ -365,7 +366,7 @@ export default function GeneralSettingsPage() {
                   title="Ceph Admin feature"
                   description="Cluster-wide advanced operations."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.ceph_admin_enabled)}
                       disabled={isFeatureLocked("ceph_admin_enabled")}
                       onChange={(value) => handleToggle("ceph_admin_enabled", value)}
@@ -386,7 +387,7 @@ export default function GeneralSettingsPage() {
                   title="Storage Ops feature"
                   description="Cross-account and cross-connection bucket operations workspace."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.storage_ops_enabled)}
                       disabled={isFeatureLocked("storage_ops_enabled")}
                       onChange={(value) => handleToggle("storage_ops_enabled", value)}
@@ -413,7 +414,7 @@ export default function GeneralSettingsPage() {
                   title="Billing feature"
                   description="Enables the billing dashboards for admin and portal."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.billing_enabled)}
                       disabled={isFeatureLocked("billing_enabled")}
                       onChange={(value) => handleToggle("billing_enabled", value)}
@@ -431,7 +432,7 @@ export default function GeneralSettingsPage() {
                   title="Endpoint Status feature"
                   description="Enables the Endpoint Status workspace for endpoint healthchecks."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.endpoint_status_enabled)}
                       disabled={isFeatureLocked("endpoint_status_enabled")}
                       onChange={(value) => handleToggle("endpoint_status_enabled", value)}
@@ -449,7 +450,7 @@ export default function GeneralSettingsPage() {
                   title="Quota alerts feature"
                   description="Enables quota threshold/full email notifications for S3 Accounts and S3 Users."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.quota_alerts_enabled)}
                       onChange={(value) => handleToggle("quota_alerts_enabled", value)}
                       ariaLabel="Quota alerts feature"
@@ -460,7 +461,7 @@ export default function GeneralSettingsPage() {
                   title="Usage history feature"
                   description="Collects quota usage history snapshots for future metrics trends."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.usage_history_enabled)}
                       onChange={(value) => handleToggle("usage_history_enabled", value)}
                       ariaLabel="Usage history feature"
@@ -498,7 +499,7 @@ export default function GeneralSettingsPage() {
                   title="Include subject contact email"
                   description="Also send alerts to account.email / s3_user.email when defined."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.quota_notifications.include_subject_contact_email)}
                       onChange={(value) => handleQuotaNotificationsChange("include_subject_contact_email", value)}
                       ariaLabel="Include subject contact email"
@@ -573,7 +574,7 @@ export default function GeneralSettingsPage() {
                   title="SMTP STARTTLS"
                   description="Enable STARTTLS upgrade for SMTP transport."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.quota_notifications.smtp_starttls)}
                       onChange={(value) => handleQuotaNotificationsChange("smtp_starttls", value)}
                       ariaLabel="SMTP STARTTLS"
@@ -622,7 +623,7 @@ export default function GeneralSettingsPage() {
                   title="Access-key login"
                   description="Allow users to sign in with S3 access keys."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.allow_login_access_keys)}
                       onChange={(value) => handleToggle("allow_login_access_keys", value)}
                       ariaLabel="Access-key login"
@@ -633,7 +634,7 @@ export default function GeneralSettingsPage() {
                   title="Access-key endpoint list"
                   description="Allow the access-key login screen to display the configured endpoints."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.allow_login_endpoint_list)}
                       onChange={(value) => handleToggle("allow_login_endpoint_list", value)}
                       ariaLabel="Access-key endpoint list"
@@ -644,7 +645,7 @@ export default function GeneralSettingsPage() {
                   title="Custom login endpoint"
                   description="Allow access-key users to enter a custom endpoint URL on the login screen."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.allow_login_custom_endpoint)}
                       onChange={(value) => handleToggle("allow_login_custom_endpoint", value)}
                       ariaLabel="Custom login endpoint"
@@ -661,7 +662,7 @@ export default function GeneralSettingsPage() {
                   title="Private S3 connections for UI users"
                   description="Allow standard UI users to create and manage their own private S3 connections."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.allow_user_private_connections)}
                       onChange={(value) => handleToggle("allow_user_private_connections", value)}
                       ariaLabel="Private S3 connections for UI users"

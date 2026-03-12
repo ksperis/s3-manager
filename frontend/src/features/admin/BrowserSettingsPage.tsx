@@ -8,7 +8,7 @@ import PageBanner from "../../components/PageBanner";
 import {
   PortalSettingsItem,
   PortalSettingsSection,
-  PortalSettingsSwitch,
+  PortalSettingsToggleAction,
 } from "../../components/PortalSettingsLayout";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { extractApiError } from "../../utils/apiError";
@@ -197,7 +197,7 @@ export default function BrowserSettingsPage() {
                   title="/browser"
                   description="Standalone browser workspace."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={settings.general.browser_root_enabled}
                       onChange={(value) => handleWorkspaceToggle("browser_root_enabled", value)}
                       ariaLabel="Enable /browser workspace"
@@ -208,7 +208,7 @@ export default function BrowserSettingsPage() {
                   title="/manager/browser"
                   description="Browser tab inside the manager workspace."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={settings.general.browser_manager_enabled}
                       onChange={(value) => handleWorkspaceToggle("browser_manager_enabled", value)}
                       ariaLabel="Enable /manager/browser workspace"
@@ -223,7 +223,7 @@ export default function BrowserSettingsPage() {
                   title="/portal/browser"
                   description="Browser tab inside the portal workspace."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={settings.general.browser_portal_enabled}
                       onChange={(value) => handleWorkspaceToggle("browser_portal_enabled", value)}
                       ariaLabel="Enable /portal/browser workspace"
@@ -234,7 +234,7 @@ export default function BrowserSettingsPage() {
                   title="/ceph-admin/browser"
                   description="Browser tab inside the Ceph Admin workspace."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={settings.general.browser_ceph_admin_enabled}
                       onChange={(value) => handleWorkspaceToggle("browser_ceph_admin_enabled", value)}
                       ariaLabel="Enable /ceph-admin/browser workspace"
@@ -280,7 +280,7 @@ export default function BrowserSettingsPage() {
                   title="Enable proxy mode"
                   description="Use the backend as a relay when direct transfers are blocked."
                   action={
-                    <PortalSettingsSwitch
+                    <PortalSettingsToggleAction
                       checked={settings.browser.allow_proxy_transfers}
                       onChange={(value) => handleToggleChange(value)}
                       ariaLabel="Enable proxy mode"

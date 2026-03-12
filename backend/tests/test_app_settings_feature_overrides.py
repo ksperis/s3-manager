@@ -125,9 +125,9 @@ def test_branding_settings_reject_invalid_logo_url():
         BrandingSettings(login_logo_url="logo.svg")
 
 
-def test_manager_ceph_s3_user_keys_flag_default_disabled():
+def test_manager_ceph_s3_user_keys_flag_default_enabled():
     settings = AppSettings()
-    assert settings.general.manager_ceph_s3_user_keys_enabled is False
+    assert settings.general.manager_ceph_s3_user_keys_enabled is True
 
 
 def test_manager_ceph_s3_user_keys_flag_persists(monkeypatch, tmp_path):

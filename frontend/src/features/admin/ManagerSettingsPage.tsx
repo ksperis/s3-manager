@@ -5,6 +5,11 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../../components/PageHeader";
 import PageBanner from "../../components/PageBanner";
+import {
+  PortalSettingsItem,
+  PortalSettingsSection,
+  PortalSettingsToggleAction,
+} from "../../components/PortalSettingsLayout";
 import { AppSettings, fetchAppSettings, fetchDefaultAppSettings, updateAppSettings } from "../../api/appSettings";
 import { extractApiError } from "../../utils/apiError";
 import { confirmAction } from "../../utils/confirm";
@@ -238,161 +243,92 @@ export default function ManagerSettingsPage() {
         {settings && (
           <div className="space-y-4 ui-surface-card p-5">
             <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
-              <div>
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Workspace access
-                </p>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Manager workspace access rules for non-admin roles.
-                </p>
-              </div>
-
-              <div className="mt-3 space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Allow stats for all users</p>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Allows every non-admin profile to view bucket stats and usage from /manager.
-                    </p>
-                  </div>
-                  <label className="relative inline-flex cursor-pointer items-center">
-                    <input
-                      type="checkbox"
-                      className="peer sr-only"
+              <PortalSettingsSection
+                title="Workspace access"
+                description="Manager workspace access rules for non-admin roles."
+                layout="stack"
+              >
+                <PortalSettingsItem
+                  title="Allow stats for all users"
+                  description="Allows every non-admin profile to view bucket stats and usage from /manager."
+                  action={
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.manager.allow_manager_user_usage_stats)}
-                      onChange={(e) => handleToggleAllowManagerUserStats(e.target.checked)}
-                      aria-label="Allow manager user stats"
+                      onChange={(value) => handleToggleAllowManagerUserStats(value)}
+                      ariaLabel="Allow manager user stats"
                     />
-                    <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                  </label>
-                </div>
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">Allow portal managers in Manager workspace</p>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      When enabled, users with role portal_manager can use /manager for their linked accounts.
-                    </p>
-                  </div>
-                  <label className="relative inline-flex cursor-pointer items-center">
-                    <input
-                      type="checkbox"
-                      className="peer sr-only"
+                  }
+                />
+                <PortalSettingsItem
+                  title="Allow portal managers in Manager workspace"
+                  description="When enabled, users with role portal_manager can use /manager for their linked accounts."
+                  action={
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.allow_portal_manager_workspace)}
-                      onChange={(e) => handleToggleAllowPortalManagerWorkspace(e.target.checked)}
-                      aria-label="Allow portal manager workspace"
+                      onChange={(value) => handleToggleAllowPortalManagerWorkspace(value)}
+                      ariaLabel="Allow portal manager workspace"
                     />
-                    <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                  </label>
-                </div>
-              </div>
+                  }
+                />
+              </PortalSettingsSection>
             </div>
             <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
-              <div>
-                <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  Extra Tools
-                </p>
-                <p className="ui-caption text-slate-500 dark:text-slate-400">
-                  Optional manager tools and access policy for non-admin users.
-                </p>
-              </div>
-
-              <div className="mt-3 space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
-                      Bucket migration tool
-                    </p>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Enables the Manager bucket migration tool.
-                    </p>
-                  </div>
-                  <label className="relative inline-flex cursor-pointer items-center">
-                    <input
-                      type="checkbox"
-                      className="peer sr-only"
+              <PortalSettingsSection
+                title="Extra Tools"
+                description="Optional manager tools and access policy for non-admin users."
+                layout="stack"
+              >
+                <PortalSettingsItem
+                  title="Bucket migration tool"
+                  description="Enables the Manager bucket migration tool."
+                  action={
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.bucket_migration_enabled)}
-                      onChange={(e) => handleToggleBucketMigrationTool(e.target.checked)}
-                      aria-label="Bucket migration tool"
+                      onChange={(value) => handleToggleBucketMigrationTool(value)}
+                      ariaLabel="Bucket migration tool"
+                      badge={{ visible: true, label: "Experimental", tone: "warning" }}
                     />
-                    <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                  </label>
-                </div>
-
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
-                      Bucket compare tool
-                    </p>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Enables the Manager bucket compare tool.
-                    </p>
-                  </div>
-                  <label className="relative inline-flex cursor-pointer items-center">
-                    <input
-                      type="checkbox"
-                      className="peer sr-only"
+                  }
+                />
+                <PortalSettingsItem
+                  title="Bucket compare tool"
+                  description="Enables the Manager bucket compare tool."
+                  action={
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.bucket_compare_enabled)}
-                      onChange={(e) => handleToggleBucketCompareTool(e.target.checked)}
-                      aria-label="Bucket compare tool"
+                      onChange={(value) => handleToggleBucketCompareTool(value)}
+                      ariaLabel="Bucket compare tool"
                     />
-                    <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                  </label>
-                </div>
-
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
-                      Ceph S3 User keys manager
-                    </p>
-                    <p className="ui-caption text-slate-500 dark:text-slate-400">
-                      Enables the Manager Ceph section for RGW access key management on eligible S3 User contexts.
-                    </p>
-                  </div>
-                  <label className="relative inline-flex cursor-pointer items-center">
-                    <input
-                      type="checkbox"
-                      className="peer sr-only"
+                  }
+                />
+                <PortalSettingsItem
+                  title="Ceph S3 User keys manager"
+                  description="Enables the Manager Ceph section for RGW access key management on eligible S3 User contexts."
+                  action={
+                    <PortalSettingsToggleAction
                       checked={Boolean(settings.general.manager_ceph_s3_user_keys_enabled)}
-                      onChange={(e) => handleToggleManagerCephS3UserKeysTool(e.target.checked)}
-                      aria-label="Ceph S3 User keys manager"
+                      onChange={(value) => handleToggleManagerCephS3UserKeysTool(value)}
+                      ariaLabel="Ceph S3 User keys manager"
                     />
-                    <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                    <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                  </label>
-                </div>
-              </div>
-
-              <div className="my-4 border-t border-slate-200 dark:border-slate-700" />
-
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="ui-body font-semibold text-slate-900 dark:text-slate-100">
-                    Allow UI User access to bucket migration
-                  </p>
-                  <p className="ui-caption text-slate-500 dark:text-slate-400">
-                    When enabled, standard UI users can access the bucket migration tool. Otherwise it stays restricted to UI Admin.
-                  </p>
+                  }
+                />
+                <PortalSettingsItem
+                  title="Allow UI User access to bucket migration"
+                  description="When enabled, standard UI users can access the bucket migration tool. Otherwise it stays restricted to UI Admin."
+                  action={
+                    <PortalSettingsToggleAction
+                      checked={Boolean(settings.general.allow_ui_user_bucket_migration)}
+                      disabled={!settings.general.bucket_migration_enabled}
+                      onChange={(value) => handleToggleAllowUiUserBucketMigration(value)}
+                      ariaLabel="Allow UI User access to bucket migration"
+                    />
+                  }
+                >
                   {!settings.general.bucket_migration_enabled && (
                     <p className="mt-2 ui-caption text-amber-700 dark:text-amber-200">Enable "Bucket migration tool" first.</p>
                   )}
-                </div>
-                <label className="relative inline-flex cursor-pointer items-center">
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={Boolean(settings.general.allow_ui_user_bucket_migration)}
-                    disabled={!settings.general.bucket_migration_enabled}
-                    onChange={(e) => handleToggleAllowUiUserBucketMigration(e.target.checked)}
-                    aria-label="Allow UI User access to bucket migration"
-                  />
-                  <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
-                  <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                </label>
-              </div>
+                </PortalSettingsItem>
+              </PortalSettingsSection>
 
               <div className="my-4 border-t border-slate-200 dark:border-slate-700" />
 

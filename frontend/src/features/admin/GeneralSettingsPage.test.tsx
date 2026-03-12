@@ -209,6 +209,13 @@ describe("GeneralSettingsPage branding", () => {
     expect(screen.queryByLabelText("Bucket compare tool")).not.toBeInTheDocument();
   });
 
+  it("shows Experimental badge on Portal feature toggle", async () => {
+    render(<GeneralSettingsPage />);
+
+    await screen.findByLabelText("Portal feature");
+    expect(screen.getByText("Experimental")).toBeInTheDocument();
+  });
+
   it("sends a quota SMTP test email with current quota notification settings", async () => {
     const user = userEvent.setup();
     render(<GeneralSettingsPage />);

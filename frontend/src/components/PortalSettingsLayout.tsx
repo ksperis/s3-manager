@@ -3,6 +3,8 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { ReactNode } from "react";
+import UiBadge from "./ui/UiBadge";
+import type { UiTone } from "./ui/styles";
 
 type PortalSettingsSectionProps = {
   title: string;
@@ -25,6 +27,18 @@ type PortalSettingsSwitchProps = {
   disabled?: boolean;
   ariaLabel: string;
   onChange: (value: boolean) => void;
+};
+
+type PortalSettingsConditionalBadgeProps = {
+  visible?: boolean;
+  label: string;
+  tone?: UiTone;
+  className?: string;
+};
+
+type PortalSettingsToggleActionProps = PortalSettingsSwitchProps & {
+  badge?: PortalSettingsConditionalBadgeProps;
+  className?: string;
 };
 
 export const PortalSettingsSection = ({
@@ -72,4 +86,39 @@ export const PortalSettingsSwitch = ({ checked, disabled, ariaLabel, onChange }:
     <span className="h-5 w-9 rounded-full bg-slate-200 transition peer-checked:bg-emerald-500 dark:bg-slate-700" />
     <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
   </label>
+);
+
+export const PortalSettingsConditionalBadge = ({
+  visible = false,
+  label,
+  tone = "warning",
+  className,
+}: PortalSettingsConditionalBadgeProps) => {
+  if (!visible) return null;
+  return (
+    <UiBadge tone={tone} className={className}>
+      {label}
+    </UiBadge>
+  );
+};
+
+export const PortalSettingsToggleAction = ({
+  checked,
+  disabled,
+  ariaLabel,
+  onChange,
+  badge,
+  className,
+}: PortalSettingsToggleActionProps) => (
+  <div className={`inline-flex items-center gap-2 ${className ?? ""}`.trim()}>
+    {badge && (
+      <PortalSettingsConditionalBadge
+        visible={badge.visible}
+        label={badge.label}
+        tone={badge.tone}
+        className={badge.className}
+      />
+    )}
+    <PortalSettingsSwitch checked={checked} disabled={disabled} ariaLabel={ariaLabel} onChange={onChange} />
+  </div>
 );
