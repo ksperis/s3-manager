@@ -10,6 +10,7 @@ import TableEmptyState from "../../components/TableEmptyState";
 import ListSectionCard from "../../components/list/ListSectionCard";
 import { resolveListTableStatus } from "../../components/list/listTableStatus";
 import PaginationControls from "../../components/PaginationControls";
+import UiButton from "../../components/ui/UiButton";
 import { tableActionButtonClasses, tableDeleteActionClasses } from "../../components/tableActionClasses";
 import { toolbarCompactInputClasses } from "../../components/toolbarControlClasses";
 import {
@@ -1522,12 +1523,12 @@ export default function S3ConnectionsPage() {
               This will permanently delete {selectedOnPageIds.length} selected connection{selectedOnPageIds.length > 1 ? "s" : ""}.
             </p>
             <div className="flex justify-end gap-2">
-              <button className="ui-btn" onClick={() => setBulkDeleteOpen(false)} disabled={bulkDeleteBusy}>
+              <UiButton variant="secondary" onClick={() => setBulkDeleteOpen(false)} disabled={bulkDeleteBusy}>
                 Cancel
-              </button>
-              <button className="ui-btn ui-btn-danger" onClick={() => void submitBulkDelete()} disabled={bulkDeleteBusy}>
+              </UiButton>
+              <UiButton variant="danger" onClick={() => void submitBulkDelete()} disabled={bulkDeleteBusy}>
                 {bulkDeleteBusy ? "Deleting..." : "Delete selected connections"}
-              </button>
+              </UiButton>
             </div>
           </div>
         </Modal>
@@ -1540,12 +1541,12 @@ export default function S3ConnectionsPage() {
             {deleteError && <PageBanner tone="error">{deleteError}</PageBanner>}
             <p className="ui-body">This will permanently delete the connection and its credentials.</p>
             <div className="flex justify-end gap-2">
-              <button className="ui-btn" onClick={() => setDeleteTarget(null)} disabled={deleteBusy}>
+              <UiButton variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleteBusy}>
                 Cancel
-              </button>
-              <button className="ui-btn ui-btn-danger" onClick={submitDelete} disabled={deleteBusy}>
+              </UiButton>
+              <UiButton variant="danger" onClick={submitDelete} disabled={deleteBusy}>
                 {deleteBusy ? "Deleting..." : "Delete"}
-              </button>
+              </UiButton>
             </div>
           </div>
         </Modal>
