@@ -31,6 +31,7 @@ import { extractApiError } from "../../utils/apiError";
 import { isAdminLikeRole, isSuperAdminRole, readStoredUser } from "../../utils/workspaces";
 
 type AssociationTab = "accounts" | "s3_users" | "connections";
+type UserModalTab = "general" | "associations";
 
 type AccountSelection = {
   id: number;
@@ -712,6 +713,7 @@ export default function UsersPage() {
   const [createS3AccountSearch, setCreateS3AccountSearch] = useState("");
   const [createS3Search, setCreateS3Search] = useState("");
   const [createConnectionSearch, setCreateConnectionSearch] = useState("");
+  const [createModalTab, setCreateModalTab] = useState<UserModalTab>("general");
   const [createAssociationsTab, setCreateAssociationsTab] = useState<"accounts" | "s3_users" | "connections">("accounts");
   const [showCreateAccountPanel, setShowCreateAccountPanel] = useState(false);
   const [createAccountSelections, setCreateAccountSelections] = useState<number[]>([]);
@@ -729,6 +731,7 @@ export default function UsersPage() {
   const [editS3AccountSearch, setEditS3AccountSearch] = useState("");
   const [editS3Search, setEditS3Search] = useState("");
   const [editConnectionSearch, setEditConnectionSearch] = useState("");
+  const [editModalTab, setEditModalTab] = useState<UserModalTab>("general");
   const [editAssociationsTab, setEditAssociationsTab] = useState<"accounts" | "s3_users" | "connections">("accounts");
   const [showEditAccountPanel, setShowEditAccountPanel] = useState(false);
   const [editAccountSelections, setEditAccountSelections] = useState<number[]>([]);
@@ -1215,6 +1218,7 @@ export default function UsersPage() {
     setActionError(null);
     setActionMessage(null);
     if (!form.email || !form.password) {
+      setCreateModalTab("general");
       setActionError("Email and password are required.");
       return;
     }
@@ -1270,6 +1274,7 @@ export default function UsersPage() {
       setShowCreateAccountPanel(false);
       setShowCreateS3UserPanel(false);
       setShowCreateConnectionPanel(false);
+      setCreateModalTab("general");
       setCreateAssociationsTab("accounts");
       await fetchUsers();
       if (s3AccountsLoaded) {
@@ -1333,6 +1338,7 @@ export default function UsersPage() {
     setEditAccountSelections([]);
     setEditS3UserSelections([]);
     setEditConnectionSelections([]);
+    setEditModalTab("general");
     setActionError(null);
     setActionMessage(null);
     setShowEditModal(true);
@@ -1428,6 +1434,7 @@ export default function UsersPage() {
       setEditS3AccountSearch("");
       setEditS3Search("");
       setEditConnectionSearch("");
+      setEditModalTab("general");
       setEditAssociationsTab("accounts");
       setShowEditAccountPanel(false);
       setShowEditS3UserPanel(false);
@@ -1488,6 +1495,7 @@ export default function UsersPage() {
           {
             label: "Create user",
             onClick: () => {
+              setCreateModalTab("general");
               setCreateAssociationsTab("accounts");
               setShowCreateModal(true);
             },
@@ -1511,6 +1519,7 @@ export default function UsersPage() {
             setCreateS3AccountSearch("");
             setCreateS3Search("");
             setCreateConnectionSearch("");
+            setCreateModalTab("general");
             setCreateAssociationsTab("accounts");
             setShowCreateAccountPanel(false);
             setShowCreateS3UserPanel(false);
@@ -1530,75 +1539,105 @@ export default function UsersPage() {
               {actionMessage}
             </PageBanner>
           )}
-          <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700">Email *</label>
-              <input
-                type="email"
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="jane.doe@example.com"
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700">Password *</label>
-              <input
-                type="password"
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                value={form.password}
-                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                placeholder="•••••••"
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700">Role</label>
-              <select
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                value={createRoleValue}
-                onChange={(e) => {
-                  const value = normalizeUiRoleValue(e.target.value);
-                  const supportsCephAdmin = value === "ui_admin" || value === "ui_superadmin";
-                  setForm((f) => ({
-                    ...f,
-                    role: value,
-                    can_access_ceph_admin:
-                      currentIsSuperAdmin && supportsCephAdmin ? Boolean(f.can_access_ceph_admin) : false,
-                  }));
-                }}
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => setCreateModalTab("general")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  createModalTab === "general"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
               >
-                <option value="ui_none">No access</option>
-                <option value="ui_user">User</option>
-                <option value="ui_admin">Admin</option>
-                <option value="ui_superadmin" disabled={!currentIsSuperAdmin}>
-                  Superadmin{currentIsSuperAdmin ? "" : " (restricted)"}
-                </option>
-              </select>
+                General
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateModalTab("associations")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  createModalTab === "associations"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                Associations
+              </button>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700">Ceph Admin access</label>
-              <label className="inline-flex items-center gap-2 ui-body text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={createCanGrantCephAdmin && Boolean(form.can_access_ceph_admin)}
-                  disabled={!createCanGrantCephAdmin}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      can_access_ceph_admin: e.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
-                />
-                <span>Allow access to /ceph-admin</span>
-              </label>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Grantable only by Superadmin for roles "Admin" and "Superadmin".
-              </p>
-            </div>
-            <div className="md:col-span-2">
+
+            {createModalTab === "general" && (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700">Email *</label>
+                  <input
+                    type="email"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="jane.doe@example.com"
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700">Password *</label>
+                  <input
+                    type="password"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    placeholder="•••••••"
+                    required
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700">Role</label>
+                  <select
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    value={createRoleValue}
+                    onChange={(e) => {
+                      const value = normalizeUiRoleValue(e.target.value);
+                      const supportsCephAdmin = value === "ui_admin" || value === "ui_superadmin";
+                      setForm((f) => ({
+                        ...f,
+                        role: value,
+                        can_access_ceph_admin:
+                          currentIsSuperAdmin && supportsCephAdmin ? Boolean(f.can_access_ceph_admin) : false,
+                      }));
+                    }}
+                  >
+                    <option value="ui_none">No access</option>
+                    <option value="ui_user">User</option>
+                    <option value="ui_admin">Admin</option>
+                    <option value="ui_superadmin" disabled={!currentIsSuperAdmin}>
+                      Superadmin{currentIsSuperAdmin ? "" : " (restricted)"}
+                    </option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700">Ceph Admin access</label>
+                  <label className="inline-flex items-center gap-2 ui-body text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={createCanGrantCephAdmin && Boolean(form.can_access_ceph_admin)}
+                      disabled={!createCanGrantCephAdmin}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          can_access_ceph_admin: e.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                    />
+                    <span>Allow access to /ceph-admin</span>
+                  </label>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    Grantable only by Superadmin for roles "Admin" and "Superadmin".
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {createModalTab === "associations" && (
               <AssociationsTabs
                 activeTab={createAssociationsTab}
                 onTabChange={(nextTab) => {
@@ -1659,8 +1698,9 @@ export default function UsersPage() {
                   toggleSelection: toggleCreateConnectionSelection,
                 }}
               />
-            </div>
-            <div className="flex items-center justify-end gap-3 md:col-span-2">
+            )}
+
+            <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => {
@@ -1674,6 +1714,7 @@ export default function UsersPage() {
                   setCreateConnectionSearch("");
                   setCreateAccountRoleChoice({});
                   setCreateAccountAdminChoice({});
+                  setCreateModalTab("general");
                   setCreateAssociationsTab("accounts");
                   setShowCreateAccountPanel(false);
                   setShowCreateS3UserPanel(false);
@@ -1822,6 +1863,7 @@ export default function UsersPage() {
             setEditS3Search("");
             setEditSelectedS3Connections([]);
             setEditConnectionSearch("");
+            setEditModalTab("general");
             setEditAssociationsTab("accounts");
             setShowEditAccountPanel(false);
             setShowEditS3UserPanel(false);
@@ -1843,96 +1885,126 @@ export default function UsersPage() {
               {actionMessage}
             </PageBanner>
           )}
-          <form onSubmit={submitEdit} className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700">Email</label>
-              <input
-                type="email"
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                value={editForm.email ?? ""}
-                onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700">New password</label>
-              <input
-                type="password"
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                value={editForm.password ?? ""}
-                onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
-                placeholder="Leave blank to keep current"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700">Role</label>
-              <select
-                className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                value={editRoleValue}
-                onChange={(e) => {
-                  const value = normalizeUiRoleValue(e.target.value);
-                  const supportsCephAdmin = value === "ui_admin" || value === "ui_superadmin";
-                  const supportsStorageOps = value === "ui_user" || supportsCephAdmin;
-                  setEditForm((f) => ({
-                    ...f,
-                    role: value,
-                    can_access_ceph_admin:
-                      currentIsSuperAdmin && supportsCephAdmin ? Boolean(f.can_access_ceph_admin) : false,
-                    can_access_storage_ops:
-                      currentIsAdminLike && supportsStorageOps ? Boolean(f.can_access_storage_ops) : false,
-                  }));
-                }}
+          <form onSubmit={submitEdit} className="space-y-4">
+            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => setEditModalTab("general")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editModalTab === "general"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
               >
-                <option value="ui_none">No access</option>
-                <option value="ui_user">User</option>
-                <option value="ui_admin">Admin</option>
-                <option value="ui_superadmin" disabled={!currentIsSuperAdmin}>
-                  Superadmin{currentIsSuperAdmin ? "" : " (restricted)"}
-                </option>
-              </select>
+                General
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditModalTab("associations")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editModalTab === "associations"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                Associations
+              </button>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700">Ceph Admin access</label>
-              <label className="inline-flex items-center gap-2 ui-body text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={editCanGrantCephAdmin && Boolean(editForm.can_access_ceph_admin)}
-                  disabled={!editCanGrantCephAdmin}
-                  onChange={(e) =>
-                    setEditForm((f) => ({
-                      ...f,
-                      can_access_ceph_admin: e.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
-                />
-                <span>Allow access to /ceph-admin</span>
-              </label>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Grantable only by Superadmin for roles "Admin" and "Superadmin".
-              </p>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="ui-body font-medium text-slate-700">Storage Ops access</label>
-              <label className="inline-flex items-center gap-2 ui-body text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={editCanGrantStorageOps && Boolean(editForm.can_access_storage_ops)}
-                  disabled={!editCanGrantStorageOps}
-                  onChange={(e) =>
-                    setEditForm((f) => ({
-                      ...f,
-                      can_access_storage_ops: e.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
-                />
-                <span>Allow access to /storage-ops</span>
-              </label>
-              <p className="ui-caption text-slate-500 dark:text-slate-400">
-                Grantable by Admin or Superadmin for roles "User", "Admin" and "Superadmin".
-              </p>
-            </div>
-            <div className="md:col-span-2">
+
+            {editModalTab === "general" && (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700">Email</label>
+                  <input
+                    type="email"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    value={editForm.email ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700">New password</label>
+                  <input
+                    type="password"
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    value={editForm.password ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
+                    placeholder="Leave blank to keep current"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700">Role</label>
+                  <select
+                    className="rounded-md border border-slate-200 px-3 py-2 ui-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    value={editRoleValue}
+                    onChange={(e) => {
+                      const value = normalizeUiRoleValue(e.target.value);
+                      const supportsCephAdmin = value === "ui_admin" || value === "ui_superadmin";
+                      const supportsStorageOps = value === "ui_user" || supportsCephAdmin;
+                      setEditForm((f) => ({
+                        ...f,
+                        role: value,
+                        can_access_ceph_admin:
+                          currentIsSuperAdmin && supportsCephAdmin ? Boolean(f.can_access_ceph_admin) : false,
+                        can_access_storage_ops:
+                          currentIsAdminLike && supportsStorageOps ? Boolean(f.can_access_storage_ops) : false,
+                      }));
+                    }}
+                  >
+                    <option value="ui_none">No access</option>
+                    <option value="ui_user">User</option>
+                    <option value="ui_admin">Admin</option>
+                    <option value="ui_superadmin" disabled={!currentIsSuperAdmin}>
+                      Superadmin{currentIsSuperAdmin ? "" : " (restricted)"}
+                    </option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="ui-body font-medium text-slate-700">Ceph Admin access</label>
+                  <label className="inline-flex items-center gap-2 ui-body text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={editCanGrantCephAdmin && Boolean(editForm.can_access_ceph_admin)}
+                      disabled={!editCanGrantCephAdmin}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          can_access_ceph_admin: e.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                    />
+                    <span>Allow access to /ceph-admin</span>
+                  </label>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    Grantable only by Superadmin for roles "Admin" and "Superadmin".
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1 md:col-span-2">
+                  <label className="ui-body font-medium text-slate-700">Storage Ops access</label>
+                  <label className="inline-flex items-center gap-2 ui-body text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={editCanGrantStorageOps && Boolean(editForm.can_access_storage_ops)}
+                      disabled={!editCanGrantStorageOps}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          can_access_storage_ops: e.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary disabled:opacity-60"
+                    />
+                    <span>Allow access to /storage-ops</span>
+                  </label>
+                  <p className="ui-caption text-slate-500 dark:text-slate-400">
+                    Grantable by Admin or Superadmin for roles "User", "Admin" and "Superadmin".
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {editModalTab === "associations" && (
               <AssociationsTabs
                 activeTab={editAssociationsTab}
                 onTabChange={(nextTab) => {
@@ -1993,8 +2065,9 @@ export default function UsersPage() {
                   toggleSelection: toggleEditConnectionSelection,
                 }}
               />
-            </div>
-            <div className="flex items-center justify-end gap-3 md:col-span-2">
+            )}
+
+            <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => {
@@ -2006,6 +2079,7 @@ export default function UsersPage() {
                   setEditS3Search("");
                   setEditSelectedS3Connections([]);
                   setEditConnectionSearch("");
+                  setEditModalTab("general");
                   setEditAssociationsTab("accounts");
                   setShowEditAccountPanel(false);
                   setShowEditS3UserPanel(false);

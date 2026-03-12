@@ -42,7 +42,7 @@ import { isAdminLikeRole } from "../../utils/workspaces";
 type SortField = "name" | "rgw_account_id";
 type TriState = "inherit" | "enabled" | "disabled";
 type PolicyMode = "inherit" | "actions";
-type EditTab = "general" | "portal";
+type EditTab = "general" | "users" | "portal";
 type TextMatchMode = "contains" | "exact";
 
 const hasOwn = (value: Record<string, unknown> | null | undefined, key: string) =>
@@ -169,9 +169,9 @@ export default function S3AccountsPage() {
     editingEndpointCanWrite &&
     Boolean(editingS3Account?.rgw_account_id);
   const effectivePortalSettings = portalAccountSettings?.effective ?? null;
-  const adminOverride = portalAccountSettings?.admin_override ?? null;
   const portalManagerOverride = portalAccountSettings?.portal_manager_override ?? null;
-  const showGeneralTab = !portalEnabled || editTab === "general";
+  const showGeneralTab = editTab === "general";
+  const showUsersTab = editTab === "users";
   const showPortalTab = portalEnabled && editTab === "portal";
   const hasPortalManagerOverrides = useMemo(() => {
     if (!portalManagerOverride) return false;
@@ -745,6 +745,7 @@ export default function S3AccountsPage() {
       };
       await updateS3Account(targetId, payload);
       setEditingS3Account(null);
+      setEditTab("general");
       setUserSearch("");
       setShowUserPanel(false);
       setUserSelections([]);
@@ -1241,6 +1242,7 @@ export default function S3AccountsPage() {
           title={`Edit ${editingS3Account.name}`}
           onClose={() => {
             setEditingS3Account(null);
+            setEditTab("general");
             setUserSearch("");
             setShowUserPanel(false);
             setUserSelections([]);
@@ -1258,19 +1260,33 @@ export default function S3AccountsPage() {
             </span>
           </div>
           <div className="space-y-4">
-            {portalEnabled && (
-              <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
-                <button
-                  type="button"
-                  onClick={() => setEditTab("general")}
-                  className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
-                    editTab === "general"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  }`}
-                >
-                  Account
-                </button>
+            <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/60">
+              <button
+                type="button"
+                onClick={() => setEditTab("general")}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editTab === "general"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                General
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void loadUsersIfNeeded();
+                  setEditTab("users");
+                }}
+                className={`rounded-md px-3 py-1.5 ui-caption font-semibold transition ${
+                  editTab === "users"
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                }`}
+              >
+                Linked UI users
+              </button>
+              {portalEnabled && (
                 <button
                   type="button"
                   onClick={() => setEditTab("portal")}
@@ -1282,8 +1298,8 @@ export default function S3AccountsPage() {
                 >
                   Portal
                 </button>
-              </div>
-            )}
+              )}
+            </div>
             {showGeneralTab && (
               <StorageUsageCard
                 accountName={editingS3Account.name}
@@ -1344,7 +1360,10 @@ export default function S3AccountsPage() {
                       />
                     </div>
                   </div>
-                  <div className="space-y-3">
+                </>
+              )}
+              {showUsersTab && (
+                <div className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <label className="ui-body font-medium text-slate-700 dark:text-slate-200">Linked UI users</label>
@@ -1600,7 +1619,6 @@ export default function S3AccountsPage() {
                       </div>
                     )}
                   </div>
-                </>
               )}
               {showPortalTab && (
                 <div className="ui-surface-card p-4">
@@ -1874,6 +1892,7 @@ export default function S3AccountsPage() {
                   type="button"
                   onClick={() => {
                     setEditingS3Account(null);
+                    setEditTab("general");
                     setUserSearch("");
                     setShowUserPanel(false);
                     setUserSelections([]);
