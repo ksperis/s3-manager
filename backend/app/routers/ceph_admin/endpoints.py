@@ -23,6 +23,7 @@ from app.routers.ceph_admin.dependencies import (
 from app.routers.dependencies import get_current_ceph_admin
 from app.services.rgw_admin import RGWAdminError, get_rgw_admin_client
 from app.utils.storage_endpoint_features import resolve_admin_endpoint
+from app.utils.storage_endpoint_ordering import endpoint_name_order_by
 
 router = APIRouter(prefix="/ceph-admin/endpoints", tags=["ceph-admin-endpoints"])
 
@@ -165,7 +166,7 @@ def list_ceph_admin_endpoints(
 ) -> list[CephAdminEndpoint]:
     endpoints = (
         db.query(DbStorageEndpoint)
-        .order_by(DbStorageEndpoint.is_default.desc(), DbStorageEndpoint.name.asc())
+        .order_by(*endpoint_name_order_by(DbStorageEndpoint))
         .all()
     )
     results: list[CephAdminEndpoint] = []

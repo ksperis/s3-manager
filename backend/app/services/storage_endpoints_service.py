@@ -40,6 +40,7 @@ from app.utils.storage_endpoint_features import (
     normalize_features_config,
     resolve_admin_endpoint,
 )
+from app.utils.storage_endpoint_ordering import endpoint_name_order_by
 from app.utils.normalize import normalize_storage_provider
 
 logger = logging.getLogger(__name__)
@@ -550,7 +551,7 @@ class StorageEndpointsService:
     def list_endpoints(self, *, include_admin_ops_permissions: bool = False) -> list[StorageEndpointSchema]:
         endpoints = (
             self.db.query(StorageEndpoint)
-            .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
+            .order_by(*endpoint_name_order_by(StorageEndpoint))
             .all()
         )
         return [self._serialize(ep, include_admin_ops_permissions=include_admin_ops_permissions) for ep in endpoints]

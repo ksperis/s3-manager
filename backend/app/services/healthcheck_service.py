@@ -30,6 +30,7 @@ from app.db import (
 from app.services.app_settings_service import load_app_settings
 from app.services.s3_client import get_s3_client
 from app.utils.storage_endpoint_features import normalize_features_config
+from app.utils.storage_endpoint_ordering import endpoint_name_order_by
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -129,15 +130,14 @@ class HealthCheckService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def _sorted_endpoints_query(self):
+        return self.db.query(StorageEndpoint).order_by(*endpoint_name_order_by(StorageEndpoint))
+
     def run_checks(self) -> dict:
         app_settings = load_app_settings()
         if not app_settings.general.endpoint_status_enabled:
             raise ValueError("Endpoint Status feature is disabled")
-        endpoints = (
-            self.db.query(StorageEndpoint)
-            .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
-            .all()
-        )
+        endpoints = self._sorted_endpoints_query().all()
         run_started_at = utcnow()
         profiles = {endpoint.id: self._resolve_healthcheck_profile(endpoint) for endpoint in endpoints}
         baselines = {
@@ -231,11 +231,7 @@ class HealthCheckService:
         )
 
     def build_summary(self) -> dict:
-        endpoints = (
-            self.db.query(StorageEndpoint)
-            .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
-            .all()
-        )
+        endpoints = self._sorted_endpoints_query().all()
         endpoint_ids = [endpoint.id for endpoint in endpoints]
         latest_scope_by_endpoint = self._load_latest_scope_by_endpoint(endpoint_ids)
         summaries: list[dict] = []
@@ -342,11 +338,7 @@ class HealthCheckService:
         }
 
     def build_overview(self, window: HealthWindow) -> dict:
-        endpoints = (
-            self.db.query(StorageEndpoint)
-            .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
-            .all()
-        )
+        endpoints = self._sorted_endpoints_query().all()
         now = utcnow()
         start = now - WINDOW_DELTAS[window]
         endpoint_ids = [endpoint.id for endpoint in endpoints]
@@ -409,11 +401,7 @@ class HealthCheckService:
         }
 
     def build_latency_overview(self, window: HealthWindow = HealthWindow.DAY) -> dict:
-        endpoints = (
-            self.db.query(StorageEndpoint)
-            .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
-            .all()
-        )
+        endpoints = self._sorted_endpoints_query().all()
         now = utcnow()
         start = now - WINDOW_DELTAS[window]
         endpoint_ids = [endpoint.id for endpoint in endpoints]
@@ -470,11 +458,7 @@ class HealthCheckService:
         }
 
     def build_global_incidents(self, window: HealthWindow, limit: int = 300) -> dict:
-        endpoints = (
-            self.db.query(StorageEndpoint)
-            .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
-            .all()
-        )
+        endpoints = self._sorted_endpoints_query().all()
         endpoint_meta = {
             endpoint.id: {
                 "name": endpoint.name,
@@ -545,10 +529,7 @@ class HealthCheckService:
         endpoint_id: Optional[int] = None,
         incident_highlight_minutes: Optional[int] = None,
     ) -> dict:
-        endpoints_query = (
-            self.db.query(StorageEndpoint)
-            .order_by(StorageEndpoint.is_default.desc(), StorageEndpoint.name.asc())
-        )
+        endpoints_query = self._sorted_endpoints_query()
         if endpoint_id is not None:
             endpoints_query = endpoints_query.filter(StorageEndpoint.id == endpoint_id)
         endpoints = endpoints_query.all()

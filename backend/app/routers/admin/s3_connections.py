@@ -39,6 +39,7 @@ from app.utils.s3_connection_endpoint import (
     parse_custom_endpoint_config,
     resolve_connection_details,
 )
+from app.utils.s3_connection_ordering import s3_connection_name_order_by
 from app.utils.s3_connection_visibility import normalize_visibility, visibility_from_flags
 
 
@@ -176,15 +177,30 @@ def list_s3_connections(
             | (linked_user.full_name.ilike(term))
         )
 
-    sort_field = {
+    sort_map = {
         "name": S3Connection.name,
         "endpoint": StorageEndpoint.endpoint_url,
         "owner": User.email,
         "last_used_at": S3Connection.last_used_at,
         "created_at": S3Connection.created_at,
-    }.get(sort_by, S3Connection.name)
-    order = sort_field.asc() if sort_dir.lower() != "desc" else sort_field.desc()
-    q = q.order_by(order)
+    }
+    requested_sort = sort_by if sort_by in sort_map else "name"
+    descending = sort_dir.lower() == "desc"
+    if requested_sort == "name":
+        if descending:
+            q = q.order_by(
+                func.lower(S3Connection.name).desc(),
+                S3Connection.name.desc(),
+                S3Connection.id.desc(),
+            )
+        else:
+            q = q.order_by(*s3_connection_name_order_by(S3Connection))
+    else:
+        sort_field = sort_map[requested_sort]
+        if descending:
+            q = q.order_by(sort_field.desc(), S3Connection.id.desc())
+        else:
+            q = q.order_by(sort_field.asc(), S3Connection.id.asc())
 
     total = q.count()
     rows = q.offset((page - 1) * page_size).limit(page_size).all()
@@ -234,7 +250,7 @@ def list_s3_connections_minimal(
             | (S3Connection.owner_user_id == current_user.id)
             | ((S3Connection.is_shared.is_(True)) & (access_link.user_id == current_user.id))
         )
-        .order_by(S3Connection.name.asc())
+        .order_by(*s3_connection_name_order_by(S3Connection))
         .distinct()
         .all()
     )

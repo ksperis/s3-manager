@@ -8,9 +8,17 @@ from app.routers.ceph_admin import endpoints as endpoints_router
 
 class _FakeQuery:
     def __init__(self, endpoints):
-        self._endpoints = endpoints
+        self._endpoints = list(endpoints)
 
     def order_by(self, *args, **kwargs):
+        self._endpoints = sorted(
+            self._endpoints,
+            key=lambda endpoint: (
+                str(getattr(endpoint, "name", "")).lower(),
+                str(getattr(endpoint, "name", "")),
+                int(getattr(endpoint, "id", 0)),
+            ),
+        )
         return self
 
     def all(self):
@@ -83,6 +91,29 @@ def test_list_ceph_admin_endpoints_includes_ceph_even_when_admin_feature_disable
 
     assert len(payload) == 1
     assert payload[0].id == 2
+
+
+def test_list_ceph_admin_endpoints_are_sorted_by_name_case_insensitive(monkeypatch):
+    endpoint_default = _build_endpoint(10)
+    endpoint_default.name = "Zulu"
+    endpoint_default.is_default = True
+    endpoint_alpha = _build_endpoint(11)
+    endpoint_alpha.name = "alpha"
+    endpoint_beta = _build_endpoint(12)
+    endpoint_beta.name = "Beta"
+
+    def _unexpected_validate(_endpoint):
+        raise AssertionError("validate_ceph_admin_service_identity should not be called from list")
+
+    monkeypatch.setattr(endpoints_router, "validate_ceph_admin_service_identity", _unexpected_validate)
+
+    payload = endpoints_router.list_ceph_admin_endpoints(
+        db=_FakeSession([endpoint_default, endpoint_alpha, endpoint_beta]),
+        _=SimpleNamespace(),
+    )
+
+    assert [entry.name for entry in payload] == ["alpha", "Beta", "Zulu"]
+    assert payload[0].is_default is False
 
 
 def test_get_ceph_admin_endpoint_access_reports_warning_and_metrics_capability(monkeypatch):

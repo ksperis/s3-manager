@@ -82,6 +82,34 @@ def test_list_for_user_and_list_owned_private_filters_visibility(db_session):
     assert public_row.name in owner_visible
 
 
+def test_list_for_user_and_owned_private_are_sorted_case_insensitive(db_session):
+    owner = _user(db_session, "owner-sort@example.test")
+    shared_user = _user(db_session, "shared-sort@example.test")
+    other = _user(db_session, "other-sort@example.test")
+
+    lower = _create_row(db_session, owner_user_id=owner.id, name="alpha")
+    mixed = _create_row(db_session, owner_user_id=owner.id, name="Beta")
+    public_1 = _create_row(db_session, owner_user_id=None, name="same", is_public=True)
+    public_2 = _create_row(db_session, owner_user_id=None, name="same", is_public=True)
+    shared = _create_row(db_session, owner_user_id=other.id, name="Zulu", is_shared=True)
+    db_session.add(UserS3Connection(user_id=shared_user.id, s3_connection_id=shared.id))
+    db_session.commit()
+
+    service = S3ConnectionsService(db_session)
+
+    owner_visible = service.list_for_user(owner.id)
+    owner_visible_names = [item.name for item in owner_visible]
+    owner_visible_same_ids = [item.id for item in owner_visible if item.name == "same"]
+    owned_private_names = [item.name for item in service.list_owned_private(owner.id)]
+    shared_visible_names = [item.name for item in service.list_for_user(shared_user.id)]
+
+    assert owner_visible_names == ["alpha", "Beta", "same", "same"]
+    assert owner_visible_same_ids == sorted([public_1.id, public_2.id])
+    assert owned_private_names == ["alpha", "Beta"]
+    assert shared_visible_names == ["same", "same", "Zulu"]
+    assert lower.id < mixed.id
+
+
 def test_get_owned_and_get_visible_with_access_control(db_session):
     owner = _user(db_session, "owner2@example.test")
     reader = _user(db_session, "reader@example.test")

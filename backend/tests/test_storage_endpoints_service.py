@@ -96,6 +96,41 @@ def test_list_endpoints_skips_admin_ops_permissions_by_default(db_session, monke
     assert perms.accounts_write is False
 
 
+def test_list_endpoints_orders_by_name_case_insensitive(db_session):
+    db_session.add_all(
+        [
+            StorageEndpoint(
+                name="Zulu",
+                endpoint_url="https://zulu.example.test",
+                provider=StorageProvider.CEPH.value,
+                is_default=True,
+                is_editable=True,
+            ),
+            StorageEndpoint(
+                name="alpha",
+                endpoint_url="https://alpha.example.test",
+                provider=StorageProvider.CEPH.value,
+                is_default=False,
+                is_editable=True,
+            ),
+            StorageEndpoint(
+                name="Beta",
+                endpoint_url="https://beta.example.test",
+                provider=StorageProvider.CEPH.value,
+                is_default=False,
+                is_editable=True,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    service = StorageEndpointsService(db_session)
+    endpoints = service.list_endpoints()
+
+    assert [endpoint.name for endpoint in endpoints] == ["alpha", "Beta", "Zulu"]
+    assert endpoints[0].is_default is False
+
+
 def test_get_endpoint_exposes_admin_ops_permissions_from_caps(db_session, monkeypatch):
     endpoint = _create_ceph_endpoint(db_session, name="ceph-main-detail")
 
