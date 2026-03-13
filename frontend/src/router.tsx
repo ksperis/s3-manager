@@ -160,7 +160,7 @@ function RouteFallback() {
   );
 }
 
-const buildAdminNav = (
+export const buildAdminNav = (
   portalEnabled: boolean,
   browserEnabled: boolean,
   billingEnabled: boolean,
@@ -170,8 +170,18 @@ const buildAdminNav = (
   const settingsLinks = [
     { to: "/admin/general-settings", label: "General" },
     { to: "/admin/manager-settings", label: "Manager" },
-    { to: "/admin/browser-settings", label: "Browser", disabled: !browserEnabled },
-    { to: "/admin/portal-settings", label: "Portal", disabled: !portalEnabled },
+    {
+      to: "/admin/browser-settings",
+      label: "Browser",
+      disabled: !browserEnabled,
+      disabledHint: !browserEnabled ? "Browser feature is disabled in General settings." : undefined,
+    },
+    {
+      to: "/admin/portal-settings",
+      label: "Portal",
+      disabled: !portalEnabled,
+      disabledHint: !portalEnabled ? "Portal feature is disabled in General settings." : undefined,
+    },
     { to: "/admin/key-rotation", label: "Key Rotation" },
     { to: "/admin/api-tokens", label: "API Tokens" },
   ];

@@ -58,6 +58,7 @@ function buildContext(overrides?: Record<string, unknown>) {
     setAccessMode: vi.fn(),
     canSwitchAccess: false,
     managerStatsEnabled: false,
+    managerStatsMessage: null,
     managerBrowserEnabled: true,
     managerCephKeysEnabled: true,
     ...overrides,
@@ -131,5 +132,89 @@ describe("ManagerLayout", () => {
 
     const labels = capturedNavSections.map((section) => section.label);
     expect(labels).not.toContain("Ceph");
+  });
+
+  it("shows a loading hint for disabled Metrics while manager context is loading", () => {
+    useS3AccountContextMock.mockReturnValue(buildContext({ managerStatsEnabled: null }));
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const metricsLink = capturedNavSections
+      .find((section) => section.label === "Overview")
+      ?.links.find((link) => link.label === "Metrics");
+    expect(metricsLink?.disabled).toBe(true);
+    expect(metricsLink?.disabledHint).toBe("Metrics availability is loading for this context.");
+  });
+
+  it("uses backend metrics message when Metrics is disabled", () => {
+    useS3AccountContextMock.mockReturnValue(
+      buildContext({
+        managerStatsEnabled: false,
+        managerStatsMessage: "Manager metrics are temporarily blocked for this account.",
+      })
+    );
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const metricsLink = capturedNavSections
+      .find((section) => section.label === "Overview")
+      ?.links.find((link) => link.label === "Metrics");
+    expect(metricsLink?.disabled).toBe(true);
+    expect(metricsLink?.disabledHint).toBe("Manager metrics are temporarily blocked for this account.");
+  });
+
+  it("uses a default message when Metrics is disabled without backend reason", () => {
+    useS3AccountContextMock.mockReturnValue(buildContext({ managerStatsEnabled: false, managerStatsMessage: null }));
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const metricsLink = capturedNavSections
+      .find((section) => section.label === "Overview")
+      ?.links.find((link) => link.label === "Metrics");
+    expect(metricsLink?.disabled).toBe(true);
+    expect(metricsLink?.disabledHint).toBe("Metrics are disabled for this context.");
+  });
+
+  it("shows endpoint capability hint when metrics capabilities are unavailable", () => {
+    useS3AccountContextMock.mockReturnValue(
+      buildContext({
+        managerStatsEnabled: true,
+        accounts: [
+          {
+            id: "s3u-1",
+            display_name: "Managed S3 User",
+            storage_endpoint_capabilities: { iam: true, usage: false, metrics: false, sns: true },
+          },
+        ],
+      })
+    );
+    useGeneralSettingsMock.mockReturnValue({ generalSettings: buildGeneralSettings() });
+
+    render(
+      <MemoryRouter initialEntries={["/manager"]}>
+        <ManagerLayout />
+      </MemoryRouter>
+    );
+
+    const metricsLink = capturedNavSections
+      .find((section) => section.label === "Overview")
+      ?.links.find((link) => link.label === "Metrics");
+    expect(metricsLink?.disabled).toBe(true);
+    expect(metricsLink?.disabledHint).toBe("Metrics are unavailable for this endpoint capabilities.");
   });
 });

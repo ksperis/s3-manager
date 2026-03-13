@@ -62,6 +62,7 @@ function ManagerShell() {
     setAccessMode,
     canSwitchAccess,
     managerStatsEnabled,
+    managerStatsMessage,
     managerBrowserEnabled,
     managerCephKeysEnabled,
   } = useS3AccountContext();
@@ -94,6 +95,16 @@ function ManagerShell() {
   const metricsFeatureEnabled = endpointCaps ? endpointCaps.usage !== false : true;
   const snsFeatureEnabled = endpointCaps ? endpointCaps.sns !== false : true;
   const canViewMetricsMenu = Boolean(managerStatsEnabled) && (usageFeatureEnabled || metricsFeatureEnabled);
+  const managerMetricsDisabledHint =
+    managerStatsEnabled === null
+      ? "Metrics availability is loading for this context."
+      : managerStatsEnabled === false
+        ? managerStatsMessage && managerStatsMessage.trim()
+          ? managerStatsMessage
+          : "Metrics are disabled for this context."
+        : !usageFeatureEnabled && !metricsFeatureEnabled
+          ? "Metrics are unavailable for this endpoint capabilities."
+          : undefined;
   const managerBrowserAvailable = managerBrowserEnabled !== false;
   const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
   const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
@@ -187,7 +198,12 @@ function ManagerShell() {
       label: "Overview",
       links: [
         { to: "/manager", label: "Dashboard", end: true },
-        { to: "/manager/metrics", label: "Metrics", disabled: !canViewMetricsMenu },
+        {
+          to: "/manager/metrics",
+          label: "Metrics",
+          disabled: !canViewMetricsMenu,
+          disabledHint: !canViewMetricsMenu ? managerMetricsDisabledHint : undefined,
+        },
       ],
     },
   ];

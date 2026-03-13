@@ -11,8 +11,11 @@ export type SidebarLink = {
   badge?: string;
   end?: boolean;
   disabled?: boolean;
+  disabledHint?: string;
   icon?: ReactNode;
 };
+
+const DEFAULT_DISABLED_HINT = "Unavailable in current context.";
 
 export type SidebarSection = {
   label: string;
@@ -161,7 +164,7 @@ export default function Sidebar({
                         <div
                           className={`${baseLinkClasses} ${inactiveLinkClasses} cursor-not-allowed opacity-50`}
                           aria-disabled="true"
-                          title={compact ? link.label : undefined}
+                          title={link.disabledHint ?? DEFAULT_DISABLED_HINT}
                         >
                           <div className={`flex min-w-0 items-center ${compact ? "" : "gap-2"}`}>
                             <span className={`shrink-0 text-slate-500 dark:text-slate-400 ${iconClasses}`}>

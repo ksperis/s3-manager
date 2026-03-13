@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Laurent Barbe
  * Licensed under the Apache License, Version 2.0
  */
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import Layout from "../../components/Layout";
 import TopbarDropdownSelect, { TopbarDropdownOption } from "../../components/TopbarDropdownSelect";
 import { SidebarSection } from "../../components/Sidebar";
@@ -12,6 +12,7 @@ import { CephAdminEndpointProvider, useCephAdminEndpoint } from "./CephAdminEndp
 import type { TopbarControlDescriptor } from "../../components/topbarControlsLayout";
 
 function CephAdminShell() {
+  const location = useLocation();
   const { generalSettings } = useGeneralSettings();
   const {
     endpoints,
@@ -46,6 +47,43 @@ function CephAdminShell() {
     canAdmin &&
     generalSettings.browser_enabled &&
     generalSettings.browser_ceph_admin_enabled;
+  const normalizedPath = location.pathname.replace(/\/+$/, "");
+  const onCephAdminBrowserRoute = normalizedPath === "/ceph-admin/browser";
+  const browserLinkDisabled = !canBrowser || !onCephAdminBrowserRoute;
+  const resolveCommonEndpointHint = () => {
+    if (!endpointSelected) return "Select a Ceph endpoint first.";
+    if (selectedEndpointAccessLoading) return "Endpoint access is loading.";
+    return null;
+  };
+  const metricsDisabledHint = (() => {
+    const commonHint = resolveCommonEndpointHint();
+    if (commonHint) return commonHint;
+    if (!selectedEndpointAccess?.can_metrics) return "Metrics access is not granted for this endpoint.";
+    if (!usageFeatureEnabled && !trafficFeatureEnabled) return "Metrics are unavailable for this endpoint capabilities.";
+    return undefined;
+  })();
+  const accountsDisabledHint = (() => {
+    const commonHint = resolveCommonEndpointHint();
+    if (commonHint) return commonHint;
+    if (!selectedEndpointAccess?.can_admin) return "Administrator access is required for RGW account management.";
+    if (!selectedEndpointAccess?.can_accounts) return "RGW account management is not granted for this endpoint.";
+    return undefined;
+  })();
+  const endpointAdminDisabledHint = (() => {
+    const commonHint = resolveCommonEndpointHint();
+    if (commonHint) return commonHint;
+    if (!selectedEndpointAccess?.can_admin) return "Administrator access is required for this endpoint.";
+    return undefined;
+  })();
+  const browserDisabledHint = (() => {
+    const commonHint = resolveCommonEndpointHint();
+    if (commonHint) return commonHint;
+    if (!selectedEndpointAccess?.can_admin) return "Administrator access is required for this endpoint.";
+    if (!generalSettings.browser_enabled) return "Browser feature is disabled in General settings.";
+    if (!generalSettings.browser_ceph_admin_enabled) return "Ceph Admin Browser is disabled in Browser settings.";
+    if (!onCephAdminBrowserRoute) return "Open the bucket from the Buckets list.";
+    return undefined;
+  })();
   const adminWarning = endpointSelected && !selectedEndpointAccessLoading ? selectedEndpointAccess?.admin_warning ?? null : null;
 
   const handleChange = (selectedValue: string) => {
@@ -60,21 +98,46 @@ function CephAdminShell() {
       label: "Overview",
       links: [
         { to: "/ceph-admin", label: "Dashboard", end: true },
-        { to: "/ceph-admin/metrics", label: "Metrics", disabled: !canMetrics },
+        {
+          to: "/ceph-admin/metrics",
+          label: "Metrics",
+          disabled: !canMetrics,
+          disabledHint: !canMetrics ? metricsDisabledHint : undefined,
+        },
       ],
     },
     {
       label: "CEPH S3",
       links: [
-        { to: "/ceph-admin/accounts", label: "RGW Accounts", disabled: !canAccounts },
-        { to: "/ceph-admin/users", label: "RGW Users", disabled: !canAdmin },
-        { to: "/ceph-admin/buckets", label: "Buckets", disabled: !canAdmin },
+        {
+          to: "/ceph-admin/accounts",
+          label: "RGW Accounts",
+          disabled: !canAccounts,
+          disabledHint: !canAccounts ? accountsDisabledHint : undefined,
+        },
+        {
+          to: "/ceph-admin/users",
+          label: "RGW Users",
+          disabled: !canAdmin,
+          disabledHint: !canAdmin ? endpointAdminDisabledHint : undefined,
+        },
+        {
+          to: "/ceph-admin/buckets",
+          label: "Buckets",
+          disabled: !canAdmin,
+          disabledHint: !canAdmin ? endpointAdminDisabledHint : undefined,
+        },
       ],
     },
     {
       label: "Data",
       links: [
-        { to: "/ceph-admin/browser", label: "Browser", disabled: !canBrowser },
+        {
+          to: "/ceph-admin/browser",
+          label: "Browser",
+          disabled: browserLinkDisabled,
+          disabledHint: browserDisabledHint,
+        },
       ],
     },
   ];
