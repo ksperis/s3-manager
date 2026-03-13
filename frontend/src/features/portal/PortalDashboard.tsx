@@ -3,7 +3,6 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Bucket } from "../../api/buckets";
 import { PortalSettings } from "../../api/appSettings";
 import {
@@ -20,8 +19,6 @@ import {
   fetchPortalState,
   PortalAccessKey,
   PortalState,
-  PortalUserSummary,
-  listPortalUsers,
   updatePortalAccessKeyStatus,
   fetchPortalSettings,
   fetchPortalTraffic,
@@ -117,7 +114,6 @@ function formatIncidentWindow(minutes?: number | null) {
 
 export default function PortalDashboard() {
   const { t } = useI18n();
-  const navigate = useNavigate();
   const { generalSettings } = useGeneralSettings();
   const { accountIdForApi, selectedAccount, hasAccountContext, loading: accountLoading, error: accountError } = usePortalAccountContext();
   const [state, setState] = useState<PortalState | null>(null);
@@ -141,8 +137,6 @@ export default function PortalDashboard() {
   const [showBucketModal, setShowBucketModal] = useState(false);
   const [selectedBucket, setSelectedBucket] = useState<Bucket | null>(null);
   const [newBucketName, setNewBucketName] = useState("");
-  const [portalUsers, setPortalUsers] = useState<PortalUserSummary[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
   const [showKeysModal, setShowKeysModal] = useState(false);
   const [portalSettings, setPortalSettings] = useState<PortalSettings | null>(null);
   const [trafficSparkline, setTrafficSparkline] = useState<{ timestamp: number; total: number; ops: number }[]>([]);
@@ -155,8 +149,9 @@ export default function PortalDashboard() {
   const accountUsedBytes = accountUsage?.used_bytes ?? state?.used_bytes ?? null;
   const accountUsedObjects = accountUsage?.used_objects ?? state?.used_objects ?? null;
   const isBucketNameValid = !newBucketName || isValidS3BucketName(newBucketName);
+  const scopedBuckets = useMemo(() => state?.buckets ?? [], [state?.buckets]);
   const derivedBucketTotals = useMemo(() => {
-    const buckets = state?.buckets ?? [];
+    const buckets = scopedBuckets;
     let bytesSum = 0;
     let objectsSum = 0;
     let hasBytes = false;
@@ -175,23 +170,22 @@ export default function PortalDashboard() {
       bytes: hasBytes ? bytesSum : null,
       objects: hasObjects ? objectsSum : null,
     };
-  }, [state?.buckets]);
+  }, [scopedBuckets]);
   const bucketTotalsBytes = accountUsedBytes != null ? accountUsedBytes : derivedBucketTotals.bytes;
   const bucketTotalsObjects = accountUsedObjects != null ? accountUsedObjects : derivedBucketTotals.objects;
-  const visibleBucketCount = state?.buckets?.length ?? 0;
-  const totalBucketCount = state?.total_buckets ?? visibleBucketCount;
-  const isPortalUser = state?.account_role === "portal_user";
+  const visibleBucketCount = scopedBuckets.length;
+  const totalBucketCount = visibleBucketCount;
   const needsIamBootstrap = Boolean(state && !state.iam_provisioned);
   const orderedAccessKeys = useMemo(() => {
     const keys = state?.access_keys ?? [];
     return keys.filter((key) => !key.is_portal);
   }, [state?.access_keys]);
   const filteredBuckets = useMemo(() => {
-    const list = state?.buckets ?? [];
+    const list = scopedBuckets;
     const query = bucketFilter.trim().toLowerCase();
     if (!query) return list;
     return list.filter((bucket) => bucket.name.toLowerCase().includes(query));
-  }, [state?.buckets, bucketFilter]);
+  }, [bucketFilter, scopedBuckets]);
   const bucketNamesKey = useMemo(
     () => filteredBuckets.map((bucket) => bucket.name).join("|"),
     [filteredBuckets]
@@ -264,14 +258,11 @@ export default function PortalDashboard() {
     }
   }, []);
 
-  const canManageBuckets = Boolean(state?.can_manage_buckets);
-  const allowPortalUserBucketCreate = Boolean(portalSettings?.allow_portal_user_bucket_create && isPortalUser);
-  const allowPortalUserAccessKeyCreate = Boolean(portalSettings?.allow_portal_user_access_key_create && isPortalUser);
+  const canCreateBuckets = Boolean(portalSettings?.allow_portal_user_bucket_create);
+  const canDeleteBuckets = canCreateBuckets;
+  const canCreateAccessKeys = Boolean(portalSettings?.allow_portal_user_access_key_create);
   const maxPortalUserAccessKeys = Math.max(1, Math.trunc(Number(portalSettings?.max_portal_user_access_keys ?? 2)));
   const accessKeyLimitReached = orderedAccessKeys.length >= maxPortalUserAccessKeys;
-  const canCreateBuckets = canManageBuckets || allowPortalUserBucketCreate;
-  const canDeleteBuckets = canCreateBuckets;
-  const canCreateAccessKeys = canManageBuckets || allowPortalUserAccessKeyCreate;
   const canCreateMoreAccessKeys = canCreateAccessKeys && !accessKeyLimitReached;
   const selectedBucketStatsLoading = selectedBucket ? Boolean(bucketStatsLoading[selectedBucket.name]) : false;
   const accessKeyLimitReachedMessage = t({
@@ -279,10 +270,7 @@ export default function PortalDashboard() {
     fr: `Nombre maximal de cles IAM utilisateur atteint (${maxPortalUserAccessKeys}). Supprimez une cle avant d'en creer une nouvelle.`,
     de: `Maximale Anzahl an IAM-Benutzerschlusseln erreicht (${maxPortalUserAccessKeys}). Loschen Sie einen Schlussel, bevor Sie einen neuen erstellen.`,
   });
-  const canOpenBucketInBrowser = Boolean(accountIdForApi) && generalSettings.browser_enabled && generalSettings.browser_portal_enabled;
-  const canViewPortalUsers = Boolean(state?.can_manage_portal_users);
-  const assignedPortalUsers = useMemo(() => portalUsers.filter((u) => !u.iam_only), [portalUsers]);
-  const portalUsersCount = canViewPortalUsers ? (loadingUsers ? "…" : assignedPortalUsers.length) : "-";
+  const portalUsersCount = "-";
   const clampRatio = (used?: number | null, quota?: number | null) => {
     if (used == null || quota == null || quota <= 0) return null;
     return Math.min(100, Math.max(0, (used / quota) * 100));
@@ -306,25 +294,6 @@ export default function PortalDashboard() {
     setDeletingBucketFromModal(false);
     setShowBucketModal(false);
     setSelectedBucket(null);
-  };
-
-  const openBucketInBrowser = useCallback(
-    (bucket: Bucket) => {
-      if (!accountIdForApi || !generalSettings.browser_enabled || !generalSettings.browser_portal_enabled) return;
-      if (typeof window !== "undefined") {
-        localStorage.setItem("selectedPortalAccountId", String(accountIdForApi));
-      }
-      navigate(`/portal/browser?bucket=${encodeURIComponent(bucket.name)}`);
-    },
-    [accountIdForApi, generalSettings.browser_enabled, generalSettings.browser_portal_enabled, navigate]
-  );
-
-  const handleBucketPrimaryAction = (bucket: Bucket) => {
-    if (canOpenBucketInBrowser) {
-      openBucketInBrowser(bucket);
-      return;
-    }
-    openBucketModal(bucket);
   };
 
   const isPortalKeyActive = (key?: PortalAccessKey | null): boolean => {
@@ -585,8 +554,8 @@ export default function PortalDashboard() {
   }, [accountIdForApi]);
 
   useEffect(() => {
-    bucketsRef.current = state?.buckets ?? [];
-  }, [state?.buckets]);
+    bucketsRef.current = scopedBuckets;
+  }, [scopedBuckets]);
 
   useEffect(() => {
     let cancelled = false;
@@ -632,41 +601,10 @@ export default function PortalDashboard() {
   }, [accountIdForApi]);
 
   useEffect(() => {
-    let cancelled = false;
-    const loadUsers = async () => {
-      if (!canViewPortalUsers || !accountIdForApi) {
-        setPortalUsers([]);
-        setLoadingUsers(false);
-        return;
-      }
-      try {
-        setLoadingUsers(true);
-        const data = await listPortalUsers(accountIdForApi);
-        if (!cancelled) {
-          setPortalUsers(data);
-        }
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) {
-          setPortalUsers([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingUsers(false);
-        }
-      }
-    };
-    loadUsers();
-    return () => {
-      cancelled = true;
-    };
-  }, [accountIdForApi, canViewPortalUsers]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!state?.buckets?.length) return;
+    if (!scopedBuckets.length) return;
     if (!("IntersectionObserver" in window)) {
-      state.buckets.forEach((bucket) => {
+      scopedBuckets.forEach((bucket) => {
         void loadBucketStats(bucket.name);
       });
       return;
@@ -687,11 +625,11 @@ export default function PortalDashboard() {
     const nodes = document.querySelectorAll("[data-portal-bucket]");
     nodes.forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, [bucketNamesKey, loadBucketStats]);
+  }, [bucketNamesKey, loadBucketStats, scopedBuckets]);
 
   useEffect(() => {
-    if (!selectedBucket || !state?.buckets) return;
-    const updated = state.buckets.find((b) => b.name === selectedBucket.name);
+    if (!selectedBucket) return;
+    const updated = scopedBuckets.find((b) => b.name === selectedBucket.name);
     if (!updated) {
       setSelectedBucket(null);
       setShowBucketModal(false);
@@ -706,7 +644,7 @@ export default function PortalDashboard() {
     ) {
       setSelectedBucket(updated);
     }
-  }, [selectedBucket, state?.buckets]);
+  }, [scopedBuckets, selectedBucket]);
 
   const handleRotateKey = async () => {
     if (!accountIdForApi) return;
@@ -1138,7 +1076,7 @@ export default function PortalDashboard() {
                   </div>
                   <div>
                     <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      {t({ en: "Buckets", fr: "Buckets", de: "Buckets" })}
+                      {t({ en: "My Buckets", fr: "Mes buckets", de: "Meine Buckets" })}
                     </div>
                     <div className="mt-1 flex items-baseline gap-2">
                       <span className="ui-metric font-semibold">{visibleBucketCount}</span>
@@ -1207,10 +1145,8 @@ export default function PortalDashboard() {
                     {t({ en: "Role", fr: "Role", de: "Rolle" })}
                   </div>
                   <div className="mt-1">
-                    <UiBadge tone={state?.account_role === "portal_manager" ? "success" : "info"}>
-                      {state?.account_role === "portal_manager"
-                        ? t({ en: "Portal manager", fr: "Portal manager", de: "Portal-Manager" })
-                        : t({ en: "Portal user", fr: "Portal user", de: "Portal-Benutzer" })}
+                    <UiBadge tone="info">
+                      {t({ en: "Portal account", fr: "Compte portail", de: "Portal-Konto" })}
                     </UiBadge>
                   </div>
                 </div>
@@ -1541,7 +1477,7 @@ export default function PortalDashboard() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="ui-caption font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  {t({ en: "Buckets", fr: "Buckets", de: "Buckets" })}
+                  {t({ en: "My Buckets", fr: "Mes buckets", de: "Meine Buckets" })}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1599,7 +1535,7 @@ export default function PortalDashboard() {
               </div>
             )}
             <div className="mt-4 flex flex-wrap gap-3 justify-start">
-              {state?.buckets?.length ? (
+              {scopedBuckets.length ? (
                 filteredBuckets.length ? (
                 filteredBuckets.map((bucket) => {
                   const used = bucket.used_bytes ?? null;
@@ -1626,37 +1562,7 @@ export default function PortalDashboard() {
                         >
                           <span aria-hidden>i</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleBucketPrimaryAction(bucket)}
-                          aria-label={
-                            canOpenBucketInBrowser
-                              ? t({
-                                  en: `Open bucket ${bucket.name} in Browser`,
-                                  fr: `Ouvrir le bucket ${bucket.name} dans Browser`,
-                                  de: `Bucket ${bucket.name} im Browser offnen`,
-                                })
-                              : t({
-                                  en: `Open bucket details for ${bucket.name}`,
-                                  fr: `Ouvrir les details du bucket ${bucket.name}`,
-                                  de: `Bucket-Details fur ${bucket.name} offnen`,
-                                })
-                          }
-                          title={
-                            canOpenBucketInBrowser
-                              ? t({
-                                  en: `Open bucket ${bucket.name} in Browser`,
-                                  fr: `Ouvrir le bucket ${bucket.name} dans Browser`,
-                                  de: `Bucket ${bucket.name} im Browser offnen`,
-                                })
-                              : t({
-                                  en: `Open bucket details for ${bucket.name}`,
-                                  fr: `Ouvrir les details du bucket ${bucket.name}`,
-                                  de: `Bucket-Details fur ${bucket.name} offnen`,
-                                })
-                          }
-                          className="min-w-0 flex-1 cursor-pointer rounded-md text-left focus:outline-none focus:ring-2 focus:ring-primary/30"
-                        >
+                        <div className="min-w-0 flex-1 rounded-md text-left">
                           <div className="min-w-0">
                             <div className="truncate font-semibold text-slate-900 dark:text-white" title={bucket.name}>
                               {bucket.name}
@@ -1702,7 +1608,7 @@ export default function PortalDashboard() {
                               </div>
                             </div>
                           </div>
-                        </button>
+                        </div>
                       </div>
                     </div>
                   );

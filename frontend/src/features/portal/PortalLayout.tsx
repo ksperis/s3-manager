@@ -170,7 +170,6 @@ function PortalShell() {
   const hasPortalManagerRole = storedRoles.includes("portal_manager");
   const hasPortalUserRole = storedRoles.includes("portal_user");
   const effectiveAccountRole = accountRole ?? (hasPortalUserRole && !hasPortalManagerRole ? "portal_user" : null);
-  const hideSidebar = effectiveAccountRole === "portal_user";
   const isPortalManager = effectiveAccountRole === "portal_manager";
   const selectedPortalLabel = selectedAccount
     ? formatAccountLabel(selectedAccount, defaultEndpointId, defaultEndpointName, false)
@@ -182,10 +181,10 @@ function PortalShell() {
       label: t({ en: "Portal", fr: "Portail", de: "Portal" }),
       links: [
         { to: "/portal", label: t({ en: "Home", fr: "Accueil", de: "Startseite" }), end: true },
-        ...(isPortalManager ? [{ to: "/portal/buckets", label: t({ en: "Buckets", fr: "Buckets", de: "Buckets" }) }] : []),
         ...(generalSettings.browser_enabled && generalSettings.browser_portal_enabled
           ? [{ to: "/portal/browser", label: t({ en: "Browser", fr: "Browser", de: "Browser" }) }]
           : []),
+        ...(isPortalManager ? [{ to: "/portal/buckets", label: t({ en: "Buckets", fr: "Buckets", de: "Buckets" }) }] : []),
         { to: "/portal/manage", label: t({ en: "Access", fr: "Acces", de: "Zugriff" }) },
         ...(generalSettings.billing_enabled
           ? [{ to: "/portal/billing", label: t({ en: "Billing", fr: "Facturation", de: "Abrechnung" }) }]
@@ -214,7 +213,6 @@ function PortalShell() {
       headerTitle={t({ en: "Portal", fr: "Portail", de: "Portal" })}
       navSections={navSections}
       sidebarTitle="PORTAL"
-      hideSidebar={hideSidebar}
       hideHeader
       topbarControlDescriptors={topbarControlDescriptors}
     >

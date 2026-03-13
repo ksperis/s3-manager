@@ -404,6 +404,9 @@ def test_get_state_hides_portal_key_for_portal_user_even_when_setting_enabled(mo
                 PortalAccessKey(access_key_id="AK-USER", status="Active", created_at="2026-01-02T00:00:00Z"),
             ]
 
+        def get_user_inline_policy(self, iam_username, policy_name):  # noqa: ARG002
+            return None
+
     monkeypatch.setattr(service, "_effective_portal_settings", lambda acc: PortalSettings(allow_portal_key=True))
     monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
     monkeypatch.setattr(service, "_account_quota", lambda acc: (None, None))
@@ -414,6 +417,199 @@ def test_get_state_hides_portal_key_for_portal_user_even_when_setting_enabled(mo
     assert state.iam_provisioned is True
     assert [key.access_key_id for key in state.access_keys] == ["AK-USER"]
     assert all(not key.is_portal for key in state.access_keys)
+
+
+def test_get_state_scopes_buckets_for_portal_manager(monkeypatch, db_session):
+    account = S3Account(name="portal-account-manager-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-manager-scope@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    link = AccountIAMUser(
+        user_id=user.id,
+        account_id=account.id,
+        iam_user_id="iam-uid",
+        iam_username="portal-manager-iam",
+        active_access_key="AK-PORTAL",
+        active_secret_key="SK-PORTAL",
+    )
+    db_session.add(link)
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_MANAGER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=True,
+            can_manage_portal_users=True,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+    service = PortalService(db_session)
+
+    class _FakeIAMService:
+        def get_user(self, iam_username):
+            return IAMUser(name=iam_username, arn=f"arn:aws:iam:::user/{iam_username}")
+
+        def list_access_keys(self, iam_username):  # noqa: ARG002
+            return [
+                PortalAccessKey(access_key_id="AK-PORTAL", status="Active", created_at="2026-01-01T00:00:00Z"),
+                PortalAccessKey(access_key_id="AK-USER", status="Active", created_at="2026-01-02T00:00:00Z"),
+            ]
+
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
+    monkeypatch.setattr(service, "_account_quota", lambda acc: (None, None))
+    monkeypatch.setattr(
+        service,
+        "list_existing_user_bucket_access",
+        lambda target, scoped_account, role: ["bucket-a"],  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        s3_client,
+        "list_buckets",
+        lambda **kwargs: [  # noqa: ARG005
+            {"name": "bucket-a", "creation_date": "2026-03-01T00:00:00Z"},
+            {"name": "bucket-b", "creation_date": "2026-03-02T00:00:00Z"},
+        ],
+    )
+
+    state = service.get_state(user, access)
+
+    assert [bucket.name for bucket in state.buckets] == ["bucket-a"]
+    assert state.total_buckets == 1
+    assert state.can_manage_buckets is True
+
+
+def test_get_state_scopes_buckets_for_portal_user(monkeypatch, db_session):
+    account = S3Account(name="portal-account-user-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-scope@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    link = AccountIAMUser(
+        user_id=user.id,
+        account_id=account.id,
+        iam_user_id="iam-uid",
+        iam_username="portal-user-iam",
+        active_access_key="AK-PORTAL",
+        active_secret_key="SK-PORTAL",
+    )
+    db_session.add(link)
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+    service = PortalService(db_session)
+
+    class _FakeIAMService:
+        def get_user(self, iam_username):
+            return IAMUser(name=iam_username, arn=f"arn:aws:iam:::user/{iam_username}")
+
+        def list_access_keys(self, iam_username):  # noqa: ARG002
+            return [
+                PortalAccessKey(access_key_id="AK-PORTAL", status="Active", created_at="2026-01-01T00:00:00Z"),
+                PortalAccessKey(access_key_id="AK-USER", status="Active", created_at="2026-01-02T00:00:00Z"),
+            ]
+
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
+    monkeypatch.setattr(service, "_account_quota", lambda acc: (None, None))
+    monkeypatch.setattr(
+        service,
+        "list_existing_user_bucket_access",
+        lambda target, scoped_account, role: ["bucket-user"],  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        s3_client,
+        "list_buckets",
+        lambda **kwargs: [  # noqa: ARG005
+            {"name": "bucket-user", "creation_date": "2026-03-01T00:00:00Z"},
+            {"name": "bucket-other", "creation_date": "2026-03-02T00:00:00Z"},
+        ],
+    )
+
+    state = service.get_state(user, access)
+
+    assert [bucket.name for bucket in state.buckets] == ["bucket-user"]
+    assert state.total_buckets == 1
+    assert state.can_manage_buckets is False
+
+
+def test_get_state_returns_no_buckets_when_scope_is_empty(monkeypatch, db_session):
+    account = S3Account(name="portal-account-empty-scope", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-empty-scope@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    link = AccountIAMUser(
+        user_id=user.id,
+        account_id=account.id,
+        iam_user_id="iam-uid",
+        iam_username="portal-empty-iam",
+        active_access_key="AK-PORTAL",
+        active_secret_key="SK-PORTAL",
+    )
+    db_session.add(link)
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+    service = PortalService(db_session)
+
+    class _FakeIAMService:
+        def get_user(self, iam_username):
+            return IAMUser(name=iam_username, arn=f"arn:aws:iam:::user/{iam_username}")
+
+        def list_access_keys(self, iam_username):  # noqa: ARG002
+            return [
+                PortalAccessKey(access_key_id="AK-PORTAL", status="Active", created_at="2026-01-01T00:00:00Z"),
+                PortalAccessKey(access_key_id="AK-USER", status="Active", created_at="2026-01-02T00:00:00Z"),
+            ]
+
+    monkeypatch.setattr(service, "_get_iam_service", lambda acc: _FakeIAMService())
+    monkeypatch.setattr(service, "_account_quota", lambda acc: (None, None))
+    monkeypatch.setattr(
+        service,
+        "list_existing_user_bucket_access",
+        lambda target, scoped_account, role: [],  # noqa: ARG005
+    )
+    monkeypatch.setattr(
+        s3_client,
+        "list_buckets",
+        lambda **kwargs: [  # noqa: ARG005
+            {"name": "fallback-bucket", "creation_date": "2026-03-01T00:00:00Z"},
+        ],
+    )
+
+    state = service.get_state(user, access)
+
+    assert state.buckets == []
+    assert state.total_buckets == 0
 
 
 def test_create_access_key_rejects_when_limit_reached(monkeypatch, db_session):

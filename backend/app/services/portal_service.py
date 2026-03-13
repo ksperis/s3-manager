@@ -1409,32 +1409,30 @@ class PortalService:
                 iam_provisioned = has_active_portal_credentials
 
                 if has_active_portal_credentials:
-                    accessible_names: Optional[set[str]] = None
-                    if not access.capabilities.can_manage_buckets:
-                        allowed = self.list_existing_user_bucket_access(user, access.account, access.role)
-                        accessible_names = set(allowed)
-                    try:
-                        for b in s3_client.list_buckets(
-                            access_key=link.active_access_key,
-                            secret_key=link.active_secret_key,
-                            **self._s3_client_kwargs(account),
-                        ):
-                            name = b.get("name")
-                            if accessible_names is not None and name not in accessible_names:
-                                continue
-                            buckets.append(
-                                Bucket(
-                                    name=name,
-                                    creation_date=b.get("creation_date"),
-                                    used_bytes=None,
-                                    object_count=None,
-                                    quota_max_size_bytes=None,
-                                    quota_max_objects=None,
+                    accessible_names = set(self.list_existing_user_bucket_access(user, access.account, access.role))
+                    if accessible_names:
+                        try:
+                            for b in s3_client.list_buckets(
+                                access_key=link.active_access_key,
+                                secret_key=link.active_secret_key,
+                                **self._s3_client_kwargs(account),
+                            ):
+                                name = b.get("name")
+                                if name not in accessible_names:
+                                    continue
+                                buckets.append(
+                                    Bucket(
+                                        name=name,
+                                        creation_date=b.get("creation_date"),
+                                        used_bytes=None,
+                                        object_count=None,
+                                        quota_max_size_bytes=None,
+                                        quota_max_objects=None,
+                                    )
                                 )
-                            )
-                    except Exception as exc:  # pragma: no cover - defensive
-                        logger.warning("Unable to list buckets with existing portal credentials for %s: %s", user.email, exc)
-                        buckets = []
+                        except Exception as exc:  # pragma: no cover - defensive
+                            logger.warning("Unable to list buckets with existing portal credentials for %s: %s", user.email, exc)
+                            buckets = []
         total_buckets = len(buckets)
         quota_max_size_bytes, quota_max_objects = self._account_quota(account)
         return PortalState(

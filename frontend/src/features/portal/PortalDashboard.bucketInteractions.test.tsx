@@ -134,6 +134,7 @@ describe("PortalDashboard bucket interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    localStorage.setItem("user", JSON.stringify({ id: 42, email: "manager@example.com" }));
     generalSettingsState.browser_enabled = true;
     generalSettingsState.browser_portal_enabled = true;
     generalSettingsState.endpoint_status_enabled = false;
@@ -160,27 +161,71 @@ describe("PortalDashboard bucket interactions", () => {
     fetchPortalWorkspaceHealthOverviewMock.mockResolvedValue({ endpoints: [], incidents: [], incident_highlight_minutes: 720 });
   });
 
-  it("opens the bucket modal when browser feature is disabled and bucket card is clicked", async () => {
+  it("shows buckets from portal state for portal_manager", async () => {
+    fetchPortalStateMock.mockResolvedValueOnce({
+      ...basePortalState,
+      buckets: [
+        ...basePortalState.buckets,
+        {
+          name: "bucket-b",
+          creation_date: "2026-03-11T10:00:00Z",
+          used_bytes: 64,
+          object_count: 2,
+          quota_max_size_bytes: null,
+          quota_max_objects: null,
+        },
+      ],
+      total_buckets: 2,
+    });
+
+    render(<PortalDashboard />);
+
+    expect(await screen.findByText("bucket-a")).toBeInTheDocument();
+    expect(await screen.findByText("bucket-b")).toBeInTheDocument();
+  });
+
+  it("shows buckets from portal state for portal_user", async () => {
+    fetchPortalStateMock.mockResolvedValueOnce({
+      ...basePortalState,
+      account_role: "portal_user",
+      can_manage_buckets: false,
+      buckets: [
+        {
+          name: "bucket-user",
+          creation_date: "2026-03-12T10:00:00Z",
+          used_bytes: 32,
+          object_count: 1,
+          quota_max_size_bytes: null,
+          quota_max_objects: null,
+        },
+      ],
+      total_buckets: 1,
+    });
+
+    render(<PortalDashboard />);
+
+    expect(await screen.findByText("bucket-user")).toBeInTheDocument();
+  });
+
+  it("does not open bucket details when clicking a bucket on home", async () => {
     generalSettingsState.browser_enabled = false;
     const user = userEvent.setup();
     render(<PortalDashboard />);
 
-    const openDetailsButton = await screen.findByRole("button", { name: "Open bucket details for bucket-a" });
-    await user.click(openDetailsButton);
+    await user.click(await screen.findByText("bucket-a"));
 
-    expect(await screen.findByTestId("portal-bucket-modal")).toHaveTextContent("Bucket modal: bucket-a");
+    expect(screen.queryByTestId("portal-bucket-modal")).not.toBeInTheDocument();
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
-  it("opens portal browser on bucket card click when browser feature is enabled", async () => {
+  it("does not open browser when clicking a bucket on home", async () => {
     const user = userEvent.setup();
     render(<PortalDashboard />);
 
-    const openInBrowserButton = await screen.findByRole("button", { name: "Open bucket bucket-a in Browser" });
-    await user.click(openInBrowserButton);
+    await user.click(await screen.findByText("bucket-a"));
 
-    expect(navigateMock).toHaveBeenCalledWith("/portal/browser?bucket=bucket-a");
-    expect(localStorage.getItem("selectedPortalAccountId")).toBe("1");
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(localStorage.getItem("selectedPortalAccountId")).toBeNull();
     expect(screen.queryByTestId("portal-bucket-modal")).not.toBeInTheDocument();
   });
 
@@ -271,6 +316,9 @@ describe("PortalDashboard bucket interactions", () => {
       buckets: [{ ...basePortalState.buckets[0], object_count: 0 }],
       used_objects: 0,
     });
+    fetchPortalSettingsMock.mockResolvedValueOnce({
+      allow_portal_user_bucket_create: true,
+    });
     fetchPortalBucketStatsMock.mockResolvedValue({ name: "bucket-a", used_bytes: 128, object_count: 0 });
 
     render(<PortalDashboard />);
@@ -307,6 +355,9 @@ describe("PortalDashboard bucket interactions", () => {
 
   it("does not call delete API when selected bucket is not empty", async () => {
     const user = userEvent.setup();
+    fetchPortalSettingsMock.mockResolvedValueOnce({
+      allow_portal_user_bucket_create: true,
+    });
     render(<PortalDashboard />);
 
     await user.click(await screen.findByRole("button", { name: "Bucket information for bucket-a" }));
@@ -322,6 +373,9 @@ describe("PortalDashboard bucket interactions", () => {
       ...basePortalState,
       buckets: [{ ...basePortalState.buckets[0], object_count: 0 }],
       used_objects: 0,
+    });
+    fetchPortalSettingsMock.mockResolvedValueOnce({
+      allow_portal_user_bucket_create: true,
     });
     fetchPortalBucketStatsMock.mockResolvedValue({ name: "bucket-a", used_bytes: 128, object_count: 0 });
     deletePortalBucketMock.mockRejectedValueOnce(new Error("Bucket 'bucket-a' is not empty."));
