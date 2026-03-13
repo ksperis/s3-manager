@@ -17,7 +17,6 @@ from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
-from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -53,6 +52,14 @@ from app.models.ceph_admin import (
     PaginatedCephAdminBucketsResponse,
 )
 from app.routers.ceph_admin.dependencies import CephAdminContext, _resolve_storage_endpoint, get_ceph_admin_context
+from app.routers.http_errors import raise_bad_gateway_from_runtime
+from app.services.bucket_listing_shared import (
+    _filter_requires_stats as _shared_filter_requires_stats,
+    _format_sse_event as _shared_format_sse_event,
+    _is_advanced_filter_stream_payload as _shared_is_advanced_filter_stream_payload,
+    _parse_filter as _shared_parse_filter,
+    parse_includes,
+)
 from app.services.buckets_service import BucketsService
 from app.services.rgw_admin import RGWAdminError
 from app.utils.rgw import extract_bucket_list, is_rgw_account_id
@@ -169,26 +176,6 @@ def _normalize_http_error_detail(detail: object) -> object:
         return detail
     return str(detail)
 
-
-def _format_sse_event(event: str, payload: dict[str, object]) -> str:
-    return f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
-
-
-def _is_advanced_filter_stream_payload(raw_advanced_filter: str | None) -> bool:
-    if not isinstance(raw_advanced_filter, str):
-        return False
-    text = raw_advanced_filter.strip()
-    if not text or not text.startswith("{"):
-        return False
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        return False
-    if not isinstance(payload, dict):
-        return False
-    return "rules" in payload or "match" in payload
-
-
 _BUCKET_LIST_CACHE: OrderedDict[_BucketListCacheKey, _BucketListCacheEntry] = OrderedDict()
 _BUCKET_LIST_CACHE_LOCK = Lock()
 _RGW_BUCKET_PAYLOAD_CACHE: OrderedDict[_RgwBucketPayloadCacheKey, _RgwBucketPayloadCacheEntry] = OrderedDict()
@@ -247,18 +234,6 @@ def _build_endpoint_account_from_credentials(endpoint_id: int, endpoint, access_
     account.storage_endpoint = endpoint  # type: ignore[assignment]
     account.set_session_credentials(access_key, secret_key)
     return account
-
-
-def _parse_includes(include: list[str]) -> set[str]:
-    include_set: set[str] = set()
-    for item in include:
-        if not isinstance(item, str):
-            continue
-        for part in item.split(","):
-            normalized = part.strip()
-            if normalized:
-                include_set.add(normalized)
-    return include_set
 
 
 def _split_tenant_uid(value: str) -> tuple[str | None, str]:
@@ -513,25 +488,6 @@ def _resolve_owner_names_for_buckets(
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         return dict(executor.map(resolve_owner_target, owner_targets.items()))
-
-
-def _parse_filter(raw: str | None) -> tuple[str | None, CephAdminBucketFilterQuery | None]:
-    if raw is None:
-        return None, None
-    text = raw.strip()
-    if not text:
-        return None, None
-    if text.startswith("{"):
-        try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError:
-            return text, None
-        if isinstance(parsed, dict) and ("rules" in parsed or "match" in parsed):
-            try:
-                return None, CephAdminBucketFilterQuery.model_validate(parsed)
-            except ValidationError as exc:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return text, None
 
 
 def _normalize_text(value: str) -> str:
@@ -1233,15 +1189,6 @@ def _load_feature_param_snapshots(
     return snapshots, available_keys
 
 
-def _filter_requires_stats(query: CephAdminBucketFilterQuery | None) -> bool:
-    if not query:
-        return False
-    for rule in query.rules:
-        if rule.field in {"used_bytes", "object_count", "quota_max_size_bytes", "quota_max_objects"}:
-            return True
-    return False
-
-
 def _filter_requires_owner_metadata(query: CephAdminBucketFilterQuery | None) -> bool:
     if not query:
         return False
@@ -1654,9 +1601,9 @@ def _compute_bucket_listing(
 
     if advanced_filter:
         simple_filter = filter.strip() if isinstance(filter, str) and filter.strip() else None
-        _, advanced_filter = _parse_filter(advanced_filter)
+        _, advanced_filter = _shared_parse_filter(advanced_filter)
     else:
-        simple_filter, advanced_filter = _parse_filter(filter)
+        simple_filter, advanced_filter = _shared_parse_filter(filter)
     simple_filter = simple_filter.strip() if isinstance(simple_filter, str) and simple_filter.strip() else None
 
     storage_metrics_enabled = True
@@ -1665,10 +1612,10 @@ def _compute_bucket_listing(
         storage_metrics_enabled = bool(resolve_feature_flags(endpoint).metrics_enabled)
     if not storage_metrics_enabled:
         with_stats = False
-    elif _filter_requires_stats(advanced_filter):
+    elif _shared_filter_requires_stats(advanced_filter):
         with_stats = True
 
-    include_set = _parse_includes(include)
+    include_set = parse_includes(include)
     wants_owner_name = "owner_name" in include_set
     needs_owner_metadata = _filter_requires_owner_metadata(advanced_filter) or sort_by in {"tenant", "owner"}
     fetch_with_stats = with_stats or needs_owner_metadata
@@ -1722,7 +1669,7 @@ def _compute_bucket_listing(
                 force=True,
             )
         except RGWAdminError as exc:
-            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+            raise_bad_gateway_from_runtime(exc)
 
         results: list[CephAdminBucketSummary] = []
         total_entries = len(entries)
@@ -2002,7 +1949,7 @@ async def stream_buckets(
     with_stats: bool = True,
     ctx: CephAdminContext = Depends(get_ceph_admin_context),
 ) -> StreamingResponse:
-    if not _is_advanced_filter_stream_payload(advanced_filter):
+    if not _shared_is_advanced_filter_stream_payload(advanced_filter):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="advanced_filter must be provided as a JSON payload for streaming search",
@@ -2028,7 +1975,7 @@ async def stream_buckets(
             }
             if snapshot.message:
                 payload["message"] = snapshot.message
-            push_message(_format_sse_event("progress", payload))
+            push_message(_shared_format_sse_event("progress", payload))
 
         def cancel_check() -> None:
             if cancel_event.is_set():
@@ -2050,13 +1997,13 @@ async def stream_buckets(
                     cancel_check=cancel_check,
                 )
                 payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else result.dict()
-                push_message(_format_sse_event("result", payload))
-                push_message(_format_sse_event("done", {"request_id": request_id}))
+                push_message(_shared_format_sse_event("result", payload))
+                push_message(_shared_format_sse_event("done", {"request_id": request_id}))
             except _BucketListingCancelled:
                 return
             except HTTPException as exc:
                 push_message(
-                    _format_sse_event(
+                    _shared_format_sse_event(
                         "error",
                         {
                             "request_id": request_id,
@@ -2064,11 +2011,11 @@ async def stream_buckets(
                         },
                     )
                 )
-                push_message(_format_sse_event("done", {"request_id": request_id}))
+                push_message(_shared_format_sse_event("done", {"request_id": request_id}))
             except Exception as exc:  # pragma: no cover
                 logger.exception("Bucket streaming search failed: %s", exc)
                 push_message(
-                    _format_sse_event(
+                    _shared_format_sse_event(
                         "error",
                         {
                             "request_id": request_id,
@@ -2076,7 +2023,7 @@ async def stream_buckets(
                         },
                     )
                 )
-                push_message(_format_sse_event("done", {"request_id": request_id}))
+                push_message(_shared_format_sse_event("done", {"request_id": request_id}))
             finally:
                 push_message(None)
 
@@ -2159,7 +2106,7 @@ def compare_bucket_pair(
                 include_sections=set(payload.config_features) if payload.config_features is not None else None,
             )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
     has_differences = bool(
         (
@@ -2193,7 +2140,7 @@ def bucket_properties(
     try:
         return service.get_bucket_properties(bucket_name, account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/versioning", status_code=status.HTTP_200_OK)
@@ -2209,7 +2156,7 @@ def update_versioning(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return {"message": f"Versioning updated for {bucket_name}", "enabled": payload.enabled}
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/quota", status_code=status.HTTP_200_OK)
@@ -2223,7 +2170,7 @@ def update_quota(
     try:
         bucket_info = ctx.rgw_admin.get_bucket_info(bucket_name, stats=False, allow_not_found=True)
     except RGWAdminError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
     if not bucket_info or (isinstance(bucket_info, dict) and bucket_info.get("not_found")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bucket not found")
 
@@ -2243,7 +2190,7 @@ def update_quota(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/lifecycle", response_model=BucketLifecycleConfig)
@@ -2256,7 +2203,7 @@ def get_lifecycle(
     try:
         return service.get_lifecycle(bucket_name, account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/lifecycle", response_model=BucketLifecycleConfig)
@@ -2272,7 +2219,7 @@ def put_lifecycle(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return response
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/{bucket_name}/lifecycle", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -2287,7 +2234,7 @@ def delete_lifecycle(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/cors")
@@ -2301,7 +2248,7 @@ def get_cors(
         cors = service.get_bucket_properties(bucket_name, account).cors_rules
         return {"rules": cors or []}
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/cors")
@@ -2317,7 +2264,7 @@ def put_cors(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return {"rules": payload.rules}
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/{bucket_name}/cors", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -2332,7 +2279,7 @@ def delete_cors(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/policy", response_model=BucketPolicyOut)
@@ -2346,7 +2293,7 @@ def get_policy(
         policy = service.get_policy(bucket_name, account)
         return BucketPolicyOut(policy=policy)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/policy", response_model=BucketPolicyOut)
@@ -2362,7 +2309,7 @@ def put_policy(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return BucketPolicyOut(policy=payload.policy)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/{bucket_name}/policy", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -2377,7 +2324,7 @@ def delete_policy(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/notifications", response_model=BucketNotificationConfiguration)
@@ -2390,7 +2337,7 @@ def get_notifications(
     try:
         return service.get_bucket_notifications(bucket_name, account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/notifications", response_model=BucketNotificationConfiguration)
@@ -2407,7 +2354,7 @@ def put_notifications(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return response
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/{bucket_name}/notifications", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -2422,7 +2369,7 @@ def delete_notifications(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
@@ -2435,7 +2382,7 @@ def get_replication(
     try:
         return service.get_bucket_replication(bucket_name, account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
@@ -2453,7 +2400,7 @@ def put_replication(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/{bucket_name}/replication", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -2468,7 +2415,7 @@ def delete_replication(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
@@ -2481,7 +2428,7 @@ def get_logging(
     try:
         return service.get_bucket_logging(bucket_name, account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
@@ -2499,7 +2446,7 @@ def put_logging(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/{bucket_name}/logging", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -2514,7 +2461,7 @@ def delete_logging(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
@@ -2527,7 +2474,7 @@ def get_website(
     try:
         return service.get_bucket_website(bucket_name, account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
@@ -2545,7 +2492,7 @@ def put_website(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/{bucket_name}/website", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -2560,7 +2507,7 @@ def delete_website(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/tags")
@@ -2574,7 +2521,7 @@ def get_tags(
         tags = service.get_bucket_tags(bucket_name, account)
         return {"tags": [tag.model_dump() for tag in tags]}
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/tags")
@@ -2590,7 +2537,7 @@ def put_tags(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return {"tags": [t.model_dump() for t in payload.tags]}
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/{bucket_name}/tags", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -2605,7 +2552,7 @@ def delete_tags(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/acl", response_model=BucketAcl)
@@ -2618,7 +2565,7 @@ def get_acl(
     try:
         return service.get_bucket_acl(bucket_name, account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/acl", response_model=BucketAcl)
@@ -2634,7 +2581,7 @@ def put_acl(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return response
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/public-access-block", response_model=BucketPublicAccessBlock)
@@ -2647,7 +2594,7 @@ def get_public_access_block(
     try:
         return service.get_public_access_block(bucket_name, account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/public-access-block", response_model=BucketPublicAccessBlock)
@@ -2663,7 +2610,7 @@ def put_public_access_block(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return response
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/object-lock", response_model=BucketObjectLock)
@@ -2676,7 +2623,7 @@ def get_object_lock(
     try:
         return service.get_object_lock(bucket_name, account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/object-lock", response_model=BucketObjectLock)
@@ -2694,7 +2641,7 @@ def put_object_lock(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
@@ -2708,7 +2655,7 @@ def get_bucket_encryption(
     try:
         return service.get_bucket_encryption(bucket_name, account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
@@ -2725,7 +2672,7 @@ def put_bucket_encryption(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return response
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/{bucket_name}/encryption", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
@@ -2741,4 +2688,4 @@ def delete_bucket_encryption(
         _invalidate_bucket_listing_cache(ctx.endpoint.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)

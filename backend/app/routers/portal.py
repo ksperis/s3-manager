@@ -32,6 +32,7 @@ from app.routers.dependencies import (
     get_portal_account_access,
     require_portal_manager,
 )
+from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.services.audit_service import AuditService
 from app.services.portal_service import PortalService, get_portal_service
 from app.services.s3_accounts_service import get_s3_accounts_service
@@ -161,7 +162,7 @@ def portal_bootstrap(
         )
         return state
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/state", response_model=PortalState)
@@ -178,7 +179,7 @@ def portal_state(
     try:
         return service.get_state(actor, access)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/usage", response_model=PortalUsage)
@@ -195,7 +196,7 @@ def portal_usage(
     try:
         return service.get_usage(actor, access)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/endpoint-health", response_model=WorkspaceEndpointHealthOverviewResponse)
@@ -265,7 +266,7 @@ def portal_buckets(
                 buckets = [bucket for bucket in buckets if term in bucket.name.lower()]
         return buckets
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/buckets/{bucket_name}/users", response_model=list[PortalUserCard])
@@ -310,7 +311,7 @@ def list_portal_bucket_users(
             )
         return results
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/buckets/{bucket_name}/stats", response_model=Bucket)
@@ -373,7 +374,7 @@ def create_portal_bucket(
         )
         return bucket
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/buckets/{bucket_name}")
@@ -402,7 +403,7 @@ def delete_portal_bucket(
     except BucketNotEmptyError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/access-keys", response_model=list[PortalAccessKey])
@@ -416,7 +417,7 @@ def list_portal_access_keys(
     try:
         return service.list_access_keys(actor, access)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.post("/access-keys", response_model=PortalAccessKey, status_code=status.HTTP_201_CREATED)
@@ -444,7 +445,7 @@ def create_portal_access_key(
         )
         return key
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.post("/access-keys/portal/rotate", response_model=PortalAccessKey, status_code=status.HTTP_201_CREATED)
@@ -469,7 +470,7 @@ def rotate_portal_access_key(
         )
         return key
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/access-keys/{access_key_id}/status", response_model=PortalAccessKey)
@@ -496,7 +497,7 @@ def update_portal_access_key_status(
         )
         return key
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/access-keys/{access_key_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -524,7 +525,7 @@ def delete_portal_access_key(
             metadata={"access_key_id": access_key_id},
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/traffic")
@@ -555,7 +556,7 @@ def portal_traffic(
     try:
         traffic_service = TrafficService(account)
     except ValueError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
     try:
         return traffic_service.get_traffic(window=window, bucket=bucket)
     except ValueError as exc:
@@ -612,7 +613,7 @@ def portal_iam_compliance(
     try:
         return service.check_iam_compliance(access.account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.post("/iam-compliance/apply", response_model=PortalIamComplianceReport)
@@ -626,7 +627,7 @@ def portal_apply_iam_compliance(
     try:
         return service.apply_iam_compliance(access.account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/users", response_model=list[PortalUserCard])
@@ -745,7 +746,7 @@ def add_portal_ui_user(
     try:
         service.provision_portal_user(target, access.account, assigned_role)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
     refreshed_link = (
         users_service.db.query(AccountIAMUser)
         .filter(AccountIAMUser.user_id == target.id, AccountIAMUser.account_id == access.account.id)
@@ -785,7 +786,7 @@ def list_portal_user_buckets(
         buckets = service.list_existing_user_bucket_access(target, access.account, account_role)
         return PortalUserBuckets(buckets=buckets)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.post("/users/{user_id}/buckets", response_model=PortalUserBuckets)
@@ -826,7 +827,7 @@ def grant_portal_user_bucket(
         )
         return PortalUserBuckets(buckets=buckets)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.delete("/users/{user_id}/buckets/{bucket}", response_model=PortalUserBuckets)
@@ -867,7 +868,7 @@ def revoke_portal_user_bucket(
         )
         return PortalUserBuckets(buckets=buckets)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.put("/users/{user_id}", response_model=PortalUserCard)
@@ -906,7 +907,7 @@ def update_portal_ui_user_role(
     try:
         service.provision_portal_user(target, access.account, assigned_role)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
     refreshed_link = (
         users_service.db.query(AccountIAMUser)
         .filter(AccountIAMUser.user_id == target.id, AccountIAMUser.account_id == access.account.id)
@@ -948,6 +949,6 @@ def remove_portal_ui_user(
     try:
         service.remove_portal_user(target, access.account)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
     users_service.db.delete(link)
     users_service.db.commit()

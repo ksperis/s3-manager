@@ -35,12 +35,14 @@ from app.models.manager_bucket_compare import (
 )
 from app.services.audit_service import AuditService
 from app.services.buckets_service import BucketsService, get_buckets_service
+from app.services import bucket_config_actions
 from app.services.bucket_listing_cache import (
     get_cached_bucket_listing_for_account,
     invalidate_bucket_listing_cache_for_account,
 )
-from app.services.s3_client import BucketNotEmptyError
+from app.services.bucket_listing_shared import parse_includes
 from app.utils.storage_endpoint_features import resolve_feature_flags
+from app.routers.http_errors import raise_bad_gateway_from_runtime
 from app.routers.dependencies import (
     get_account_context,
     get_audit_logger,
@@ -96,14 +98,7 @@ def list_buckets(
     _: dict = Depends(get_current_account_admin),
 ) -> list[Bucket]:
     try:
-        include_set: set[str] = set()
-        for item in include:
-            if not isinstance(item, str):
-                continue
-            for part in item.split(","):
-                normalized = part.strip()
-                if normalized:
-                    include_set.add(normalized)
+        include_set = parse_includes(include)
         return get_cached_bucket_listing_for_account(
             account=account,
             include=include_set,
@@ -111,7 +106,7 @@ def list_buckets(
             builder=lambda: service.list_buckets(account, include=include_set, with_stats=with_stats),
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.get("/{bucket_name}/stats", response_model=Bucket)
@@ -125,7 +120,7 @@ def get_bucket_stats(
     try:
         return service.get_bucket_stats(bucket_name, account, with_stats=with_stats)
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
 
 @router.post("/compare", response_model=ManagerBucketCompareResult)
@@ -174,7 +169,7 @@ def compare_bucket_pair(
                 include_sections=set(payload.config_features) if payload.config_features is not None else None,
             )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
     has_differences = bool(
         (
@@ -234,7 +229,7 @@ def run_compare_bucket_action(
             parallelism=payload.parallelism,
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        raise_bad_gateway_from_runtime(exc)
 
     _invalidate_bucket_listing_for_account(source_account)
     _invalidate_bucket_listing_for_account(target_account)
@@ -275,10 +270,11 @@ def bucket_properties(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketProperties:
-    try:
-        return service.get_bucket_properties(bucket_name, account)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_properties_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/versioning", status_code=status.HTTP_200_OK)
@@ -290,21 +286,23 @@ def update_versioning(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ):
-    try:
-        service.set_versioning(bucket_name, account, enabled=payload.enabled)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_versioning",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata={"enabled": payload.enabled},
-        )
-        return {"message": f"Versioning updated for {bucket_name}", "enabled": payload.enabled}
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    response, audit_metadata = bucket_config_actions.update_bucket_versioning_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_versioning",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return response
 
 
 @router.get("/{bucket_name}/object-lock", response_model=BucketObjectLock)
@@ -314,10 +312,11 @@ def get_object_lock(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketObjectLock:
-    try:
-        return service.get_object_lock(bucket_name, account)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_object_lock_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/object-lock", response_model=BucketObjectLock)
@@ -329,23 +328,23 @@ def put_object_lock(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketObjectLock:
-    try:
-        result = service.set_object_lock(bucket_name, account, payload)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_object_lock",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata=payload.model_dump(exclude_none=True),
-        )
-        return result
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    result, audit_metadata = bucket_config_actions.put_bucket_object_lock_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_object_lock",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return result
 
 
 @router.get("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
@@ -356,10 +355,11 @@ def get_bucket_encryption(
     _: dict = Depends(get_current_account_admin),
 ) -> BucketEncryptionConfiguration:
     _require_sse_feature(account)
-    try:
-        return service.get_bucket_encryption(bucket_name, account)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_encryption_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/encryption", response_model=BucketEncryptionConfiguration)
@@ -372,21 +372,23 @@ def put_bucket_encryption(
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketEncryptionConfiguration:
     _require_sse_feature(account)
-    try:
-        result = service.set_bucket_encryption(bucket_name, account, payload.rules)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_encryption",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata={"rules_count": len(payload.rules or [])},
-        )
-        return result
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    result, audit_metadata = bucket_config_actions.put_bucket_encryption_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_encryption",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return result
 
 
 @router.delete("/{bucket_name}/encryption", status_code=status.HTTP_204_NO_CONTENT)
@@ -398,19 +400,20 @@ def delete_bucket_encryption(
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
     _require_sse_feature(account)
-    try:
-        service.delete_bucket_encryption(bucket_name, account)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_bucket_encryption",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    bucket_config_actions.delete_bucket_encryption_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="delete_bucket_encryption",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+    )
 
 
 @router.get("/{bucket_name}/policy", response_model=BucketPolicyOut)
@@ -420,11 +423,11 @@ def get_policy(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketPolicyOut:
-    try:
-        policy = service.get_policy(bucket_name, account)
-        return BucketPolicyOut(policy=policy)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_policy_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.get("/{bucket_name}/acl", response_model=BucketAcl)
@@ -434,10 +437,11 @@ def get_acl(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketAcl:
-    try:
-        return service.get_bucket_acl(bucket_name, account)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_acl_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/acl", response_model=BucketAcl)
@@ -449,21 +453,23 @@ def put_acl(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketAcl:
-    try:
-        result = service.set_bucket_acl(bucket_name, account, payload)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_acl",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata={"acl": payload.acl},
-        )
-        return result
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    result, audit_metadata = bucket_config_actions.put_bucket_acl_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_acl",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return result
 
 
 @router.get("/{bucket_name}/public-access-block", response_model=BucketPublicAccessBlock)
@@ -473,10 +479,11 @@ def get_public_access_block(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketPublicAccessBlock:
-    try:
-        return service.get_public_access_block(bucket_name, account)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_public_access_block_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/public-access-block", response_model=BucketPublicAccessBlock)
@@ -488,21 +495,23 @@ def put_public_access_block(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketPublicAccessBlock:
-    try:
-        result = service.set_public_access_block(bucket_name, account, payload)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_public_access_block",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata=payload.model_dump(exclude_none=True),
-        )
-        return result
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    result, audit_metadata = bucket_config_actions.put_bucket_public_access_block_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_public_access_block",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return result
 
 
 @router.put("/{bucket_name}/policy", response_model=BucketPolicyOut)
@@ -514,21 +523,23 @@ def put_policy(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketPolicyOut:
-    try:
-        service.put_policy(bucket_name, account, policy=payload.policy)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="put_bucket_policy",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata={"policy_length": len(payload.policy or "")},
-        )
-        return BucketPolicyOut(policy=payload.policy)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    result, audit_metadata = bucket_config_actions.put_bucket_policy_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="put_bucket_policy",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return result
 
 
 @router.delete("/{bucket_name}/policy", status_code=status.HTTP_204_NO_CONTENT)
@@ -539,19 +550,20 @@ def delete_policy(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
-    try:
-        service.delete_policy(bucket_name, account)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_bucket_policy",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    bucket_config_actions.delete_bucket_policy_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="delete_bucket_policy",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+    )
 
 
 @router.get("/{bucket_name}/lifecycle", response_model=BucketLifecycleConfig)
@@ -561,10 +573,11 @@ def get_lifecycle(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketLifecycleConfig:
-    try:
-        return service.get_lifecycle(bucket_name, account)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_lifecycle_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/lifecycle", response_model=BucketLifecycleConfig)
@@ -576,21 +589,23 @@ def put_lifecycle(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketLifecycleConfig:
-    try:
-        result = service.set_lifecycle(bucket_name, account, rules=payload.rules)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_lifecycle",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata={"rules_count": len(payload.rules or [])},
-        )
-        return result
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    result, audit_metadata = bucket_config_actions.put_bucket_lifecycle_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_lifecycle",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return result
 
 
 @router.delete("/{bucket_name}/lifecycle", status_code=status.HTTP_204_NO_CONTENT)
@@ -601,19 +616,20 @@ def delete_lifecycle(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
-    try:
-        service.delete_lifecycle(bucket_name, account)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_bucket_lifecycle",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    bucket_config_actions.delete_bucket_lifecycle_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="delete_bucket_lifecycle",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+    )
 
 
 @router.get("/{bucket_name}/cors")
@@ -623,11 +639,11 @@ def get_cors(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ):
-    try:
-        cors = service.get_bucket_properties(bucket_name, account).cors_rules
-        return {"rules": cors or []}
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_cors_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/cors")
@@ -639,21 +655,23 @@ def put_cors(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ):
-    try:
-        service.set_cors(bucket_name, account, rules=payload.rules)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_cors",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata={"rules_count": len(payload.rules or [])},
-        )
-        return {"rules": payload.rules}
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    response, audit_metadata = bucket_config_actions.put_bucket_cors_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_cors",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return response
 
 
 @router.delete("/{bucket_name}/cors", status_code=status.HTTP_204_NO_CONTENT)
@@ -664,19 +682,20 @@ def delete_cors(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ):
-    try:
-        service.delete_cors(bucket_name, account)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_bucket_cors",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    bucket_config_actions.delete_bucket_cors_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="delete_bucket_cors",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+    )
 
 
 @router.get("/{bucket_name}/notifications", response_model=BucketNotificationConfiguration)
@@ -686,10 +705,11 @@ def get_notifications(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketNotificationConfiguration:
-    try:
-        return service.get_bucket_notifications(bucket_name, account)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_notifications_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/notifications", response_model=BucketNotificationConfiguration)
@@ -701,22 +721,23 @@ def put_notifications(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketNotificationConfiguration:
-    try:
-        configuration = payload.configuration or {}
-        result = service.set_bucket_notifications(bucket_name, account, configuration)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_notifications",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata={"keys": list(configuration.keys())},
-        )
-        return result
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    result, audit_metadata = bucket_config_actions.put_bucket_notifications_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_notifications",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return result
 
 
 @router.delete("/{bucket_name}/notifications", status_code=status.HTTP_204_NO_CONTENT)
@@ -727,19 +748,20 @@ def delete_notifications(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
-    try:
-        service.delete_bucket_notifications(bucket_name, account)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_bucket_notifications",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    bucket_config_actions.delete_bucket_notifications_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="delete_bucket_notifications",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+    )
 
 
 @router.get("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
@@ -749,10 +771,11 @@ def get_replication(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketReplicationConfiguration:
-    try:
-        return service.get_bucket_replication(bucket_name, account)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_replication_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/replication", response_model=BucketReplicationConfiguration)
@@ -764,26 +787,23 @@ def put_replication(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketReplicationConfiguration:
-    try:
-        result = service.set_bucket_replication(bucket_name, account, payload)
-        _invalidate_bucket_listing_for_account(account)
-        configuration = payload.configuration or {}
-        rules = configuration.get("Rules")
-        rules_count = len(rules) if isinstance(rules, list) else 0
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_replication",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata={"rules_count": rules_count},
-        )
-        return result
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    result, audit_metadata = bucket_config_actions.put_bucket_replication_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_replication",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return result
 
 
 @router.delete("/{bucket_name}/replication", status_code=status.HTTP_204_NO_CONTENT)
@@ -794,19 +814,20 @@ def delete_replication(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
-    try:
-        service.delete_bucket_replication(bucket_name, account)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_bucket_replication",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    bucket_config_actions.delete_bucket_replication_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="delete_bucket_replication",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+    )
 
 
 @router.get("/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
@@ -816,10 +837,11 @@ def get_logging(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketLoggingConfiguration:
-    try:
-        return service.get_bucket_logging(bucket_name, account)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_logging_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/logging", response_model=BucketLoggingConfiguration)
@@ -831,23 +853,23 @@ def put_logging(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketLoggingConfiguration:
-    try:
-        result = service.set_bucket_logging(bucket_name, account, payload)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_logging",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata=payload.model_dump(exclude_none=True),
-        )
-        return result
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    result, audit_metadata = bucket_config_actions.put_bucket_logging_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_logging",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return result
 
 
 @router.delete("/{bucket_name}/logging", status_code=status.HTTP_204_NO_CONTENT)
@@ -858,19 +880,20 @@ def delete_logging(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
-    try:
-        service.delete_bucket_logging(bucket_name, account)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_bucket_logging",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    bucket_config_actions.delete_bucket_logging_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="delete_bucket_logging",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+    )
 
 
 @router.get("/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
@@ -880,10 +903,11 @@ def get_website(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ) -> BucketWebsiteConfiguration:
-    try:
-        return service.get_bucket_website(bucket_name, account)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_website_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/website", response_model=BucketWebsiteConfiguration)
@@ -895,23 +919,23 @@ def put_website(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> BucketWebsiteConfiguration:
-    try:
-        result = service.set_bucket_website(bucket_name, account, payload)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_website",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata=payload.model_dump(exclude_none=True),
-        )
-        return result
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    result, audit_metadata = bucket_config_actions.put_bucket_website_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_website",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return result
 
 
 @router.delete("/{bucket_name}/website", status_code=status.HTTP_204_NO_CONTENT)
@@ -922,19 +946,20 @@ def delete_website(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ) -> None:
-    try:
-        service.delete_bucket_website(bucket_name, account)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_bucket_website",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    bucket_config_actions.delete_bucket_website_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="delete_bucket_website",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+    )
 
 
 @router.get("/{bucket_name}/tags")
@@ -944,11 +969,11 @@ def get_tags(
     service: BucketsService = Depends(get_buckets_service),
     _: dict = Depends(get_current_account_admin),
 ):
-    try:
-        tags = service.get_bucket_tags(bucket_name, account)
-        return {"tags": [tag.model_dump() for tag in tags]}
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return bucket_config_actions.get_bucket_tags_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
 
 
 @router.put("/{bucket_name}/tags")
@@ -960,24 +985,23 @@ def put_tags(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ):
-    try:
-        service.set_bucket_tags(bucket_name, account, tags=[{"key": tag.key, "value": tag.value} for tag in payload.tags])
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_tags",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata={
-                "tags": [{"key": tag.key, "value": tag.value} for tag in payload.tags],
-                "count": len(payload.tags or []),
-            },
-        )
-        return {"tags": payload.tags}
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    response, audit_metadata = bucket_config_actions.put_bucket_tags_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_tags",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return response
 
 
 @router.delete("/{bucket_name}/tags", status_code=status.HTTP_204_NO_CONTENT)
@@ -988,19 +1012,20 @@ def delete_tags(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ):
-    try:
-        service.delete_bucket_tags(bucket_name, account)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_bucket_tags",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    bucket_config_actions.delete_bucket_tags_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="delete_bucket_tags",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+    )
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -1011,36 +1036,22 @@ def create_bucket(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ):
-    try:
-        versioning = payload.versioning if payload.versioning is not None else False
-        location_constraint = payload.location_constraint
-        service.create_bucket(
-            payload.name,
-            account,
-            versioning=versioning,
-            location_constraint=location_constraint,
-        )
-        _invalidate_bucket_listing_for_account(account)
-        audit_metadata = {"versioning": versioning}
-        if location_constraint:
-            audit_metadata["location_constraint"] = location_constraint
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="create_bucket",
-            entity_type="bucket",
-            entity_id=payload.name,
-            account=account,
-            metadata=audit_metadata,
-        )
-        return {
-            "message": f"Bucket '{payload.name}' created",
-            "name": payload.name,
-            "versioning": versioning,
-            "location_constraint": location_constraint,
-        }
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    response, audit_metadata = bucket_config_actions.create_bucket_config(
+        service=service,
+        account=account,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="create_bucket",
+        entity_type="bucket",
+        entity_id=payload.name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return response
 
 
 @router.delete("/{bucket_name}")
@@ -1051,25 +1062,22 @@ def delete_bucket(
     current_user: User = Depends(get_current_account_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ):
-    try:
-        service.delete_bucket(bucket_name, account)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="delete_bucket",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-        )
-        return {"message": f"Bucket '{bucket_name}' deleted"}
-    except BucketNotEmptyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Bucket '{bucket_name}' is not empty. Empty it before deleting.",
-        ) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    response, _audit_metadata = bucket_config_actions.delete_bucket_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        not_empty_detail=f"Bucket '{bucket_name}' is not empty. Empty it before deleting.",
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="delete_bucket",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+    )
+    return response
 
 
 @router.put("/{bucket_name}/quota")
@@ -1081,20 +1089,20 @@ def update_quota(
     current_user: User = Depends(get_current_super_admin),
     audit_service: AuditService = Depends(get_audit_logger),
 ):
-    try:
-        service.set_bucket_quota(bucket_name, account, payload)
-        _invalidate_bucket_listing_for_account(account)
-        audit_service.record_action(
-            user=current_user,
-            scope="manager",
-            action="update_bucket_quota",
-            entity_type="bucket",
-            entity_id=bucket_name,
-            account=account,
-            metadata=payload.model_dump(exclude_none=True),
-        )
-        return {"message": "Bucket quota updated"}
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    response, audit_metadata = bucket_config_actions.update_bucket_quota_config(
+        service=service,
+        account=account,
+        bucket_name=bucket_name,
+        payload=payload,
+    )
+    _invalidate_bucket_listing_for_account(account)
+    audit_service.record_action(
+        user=current_user,
+        scope="manager",
+        action="update_bucket_quota",
+        entity_type="bucket",
+        entity_id=bucket_name,
+        account=account,
+        metadata=audit_metadata,
+    )
+    return response

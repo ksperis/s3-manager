@@ -12,6 +12,8 @@ from typing import Any, Callable, Type, TypeVar
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 
+from app.services.bucket_listing_shared import parse_includes as parse_bucket_listing_includes
+
 _K = TypeVar("_K")
 _T = TypeVar("_T")
 _R = TypeVar("_R")
@@ -38,15 +40,7 @@ class EndpointCacheEntry:
 
 
 def parse_includes(include: list[str]) -> set[str]:
-    include_set: set[str] = set()
-    for item in include:
-        if not isinstance(item, str):
-            continue
-        for part in item.split(","):
-            normalized = part.strip()
-            if normalized:
-                include_set.add(normalized)
-    return include_set
+    return parse_bucket_listing_includes(include)
 
 
 def normalize_optional_str(value: Any) -> str | None:

@@ -17,7 +17,7 @@ from app.core.database import get_db
 from app.db import S3Account, User
 from app.models.ceph_admin import CephAdminBucketFilterQuery
 from app.models.storage_ops import PaginatedStorageOpsBucketsResponse, StorageOpsBucketSummary
-from app.routers.ceph_admin.buckets import (
+from app.services.bucket_listing_shared import (
     _enrich_buckets,
     _format_sse_event,
     _is_advanced_filter_stream_payload,
@@ -27,8 +27,9 @@ from app.routers.ceph_admin.buckets import (
     _match_field_rule,
     _parse_filter,
     _filter_requires_stats,
+    parse_includes,
 )
-from app.routers.ceph_admin.listing_common import normalize_text, parse_includes, sort_value
+from app.routers.ceph_admin.listing_common import normalize_text, sort_value
 from app.routers.dependencies import get_account_context, get_current_storage_ops_admin
 from app.routers.execution_contexts import list_execution_contexts
 from app.services.bucket_listing_cache import get_cached_bucket_listing_for_account
