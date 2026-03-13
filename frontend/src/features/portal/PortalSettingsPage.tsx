@@ -401,8 +401,12 @@ export default function PortalSettingsPage() {
               <div className="space-y-4">
                 <PortalSettingsSection title={t({ en: "UI", fr: "UI", de: "UI" })} layout="grid">
                   <PortalSettingsItem
-                    title={t({ en: "Bucket creation", fr: "Creation de bucket", de: "Bucket-Erstellung" })}
-                    description={t({ en: "Allow portal users to create buckets from the portal.", fr: "Autoriser les utilisateurs portail a creer des buckets.", de: "Portal-Benutzern das Erstellen von Buckets erlauben." })}
+                    title={t({ en: "Bucket management", fr: "Gestion des buckets", de: "Bucket-Verwaltung" })}
+                    description={t({
+                      en: "Allow portal users to create buckets and request bucket deletion from the portal. Deletion is performed via portal privilege elevation (no direct IAM s3:DeleteBucket grant).",
+                      fr: "Autoriser les utilisateurs portail a creer des buckets et a demander leur suppression depuis le portail. La suppression est effectuee via elevation de privilege cote portail (sans droit IAM direct s3:DeleteBucket).",
+                      de: "Portal-Benutzern das Erstellen von Buckets und das Anfordern ihrer Loschung im Portal erlauben. Die Loschung erfolgt per Portal-Rechteerhohung (kein direktes IAM-Recht s3:DeleteBucket).",
+                    })}
                     action={
                       <div className="flex flex-col items-end gap-2">
                         <PortalSettingsSwitch
@@ -414,7 +418,7 @@ export default function PortalSettingsPage() {
                             !overridePolicy.allow_portal_user_bucket_create ||
                             adminOverride?.allow_portal_user_bucket_create != null
                           }
-                          ariaLabel={t({ en: "Toggle bucket creation for portal users", fr: "Basculer la creation de bucket pour les utilisateurs portail", de: "Bucket-Erstellung fur Portal-Benutzer umschalten" })}
+                          ariaLabel={t({ en: "Toggle bucket management for portal users", fr: "Basculer la gestion des buckets pour les utilisateurs portail", de: "Bucket-Verwaltung fur Portal-Benutzer umschalten" })}
                           onChange={(value) => setOverridePortalBucketCreate(value ? "enabled" : "disabled")}
                         />
                         <label className={inheritToggleLabelClass}>

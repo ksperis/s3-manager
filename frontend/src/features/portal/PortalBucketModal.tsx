@@ -141,15 +141,8 @@ export default function PortalBucketModal({
     bucket.object_count === 0 &&
     !deletingBucket &&
     !bucketStatsLoading;
-  const deleteHint = useMemo(() => {
+  const deleteTooltip = useMemo(() => {
     if (!canDeleteBucket) return null;
-    if (deletingBucket) {
-      return t({
-        en: "Deleting bucket...",
-        fr: "Suppression du bucket...",
-        de: "Bucket wird geloscht...",
-      });
-    }
     if (bucketStatsLoading || bucket.object_count == null) {
       return t({
         en: "Bucket stats are loading. Wait before deleting.",
@@ -165,7 +158,7 @@ export default function PortalBucketModal({
       });
     }
     return null;
-  }, [bucket.object_count, bucketStatsLoading, canDeleteBucket, deletingBucket, t]);
+  }, [bucket.object_count, bucketStatsLoading, canDeleteBucket, t]);
 
   const handleOpenInBrowser = () => {
     if (!accountId || !generalSettings.browser_enabled || !generalSettings.browser_portal_enabled) return;
@@ -220,6 +213,7 @@ export default function PortalBucketModal({
                             type="button"
                             onClick={handleDeleteBucket}
                             disabled={!canDeleteNow}
+                            title={canDeleteNow ? undefined : deleteTooltip ?? undefined}
                             className={`inline-flex items-center justify-center rounded-full border px-3 py-1 ui-caption font-semibold shadow-sm transition ${
                               canDeleteNow
                                 ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 hover:text-rose-800 dark:border-rose-900/40 dark:bg-rose-900/30 dark:text-rose-100 dark:hover:border-rose-700"
@@ -232,15 +226,9 @@ export default function PortalBucketModal({
                           </button>
                         )}
                       </div>
-                      {canDeleteBucket && (deleteError || deleteHint) && (
-                        <p
-                          className={`max-w-sm text-right ui-caption ${
-                            deleteError
-                              ? "text-rose-600 dark:text-rose-300"
-                              : "text-slate-500 dark:text-slate-400"
-                          }`}
-                        >
-                          {deleteError || deleteHint}
+                      {canDeleteBucket && deleteError && (
+                        <p className="max-w-sm text-right ui-caption text-rose-600 dark:text-rose-300">
+                          {deleteError}
                         </p>
                       )}
                     </div>

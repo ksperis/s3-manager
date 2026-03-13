@@ -519,12 +519,12 @@ export default function PortalManagePage() {
 
   const pageDescription = selectedAccount
     ? t({
-        en: `Manage users and bucket permissions for ${accountName}.`,
+        en: `Access users and bucket permissions for ${accountName}.`,
         fr: `Gerez les utilisateurs et leurs droits buckets pour ${accountName}.`,
         de: `Verwalten Sie Benutzer und Bucket-Rechte fur ${accountName}.`,
       })
     : t({
-        en: "Manage portal users and bucket permissions.",
+        en: "Access portal users and bucket permissions.",
         fr: "Gerez les utilisateurs et leurs droits buckets du portail.",
         de: "Verwalten Sie Portal-Benutzer und Bucket-Berechtigungen.",
       });
@@ -536,11 +536,11 @@ export default function PortalManagePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={t({ en: "Portal management", fr: "Gestion du portail", de: "Portal-Verwaltung" })}
+        title={t({ en: "Portal access", fr: "Acces au portail", de: "Portal-Zugriff" })}
         description={pageDescription}
         breadcrumbs={[
           { label: t({ en: "Portal", fr: "Portail", de: "Portal" }), to: "/portal" },
-          { label: t({ en: "Manage", fr: "Gestion", de: "Verwaltung" }) },
+          { label: t({ en: "Access", fr: "Acces", de: "Zugriff" }) },
         ]}
         actions={headerActions}
       />
@@ -734,7 +734,7 @@ export default function PortalManagePage() {
                               className={tableActionButtonClasses}
                               disabled={busy}
                             >
-                              {t({ en: "Manage", fr: "Gerer", de: "Verwalten" })}
+                              {t({ en: "Access", fr: "Acces", de: "Zugriff" })}
                             </button>
                             <button
                               type="button"
@@ -802,9 +802,9 @@ export default function PortalManagePage() {
       {showEditModal && editingUser && (
         <Modal
           title={t({
-            en: `Manage ${editingUser.email}`,
-            fr: `Gerer ${editingUser.email}`,
-            de: `${editingUser.email} verwalten`,
+            en: `Access ${editingUser.email}`,
+            fr: `Acces ${editingUser.email}`,
+            de: `Zugriff ${editingUser.email}`,
           })}
           onClose={closeEditModal}
         >

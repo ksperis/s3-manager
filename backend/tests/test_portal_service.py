@@ -227,6 +227,23 @@ def test_portal_user_bucket_creation_applies_defaults_with_account_credentials(m
     assert cors_calls[0][1]["secret_key"] == "ROOT-SK"
 
 
+def test_portal_user_group_policy_adds_create_bucket_without_delete_bucket(db_session):
+    service = PortalService(db_session)
+    portal_settings = PortalSettings()
+    portal_settings.allow_portal_user_bucket_create = True
+    portal_settings.iam_group_user_policy.actions = ["s3:ListAllMyBuckets", "sts:GetSessionToken"]
+    portal_settings.iam_group_user_policy.advanced_policy = None
+
+    policy = service._resolve_group_policy(portal_settings, "user")
+
+    assert isinstance(policy, dict)
+    statements = policy.get("Statement") or []
+    assert isinstance(statements, list) and statements
+    actions = statements[0].get("Action") or []
+    assert "s3:CreateBucket" in actions
+    assert "s3:DeleteBucket" not in actions
+
+
 def test_get_state_without_bootstrap_is_read_only(monkeypatch, db_session):
     account = S3Account(name="portal-account-read-only", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
     user = User(email="portal-readonly@example.com", hashed_password="x", role="ui_user")
@@ -703,3 +720,169 @@ def test_delete_portal_access_key_rejects_portal_user_when_option_disabled(db_se
 
     assert exc.value.status_code == 403
     assert service.delete_access_key_calls == 0
+
+
+def test_delete_portal_bucket_allows_portal_user_when_option_enabled(db_session):
+    account = S3Account(name="portal-account-user-delete-bucket", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-delete-bucket@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    class _FakeService:
+        def __init__(self):
+            self.delete_bucket_calls = []
+
+        def get_effective_portal_settings(self, account):  # noqa: ARG002
+            return PortalSettings(allow_portal_user_bucket_create=True)
+
+        def list_existing_user_bucket_access(self, user_obj, account_obj, account_role):  # noqa: ARG002
+            if account_role != AccountRole.PORTAL_USER.value:
+                raise AssertionError("Unexpected role")
+            return ["bucket-a"]
+
+        def delete_bucket(self, user_obj, access_obj, bucket_name, force=False, use_root=False):  # noqa: ARG002
+            self.delete_bucket_calls.append((bucket_name, force, use_root))
+
+    class _FakeAuditService:
+        def __init__(self):
+            self.actions = []
+
+        def record_action(self, **kwargs):
+            self.actions.append(kwargs)
+
+    service = _FakeService()
+    audit_service = _FakeAuditService()
+
+    result = portal_router.delete_portal_bucket(
+        bucket_name="bucket-a",
+        force=False,
+        access=access,
+        audit_service=audit_service,
+        service=service,
+    )
+
+    assert result["message"] == "Bucket 'bucket-a' deleted"
+    assert service.delete_bucket_calls == [("bucket-a", False, True)]
+    assert len(audit_service.actions) == 1
+    assert audit_service.actions[0]["action"] == "delete_bucket"
+    assert audit_service.actions[0]["metadata"]["force"] is False
+
+
+def test_delete_portal_bucket_rejects_portal_user_when_option_disabled(db_session):
+    account = S3Account(name="portal-account-user-delete-bucket-denied", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-delete-bucket-denied@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    class _FakeService:
+        def __init__(self):
+            self.delete_bucket_calls = 0
+
+        def get_effective_portal_settings(self, account):  # noqa: ARG002
+            return PortalSettings(allow_portal_user_bucket_create=False)
+
+        def list_existing_user_bucket_access(self, user_obj, account_obj, account_role):  # noqa: ARG002
+            return ["bucket-a"]
+
+        def delete_bucket(self, user_obj, access_obj, bucket_name, force=False, use_root=False):  # noqa: ARG002
+            self.delete_bucket_calls += 1
+
+    class _FakeAuditService:
+        def record_action(self, **kwargs):  # noqa: ARG002
+            raise AssertionError("Audit should not be called when deletion is forbidden")
+
+    service = _FakeService()
+    audit_service = _FakeAuditService()
+
+    with pytest.raises(HTTPException) as exc:
+        portal_router.delete_portal_bucket(
+            bucket_name="bucket-a",
+            force=False,
+            access=access,
+            audit_service=audit_service,
+            service=service,
+        )
+
+    assert exc.value.status_code == 403
+    assert service.delete_bucket_calls == 0
+
+
+def test_delete_portal_bucket_rejects_portal_user_when_bucket_not_granted(db_session):
+    account = S3Account(name="portal-account-user-delete-bucket-no-access", rgw_access_key="ROOT-AK", rgw_secret_key="ROOT-SK")
+    user = User(email="portal-user-delete-bucket-no-access@example.com", hashed_password="x", role="ui_user")
+    db_session.add_all([account, user])
+    db_session.commit()
+
+    access = AccountAccess(
+        account=account,
+        actor=user,
+        membership=None,
+        role=AccountRole.PORTAL_USER.value,
+        capabilities=AccountCapabilities(
+            can_manage_buckets=False,
+            can_manage_portal_users=False,
+            can_manage_iam=False,
+            can_view_root_key=False,
+            using_root_key=False,
+        ),
+    )
+
+    class _FakeService:
+        def __init__(self):
+            self.delete_bucket_calls = 0
+
+        def get_effective_portal_settings(self, account):  # noqa: ARG002
+            return PortalSettings(allow_portal_user_bucket_create=True)
+
+        def list_existing_user_bucket_access(self, user_obj, account_obj, account_role):  # noqa: ARG002
+            return ["bucket-x"]
+
+        def delete_bucket(self, user_obj, access_obj, bucket_name, force=False, use_root=False):  # noqa: ARG002
+            self.delete_bucket_calls += 1
+
+    class _FakeAuditService:
+        def record_action(self, **kwargs):  # noqa: ARG002
+            raise AssertionError("Audit should not be called when deletion is forbidden")
+
+    service = _FakeService()
+    audit_service = _FakeAuditService()
+
+    with pytest.raises(HTTPException) as exc:
+        portal_router.delete_portal_bucket(
+            bucket_name="bucket-a",
+            force=False,
+            access=access,
+            audit_service=audit_service,
+            service=service,
+        )
+
+    assert exc.value.status_code == 403
+    assert service.delete_bucket_calls == 0

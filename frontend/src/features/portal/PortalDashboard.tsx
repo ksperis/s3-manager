@@ -180,7 +180,6 @@ export default function PortalDashboard() {
   const bucketTotalsObjects = accountUsedObjects != null ? accountUsedObjects : derivedBucketTotals.objects;
   const visibleBucketCount = state?.buckets?.length ?? 0;
   const totalBucketCount = state?.total_buckets ?? visibleBucketCount;
-  const isPortalManager = state?.account_role === "portal_manager";
   const isPortalUser = state?.account_role === "portal_user";
   const needsIamBootstrap = Boolean(state && !state.iam_provisioned);
   const orderedAccessKeys = useMemo(() => {
@@ -271,6 +270,7 @@ export default function PortalDashboard() {
   const maxPortalUserAccessKeys = Math.max(1, Math.trunc(Number(portalSettings?.max_portal_user_access_keys ?? 2)));
   const accessKeyLimitReached = orderedAccessKeys.length >= maxPortalUserAccessKeys;
   const canCreateBuckets = canManageBuckets || allowPortalUserBucketCreate;
+  const canDeleteBuckets = canCreateBuckets;
   const canCreateAccessKeys = canManageBuckets || allowPortalUserAccessKeyCreate;
   const canCreateMoreAccessKeys = canCreateAccessKeys && !accessKeyLimitReached;
   const selectedBucketStatsLoading = selectedBucket ? Boolean(bucketStatsLoading[selectedBucket.name]) : false;
@@ -837,7 +837,7 @@ export default function PortalDashboard() {
   };
 
   const handleDeleteBucketFromModal = async () => {
-    if (!accountIdForApi || !selectedBucket || !canManageBuckets || deletingBucketFromModal) return;
+    if (!accountIdForApi || !selectedBucket || !canDeleteBuckets || deletingBucketFromModal) return;
     if (selectedBucket.object_count !== 0) return;
     const bucketName = selectedBucket.name;
     const confirmed = confirmAction(
@@ -1427,25 +1427,29 @@ export default function PortalDashboard() {
                     <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                       {orderedAccessKeys.map((k) => {
                         const isActive = isPortalKeyActive(k);
+                        const statusLabel = isActive
+                          ? t({ en: "Active", fr: "Active", de: "Aktiv" })
+                          : t({ en: "Inactive", fr: "Inactive", de: "Inaktiv" });
                         return (
                           <div key={k.access_key_id} className="px-3 py-2">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div className="min-w-0 space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span
-                                    className={`h-2 w-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"}`}
-                                    aria-label={
-                                      isActive
-                                        ? t({ en: "Active", fr: "Active", de: "Aktiv" })
-                                        : t({ en: "Inactive", fr: "Inactive", de: "Inaktiv" })
-                                    }
-                                    title={
-                                      isActive
-                                        ? t({ en: "Active", fr: "Active", de: "Aktiv" })
-                                        : t({ en: "Inactive", fr: "Inactive", de: "Inaktiv" })
-                                    }
+                                    className={`h-2.5 w-2.5 rounded-full ${isActive ? "bg-emerald-500" : "bg-amber-500"}`}
+                                    aria-label={statusLabel}
+                                    title={statusLabel}
                                   />
                                   <span className="font-mono ui-caption text-slate-700 dark:text-slate-200">{k.access_key_id}</span>
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 ui-caption font-semibold ${
+                                      isActive
+                                        ? "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/30 dark:text-emerald-100"
+                                        : "border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/30 dark:text-amber-100"
+                                    }`}
+                                  >
+                                    {statusLabel}
+                                  </span>
                                 </div>
                                 <div className="ui-caption text-slate-500 dark:text-slate-400">
                                   {k.created_at
@@ -1460,10 +1464,14 @@ export default function PortalDashboard() {
                               <div className="flex items-center gap-2">
                                 <button
                                   type="button"
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
+                                  className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition disabled:opacity-40 ${
+                                    isActive
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100 dark:hover:border-emerald-700"
+                                      : "border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100 dark:hover:border-amber-700"
+                                  }`}
                                   onClick={() => handleToggleKeyStatus(k)}
                                   disabled={
-                                    !isPortalManager ||
+                                    !canCreateAccessKeys ||
                                     k.is_portal ||
                                     k.deletable === false ||
                                     creatingKey ||
@@ -1521,7 +1529,7 @@ export default function PortalDashboard() {
               accountUsedBytes={bucketTotalsBytes}
               accountUsedObjects={bucketTotalsObjects}
               onClose={closeBucketModal}
-              canDeleteBucket={canManageBuckets}
+              canDeleteBucket={canDeleteBuckets}
               deletingBucket={deletingBucketFromModal}
               deleteError={deleteBucketFromModalError}
               bucketStatsLoading={selectedBucketStatsLoading}
@@ -1659,38 +1667,38 @@ export default function PortalDashboard() {
                             </p>
                           </div>
                           <div className="mt-2 grid grid-cols-2 gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                            <div>
-                              <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                {t({ en: "Storage", fr: "Volumetrie", de: "Speicher" })}
-                              </div>
-                              <div className="mt-1 flex items-center gap-2">
-                                {renderShareIndicator({
-                                  label: "Data",
-                                  percentOverride: dataShare,
-                                  hoverHint: t({
-                                    en: "Data percentage relative to total account usage",
-                                    fr: "Pourcentage Data relatif a l'utilisation totale du compte",
-                                    de: "Daten-Prozentsatz relativ zur gesamten Kontonutzung",
-                                  }),
-                                })}
-                                <div className="font-semibold text-slate-800 dark:text-slate-100">{usedLabel}</div>
+                            <div className="flex items-start gap-2">
+                              {renderShareIndicator({
+                                label: "Data",
+                                percentOverride: dataShare,
+                                hoverHint: t({
+                                  en: "Data percentage relative to total account usage",
+                                  fr: "Pourcentage Data relatif a l'utilisation totale du compte",
+                                  de: "Daten-Prozentsatz relativ zur gesamten Kontonutzung",
+                                }),
+                              })}
+                              <div className="min-w-0">
+                                <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  {t({ en: "Storage", fr: "Volumetrie", de: "Speicher" })}
+                                </div>
+                                <div className="mt-1 font-semibold text-slate-800 dark:text-slate-100">{usedLabel}</div>
                               </div>
                             </div>
-                            <div>
-                              <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                {t({ en: "Objects", fr: "Objets", de: "Objekte" })}
-                              </div>
-                              <div className="mt-1 flex items-center gap-2">
-                                {renderShareIndicator({
-                                  label: t({ en: "Objects", fr: "Objets", de: "Objekte" }),
-                                  percentOverride: objectsShare,
-                                  hoverHint: t({
-                                    en: "Objects percentage relative to total account usage",
-                                    fr: "Pourcentage Objets relatif a l'utilisation totale du compte",
-                                    de: "Objekt-Prozentsatz relativ zur gesamten Kontonutzung",
-                                  }),
-                                })}
-                                <div className="font-semibold text-slate-800 dark:text-slate-100">{objectsLabel}</div>
+                            <div className="flex items-start gap-2">
+                              {renderShareIndicator({
+                                label: t({ en: "Objects", fr: "Objets", de: "Objekte" }),
+                                percentOverride: objectsShare,
+                                hoverHint: t({
+                                  en: "Objects percentage relative to total account usage",
+                                  fr: "Pourcentage Objets relatif a l'utilisation totale du compte",
+                                  de: "Objekt-Prozentsatz relativ zur gesamten Kontonutzung",
+                                }),
+                              })}
+                              <div className="min-w-0">
+                                <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  {t({ en: "Objects", fr: "Objets", de: "Objekte" })}
+                                </div>
+                                <div className="mt-1 font-semibold text-slate-800 dark:text-slate-100">{objectsLabel}</div>
                               </div>
                             </div>
                           </div>

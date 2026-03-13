@@ -186,7 +186,7 @@ function PortalShell() {
         ...(generalSettings.browser_enabled && generalSettings.browser_portal_enabled
           ? [{ to: "/portal/browser", label: t({ en: "Browser", fr: "Browser", de: "Browser" }) }]
           : []),
-        { to: "/portal/manage", label: t({ en: "Manage", fr: "Gestion", de: "Verwaltung" }) },
+        { to: "/portal/manage", label: t({ en: "Access", fr: "Acces", de: "Zugriff" }) },
         ...(generalSettings.billing_enabled
           ? [{ to: "/portal/billing", label: t({ en: "Billing", fr: "Facturation", de: "Abrechnung" }) }]
           : []),

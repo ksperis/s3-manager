@@ -1661,10 +1661,10 @@ export default function S3AccountsPage() {
                       <div className="space-y-4">
                         <PortalSettingsSection title="UI" layout="grid">
                           <PortalSettingsItem
-                            title="Bucket creation"
+                            title="Bucket management"
                             description={`Effective for portal users: ${
                               effectivePortalSettings.allow_portal_user_bucket_create ? "enabled" : "disabled"
-                            }`}
+                            } (deletion runs via portal privilege elevation, not direct IAM s3:DeleteBucket).`}
                             action={
                               <select
                                 value={adminPortalBucketCreateOverride}

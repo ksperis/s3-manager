@@ -322,15 +322,15 @@ export default function PortalSettingsPage() {
         <div className="ui-surface-card p-5">
           <PortalSettingsSection title="UI" description="Portal UI switches and per-account override permissions." layout="grid">
             <PortalSettingsItem
-              title="Bucket creation"
-              description="Allow portal users to create buckets from the portal."
+              title="Bucket management"
+              description="Allow portal users to create buckets and request bucket deletion from the portal. Deletion is performed via portal privilege elevation (no direct IAM s3:DeleteBucket grant)."
               action={
                 <div className="flex flex-col gap-2 sm:items-end">
                   <PortalSettingsToggleAction
                     checked={portalBucketCreateEnabled}
                     onChange={(value) => handleToggleAllowPortalBucketCreate(value)}
                     disabled={!settings}
-                    ariaLabel="Portal user bucket creation"
+                    ariaLabel="Portal user bucket management"
                   />
                   <label className={allowOverrideLabelClass}>
                     <span>Allow override</span>

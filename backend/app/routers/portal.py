@@ -382,15 +382,25 @@ def create_portal_bucket(
 def delete_portal_bucket(
     bucket_name: str,
     force: bool = Query(False, description="Set to true to delete all objects before deleting the bucket"),
-    access: AccountAccess = Depends(require_portal_manager),
+    access: AccountAccess = Depends(get_portal_account_access),
     audit_service: AuditService = Depends(get_audit_logger),
     service: PortalService = Depends(lambda db=Depends(get_db): get_portal_service(db)),
 ):
     actor = access.actor
     if not isinstance(actor, User):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Portal endpoints require a UI user")
+    portal_settings = service.get_effective_portal_settings(access.account)
+    allow_portal_user_manage = portal_settings.allow_portal_user_bucket_create
+    is_manager = access.capabilities.can_manage_buckets
+    is_portal_user = access.role == AccountRole.PORTAL_USER.value
+    if not (is_manager or (allow_portal_user_manage and is_portal_user)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket management not allowed for this role.")
+    if is_portal_user and not is_manager:
+        allowed_buckets = service.list_existing_user_bucket_access(actor, access.account, access.role)
+        if bucket_name not in allowed_buckets:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bucket access not allowed for this role.")
     try:
-        service.delete_bucket(actor, access, bucket_name, force=force)
+        service.delete_bucket(actor, access, bucket_name, force=force, use_root=bool(is_portal_user and not is_manager))
         audit_service.record_action(
             user=actor,
             scope="portal",
