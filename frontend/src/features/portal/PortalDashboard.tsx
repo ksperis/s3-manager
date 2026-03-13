@@ -3,6 +3,7 @@
  * Licensed under the Apache License, Version 2.0
  */
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bucket } from "../../api/buckets";
 import { PortalSettings } from "../../api/appSettings";
 import {
@@ -114,6 +115,7 @@ function formatIncidentWindow(minutes?: number | null) {
 
 export default function PortalDashboard() {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const { generalSettings } = useGeneralSettings();
   const { accountIdForApi, selectedAccount, hasAccountContext, loading: accountLoading, error: accountError } = usePortalAccountContext();
   const [state, setState] = useState<PortalState | null>(null);
@@ -264,6 +266,7 @@ export default function PortalDashboard() {
   const allowPortalUserAccessKeyCreate = Boolean(portalSettings?.allow_portal_user_access_key_create && isPortalUser);
   const canCreateBuckets = canManageBuckets || allowPortalUserBucketCreate;
   const canCreateAccessKeys = canManageBuckets || allowPortalUserAccessKeyCreate;
+  const canOpenBucketInBrowser = Boolean(accountIdForApi) && generalSettings.browser_enabled && generalSettings.browser_portal_enabled;
   const canViewPortalUsers = Boolean(state?.can_manage_portal_users);
   const assignedPortalUsers = useMemo(() => portalUsers.filter((u) => !u.iam_only), [portalUsers]);
   const portalUsersCount = canViewPortalUsers ? (loadingUsers ? "…" : assignedPortalUsers.length) : "-";
@@ -287,6 +290,25 @@ export default function PortalDashboard() {
   const closeBucketModal = () => {
     setShowBucketModal(false);
     setSelectedBucket(null);
+  };
+
+  const openBucketInBrowser = useCallback(
+    (bucket: Bucket) => {
+      if (!accountIdForApi || !generalSettings.browser_enabled || !generalSettings.browser_portal_enabled) return;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("selectedPortalAccountId", String(accountIdForApi));
+      }
+      navigate(`/portal/browser?bucket=${encodeURIComponent(bucket.name)}`);
+    },
+    [accountIdForApi, generalSettings.browser_enabled, generalSettings.browser_portal_enabled, navigate]
+  );
+
+  const handleBucketPrimaryAction = (bucket: Bucket) => {
+    if (canOpenBucketInBrowser) {
+      openBucketInBrowser(bucket);
+      return;
+    }
+    openBucketModal(bucket);
   };
 
   const isPortalKeyActive = (key?: PortalAccessKey | null): boolean => {
@@ -384,6 +406,33 @@ export default function PortalDashboard() {
             )}
           </div>
         )}
+      </div>
+    );
+  };
+
+  const renderShareIndicator = ({
+    label,
+    percentOverride,
+    hoverHint,
+  }: {
+    label: string;
+    percentOverride?: number | null;
+    hoverHint?: string;
+  }) => {
+    const ratio = percentOverride ?? null;
+    const percentLabel = ratio !== null ? `${Math.round(ratio)}%` : "N/A";
+    const gradient =
+      ratio === null
+        ? undefined
+        : `conic-gradient(var(--tw-color-primary, #0ea5e9) ${ratio}%, rgba(148,163,184,0.24) ${ratio}%)`;
+    return (
+      <div
+        className="relative h-8 w-8 flex-shrink-0 rounded-full bg-slate-100 dark:bg-slate-800"
+        style={gradient ? { backgroundImage: gradient } : undefined}
+        aria-label={`${label} ${percentLabel}`}
+        title={hoverHint ?? `${label}: ${percentLabel}`}
+      >
+        <div className="absolute inset-[4px] rounded-full bg-white dark:bg-slate-900" />
       </div>
     );
   };
@@ -1464,79 +1513,96 @@ export default function PortalDashboard() {
                   return (
                     <div
                       key={bucket.name}
-                      role="button"
-                      tabIndex={0}
                       data-portal-bucket={bucket.name}
-                      onClick={() => openBucketModal(bucket)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openBucketModal(bucket);
-                        }
-                      }}
-                      className="w-full max-w-xs cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 ui-body shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-800/70"
+                      className="w-full max-w-xs rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 ui-body shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800/70"
                     >
-                      <div className="flex items-start gap-2 sm:gap-3">
-                        <div className="min-w-0">
-                          <div
-                            className="max-w-[170px] truncate font-semibold text-slate-900 dark:text-white"
-                            title={bucket.name}
-                          >
-                            {bucket.name}
+                      <div className="flex items-start gap-2 sm:gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => openBucketModal(bucket)}
+                          aria-label={t({ en: `Bucket information for ${bucket.name}`, fr: `Informations du bucket ${bucket.name}`, de: `Bucket-Informationen fur ${bucket.name}` })}
+                          title={t({ en: `Bucket information for ${bucket.name}`, fr: `Informations du bucket ${bucket.name}`, de: `Bucket-Informationen fur ${bucket.name}` })}
+                          className="mt-0.5 inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 shadow-sm transition hover:border-primary/60 hover:text-primary-700 focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-primary-200"
+                        >
+                          <span aria-hidden>i</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleBucketPrimaryAction(bucket)}
+                          aria-label={
+                            canOpenBucketInBrowser
+                              ? t({
+                                  en: `Open bucket ${bucket.name} in Browser`,
+                                  fr: `Ouvrir le bucket ${bucket.name} dans Browser`,
+                                  de: `Bucket ${bucket.name} im Browser offnen`,
+                                })
+                              : t({
+                                  en: `Open bucket details for ${bucket.name}`,
+                                  fr: `Ouvrir les details du bucket ${bucket.name}`,
+                                  de: `Bucket-Details fur ${bucket.name} offnen`,
+                                })
+                          }
+                          title={
+                            canOpenBucketInBrowser
+                              ? t({
+                                  en: `Open bucket ${bucket.name} in Browser`,
+                                  fr: `Ouvrir le bucket ${bucket.name} dans Browser`,
+                                  de: `Bucket ${bucket.name} im Browser offnen`,
+                                })
+                              : t({
+                                  en: `Open bucket details for ${bucket.name}`,
+                                  fr: `Ouvrir les details du bucket ${bucket.name}`,
+                                  de: `Bucket-Details fur ${bucket.name} offnen`,
+                                })
+                          }
+                          className="min-w-0 flex-1 cursor-pointer rounded-md text-left focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-semibold text-slate-900 dark:text-white" title={bucket.name}>
+                              {bucket.name}
+                            </div>
+                            <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
+                              {t({ en: "Created on", fr: "Cree le", de: "Erstellt am" })}{" "}
+                              {bucket.creation_date ? new Date(bucket.creation_date).toLocaleString() : "—"}
+                            </p>
                           </div>
-                          <p className="mt-1 ui-caption text-slate-500 dark:text-slate-400">
-                            {t({ en: "Created on", fr: "Cree le", de: "Erstellt am" })}{" "}
-                            {bucket.creation_date ? new Date(bucket.creation_date).toLocaleString() : "—"}
-                          </p>
-                        </div>
-                        <div className="ml-auto flex flex-shrink-0 items-start justify-end gap-2 sm:gap-3">
-                          {renderUsageGauge({
-                            label: "Data",
-                            used,
-                            quota: bucketTotalsBytes,
-                            formatter: formatBytes,
-                            unitHint: undefined,
-                            percentOverride: dataShare,
-                            hoverHint: t({
-                              en: "Data percentage relative to total account usage",
-                              fr: "Pourcentage Data relatif a l'utilisation totale du compte",
-                              de: "Daten-Prozentsatz relativ zur gesamten Kontonutzung",
-                            }),
-                            bare: true,
-                            compact: true,
-                            hidePercent: true,
-                          })}
-                          {renderUsageGauge({
-                            label: t({ en: "Objects", fr: "Objets", de: "Objekte" }),
-                            used: objectCount,
-                            quota: bucketTotalsObjects,
-                            formatter: (v) => (v == null ? "—" : v.toLocaleString()),
-                            unitHint: undefined,
-                            percentOverride: objectsShare,
-                            hoverHint: t({
-                              en: "Objects percentage relative to total account usage",
-                              fr: "Pourcentage Objets relatif a l'utilisation totale du compte",
-                              de: "Objekt-Prozentsatz relativ zur gesamten Kontonutzung",
-                            }),
-                            bare: true,
-                            compact: true,
-                            hidePercent: true,
-                          })}
-                        </div>
-                      </div>
-                      <div className="mt-2 grid grid-cols-2 gap-2 ui-caption text-slate-600 dark:text-slate-300">
-                        <div>
-                          <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            {t({ en: "Storage", fr: "Volumetrie", de: "Speicher" })}
+                          <div className="mt-2 grid grid-cols-2 gap-2 ui-caption text-slate-600 dark:text-slate-300">
+                            <div>
+                              <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                {t({ en: "Storage", fr: "Volumetrie", de: "Speicher" })}
+                              </div>
+                              <div className="mt-1 flex items-center gap-2">
+                                {renderShareIndicator({
+                                  label: "Data",
+                                  percentOverride: dataShare,
+                                  hoverHint: t({
+                                    en: "Data percentage relative to total account usage",
+                                    fr: "Pourcentage Data relatif a l'utilisation totale du compte",
+                                    de: "Daten-Prozentsatz relativ zur gesamten Kontonutzung",
+                                  }),
+                                })}
+                                <div className="font-semibold text-slate-800 dark:text-slate-100">{usedLabel}</div>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                {t({ en: "Objects", fr: "Objets", de: "Objekte" })}
+                              </div>
+                              <div className="mt-1 flex items-center gap-2">
+                                {renderShareIndicator({
+                                  label: t({ en: "Objects", fr: "Objets", de: "Objekte" }),
+                                  percentOverride: objectsShare,
+                                  hoverHint: t({
+                                    en: "Objects percentage relative to total account usage",
+                                    fr: "Pourcentage Objets relatif a l'utilisation totale du compte",
+                                    de: "Objekt-Prozentsatz relativ zur gesamten Kontonutzung",
+                                  }),
+                                })}
+                                <div className="font-semibold text-slate-800 dark:text-slate-100">{objectsLabel}</div>
+                              </div>
+                            </div>
                           </div>
-                          <div className="font-semibold text-slate-800 dark:text-slate-100">{usedLabel}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="ui-caption uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            {t({ en: "Objects", fr: "Objets", de: "Objekte" })}
-                          </div>
-                          <div className="font-semibold text-slate-800 dark:text-slate-100">{objectsLabel}</div>
-                        </div>
+                        </button>
                       </div>
                     </div>
                   );
