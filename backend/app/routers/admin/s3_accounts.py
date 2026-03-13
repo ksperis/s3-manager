@@ -32,6 +32,25 @@ router = APIRouter(prefix="/admin/accounts", tags=["admin-accounts"])
 logger = logging.getLogger(__name__)
 
 
+def _account_stable_id(account: S3Account) -> int:
+    if account.db_id is not None:
+        return int(account.db_id)
+    try:
+        return int(account.id)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _account_name_key(account: S3Account) -> tuple[str, str, int]:
+    name = account.name or ""
+    return (name.lower(), name, _account_stable_id(account))
+
+
+def _account_rgw_key(account: S3Account) -> tuple[str, int]:
+    value = account.rgw_account_id or account.id or ""
+    return (str(value).lower(), _account_stable_id(account))
+
+
 def get_admin_accounts_service(
     db: Session = Depends(get_db),
     rgw_admin_client=Depends(get_optional_super_admin_rgw_client),
@@ -73,12 +92,12 @@ def list_accounts(
         ]
     else:
         filtered = accounts
-    sort_map = {
-        "name": lambda acc: (acc.name or "").lower(),
-        "rgw_account_id": lambda acc: (acc.rgw_account_id or acc.id or "").lower(),
-    }
-    key_fn = sort_map.get(sort_by, sort_map["name"])
-    filtered.sort(key=key_fn, reverse=sort_dir == "desc")
+    requested_sort = sort_by if sort_by in {"name", "rgw_account_id"} else "name"
+    descending = sort_dir.lower() == "desc"
+    if requested_sort == "name":
+        filtered.sort(key=_account_name_key, reverse=descending)
+    else:
+        filtered.sort(key=_account_rgw_key, reverse=descending)
     total = len(filtered)
     start = max(page - 1, 0) * page_size
     end = start + page_size

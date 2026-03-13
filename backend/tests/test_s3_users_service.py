@@ -130,6 +130,30 @@ def _build_service(db_session, monkeypatch, fake_admin: FakeRGWAdmin) -> S3Users
     return S3UsersService(db_session)
 
 
+def _seed_local_user(
+    db_session,
+    *,
+    name: str,
+    uid: str,
+    endpoint_id: int,
+    created_at: datetime | None = None,
+) -> S3User:
+    row = S3User(
+        name=name,
+        rgw_user_uid=uid,
+        email=f"{uid}@example.com",
+        rgw_access_key=f"AK-{uid}",
+        rgw_secret_key=f"SK-{uid}",
+        storage_endpoint_id=endpoint_id,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    db_session.add(row)
+    db_session.commit()
+    db_session.refresh(row)
+    return row
+
+
 def test_create_user_persists_credentials(db_session, monkeypatch):
     endpoint = _seed_ceph_endpoint(db_session)
     fake = FakeRGWAdmin()
@@ -361,3 +385,83 @@ def test_delete_user_with_delete_rgw_checks_buckets_then_deletes(db_session, mon
 
     assert "remote-user" in fake.deleted_users
     assert db_session.query(S3User).filter_by(id=created.id).first() is None
+
+
+def test_list_users_and_minimal_are_sorted_case_insensitive_and_stable(db_session):
+    endpoint = _seed_ceph_endpoint(db_session)
+    _seed_local_user(db_session, name="Zulu", uid="sort-zulu", endpoint_id=endpoint.id)
+    _seed_local_user(db_session, name="alpha", uid="sort-alpha", endpoint_id=endpoint.id)
+    _seed_local_user(db_session, name="Beta", uid="sort-beta", endpoint_id=endpoint.id)
+    same_1 = _seed_local_user(db_session, name="same", uid="sort-same-1", endpoint_id=endpoint.id)
+    same_2 = _seed_local_user(db_session, name="same", uid="sort-same-2", endpoint_id=endpoint.id)
+
+    service = S3UsersService(db_session)
+    listed = service.list_users(include_quota=False)
+    minimal = service.list_users_minimal()
+
+    listed_names = [entry.name for entry in listed]
+    listed_same_ids = [entry.id for entry in listed if entry.name == "same"]
+    minimal_names = [entry.name for entry in minimal]
+    minimal_same_ids = [entry.id for entry in minimal if entry.name == "same"]
+
+    assert listed_names == ["alpha", "Beta", "same", "same", "Zulu"]
+    assert minimal_names == ["alpha", "Beta", "same", "same", "Zulu"]
+    assert listed_same_ids == sorted([same_1.id, same_2.id])
+    assert minimal_same_ids == sorted([same_1.id, same_2.id])
+
+
+def test_paginate_users_name_and_non_name_sorts_are_stable(db_session):
+    endpoint = _seed_ceph_endpoint(db_session)
+    older_time = datetime(2025, 1, 1, 12, 0, 0)
+    same_1 = _seed_local_user(db_session, name="same", uid="page-same-1", endpoint_id=endpoint.id, created_at=older_time)
+    same_2 = _seed_local_user(db_session, name="same", uid="page-same-2", endpoint_id=endpoint.id, created_at=older_time)
+    _seed_local_user(db_session, name="alpha", uid="page-alpha", endpoint_id=endpoint.id, created_at=older_time)
+    same_time = datetime(2026, 1, 1, 12, 0, 0)
+    tie_1 = _seed_local_user(
+        db_session,
+        name="time-charlie",
+        uid="page-time-1",
+        endpoint_id=endpoint.id,
+        created_at=same_time,
+    )
+    tie_2 = _seed_local_user(
+        db_session,
+        name="time-delta",
+        uid="page-time-2",
+        endpoint_id=endpoint.id,
+        created_at=same_time,
+    )
+    _seed_local_user(
+        db_session,
+        name="time-bravo",
+        uid="page-time-3",
+        endpoint_id=endpoint.id,
+        created_at=datetime(2026, 1, 2, 12, 0, 0),
+    )
+
+    service = S3UsersService(db_session)
+
+    name_desc_items, _ = service.paginate_users(
+        page=1,
+        page_size=10,
+        search=None,
+        sort_field="name",
+        sort_direction="desc",
+        include_quota=False,
+    )
+    same_desc_ids = [entry.id for entry in name_desc_items if entry.name == "same"]
+
+    created_desc_items, _ = service.paginate_users(
+        page=1,
+        page_size=10,
+        search=None,
+        sort_field="created_at",
+        sort_direction="desc",
+        include_quota=False,
+    )
+    created_desc_ids = [entry.id for entry in created_desc_items]
+
+    assert [entry.name for entry in name_desc_items[:3]] == ["time-delta", "time-charlie", "time-bravo"]
+    assert same_desc_ids == sorted([same_1.id, same_2.id], reverse=True)
+    assert created_desc_items[0].name == "time-bravo"
+    assert created_desc_ids.index(tie_2.id) < created_desc_ids.index(tie_1.id)

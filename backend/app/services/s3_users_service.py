@@ -35,6 +35,7 @@ from app.services import s3_client
 from app.utils.s3_endpoint import resolve_s3_client_options
 from app.utils.quota_stats import bytes_to_gb
 from app.utils.size_units import size_to_bytes
+from app.utils.s3_user_ordering import s3_user_name_order_by
 
 logger = logging.getLogger(__name__)
 
@@ -339,7 +340,7 @@ class S3UsersService:
         )
 
     def list_users(self, include_quota: bool = False) -> list[S3UserSchema]:
-        rows = self.db.query(S3UserModel).all()
+        rows = self.db.query(S3UserModel).order_by(*s3_user_name_order_by(S3UserModel)).all()
         link_rows = self.db.query(UserS3UserModel).all()
         link_map: dict[int, list[int]] = {}
         for link in link_rows:
@@ -347,7 +348,7 @@ class S3UsersService:
         return [self._serialize_s3_user(row, link_map, include_quota=include_quota) for row in rows]
 
     def list_users_minimal(self) -> list[S3UserSummary]:
-        rows = self.db.query(S3UserModel).order_by(S3UserModel.name.asc()).all()
+        rows = self.db.query(S3UserModel).order_by(*s3_user_name_order_by(S3UserModel)).all()
         summaries: list[S3UserSummary] = []
         for row in rows:
             endpoint = row.storage_endpoint or (
@@ -399,13 +400,27 @@ class S3UsersService:
             "email": S3UserModel.email,
             "created_at": S3UserModel.created_at,
         }
-        order_column = sort_map.get(sort_field, S3UserModel.name)
-        if sort_direction == "desc":
-            order_column = order_column.desc()
+        requested_sort = sort_field if sort_field in sort_map else "name"
+        descending = sort_direction.lower() == "desc"
         total_query = query.with_entities(func.count(func.distinct(S3UserModel.id)))
         total = total_query.scalar() or 0
         offset = max(page - 1, 0) * page_size
-        rows = query.order_by(order_column).offset(offset).limit(page_size).all()
+        if requested_sort == "name":
+            if descending:
+                query = query.order_by(
+                    func.lower(S3UserModel.name).desc(),
+                    S3UserModel.name.desc(),
+                    S3UserModel.id.desc(),
+                )
+            else:
+                query = query.order_by(*s3_user_name_order_by(S3UserModel))
+        else:
+            sort_column = sort_map[requested_sort]
+            if descending:
+                query = query.order_by(sort_column.desc(), S3UserModel.id.desc())
+            else:
+                query = query.order_by(sort_column.asc(), S3UserModel.id.asc())
+        rows = query.offset(offset).limit(page_size).all()
         user_ids = [row.id for row in rows]
         link_rows = (
             self.db.query(UserS3UserModel)

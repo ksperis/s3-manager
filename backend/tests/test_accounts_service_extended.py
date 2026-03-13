@@ -287,3 +287,23 @@ def test_delete_root_user_required_and_optional_paths(db_session, monkeypatch):
     admin.delete_user = _failing_delete  # type: ignore[method-assign]
     with pytest.raises(ValueError, match="Unable to delete RGW root user"):
         service._delete_root_user(account, required=True)
+
+
+def test_list_accounts_and_minimal_are_sorted_case_insensitive(db_session):
+    endpoint = _seed_endpoint(db_session, name="ceph-sorting", is_default=True)
+    _seed_account(db_session, endpoint.id, name="Zulu", rgw_account_id="RGW-SORT-01")
+    _seed_account(db_session, endpoint.id, name="alpha", rgw_account_id="RGW-SORT-02")
+    _seed_account(db_session, endpoint.id, name="Beta", rgw_account_id="RGW-SORT-03")
+    _seed_account(db_session, endpoint.id, name="same", rgw_account_id="RGW-SORT-04")
+    _seed_account(db_session, endpoint.id, name="Same", rgw_account_id="RGW-SORT-05")
+
+    service = S3AccountsService(db_session, allow_missing_admin=True)
+    listed = service.list_accounts(
+        include_usage_stats=False,
+        include_quota=False,
+        include_rgw_details=False,
+    )
+    minimal = service.list_accounts_minimal()
+
+    assert [entry.name for entry in listed] == ["alpha", "Beta", "Same", "same", "Zulu"]
+    assert [entry.name for entry in minimal] == ["alpha", "Beta", "Same", "same", "Zulu"]

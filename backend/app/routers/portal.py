@@ -48,6 +48,7 @@ from app.utils.s3_endpoint import resolve_s3_client_options, resolve_s3_endpoint
 from app.services.traffic_service import TrafficService, TrafficWindow, WINDOW_RESOLUTION_LABELS, WINDOW_DELTAS
 from app.services.rgw_admin import RGWAdminError
 from app.services.users_service import UsersService, get_users_service
+from app.utils.s3_account_ordering import s3_account_name_order_by
 from app.db import UserRole
 from pydantic import BaseModel
 from app.services.billing_service import BillingService
@@ -74,7 +75,7 @@ def list_portal_accounts(
     )
     account_ids = {l.account_id for l in links}
     accounts = (
-        db.query(S3Account).filter(S3Account.id.in_(account_ids)).all()
+        db.query(S3Account).filter(S3Account.id.in_(account_ids)).order_by(*s3_account_name_order_by(S3Account)).all()
         if account_ids
         else []
     )

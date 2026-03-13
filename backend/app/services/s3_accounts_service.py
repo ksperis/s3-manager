@@ -42,6 +42,7 @@ from app.utils.rgw import extract_bucket_list, normalize_rgw_identifier, resolve
 from app.utils.usage_stats import extract_usage_stats
 from app.utils.quota_stats import bytes_to_gb
 from app.utils.size_units import size_to_bytes
+from app.utils.s3_account_ordering import s3_account_name_order_by
 
 
 logger = logging.getLogger(__name__)
@@ -478,7 +479,7 @@ class S3AccountsService:
         include_quota: bool = True,
         include_rgw_details: bool = True,
     ) -> list[S3AccountSchema]:
-        db_accounts = self.db.query(S3Account).all()
+        db_accounts = self.db.query(S3Account).order_by(*s3_account_name_order_by(S3Account)).all()
         account_ids = [account.id for account in db_accounts]
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
 
@@ -548,7 +549,7 @@ class S3AccountsService:
         return results
 
     def list_accounts_minimal(self) -> list[S3AccountSummary]:
-        db_accounts = self.db.query(S3Account).all()
+        db_accounts = self.db.query(S3Account).order_by(*s3_account_name_order_by(S3Account)).all()
         account_ids = [account.id for account in db_accounts]
         user_ids_by_account, user_links_by_account = self._load_non_root_user_links(account_ids)
         summaries: list[S3AccountSummary] = []
@@ -568,7 +569,6 @@ class S3AccountsService:
                     storage_endpoint_capabilities=self._endpoint_capabilities(endpoint),
                 )
             )
-        summaries.sort(key=lambda entry: entry.name.lower())
         return summaries
 
     def get_account_detail(self, account_id: int, include_usage: bool = False) -> S3AccountSchema:
