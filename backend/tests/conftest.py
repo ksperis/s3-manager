@@ -10,6 +10,10 @@ from app.db import Base, User, UserRole
 from app.main import app
 from app.routers import dependencies
 from app.services.bucket_listing_cache import invalidate_bucket_listing_cache
+from app.services.bucket_migration_service import (
+    reset_bucket_migration_webhook_dispatcher_for_tests,
+    reset_bucket_migration_worker_for_tests,
+)
 
 
 @pytest.fixture(scope="session")
@@ -64,8 +68,8 @@ def client(db_session):
     app.dependency_overrides[dependencies.get_current_super_admin] = override_super_admin
     app.dependency_overrides[dependencies.get_current_account_admin] = override_account_admin
 
-    yield TestClient(app)
-
+    with TestClient(app) as test_client:
+        yield test_client
     app.dependency_overrides = {}
 
 
@@ -76,3 +80,14 @@ def reset_bucket_listing_cache():
         yield
     finally:
         invalidate_bucket_listing_cache()
+
+
+@pytest.fixture(autouse=True)
+def reset_bucket_migration_workers():
+    reset_bucket_migration_worker_for_tests()
+    reset_bucket_migration_webhook_dispatcher_for_tests()
+    try:
+        yield
+    finally:
+        reset_bucket_migration_worker_for_tests()
+        reset_bucket_migration_webhook_dispatcher_for_tests()

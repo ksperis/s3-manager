@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 from __future__ import annotations
 
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 from botocore.exceptions import ClientError
@@ -30,6 +31,7 @@ class _FakeS3Client:
         return {"Buckets": []}
 
 
+@contextmanager
 def _build_client(db_session):
     superadmin = User(
         email="superadmin-validate@example.com",
@@ -60,29 +62,32 @@ def _build_client(db_session):
     app.dependency_overrides[dependencies.get_db] = override_get_db
     app.dependency_overrides[dependencies.get_current_super_admin] = lambda: superadmin
     app.dependency_overrides[dependencies.get_current_account_user] = lambda: ui_user
-    return TestClient(app), ui_user
+    with TestClient(app) as test_client:
+        try:
+            yield test_client, ui_user
+        finally:
+            app.dependency_overrides = {}
 
 
 def test_validate_credentials_success_admin_custom_endpoint(db_session, monkeypatch):
-    client, _ = _build_client(db_session)
-    monkeypatch.setattr(
-        "app.services.s3_connection_validation_service.s3_client.get_s3_client",
-        lambda **kwargs: _FakeS3Client(),
-    )
+    with _build_client(db_session) as (client, _):
+        monkeypatch.setattr(
+            "app.services.s3_connection_validation_service.s3_client.get_s3_client",
+            lambda **kwargs: _FakeS3Client(),
+        )
 
-    response = client.post(
-        "/api/admin/s3-connections/validate-credentials",
-        json={
-            "endpoint_url": "https://s3.example.test",
-            "region": "us-east-1",
-            "access_key_id": "AKIA-SUCCESS",
-            "secret_access_key": "SECRET-SUCCESS",
-            "force_path_style": True,
-            "verify_tls": False,
-        },
-    )
+        response = client.post(
+            "/api/admin/s3-connections/validate-credentials",
+            json={
+                "endpoint_url": "https://s3.example.test",
+                "region": "us-east-1",
+                "access_key_id": "AKIA-SUCCESS",
+                "secret_access_key": "SECRET-SUCCESS",
+                "force_path_style": True,
+                "verify_tls": False,
+            },
+        )
 
-    app.dependency_overrides = {}
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
@@ -92,35 +97,34 @@ def test_validate_credentials_success_admin_custom_endpoint(db_session, monkeypa
 
 
 def test_validate_credentials_access_denied_is_warning_user_route(db_session, monkeypatch):
-    client, _ = _build_client(db_session)
-    monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
-    endpoint = StorageEndpoint(
-        name="endpoint-a",
-        endpoint_url="https://s3-endpoint-a.example.test",
-        region="eu-west-1",
-        provider="other",
-        verify_tls=True,
-        is_default=False,
-        is_editable=True,
-    )
-    db_session.add(endpoint)
-    db_session.commit()
-    db_session.refresh(endpoint)
-    monkeypatch.setattr(
-        "app.services.s3_connection_validation_service.s3_client.get_s3_client",
-        lambda **kwargs: _FakeS3Client(error=_client_error("AccessDenied")),
-    )
+    with _build_client(db_session) as (client, _):
+        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+        endpoint = StorageEndpoint(
+            name="endpoint-a",
+            endpoint_url="https://s3-endpoint-a.example.test",
+            region="eu-west-1",
+            provider="other",
+            verify_tls=True,
+            is_default=False,
+            is_editable=True,
+        )
+        db_session.add(endpoint)
+        db_session.commit()
+        db_session.refresh(endpoint)
+        monkeypatch.setattr(
+            "app.services.s3_connection_validation_service.s3_client.get_s3_client",
+            lambda **kwargs: _FakeS3Client(error=_client_error("AccessDenied")),
+        )
 
-    response = client.post(
-        "/api/connections/validate-credentials",
-        json={
-            "storage_endpoint_id": endpoint.id,
-            "access_key_id": "AKIA-WARN",
-            "secret_access_key": "SECRET-WARN",
-        },
-    )
+        response = client.post(
+            "/api/connections/validate-credentials",
+            json={
+                "storage_endpoint_id": endpoint.id,
+                "access_key_id": "AKIA-WARN",
+                "secret_access_key": "SECRET-WARN",
+            },
+        )
 
-    app.dependency_overrides = {}
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
@@ -129,23 +133,22 @@ def test_validate_credentials_access_denied_is_warning_user_route(db_session, mo
 
 
 def test_validate_credentials_invalid_credentials_error(db_session, monkeypatch):
-    client, _ = _build_client(db_session)
-    monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
-    monkeypatch.setattr(
-        "app.services.s3_connection_validation_service.s3_client.get_s3_client",
-        lambda **kwargs: _FakeS3Client(error=_client_error("InvalidAccessKeyId")),
-    )
+    with _build_client(db_session) as (client, _):
+        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+        monkeypatch.setattr(
+            "app.services.s3_connection_validation_service.s3_client.get_s3_client",
+            lambda **kwargs: _FakeS3Client(error=_client_error("InvalidAccessKeyId")),
+        )
 
-    response = client.post(
-        "/api/connections/validate-credentials",
-        json={
-            "endpoint_url": "https://s3-invalid-credentials.example.test",
-            "access_key_id": "AKIA-INVALID",
-            "secret_access_key": "SECRET-INVALID",
-        },
-    )
+        response = client.post(
+            "/api/connections/validate-credentials",
+            json={
+                "endpoint_url": "https://s3-invalid-credentials.example.test",
+                "access_key_id": "AKIA-INVALID",
+                "secret_access_key": "SECRET-INVALID",
+            },
+        )
 
-    app.dependency_overrides = {}
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is False
@@ -155,35 +158,33 @@ def test_validate_credentials_invalid_credentials_error(db_session, monkeypatch)
 
 
 def test_validate_credentials_storage_endpoint_not_found(db_session, monkeypatch):
-    client, _ = _build_client(db_session)
-    monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
+    with _build_client(db_session) as (client, _):
+        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(True))
 
-    response = client.post(
-        "/api/connections/validate-credentials",
-        json={
-            "storage_endpoint_id": 999999,
-            "access_key_id": "AKIA-MISSING-ENDPOINT",
-            "secret_access_key": "SECRET-MISSING-ENDPOINT",
-        },
-    )
+        response = client.post(
+            "/api/connections/validate-credentials",
+            json={
+                "storage_endpoint_id": 999999,
+                "access_key_id": "AKIA-MISSING-ENDPOINT",
+                "secret_access_key": "SECRET-MISSING-ENDPOINT",
+            },
+        )
 
-    app.dependency_overrides = {}
     assert response.status_code == 404
     assert response.json()["detail"] == "Storage endpoint not found"
 
 
 def test_validate_credentials_forbidden_when_private_connections_disabled(db_session, monkeypatch):
-    client, _ = _build_client(db_session)
-    monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(False))
+    with _build_client(db_session) as (client, _):
+        monkeypatch.setattr("app.routers.connections.load_app_settings", lambda: _settings(False))
 
-    response = client.post(
-        "/api/connections/validate-credentials",
-        json={
-            "endpoint_url": "https://s3-forbidden.example.test",
-            "access_key_id": "AKIA-FORBIDDEN",
-            "secret_access_key": "SECRET-FORBIDDEN",
-        },
-    )
+        response = client.post(
+            "/api/connections/validate-credentials",
+            json={
+                "endpoint_url": "https://s3-forbidden.example.test",
+                "access_key_id": "AKIA-FORBIDDEN",
+                "secret_access_key": "SECRET-FORBIDDEN",
+            },
+        )
 
-    app.dependency_overrides = {}
     assert response.status_code == 403

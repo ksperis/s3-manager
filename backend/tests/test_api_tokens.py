@@ -19,7 +19,8 @@ def auth_client(db_session):
             pass
 
     app.dependency_overrides[dependencies.get_db] = override_get_db
-    yield TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
     app.dependency_overrides = {}
 
 

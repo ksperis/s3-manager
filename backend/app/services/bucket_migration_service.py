@@ -4910,6 +4910,15 @@ _worker_singleton: Optional[BucketMigrationWorker] = None
 _worker_lock = threading.Lock()
 
 
+def reset_bucket_migration_worker_for_tests(*, timeout: float = 0.5) -> None:
+    global _worker_singleton
+    with _worker_lock:
+        worker = _worker_singleton
+        _worker_singleton = None
+    if worker is not None:
+        worker.stop(timeout=timeout)
+
+
 def get_bucket_migration_worker(session_factory: sessionmaker) -> BucketMigrationWorker:
     global _worker_singleton
     with _worker_lock:

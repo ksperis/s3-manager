@@ -35,7 +35,8 @@ def contract_client(db_session):
     app.dependency_overrides[dependencies.get_current_account_user] = lambda: user
     app.dependency_overrides[dependencies.get_current_super_admin] = lambda: user
     app.dependency_overrides[dependencies.get_current_account_admin] = lambda: user
-    yield TestClient(app), db_session, user
+    with TestClient(app) as test_client:
+        yield test_client, db_session, user
     app.dependency_overrides = {}
 
 
