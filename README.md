@@ -1,6 +1,6 @@
 # s3-manager
 
-**s3-manager** is an open-source web application to manage **S3-compatible object storage** (Ceph RGW, AWS S3, MinIO, Scality, ...).
+**s3-manager** is an open-source web application to manage **S3-compatible object storage**, primarily focused on **Ceph RGW**, with **partial compatibility** for non-Ceph S3 implementations.
 
 > Project status: **Early-stage / Proof of Concept**. Suitable for labs and validation environments.
 
