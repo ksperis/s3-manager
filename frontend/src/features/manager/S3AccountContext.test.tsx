@@ -66,7 +66,6 @@ describe("S3AccountProvider", () => {
     listExecutionContextsMock.mockResolvedValue(CONTEXTS);
     fetchManagerContextMock.mockResolvedValue({
       access_mode: "admin",
-      can_switch_access: false,
       iam_identity: "arn:test",
       manager_stats_enabled: true,
       manager_browser_enabled: true,

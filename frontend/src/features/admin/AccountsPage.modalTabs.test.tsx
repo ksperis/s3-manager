@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AccountsPage from "./AccountsPage";
 
@@ -196,6 +196,43 @@ describe("AccountsPage modal tabs", () => {
         user_links: expect.arrayContaining([
           expect.objectContaining({
             user_id: 7,
+          }),
+        ]),
+      })
+    );
+  });
+
+  it("does not auto-enable admin when adding a portal_manager link", async () => {
+    render(<AccountsPage />);
+
+    await screen.findByText("acc-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Linked UI users" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add UI users" }));
+    const userCheckbox = await screen.findByRole("checkbox", { name: "ui7@example.com" });
+    fireEvent.click(userCheckbox);
+    const userRow = userCheckbox.closest("div");
+    if (!userRow) {
+      throw new Error("User row not found");
+    }
+    fireEvent.change(within(userRow).getByRole("combobox"), { target: { value: "portal_manager" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateS3AccountMock).toHaveBeenCalled();
+    });
+
+    const lastCall = updateS3AccountMock.mock.calls.at(-1);
+    expect(lastCall?.[1]).toEqual(
+      expect.objectContaining({
+        user_links: expect.arrayContaining([
+          expect.objectContaining({
+            user_id: 7,
+            account_role: "portal_manager",
+            account_admin: false,
           }),
         ]),
       })

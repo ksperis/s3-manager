@@ -44,7 +44,6 @@ describe("GeneralSettingsProvider fallbacks", () => {
       browser_manager_enabled: true,
       browser_portal_enabled: true,
       browser_ceph_admin_enabled: true,
-      allow_portal_manager_workspace: true,
       portal_enabled: true,
       billing_enabled: true,
       endpoint_status_enabled: true,

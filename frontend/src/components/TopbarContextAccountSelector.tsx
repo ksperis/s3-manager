@@ -8,7 +8,7 @@ import { formatAccountLabel } from "../features/shared/storageEndpointLabel";
 import TopbarControlTrigger from "./TopbarControlTrigger";
 import AnchoredPortalMenu from "./ui/AnchoredPortalMenu";
 
-export type ContextAccessMode = "admin" | "portal" | "session" | "s3_user" | "connection" | null;
+export type ContextAccessMode = "admin" | "session" | "s3_user" | "connection" | null;
 
 export function getContextAccessModeVisual(mode: ContextAccessMode): {
   label: string;
@@ -20,13 +20,6 @@ export function getContextAccessModeVisual(mode: ContextAccessMode): {
       label: "Admin mode",
       shortLabel: "Admin",
       classes: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100",
-    };
-  }
-  if (mode === "portal") {
-    return {
-      label: "Portal mode",
-      shortLabel: "Portal",
-      classes: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-100",
     };
   }
   if (mode === "connection") {
@@ -62,9 +55,6 @@ type TopbarContextAccountSelectorProps = {
   onContextChange: (selectedValue: string) => void;
   selectedLabel: string;
   identityLabel: string | null;
-  accessMode: ContextAccessMode;
-  canToggleAccess?: boolean;
-  onToggleAccess?: () => void;
   defaultEndpointId: number | null;
   defaultEndpointName: string | null;
   widthClassName?: string;
@@ -79,9 +69,6 @@ export default function TopbarContextAccountSelector({
   onContextChange,
   selectedLabel,
   identityLabel,
-  accessMode,
-  canToggleAccess = false,
-  onToggleAccess,
   defaultEndpointId,
   defaultEndpointName,
   widthClassName = "w-[26rem] max-w-[55vw] min-w-[19rem]",
@@ -97,8 +84,6 @@ export default function TopbarContextAccountSelector({
   const menuSurfaceRef = useRef<HTMLDivElement | null>(null);
   const listboxRef = useRef<HTMLDivElement | null>(null);
   const listboxId = useId();
-  const modeVisual = getContextAccessModeVisual(accessMode);
-  const canShowToggle = (accessMode === "admin" || accessMode === "portal") && Boolean(onToggleAccess);
 
   const contextItems = useMemo(
     () =>
@@ -253,41 +238,6 @@ export default function TopbarContextAccountSelector({
         <p className="truncate ui-caption font-semibold text-slate-800 dark:text-slate-100">
           {identityLabel ?? "Not available for this context"}
         </p>
-        {canShowToggle && (
-          <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-slate-200/70 bg-white px-2.5 py-2 dark:border-slate-700 dark:bg-slate-900/70">
-            <div className="min-w-0">
-              <p className="ui-caption font-semibold text-slate-700 dark:text-slate-100">Admin mode</p>
-              <p className="truncate ui-caption text-slate-500 dark:text-slate-400">{modeVisual.label}</p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={accessMode === "admin"}
-              onClick={onToggleAccess}
-              disabled={!canToggleAccess}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-                accessMode === "admin"
-                  ? "bg-amber-400/80 dark:bg-amber-500/70"
-                  : "bg-slate-200 dark:bg-slate-700"
-              } ${canToggleAccess ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
-              aria-label={
-                accessMode === "admin"
-                  ? canToggleAccess
-                    ? "Admin mode actif, basculer en mode portal"
-                    : "Admin mode actif"
-                  : canToggleAccess
-                    ? "Portal mode actif, basculer en mode admin"
-                    : "Portal mode actif"
-              }
-            >
-              <span
-                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition ${
-                  accessMode === "admin" ? "translate-x-4" : "translate-x-1"
-                }`}
-              />
-            </button>
-          </div>
-        )}
       </div>
 
       {contextItems.length > searchThreshold && (

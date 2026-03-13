@@ -5,12 +5,11 @@
 import client from "./client";
 import { S3AccountSelector, withS3AccountParam } from "./accountParams";
 
-export type ManagerAccessMode = "admin" | "portal" | "session" | "s3_user" | "connection";
+export type ManagerAccessMode = "admin" | "session" | "s3_user" | "connection";
 
 export type ManagerContext = {
   access_mode: ManagerAccessMode;
   iam_identity?: string | null;
-  can_switch_access?: boolean;
   manager_stats_enabled: boolean;
   manager_stats_message?: string | null;
   manager_browser_enabled?: boolean;

@@ -1501,7 +1501,7 @@ export default function S3AccountsPage() {
                           {visibleAvailableUsers.map((u) => {
                             const isSelected = userSelections.includes(u.id);
                             const role = portalEnabled ? userRoleChoice[u.id] ?? "portal_none" : "portal_none";
-                            const adminChecked = portalEnabled ? userAdminChoice[u.id] ?? role === "portal_manager" : true;
+                            const adminChecked = portalEnabled ? userAdminChoice[u.id] ?? false : true;
                             return (
                               <div
                                 key={u.id}
@@ -1526,14 +1526,9 @@ export default function S3AccountsPage() {
                                       className="rounded-md border border-slate-200 px-2 py-1 ui-caption font-semibold uppercase tracking-wide text-slate-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                                       value={role}
                                       onChange={(e) => {
-                                        const nextRole = e.target.value as AccountUserLink["account_role"];
                                         setUserRoleChoice((prev) => ({
                                           ...prev,
-                                          [u.id]: nextRole,
-                                        }));
-                                        setUserAdminChoice((prev) => ({
-                                          ...prev,
-                                          [u.id]: prev[u.id] ?? nextRole === "portal_manager",
+                                          [u.id]: e.target.value as AccountUserLink["account_role"],
                                         }));
                                       }}
                                     >
@@ -1598,7 +1593,7 @@ export default function S3AccountsPage() {
                                   return {
                                     user_id: id,
                                     account_role: role,
-                                    account_admin: portalEnabled ? userAdminChoice[id] ?? role === "portal_manager" : true,
+                                    account_admin: portalEnabled ? userAdminChoice[id] ?? false : true,
                                     user_email: userLabelById.get(id) ?? undefined,
                                   };
                                 });

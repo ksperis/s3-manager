@@ -29,8 +29,6 @@ type S3AccountContextType = {
   accessError?: string | null;
   iamIdentity: string | null;
   accessMode: ManagerAccessMode | null;
-  setAccessMode: (mode: ManagerAccessMode) => void;
-  canSwitchAccess: boolean;
   managerStatsEnabled: boolean | null;
   managerStatsMessage: string | null;
   managerBrowserEnabled: boolean | null;
@@ -49,8 +47,6 @@ const S3AccountContext = createContext<S3AccountContextType>({
   accessError: null,
   iamIdentity: null,
   accessMode: null,
-  setAccessMode: () => {},
-  canSwitchAccess: false,
   managerStatsEnabled: null,
   managerStatsMessage: null,
   managerBrowserEnabled: null,
@@ -107,7 +103,6 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
   const [accessError, setAccessError] = useState<string | null>(null);
   const [iamIdentity, setIamIdentity] = useState<string | null>(null);
   const [accessMode, setAccessModeState] = useState<ManagerAccessMode | null>(null);
-  const [canSwitchAccess, setCanSwitchAccess] = useState(false);
   const [managerStatsEnabled, setManagerStatsEnabled] = useState<boolean | null>(null);
   const [managerStatsMessage, setManagerStatsMessage] = useState<string | null>(null);
   const [managerBrowserEnabled, setManagerBrowserEnabled] = useState<boolean | null>(null);
@@ -200,12 +195,6 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
     }
   };
 
-  const setAccessMode = (mode: ManagerAccessMode) => {
-    if (!selectedS3AccountId) return;
-    localStorage.setItem(`managerAccessMode:${selectedS3AccountId}`, mode);
-    setAccessModeState(mode);
-  };
-
   const selectedS3Account = useMemo(
     () => accounts.find((account) => account.id === selectedS3AccountId),
     [accounts, selectedS3AccountId]
@@ -216,22 +205,9 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
   const selectedS3AccountType = deriveS3AccountType(selectedS3Account);
 
   useEffect(() => {
-    if (!selectedS3AccountId) {
-      setAccessModeState(null);
-      return;
-    }
-    const stored = localStorage.getItem(`managerAccessMode:${selectedS3AccountId}`);
-    if (stored === "admin" || stored === "portal") {
-      setAccessModeState(stored);
-    } else {
-      setAccessModeState(null);
-    }
-  }, [selectedS3AccountId]);
-
-  useEffect(() => {
     if (!hasS3AccountContext) {
       setIamIdentity(null);
-      setCanSwitchAccess(false);
+      setAccessModeState(null);
       setManagerStatsEnabled(null);
       setManagerStatsMessage(null);
       setManagerBrowserEnabled(null);
@@ -247,20 +223,16 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
       .then((data) => {
         if (!isMounted) return;
         setIamIdentity(data.iam_identity ?? null);
-        setCanSwitchAccess(Boolean(data.can_switch_access));
         setAccessModeState(data.access_mode);
         setManagerStatsEnabled(Boolean(data.manager_stats_enabled));
         setManagerStatsMessage(data.manager_stats_message ?? null);
         setManagerBrowserEnabled(data.manager_browser_enabled !== false);
         setManagerCephKeysEnabled(Boolean(data.manager_ceph_keys_enabled));
-        if (selectedS3AccountId && (data.access_mode === "admin" || data.access_mode === "portal")) {
-          localStorage.setItem(`managerAccessMode:${selectedS3AccountId}`, data.access_mode);
-        }
       })
       .catch(() => {
         if (!isMounted) return;
         setIamIdentity(null);
-        setCanSwitchAccess(false);
+        setAccessModeState(null);
         setManagerStatsEnabled(null);
         setManagerStatsMessage(null);
         setManagerBrowserEnabled(null);
@@ -269,7 +241,7 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
     return () => {
       isMounted = false;
     };
-  }, [accountIdForApi, hasS3AccountContext, accessMode, selectedS3AccountId]);
+  }, [accountIdForApi, hasS3AccountContext]);
 
   return (
     <S3AccountContext.Provider
@@ -285,8 +257,6 @@ export function S3AccountProvider({ children, scope = "manager" }: S3AccountProv
         accessError,
         iamIdentity,
         accessMode,
-        setAccessMode,
-        canSwitchAccess,
         managerStatsEnabled,
         managerStatsMessage,
         managerBrowserEnabled,

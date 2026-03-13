@@ -32,7 +32,6 @@ function renderSelector(params: {
       onContextChange={onContextChange}
       selectedLabel="Selected context"
       identityLabel={null}
-      accessMode="session"
       defaultEndpointId={null}
       defaultEndpointName="Default"
     />

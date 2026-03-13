@@ -77,20 +77,6 @@ export default function PortalSettingsPage() {
     );
   };
 
-  const handleToggleAllowPortalManagerWorkspace = (value: boolean) => {
-    setSettings((prev) =>
-      prev
-        ? {
-            ...prev,
-            general: {
-              ...prev.general,
-              allow_portal_manager_workspace: value,
-            },
-          }
-        : prev
-    );
-  };
-
   const handleBucketDefaultVersioning = (value: boolean) => {
     setSettings((prev) =>
       prev ? { ...prev, portal: { ...prev.portal, bucket_defaults: { ...prev.portal.bucket_defaults, versioning: value } } } : prev
@@ -237,10 +223,6 @@ export default function PortalSettingsPage() {
           ? {
               ...prev,
               portal: defaults.portal,
-              general: {
-                ...prev.general,
-                allow_portal_manager_workspace: defaults.general.allow_portal_manager_workspace,
-              },
             }
           : defaults
       );
@@ -382,19 +364,6 @@ export default function PortalSettingsPage() {
                   disabled={!settings}
                   aria-label="Max IAM user keys per portal user"
                   className="w-28 rounded-md border border-slate-300 bg-white px-2 py-1 ui-caption text-slate-800 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                />
-              }
-            />
-            <PortalSettingsItem
-              title="Allow portal managers in Manager workspace"
-              description="When enabled, users with role portal_manager can use /manager for their linked accounts."
-              action={
-                <PortalSettingsToggleAction
-                  checked={Boolean(settings?.general.allow_portal_manager_workspace)}
-                  onChange={(value) => handleToggleAllowPortalManagerWorkspace(value)}
-                  disabled={!settings}
-                  ariaLabel="Allow portal manager workspace"
-                  badge={{ visible: true, label: "Experimental", tone: "info" }}
                 />
               }
             />

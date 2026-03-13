@@ -121,7 +121,6 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
     (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
   );
   const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
-  const hasPortalManagerRole = links.some((link) => link.account_role === "portal_manager");
   const hasS3UserAccess = s3UserDetails.length > 0 || s3UserIds.length > 0;
   const hasBrowserConnectionAccess =
     connectionDetails.length > 0
@@ -131,7 +130,7 @@ function resolveAvailableWorkspaces(user: SessionUser | null): WorkspaceOption[]
     connectionDetails.length > 0
       ? connectionDetails.some((connection) => canUseManagerConnection(connection))
       : connectionIds.length > 0;
-  const hasManagerAccess = hasAccountAdmin || hasManagerConnectionAccess || hasPortalManagerRole || hasS3UserAccess;
+  const hasManagerAccess = hasAccountAdmin || hasManagerConnectionAccess || hasS3UserAccess;
   const hasBrowserAccess = hasBrowserConnectionAccess || hasS3UserAccess;
 
   return ALL_WORKSPACES.filter((workspace) => {
@@ -161,10 +160,7 @@ export function resolveAvailableWorkspacesWithFlags(
         : Boolean(user.s3_connections && user.s3_connections.length > 0);
       if (hasIamConnections) return true;
       if (user.s3_user_details?.length || user.s3_users?.length) return true;
-      return Boolean(
-        generalSettings.allow_portal_manager_workspace &&
-          user.account_links?.some((link) => link.account_role === "portal_manager")
-      );
+      return false;
     }
     if (workspace.id === "browser") return generalSettings.browser_enabled && generalSettings.browser_root_enabled;
     if (workspace.id === "portal") return generalSettings.portal_enabled;
@@ -205,7 +201,6 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
     (link) => link.account_role === "portal_user" || link.account_role === "portal_manager"
   );
   const hasAccountAdmin = links.some((link) => Boolean(link.account_admin));
-  const hasPortalManager = links.some((link) => link.account_role === "portal_manager");
   const hasS3UserAccess = s3UserDetails.length > 0 || s3UserIds.length > 0;
   const hasBrowserConnectionAccess =
     connectionDetails.length > 0
@@ -219,8 +214,7 @@ export function resolveRoleHomePath(user: SessionUser | null, generalSettings: G
   const hasManagerAccess =
     hasAccountAdmin ||
     hasManagerConnectionAccess ||
-    hasS3UserAccess ||
-    (generalSettings.allow_portal_manager_workspace && hasPortalManager);
+    hasS3UserAccess;
 
   if (generalSettings.manager_enabled && hasManagerAccess) return "/manager";
   if (generalSettings.storage_ops_enabled && Boolean(user.can_access_storage_ops)) return "/storage-ops";

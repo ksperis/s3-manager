@@ -229,7 +229,6 @@ export default function GeneralSettingsPage() {
               ...prev,
               general: {
                 ...defaults.general,
-                allow_portal_manager_workspace: prev.general.allow_portal_manager_workspace,
                 bucket_migration_enabled: prev.general.bucket_migration_enabled,
                 bucket_compare_enabled: prev.general.bucket_compare_enabled,
                 allow_ui_user_bucket_migration: prev.general.allow_ui_user_bucket_migration,

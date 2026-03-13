@@ -67,17 +67,6 @@ client.interceptors.request.use((config) => {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
   }
-  const url = config.url ?? "";
-  if (url.startsWith("/manager")) {
-    const accountId = localStorage.getItem("selectedExecutionContextId");
-    if (accountId) {
-      const mode = localStorage.getItem(`managerAccessMode:${accountId}`);
-      if (mode === "admin" || mode === "portal") {
-        config.headers = config.headers ?? {};
-        config.headers["X-Manager-Access-Mode"] = mode;
-      }
-    }
-  }
   const userRaw = localStorage.getItem("user");
   if (userRaw) {
     try {

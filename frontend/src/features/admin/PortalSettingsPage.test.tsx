@@ -29,7 +29,6 @@ function buildSettings(): AppSettings {
       browser_manager_enabled: false,
       browser_portal_enabled: true,
       browser_ceph_admin_enabled: true,
-      allow_portal_manager_workspace: false,
       portal_enabled: false,
       billing_enabled: false,
       endpoint_status_enabled: false,
@@ -124,13 +123,6 @@ describe("PortalSettingsPage", () => {
     fetchAppSettingsMock.mockResolvedValue(buildSettings());
     fetchDefaultAppSettingsMock.mockResolvedValue(buildSettings());
     updateAppSettingsMock.mockImplementation(async (payload: AppSettings) => payload);
-  });
-
-  it("renders allow portal manager workspace toggle with Experimental badge", async () => {
-    render(<PortalSettingsPage />);
-
-    await screen.findByLabelText("Allow portal manager workspace");
-    expect(screen.getByText("Experimental")).toBeInTheDocument();
   });
 
   it("sends max portal user keys in save payload", async () => {

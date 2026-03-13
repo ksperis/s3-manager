@@ -115,7 +115,6 @@ function BrowserShell() {
             onContextChange={handleS3AccountChange}
             selectedLabel={selectedLabel}
             identityLabel={identityLabel}
-            accessMode={identityAccessMode ?? "session"}
             defaultEndpointId={defaultEndpointId}
             defaultEndpointName={defaultEndpointName}
             widthClassName={mode === "icon" ? "w-9" : "w-44 lg:w-64 xl:w-[26rem] min-w-[11rem] max-w-[42vw]"}

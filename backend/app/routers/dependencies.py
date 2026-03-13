@@ -33,7 +33,6 @@ from app.db import (
 from app.models.session import ManagerSessionPrincipal
 from app.services.rgw_admin import RGWAdminClient, RGWAdminError, get_rgw_admin_client
 from app.services.app_settings_service import load_app_settings
-from app.services.portal_service import get_portal_service
 from app.services.audit_service import AuditService, get_audit_service as build_audit_service
 from app.services.api_token_service import ApiTokenService
 from app.services.session_service import SessionService
@@ -431,17 +430,6 @@ def _resolve_ceph_admin_browser_context(db: Session, actor: User, endpoint_id: i
     return _build_ceph_admin_browser_account(endpoint)
 
 
-def _normalize_access_mode(value: Optional[str]) -> Optional[str]:
-    if not value:
-        return None
-    normalized = value.strip().lower()
-    if normalized in {"portal", "user"}:
-        return "portal"
-    if normalized in {"admin", "root"}:
-        return "admin"
-    return None
-
-
 def _resolve_workspace_surface(request: Optional[Request]) -> str:
     if not request:
         return "manager"
@@ -490,33 +478,17 @@ def _resolve_user_account_link(
 
 def _manager_membership_capabilities(
     link: UserS3Account,
-    requested_mode: Optional[str],
-) -> tuple[str, AccountCapabilities]:
-    account_role = link.account_role
+) -> AccountCapabilities:
     is_account_admin = bool(link.account_admin or link.is_root)
-    if account_role == AccountRole.PORTAL_NONE.value and not is_account_admin:
+    if not is_account_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-    allow_portal_manager_workspace = bool(load_app_settings().general.allow_portal_manager_workspace)
-    portal_manager_enabled = bool(
-        account_role == AccountRole.PORTAL_MANAGER.value and allow_portal_manager_workspace
+    return AccountCapabilities(
+        can_manage_buckets=True,
+        can_manage_portal_users=False,
+        can_manage_iam=True,
+        can_view_root_key=True,
+        using_root_key=True,
     )
-    can_use_portal_mode = bool(account_role != AccountRole.PORTAL_NONE.value and allow_portal_manager_workspace)
-    if can_use_portal_mode:
-        using_root = bool(is_account_admin and requested_mode == "admin")
-    else:
-        using_root = bool(is_account_admin)
-    can_manage_iam = bool(using_root or portal_manager_enabled)
-    # Manager workspace actions stay restricted to account admins/root and optionally portal managers.
-    can_manage_buckets = bool(is_account_admin or portal_manager_enabled)
-    can_manage_portal_users = bool(portal_manager_enabled or (is_account_admin and using_root))
-    capabilities = AccountCapabilities(
-        can_manage_buckets=can_manage_buckets,
-        can_manage_portal_users=can_manage_portal_users,
-        can_manage_iam=can_manage_iam,
-        can_view_root_key=using_root,
-        using_root_key=using_root,
-    )
-    return account_role, capabilities
 
 
 def _resolve_session_account(
@@ -593,7 +565,6 @@ def get_account_context(
 ) -> S3Account:
     account_id, s3_user_id, connection_id, ceph_admin_endpoint_id = _parse_account_selector(account_ref)
     surface = _resolve_workspace_surface(request)
-    requested_mode = _normalize_access_mode(request.headers.get("X-Manager-Access-Mode")) if request else None
     requested_endpoint = normalize_s3_endpoint(request.headers.get("X-S3-Endpoint")) if request else None
     if isinstance(actor, ManagerSessionPrincipal):
         requested_endpoint = _resolve_requested_session_endpoint(db, actor, requested_endpoint)
@@ -615,24 +586,15 @@ def get_account_context(
         if s3_user_id is not None:
             return _resolve_s3_user_context(db, actor, s3_user_id)
         account, link = _resolve_user_account_link(db, actor, account_id, allow_default=False)
-        account_role, capabilities = _manager_membership_capabilities(link, requested_mode)
+        capabilities = _manager_membership_capabilities(link)
         if not capabilities.can_manage_buckets:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this account")
-        access_key: Optional[str]
-        secret_key: Optional[str]
-        if capabilities.using_root_key:
-            access_key, secret_key = account.effective_rgw_credentials()
-            if not access_key or not secret_key:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Admin credentials are not configured for this account",
-                )
-        else:
-            portal_service = get_portal_service(db)
-            try:
-                access_key, secret_key = portal_service.get_portal_credentials(actor, account, account_role)
-            except RuntimeError as exc:
-                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        access_key, secret_key = account.effective_rgw_credentials()
+        if not access_key or not secret_key:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Admin credentials are not configured for this account",
+            )
         account.set_session_credentials(access_key, secret_key)
         account._manager_capabilities = capabilities  # type: ignore[attr-defined]
         return account
@@ -876,27 +838,16 @@ def _ensure_bucket_migration_allowed(user: User) -> None:
 
 def _manager_link_allows_bucket_migration(
     link: UserS3Account,
-    *,
-    allow_portal_manager_workspace: bool,
 ) -> bool:
-    if bool(link.account_admin or link.is_root):
-        return True
-    return (
-        (link.account_role or "") == AccountRole.PORTAL_MANAGER.value
-        and allow_portal_manager_workspace
-    )
+    return bool(link.account_admin or link.is_root)
 
 
 def _build_bucket_migration_allowed_context_ids(db: Session, user: User) -> set[str]:
-    allow_portal_manager_workspace = bool(load_app_settings().general.allow_portal_manager_workspace)
     allowed_context_ids: set[str] = set()
 
     account_links = db.query(UserS3Account).filter(UserS3Account.user_id == user.id).all()
     for link in account_links:
-        if _manager_link_allows_bucket_migration(
-            link,
-            allow_portal_manager_workspace=allow_portal_manager_workspace,
-        ):
+        if _manager_link_allows_bucket_migration(link):
             allowed_context_ids.add(str(link.account_id))
 
     s3_links = db.query(UserS3User).filter(UserS3User.user_id == user.id).all()

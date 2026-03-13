@@ -12,7 +12,6 @@ const baseSettings: GeneralSettings = {
   browser_manager_enabled: false,
   browser_portal_enabled: true,
   browser_ceph_admin_enabled: true,
-  allow_portal_manager_workspace: false,
   portal_enabled: false,
   billing_enabled: false,
   endpoint_status_enabled: false,

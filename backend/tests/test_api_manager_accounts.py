@@ -25,7 +25,14 @@ def test_super_admin_only_sees_linked_accounts(client: TestClient, db_session):
     other_account = S3Account(name="other", rgw_account_id="RGW-OTHER")
     db_session.add_all([super_admin, linked_account, other_account])
     db_session.flush()
-    db_session.add(UserS3Account(user_id=super_admin.id, account_id=linked_account.id))
+    db_session.add(
+        UserS3Account(
+            user_id=super_admin.id,
+            account_id=linked_account.id,
+            account_admin=True,
+            is_root=False,
+        )
+    )
 
     linked_s3_user = S3User(
         name="linked-s3",

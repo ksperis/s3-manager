@@ -36,9 +36,6 @@ vi.mock("./BrowserContext", () => ({
     selectorForApi: "acc-1",
     selectedKind: null,
     sessionAccountName: null,
-    accessMode: null,
-    setAccessMode: () => {},
-    canSwitchAccess: false,
     accessError: null,
   }),
 }));

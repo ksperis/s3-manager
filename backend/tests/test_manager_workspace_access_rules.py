@@ -104,7 +104,7 @@ def _build_linked_s3_user_context(
     return user, account
 
 
-def test_manager_membership_portal_manager_disabled_by_default():
+def test_manager_membership_portal_manager_without_admin_is_forbidden():
     link = UserS3Account(
         user_id=1,
         account_id=1,
@@ -112,29 +112,12 @@ def test_manager_membership_portal_manager_disabled_by_default():
         account_admin=False,
         is_root=False,
     )
-    _, caps = dependencies._manager_membership_capabilities(link, requested_mode=None)
-    assert caps.can_manage_buckets is False
-    assert caps.can_manage_iam is False
+    with pytest.raises(HTTPException) as exc:
+        dependencies._manager_membership_capabilities(link)
+    assert exc.value.status_code == 403
 
 
-def test_manager_membership_portal_manager_enabled_with_setting(monkeypatch):
-    link = UserS3Account(
-        user_id=1,
-        account_id=1,
-        account_role=AccountRole.PORTAL_MANAGER.value,
-        account_admin=False,
-        is_root=False,
-    )
-    settings = AppSettings()
-    settings.general.allow_portal_manager_workspace = True
-    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
-
-    _, caps = dependencies._manager_membership_capabilities(link, requested_mode=None)
-    assert caps.can_manage_buckets is True
-    assert caps.can_manage_iam is True
-
-
-def test_manager_membership_account_admin_forces_admin_mode_when_portal_workspace_disabled(monkeypatch):
+def test_manager_membership_account_admin_uses_root_key_capabilities():
     link = UserS3Account(
         user_id=1,
         account_id=1,
@@ -142,22 +125,14 @@ def test_manager_membership_account_admin_forces_admin_mode_when_portal_workspac
         account_admin=True,
         is_root=False,
     )
-    settings = AppSettings()
-    settings.general.allow_portal_manager_workspace = False
-    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
-
-    _, caps = dependencies._manager_membership_capabilities(link, requested_mode="portal")
+    caps = dependencies._manager_membership_capabilities(link)
     assert caps.using_root_key is True
     assert caps.can_manage_buckets is True
     assert caps.can_manage_iam is True
+    assert caps.can_view_root_key is True
 
 
-def test_manager_context_disables_access_toggle_when_portal_workspace_disabled(db_session, monkeypatch):
-    settings = AppSettings()
-    settings.general.allow_portal_manager_workspace = False
-    monkeypatch.setattr(dependencies, "load_app_settings", lambda: settings)
-    monkeypatch.setattr(manager_context_router, "load_app_settings", lambda: settings)
-
+def test_manager_context_ignores_legacy_access_mode_header(db_session):
     user = User(
         email="manager-access-toggle-disabled@example.com",
         hashed_password="x",
@@ -194,7 +169,7 @@ def test_manager_context_disables_access_toggle_when_portal_workspace_disabled(d
     )
     payload = manager_context_router.get_manager_context(account=account_ctx, actor=user, db=db_session)
     assert payload.access_mode == "admin"
-    assert payload.can_switch_access is False
+    assert "can_switch_access" not in payload.model_dump()
 
 
 def test_manager_workspace_accepts_non_iam_connection_when_access_manager_enabled(db_session):

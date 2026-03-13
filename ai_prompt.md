@@ -139,8 +139,8 @@ Internal APIs under `/internal` are non-UI operational endpoints.
 
 Mutating operations must run with a clearly identified execution identity, such as:
 
-- account root credentials (manager admin mode),
-- portal workflow IAM credentials (technical identity),
+- account root credentials (manager account context, root-only path),
+- portal workflow IAM credentials (technical identity for portal workflows),
 - S3 Connection credentials,
 - legacy S3 User credentials,
 - session credentials (S3 session / STS when available),
@@ -148,7 +148,7 @@ Mutating operations must run with a clearly identified execution identity, such 
 
 Execution context rules:
 - For UI users, `/manager` and `/browser` APIs that depend on account context require explicit `account_id`.
-- `X-Manager-Access-Mode` selects account admin-vs-portal mode when authorized.
+- `X-Manager-Access-Mode` is ignored; manager account context always uses account root credentials.
 - Session principals may default to their bound account when `account_id` is omitted.
 - Backend must not silently switch to a different context than the one requested/resolved.
 

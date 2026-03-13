@@ -6,7 +6,6 @@ import { createContext, useContext, useEffect, useMemo, useState, ReactNode } fr
 import { useSearchParams } from "react-router-dom";
 import { S3AccountSelector } from "../../api/accountParams";
 import { ExecutionContext, ExecutionContextKind, listExecutionContexts } from "../../api/executionContexts";
-export type BrowserAccessMode = "admin" | "portal";
 
 const EXECUTION_CONTEXT_STORAGE_KEY = "selectedExecutionContextId";
 const EXECUTION_CONTEXT_URL_PARAM = "ctx";
@@ -20,9 +19,6 @@ type BrowserContextState = {
   selectorForApi: S3AccountSelector;
   selectedKind: ExecutionContextKind | null;
   sessionAccountName: string | null;
-  accessMode: BrowserAccessMode | null;
-  setAccessMode: (mode: BrowserAccessMode) => void;
-  canSwitchAccess: boolean;
   accessError?: string | null;
 };
 
@@ -35,9 +31,6 @@ const Ctx = createContext<BrowserContextState>({
   selectorForApi: null,
   selectedKind: null,
   sessionAccountName: null,
-  accessMode: null,
-  setAccessMode: () => {},
-  canSwitchAccess: false,
   accessError: null,
 });
 
@@ -70,8 +63,6 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
   const [contexts, setContexts] = useState<ExecutionContext[]>([]);
   const [selectedContextId, setSelectedContextIdState] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
-  const [accessMode, setAccessModeState] = useState<BrowserAccessMode | null>(null);
-  const [canSwitchAccess, setCanSwitchAccess] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -154,18 +145,6 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
   const hasContext = requiresContextSelection ? selected != null : true;
   const selectorForApi: S3AccountSelector = requiresContextSelection ? selectedContextId : null;
 
-  // For step 2, we keep /browser simple: no root/portal switching.
-  useEffect(() => {
-    setAccessModeState(null);
-    setCanSwitchAccess(false);
-  }, [selectedContextId, selectedKind]);
-
-  const setAccessMode = (mode: BrowserAccessMode) => {
-    if (!selectedContextId) return;
-    localStorage.setItem(`browserAccessMode:${selectedContextId}`, mode);
-    setAccessModeState(mode);
-  };
-
   return (
     <Ctx.Provider
       value={{
@@ -177,9 +156,6 @@ export function BrowserContextProvider({ children }: { children: ReactNode }) {
         selectorForApi,
         selectedKind,
         sessionAccountName: sessionInfo.accountName,
-        accessMode,
-        setAccessMode,
-        canSwitchAccess,
         accessError,
       }}
     >

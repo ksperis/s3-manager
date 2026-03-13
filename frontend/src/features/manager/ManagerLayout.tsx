@@ -59,8 +59,6 @@ function ManagerShell() {
     accessError,
     iamIdentity,
     accessMode,
-    setAccessMode,
-    canSwitchAccess,
     managerStatsEnabled,
     managerStatsMessage,
     managerBrowserEnabled,
@@ -106,8 +104,6 @@ function ManagerShell() {
           ? "Metrics are unavailable for this endpoint capabilities."
           : undefined;
   const managerBrowserAvailable = managerBrowserEnabled !== false;
-  const isAccessModeToggleVisible = accessMode === "admin" || accessMode === "portal";
-  const canToggleAccess = canSwitchAccess && isAccessModeToggleVisible;
   const modeVisual = getContextAccessModeVisual(accessMode);
   const identityLabel = iamIdentity
     ? accessMode === "connection"
@@ -132,11 +128,6 @@ function ManagerShell() {
       nextParams.delete("ctx");
     }
     navigate({ pathname: "/manager", search: nextParams.toString() ? `?${nextParams.toString()}` : "" });
-  };
-
-  const handleAccessModeToggle = () => {
-    if (!canToggleAccess) return;
-    setAccessMode(accessMode === "admin" ? "portal" : "admin");
   };
 
   const renderStaticAccountPill = (mode: "icon" | "icon_label") => {
@@ -179,9 +170,6 @@ function ManagerShell() {
             onContextChange={handleS3AccountChange}
             selectedLabel={selectedLabel}
             identityLabel={identityLabel}
-            accessMode={accessMode}
-            canToggleAccess={canToggleAccess}
-            onToggleAccess={handleAccessModeToggle}
             defaultEndpointId={defaultEndpointId}
             defaultEndpointName={defaultEndpointName}
             widthClassName={mode === "icon" ? "w-9" : "w-44 lg:w-64 xl:w-[26rem] min-w-[11rem] max-w-[42vw]"}

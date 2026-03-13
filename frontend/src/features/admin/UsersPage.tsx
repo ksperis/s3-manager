@@ -369,7 +369,7 @@ const AssociationsTabs = ({
                         const isSelected = accounts.selections.includes(accountId);
                         const role = accounts.roleChoice[accountId] ?? "portal_none";
                         const adminChecked = portalEnabled
-                          ? accounts.adminChoice[accountId] ?? role === "portal_manager"
+                          ? accounts.adminChoice[accountId] ?? false
                           : true;
                         return (
                           <div
@@ -460,7 +460,7 @@ const AssociationsTabs = ({
                             const next = accounts.selections.map((accountId) => {
                               const role = accounts.roleChoice[accountId] ?? "portal_none";
                               const account_admin = portalEnabled
-                                ? accounts.adminChoice[accountId] ?? role === "portal_manager"
+                                ? accounts.adminChoice[accountId] ?? false
                                 : true;
                               return { id: accountId, role, account_admin };
                             });
@@ -1362,7 +1362,7 @@ export default function UsersPage() {
               created.id,
               Number(entry.id),
               portalEnabled ? (entry.role as string | undefined) : undefined,
-              portalEnabled ? entry.account_admin ?? entry.role === "portal_manager" : true
+              portalEnabled ? entry.account_admin ?? false : true
             )
           )
         );
@@ -1519,7 +1519,7 @@ export default function UsersPage() {
               editingUser.id,
               Number(entry.id),
               portalEnabled ? entry.role : undefined,
-              portalEnabled ? entry.account_admin ?? entry.role === "portal_manager" : true
+              portalEnabled ? entry.account_admin ?? false : true
             )
           )
         );
@@ -1531,7 +1531,7 @@ export default function UsersPage() {
               editingUser.id,
               Number(entry.id),
               portalEnabled ? entry.role : undefined,
-              portalEnabled ? entry.account_admin ?? entry.role === "portal_manager" : true
+              portalEnabled ? entry.account_admin ?? false : true
             )
           )
         );

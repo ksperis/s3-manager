@@ -7,10 +7,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.db import AccountRole, S3Account, S3Connection, S3User, User, UserS3Account, UserS3Connection, UserS3User
+from app.db import S3Account, S3Connection, S3User, User, UserS3Account, UserS3Connection, UserS3User
 from app.models.execution_context import ExecutionContext, ExecutionContextCapabilities
 from app.routers.dependencies import get_current_account_user
-from app.services.app_settings_service import load_app_settings
 from app.services.s3_users_service import S3UsersService
 from app.utils.s3_connection_capabilities import s3_connection_can_manage_iam
 from app.utils.s3_connection_endpoint import resolve_connection_details
@@ -128,12 +127,8 @@ def _build_connection_context(connection: S3Connection, *, hidden: bool = False)
     )
 
 
-def _manager_account_allowed(link: UserS3Account, *, allow_portal_manager_workspace: bool) -> bool:
-    if bool(link.account_admin):
-        return True
-    if (link.account_role or "") != AccountRole.PORTAL_MANAGER.value:
-        return False
-    return allow_portal_manager_workspace
+def _manager_account_allowed(link: UserS3Account) -> bool:
+    return bool(link.account_admin or link.is_root)
 
 
 @router.get("/execution-contexts", response_model=list[ExecutionContext])
@@ -143,7 +138,6 @@ def list_execution_contexts(
     db: Session = Depends(get_db),
 ) -> list[ExecutionContext]:
     s3_users_service = S3UsersService(db)
-    allow_portal_manager_workspace = bool(load_app_settings().general.allow_portal_manager_workspace)
     links = (
         db.query(UserS3Account)
         .filter(UserS3Account.user_id == user.id)
@@ -193,9 +187,7 @@ def list_execution_contexts(
     account_by_id = {account.id: account for account in accounts}
     if workspace == "manager":
         for link in links:
-            if not _manager_account_allowed(
-                link, allow_portal_manager_workspace=allow_portal_manager_workspace
-            ):
+            if not _manager_account_allowed(link):
                 continue
             account = account_by_id.get(link.account_id)
             if account is not None:

@@ -10,7 +10,6 @@ const GENERAL_SETTINGS = {
   browser_manager_enabled: true,
   browser_portal_enabled: true,
   browser_ceph_admin_enabled: true,
-  allow_portal_manager_workspace: true,
   portal_enabled: true,
   billing_enabled: false,
   endpoint_status_enabled: true,
@@ -571,7 +570,6 @@ export function buildBaseRules(): MockRule[] {
         return {
           access_mode: isConnection ? "connection" : "admin",
           iam_identity: isConnection ? "conn-blueharbor" : "helios-admin",
-          can_switch_access: true,
           manager_stats_enabled: true,
           manager_browser_enabled: true,
         };

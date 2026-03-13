@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import UsersPage from "./UsersPage";
 
@@ -13,6 +13,38 @@ const updateS3AccountMock = vi.fn();
 
 const listMinimalS3UsersMock = vi.fn();
 const listMinimalS3ConnectionsMock = vi.fn();
+const generalSettingsState = {
+  manager_enabled: true,
+  ceph_admin_enabled: false,
+  storage_ops_enabled: false,
+  browser_enabled: true,
+  browser_root_enabled: true,
+  browser_manager_enabled: false,
+  browser_portal_enabled: true,
+  browser_ceph_admin_enabled: true,
+  portal_enabled: false,
+  billing_enabled: false,
+  endpoint_status_enabled: false,
+  quota_alerts_enabled: false,
+  usage_history_enabled: false,
+  bucket_migration_enabled: false,
+  bucket_compare_enabled: false,
+  manager_ceph_s3_user_keys_enabled: true,
+  allow_ui_user_bucket_migration: false,
+  allow_login_access_keys: false,
+  allow_login_endpoint_list: false,
+  allow_login_custom_endpoint: false,
+  allow_user_private_connections: false,
+};
+
+vi.mock("../../components/GeneralSettingsContext", () => ({
+  useGeneralSettings: () => ({
+    generalSettings: generalSettingsState,
+    loading: false,
+    refresh: async () => {},
+    setGeneralSettings: () => {},
+  }),
+}));
 
 vi.mock("../../api/users", () => ({
   listUsers: (params?: unknown) => listUsersMock(params),
@@ -39,6 +71,7 @@ vi.mock("../../api/s3ConnectionsAdmin", () => ({
 describe("UsersPage modal tabs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    generalSettingsState.portal_enabled = false;
 
     localStorage.setItem("user", JSON.stringify({ id: 1, role: "ui_superadmin" }));
 
@@ -259,5 +292,32 @@ describe("UsersPage modal tabs", () => {
         can_access_storage_ops: true,
       })
     );
+  });
+
+  it("does not auto-enable account admin when portal role is portal_manager", async () => {
+    generalSettingsState.portal_enabled = true;
+    render(<UsersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create user" }));
+    fireEvent.change(screen.getByPlaceholderText("jane.doe@example.com"), { target: { value: "pm@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("•••••••"), { target: { value: "secret-123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Associations" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add accounts" }));
+    const accountCheckbox = await screen.findByRole("checkbox", { name: "acc-1" });
+    fireEvent.click(accountCheckbox);
+    const accountRow = accountCheckbox.closest("div");
+    if (!accountRow) {
+      throw new Error("Account row not found");
+    }
+    fireEvent.change(within(accountRow).getByRole("combobox"), { target: { value: "portal_manager" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add selected" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(assignUserToS3AccountMock).toHaveBeenCalled();
+    });
+    expect(assignUserToS3AccountMock).toHaveBeenCalledWith(100, 1, "portal_manager", false);
   });
 });

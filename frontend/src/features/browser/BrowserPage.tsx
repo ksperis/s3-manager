@@ -5355,13 +5355,6 @@ export default function BrowserPage({
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
-    const accountId = localStorage.getItem("selectedExecutionContextId");
-    if (accountId) {
-      const mode = localStorage.getItem(`managerAccessMode:${accountId}`);
-      if (mode === "admin" || mode === "portal") {
-        headers["X-Manager-Access-Mode"] = mode;
-      }
-    }
     const userRaw = localStorage.getItem("user");
     if (userRaw) {
       try {

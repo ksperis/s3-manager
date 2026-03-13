@@ -15,7 +15,6 @@ from app.db import (
     UserS3Account,
     UserS3User,
 )
-from app.models.app_settings import AppSettings
 from app.routers import execution_contexts
 
 
@@ -158,29 +157,6 @@ def test_manager_workspace_returns_allowed_contexts_including_s3_users(db_sessio
     assert f"conn-{manager_connection.id}" in context_ids
     assert f"conn-{browser_only_connection.id}" not in context_ids
     assert any(context.kind == "legacy_user" for context in contexts)
-
-
-def test_manager_workspace_includes_portal_manager_accounts_when_enabled(db_session, monkeypatch):
-    user = _create_user(db_session)
-    portal_manager_account = _create_account(db_session, name="pm-account-enabled", rgw_account_id="RGWPM0002")
-    db_session.add(
-        UserS3Account(
-            user_id=user.id,
-            account_id=portal_manager_account.id,
-            account_role=AccountRole.PORTAL_MANAGER.value,
-            account_admin=False,
-            is_root=False,
-        )
-    )
-    db_session.commit()
-
-    settings = AppSettings()
-    settings.general.allow_portal_manager_workspace = True
-    monkeypatch.setattr(execution_contexts, "load_app_settings", lambda: settings)
-
-    contexts = execution_contexts.list_execution_contexts(workspace="manager", user=user, db=db_session)
-    context_ids = {context.id for context in contexts}
-    assert str(portal_manager_account.id) in context_ids
 
 
 def test_browser_workspace_returns_connections_and_s3_users(db_session):

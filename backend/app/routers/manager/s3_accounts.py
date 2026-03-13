@@ -70,7 +70,8 @@ def list_manager_accounts(
         .filter(UserS3Account.user_id == user.id)
         .all()
     )
-    account_ids = {l.account_id for l in links}
+    manager_account_links = [link for link in links if bool(link.account_admin or link.is_root)]
+    account_ids = {link.account_id for link in manager_account_links}
     accounts = (
         db.query(S3Account).filter(S3Account.id.in_(account_ids)).all()
         if account_ids
