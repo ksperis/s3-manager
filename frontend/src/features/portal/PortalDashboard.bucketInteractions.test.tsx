@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PortalDashboard from "./PortalDashboard";
@@ -6,11 +6,14 @@ import PortalDashboard from "./PortalDashboard";
 const navigateMock = vi.fn();
 const fetchPortalStateMock = vi.fn();
 const fetchPortalSettingsMock = vi.fn();
+const createPortalAccessKeyMock = vi.fn();
+const deletePortalBucketMock = vi.fn();
 const fetchPortalTrafficMock = vi.fn();
 const fetchPortalBucketStatsMock = vi.fn();
 const fetchPortalUsageMock = vi.fn();
 const listPortalUsersMock = vi.fn();
 const fetchPortalWorkspaceHealthOverviewMock = vi.fn();
+const confirmActionMock = vi.fn();
 const tMock = (text: { en: string }) => text.en;
 
 const generalSettingsState = {
@@ -53,14 +56,35 @@ vi.mock("./PortalAccountContext", () => ({
 }));
 
 vi.mock("./PortalBucketModal", () => ({
-  default: ({ bucket }: { bucket: { name: string } }) => <div data-testid="portal-bucket-modal">Bucket modal: {bucket.name}</div>,
+  default: ({
+    bucket,
+    canDeleteBucket,
+    onDeleteBucket,
+    deleteError,
+  }: {
+    bucket: { name: string };
+    canDeleteBucket?: boolean;
+    onDeleteBucket?: () => void;
+    deleteError?: string | null;
+  }) => (
+    <div data-testid="portal-bucket-modal">
+      <div>Bucket modal: {bucket.name}</div>
+      {canDeleteBucket ? (
+        <button type="button" onClick={() => onDeleteBucket?.()}>
+          Delete bucket
+        </button>
+      ) : null}
+      {deleteError ? <div>{deleteError}</div> : null}
+    </div>
+  ),
 }));
 
 vi.mock("../../api/portal", () => ({
   bootstrapPortalIdentity: vi.fn(),
-  createPortalAccessKey: vi.fn(),
+  createPortalAccessKey: (...args: unknown[]) => createPortalAccessKeyMock(...args),
   createPortalBucket: vi.fn(),
   deletePortalAccessKey: vi.fn(),
+  deletePortalBucket: (...args: unknown[]) => deletePortalBucketMock(...args),
   fetchPortalState: (...args: unknown[]) => fetchPortalStateMock(...args),
   listPortalUsers: (...args: unknown[]) => listPortalUsersMock(...args),
   updatePortalAccessKeyStatus: vi.fn(),
@@ -72,6 +96,11 @@ vi.mock("../../api/portal", () => ({
 
 vi.mock("../../api/healthchecks", () => ({
   fetchPortalWorkspaceHealthOverview: (...args: unknown[]) => fetchPortalWorkspaceHealthOverviewMock(...args),
+}));
+
+vi.mock("../../utils/confirm", () => ({
+  confirmAction: (...args: unknown[]) => confirmActionMock(...args),
+  confirmDeletion: vi.fn(),
 }));
 
 const basePortalState = {
@@ -109,6 +138,13 @@ describe("PortalDashboard bucket interactions", () => {
     generalSettingsState.endpoint_status_enabled = false;
     fetchPortalStateMock.mockResolvedValue(basePortalState);
     fetchPortalSettingsMock.mockResolvedValue({});
+    createPortalAccessKeyMock.mockResolvedValue({
+      access_key_id: "AK-NEW",
+      secret_access_key: "SK-NEW",
+      status: "Active",
+    });
+    deletePortalBucketMock.mockResolvedValue(undefined);
+    confirmActionMock.mockReturnValue(true);
     fetchPortalTrafficMock.mockResolvedValue({ series: [], totals: { ops: 0 } });
     fetchPortalBucketStatsMock.mockResolvedValue({ name: "bucket-a", used_bytes: 128, object_count: 4 });
     fetchPortalUsageMock.mockResolvedValue({ used_bytes: 128, used_objects: 4 });
@@ -149,5 +185,79 @@ describe("PortalDashboard bucket interactions", () => {
 
     expect(await screen.findByTestId("portal-bucket-modal")).toHaveTextContent("Bucket modal: bucket-a");
     expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("disables key creation when max IAM user keys is reached", async () => {
+    const user = userEvent.setup();
+    fetchPortalStateMock.mockResolvedValueOnce({
+      ...basePortalState,
+      access_keys: [
+        { access_key_id: "AK-USER-1", status: "Active", is_portal: false },
+        { access_key_id: "AK-USER-2", status: "Inactive", is_portal: false },
+      ],
+    });
+    fetchPortalSettingsMock.mockResolvedValueOnce({
+      allow_portal_user_access_key_create: true,
+      max_portal_user_access_keys: 2,
+    });
+
+    render(<PortalDashboard />);
+
+    await user.click(await screen.findByRole("button", { name: "2 key(s)" }));
+
+    const createButton = await screen.findByRole("button", { name: "Create user key" });
+    expect(createButton).toBeDisabled();
+    expect(screen.getByText("Maximum IAM user keys reached (2). Delete a key before creating a new one.")).toBeInTheDocument();
+    await user.click(createButton);
+    expect(createPortalAccessKeyMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes selected bucket from modal when bucket is empty", async () => {
+    const user = userEvent.setup();
+    fetchPortalStateMock.mockResolvedValueOnce({
+      ...basePortalState,
+      buckets: [{ ...basePortalState.buckets[0], object_count: 0 }],
+      used_objects: 0,
+    });
+    fetchPortalBucketStatsMock.mockResolvedValue({ name: "bucket-a", used_bytes: 128, object_count: 0 });
+
+    render(<PortalDashboard />);
+
+    await user.click(await screen.findByRole("button", { name: "Bucket information for bucket-a" }));
+    await user.click(await screen.findByRole("button", { name: "Delete bucket" }));
+
+    await waitFor(() => expect(deletePortalBucketMock).toHaveBeenCalledWith(1, "bucket-a", false));
+    expect(confirmActionMock).toHaveBeenCalled();
+    expect(screen.queryByTestId("portal-bucket-modal")).not.toBeInTheDocument();
+  });
+
+  it("does not call delete API when selected bucket is not empty", async () => {
+    const user = userEvent.setup();
+    render(<PortalDashboard />);
+
+    await user.click(await screen.findByRole("button", { name: "Bucket information for bucket-a" }));
+    await user.click(await screen.findByRole("button", { name: "Delete bucket" }));
+
+    expect(confirmActionMock).not.toHaveBeenCalled();
+    expect(deletePortalBucketMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps modal open and shows API error when delete fails", async () => {
+    const user = userEvent.setup();
+    fetchPortalStateMock.mockResolvedValueOnce({
+      ...basePortalState,
+      buckets: [{ ...basePortalState.buckets[0], object_count: 0 }],
+      used_objects: 0,
+    });
+    fetchPortalBucketStatsMock.mockResolvedValue({ name: "bucket-a", used_bytes: 128, object_count: 0 });
+    deletePortalBucketMock.mockRejectedValueOnce(new Error("Bucket 'bucket-a' is not empty."));
+
+    render(<PortalDashboard />);
+
+    await user.click(await screen.findByRole("button", { name: "Bucket information for bucket-a" }));
+    await user.click(await screen.findByRole("button", { name: "Delete bucket" }));
+
+    expect(await screen.findByText("Bucket 'bucket-a' is not empty.")).toBeInTheDocument();
+    expect(screen.getByTestId("portal-bucket-modal")).toBeInTheDocument();
   });
 });

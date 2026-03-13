@@ -16,6 +16,7 @@ import {
   createPortalAccessKey,
   createPortalBucket,
   deletePortalAccessKey,
+  deletePortalBucket,
   fetchPortalState,
   PortalAccessKey,
   PortalState,
@@ -43,6 +44,7 @@ import {
   normalizeS3BucketNameInput,
 } from "../../utils/s3BucketName";
 import { extractApiError } from "../../utils/apiError";
+import { confirmAction } from "../../utils/confirm";
 
 function CopyButton({ value, label, iconOnly = false }: { value: string; label: string; iconOnly?: boolean }) {
   const handleCopy = () => {
@@ -134,6 +136,8 @@ export default function PortalDashboard() {
   const [creatingKey, setCreatingKey] = useState(false);
   const [togglingKeyId, setTogglingKeyId] = useState<string | null>(null);
   const [creatingBucket, setCreatingBucket] = useState(false);
+  const [deletingBucketFromModal, setDeletingBucketFromModal] = useState(false);
+  const [deleteBucketFromModalError, setDeleteBucketFromModalError] = useState<string | null>(null);
   const [showBucketModal, setShowBucketModal] = useState(false);
   const [selectedBucket, setSelectedBucket] = useState<Bucket | null>(null);
   const [newBucketName, setNewBucketName] = useState("");
@@ -264,8 +268,17 @@ export default function PortalDashboard() {
   const canManageBuckets = Boolean(state?.can_manage_buckets);
   const allowPortalUserBucketCreate = Boolean(portalSettings?.allow_portal_user_bucket_create && isPortalUser);
   const allowPortalUserAccessKeyCreate = Boolean(portalSettings?.allow_portal_user_access_key_create && isPortalUser);
+  const maxPortalUserAccessKeys = Math.max(1, Math.trunc(Number(portalSettings?.max_portal_user_access_keys ?? 2)));
+  const accessKeyLimitReached = orderedAccessKeys.length >= maxPortalUserAccessKeys;
   const canCreateBuckets = canManageBuckets || allowPortalUserBucketCreate;
   const canCreateAccessKeys = canManageBuckets || allowPortalUserAccessKeyCreate;
+  const canCreateMoreAccessKeys = canCreateAccessKeys && !accessKeyLimitReached;
+  const selectedBucketStatsLoading = selectedBucket ? Boolean(bucketStatsLoading[selectedBucket.name]) : false;
+  const accessKeyLimitReachedMessage = t({
+    en: `Maximum IAM user keys reached (${maxPortalUserAccessKeys}). Delete a key before creating a new one.`,
+    fr: `Nombre maximal de cles IAM utilisateur atteint (${maxPortalUserAccessKeys}). Supprimez une cle avant d'en creer une nouvelle.`,
+    de: `Maximale Anzahl an IAM-Benutzerschlusseln erreicht (${maxPortalUserAccessKeys}). Loschen Sie einen Schlussel, bevor Sie einen neuen erstellen.`,
+  });
   const canOpenBucketInBrowser = Boolean(accountIdForApi) && generalSettings.browser_enabled && generalSettings.browser_portal_enabled;
   const canViewPortalUsers = Boolean(state?.can_manage_portal_users);
   const assignedPortalUsers = useMemo(() => portalUsers.filter((u) => !u.iam_only), [portalUsers]);
@@ -282,12 +295,15 @@ export default function PortalDashboard() {
   };
 
   const openBucketModal = (bucket: Bucket) => {
+    setDeleteBucketFromModalError(null);
     setSelectedBucket(bucket);
     setShowBucketModal(true);
     void loadBucketStats(bucket.name);
   };
 
   const closeBucketModal = () => {
+    setDeleteBucketFromModalError(null);
+    setDeletingBucketFromModal(false);
     setShowBucketModal(false);
     setSelectedBucket(null);
   };
@@ -694,6 +710,10 @@ export default function PortalDashboard() {
 
   const handleRotateKey = async () => {
     if (!accountIdForApi) return;
+    if (accessKeyLimitReached) {
+      setKeyActionError(accessKeyLimitReachedMessage);
+      return;
+    }
     setCreatingKey(true);
     setKeyActionError(null);
     setLastCreatedKey(null);
@@ -813,6 +833,61 @@ export default function PortalDashboard() {
       );
     } finally {
       setTogglingKeyId(null);
+    }
+  };
+
+  const handleDeleteBucketFromModal = async () => {
+    if (!accountIdForApi || !selectedBucket || !canManageBuckets || deletingBucketFromModal) return;
+    if (selectedBucket.object_count !== 0) return;
+    const bucketName = selectedBucket.name;
+    const confirmed = confirmAction(
+      t({
+        en: `Delete bucket '${bucketName}'?`,
+        fr: `Supprimer le bucket '${bucketName}' ?`,
+        de: `Bucket '${bucketName}' loschen?`,
+      })
+    );
+    if (!confirmed) return;
+    setDeletingBucketFromModal(true);
+    setDeleteBucketFromModalError(null);
+    setBucketActionError(null);
+    try {
+      await deletePortalBucket(accountIdForApi, bucketName, false);
+      bucketStatsLoadedRef.current.delete(bucketName);
+      setBucketStatsLoading((prev) => {
+        if (!prev[bucketName]) return prev;
+        const next = { ...prev };
+        delete next[bucketName];
+        return next;
+      });
+      setState((prev) => {
+        if (!prev) return prev;
+        const nextBuckets = (prev.buckets || []).filter((bucket) => bucket.name !== bucketName);
+        const nextTotal =
+          prev.total_buckets == null ? prev.total_buckets : Math.max(0, prev.total_buckets - 1);
+        return {
+          ...prev,
+          buckets: nextBuckets,
+          total_buckets: nextTotal,
+        };
+      });
+      setDeleteBucketFromModalError(null);
+      setShowBucketModal(false);
+      setSelectedBucket(null);
+    } catch (err) {
+      console.error(err);
+      setDeleteBucketFromModalError(
+        extractApiError(
+          err,
+          t({
+            en: "Unable to delete bucket.",
+            fr: "Impossible de supprimer le bucket.",
+            de: "Bucket kann nicht geloscht werden.",
+          })
+        )
+      );
+    } finally {
+      setDeletingBucketFromModal(false);
     }
   };
 
@@ -1270,9 +1345,13 @@ export default function PortalDashboard() {
                     <button
                       type="button"
                       onClick={handleRotateKey}
-                      disabled={creatingKey || !accountIdForApi || !canCreateAccessKeys || Boolean(togglingKeyId)}
+                      disabled={creatingKey || !accountIdForApi || !canCreateMoreAccessKeys || Boolean(togglingKeyId)}
                       aria-label={t({ en: "Create user key", fr: "Creer une cle utilisateur", de: "Benutzerschlussel erstellen" })}
-                      title={t({ en: "Create user key", fr: "Creer une cle utilisateur", de: "Benutzerschlussel erstellen" })}
+                      title={
+                        accessKeyLimitReached
+                          ? accessKeyLimitReachedMessage
+                          : t({ en: "Create user key", fr: "Creer une cle utilisateur", de: "Benutzerschlussel erstellen" })
+                      }
                       className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600"
                     >
                       <span aria-hidden>{creatingKey ? "…" : "➕"}</span>
@@ -1336,6 +1415,14 @@ export default function PortalDashboard() {
                       })}
                     </span>
                   </div>
+                  <p className={`ui-caption ${accessKeyLimitReached ? "text-amber-600 dark:text-amber-300" : "text-slate-500 dark:text-slate-400"}`}>
+                    {t({
+                      en: `${orderedAccessKeys.length}/${maxPortalUserAccessKeys} user key(s)`,
+                      fr: `${orderedAccessKeys.length}/${maxPortalUserAccessKeys} cle(s) utilisateur`,
+                      de: `${orderedAccessKeys.length}/${maxPortalUserAccessKeys} Benutzerschlussel`,
+                    })}
+                  </p>
+                  {accessKeyLimitReached && <p className="ui-caption text-amber-600 dark:text-amber-300">{accessKeyLimitReachedMessage}</p>}
                   {orderedAccessKeys.length ? (
                     <div className="divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                       {orderedAccessKeys.map((k) => {
@@ -1434,6 +1521,11 @@ export default function PortalDashboard() {
               accountUsedBytes={bucketTotalsBytes}
               accountUsedObjects={bucketTotalsObjects}
               onClose={closeBucketModal}
+              canDeleteBucket={canManageBuckets}
+              deletingBucket={deletingBucketFromModal}
+              deleteError={deleteBucketFromModalError}
+              bucketStatsLoading={selectedBucketStatsLoading}
+              onDeleteBucket={handleDeleteBucketFromModal}
             />
           )}
 

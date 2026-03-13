@@ -21,6 +21,11 @@ type PortalBucketModalProps = {
   onClose: () => void;
   accountUsedBytes?: number | null;
   accountUsedObjects?: number | null;
+  canDeleteBucket?: boolean;
+  onDeleteBucket?: () => void;
+  deletingBucket?: boolean;
+  deleteError?: string | null;
+  bucketStatsLoading?: boolean;
 };
 
 type ObjectRow = { type: "prefix"; key: string; name: string } | { type: "object"; key: string; name: string; object: S3Object };
@@ -38,6 +43,11 @@ export default function PortalBucketModal({
   onClose,
   accountUsedBytes,
   accountUsedObjects,
+  canDeleteBucket = false,
+  onDeleteBucket,
+  deletingBucket = false,
+  deleteError = null,
+  bucketStatsLoading = false,
 }: PortalBucketModalProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -126,11 +136,46 @@ export default function PortalBucketModal({
   const objectsShare = computeRelativeShare(bucket.object_count, accountUsedObjects);
   const canOpenInBrowser =
     Boolean(accountId) && generalSettings.browser_enabled && generalSettings.browser_portal_enabled;
+  const canDeleteNow =
+    Boolean(canDeleteBucket) &&
+    bucket.object_count === 0 &&
+    !deletingBucket &&
+    !bucketStatsLoading;
+  const deleteHint = useMemo(() => {
+    if (!canDeleteBucket) return null;
+    if (deletingBucket) {
+      return t({
+        en: "Deleting bucket...",
+        fr: "Suppression du bucket...",
+        de: "Bucket wird geloscht...",
+      });
+    }
+    if (bucketStatsLoading || bucket.object_count == null) {
+      return t({
+        en: "Bucket stats are loading. Wait before deleting.",
+        fr: "Les statistiques du bucket sont en cours de chargement. Patientez avant de supprimer.",
+        de: "Bucket-Statistiken werden geladen. Warten Sie vor dem Loschen.",
+      });
+    }
+    if (bucket.object_count !== 0) {
+      return t({
+        en: "Delete is available only when the bucket is empty.",
+        fr: "La suppression est disponible uniquement lorsque le bucket est vide.",
+        de: "Loschen ist nur moglich, wenn der Bucket leer ist.",
+      });
+    }
+    return null;
+  }, [bucket.object_count, bucketStatsLoading, canDeleteBucket, deletingBucket, t]);
 
   const handleOpenInBrowser = () => {
     if (!accountId || !generalSettings.browser_enabled || !generalSettings.browser_portal_enabled) return;
     localStorage.setItem("selectedPortalAccountId", String(accountId));
     navigate(`/portal/browser?bucket=${encodeURIComponent(bucket.name)}`);
+  };
+
+  const handleDeleteBucket = () => {
+    if (!canDeleteNow) return;
+    onDeleteBucket?.();
   };
 
   return (
@@ -156,18 +201,49 @@ export default function PortalBucketModal({
                         {bucket.creation_date ? new Date(bucket.creation_date).toLocaleString() : "—"}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleOpenInBrowser}
-                      disabled={!canOpenInBrowser}
-                      className={`inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1 ui-caption font-semibold text-slate-700 shadow-sm transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 ${
-                        canOpenInBrowser
-                          ? "hover:border-primary/60 hover:text-primary-700 dark:hover:text-primary-200"
-                          : "cursor-not-allowed opacity-60"
-                      }`}
-                    >
-                      {t({ en: "Open in Browser", fr: "Ouvrir dans Browser", de: "Im Browser offnen" })}
-                    </button>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={handleOpenInBrowser}
+                          disabled={!canOpenInBrowser}
+                          className={`inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1 ui-caption font-semibold text-slate-700 shadow-sm transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 ${
+                            canOpenInBrowser
+                              ? "hover:border-primary/60 hover:text-primary-700 dark:hover:text-primary-200"
+                              : "cursor-not-allowed opacity-60"
+                          }`}
+                        >
+                          {t({ en: "Open in Browser", fr: "Ouvrir dans Browser", de: "Im Browser offnen" })}
+                        </button>
+                        {canDeleteBucket && (
+                          <button
+                            type="button"
+                            onClick={handleDeleteBucket}
+                            disabled={!canDeleteNow}
+                            className={`inline-flex items-center justify-center rounded-full border px-3 py-1 ui-caption font-semibold shadow-sm transition ${
+                              canDeleteNow
+                                ? "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 hover:text-rose-800 dark:border-rose-900/40 dark:bg-rose-900/30 dark:text-rose-100 dark:hover:border-rose-700"
+                                : "cursor-not-allowed border-rose-200 bg-rose-50/60 text-rose-400 opacity-70 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-300/70"
+                            }`}
+                          >
+                            {deletingBucket
+                              ? t({ en: "Deleting...", fr: "Suppression...", de: "Wird geloscht..." })
+                              : t({ en: "Delete bucket", fr: "Supprimer le bucket", de: "Bucket loschen" })}
+                          </button>
+                        )}
+                      </div>
+                      {canDeleteBucket && (deleteError || deleteHint) && (
+                        <p
+                          className={`max-w-sm text-right ui-caption ${
+                            deleteError
+                              ? "text-rose-600 dark:text-rose-300"
+                              : "text-slate-500 dark:text-slate-400"
+                          }`}
+                        >
+                          {deleteError || deleteHint}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
                     <UsageTile
